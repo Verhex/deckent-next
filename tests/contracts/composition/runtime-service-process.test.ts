@@ -139,7 +139,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('keeps execution across clie
     });
     // The attempt observation and delivery finalization commit separately. Wait for the journal's own evidence.
     const delivery = await poll(async () => {
-      const db = new DatabaseSync(ledgerPath, { readOnly: true });
+      const db = new DatabaseSync(ledgerPath, { readOnly: true, timeout: 5000 });
       try {
         const row = db.prepare('SELECT record FROM cancellation_deliveries WHERE scope_id=? AND attempt_id=?')
           .get('s', identity.attemptId) as { record: string } | undefined;
