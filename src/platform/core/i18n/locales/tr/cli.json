@@ -526,7 +526,6 @@
   "inventory.recorded": "kayıtlı; bütünlük doğrulanmadı",
   "inventory.next": "Sonraki sayfa: --after {after}",
   "cli.run.inspect.heading": "Run {run} | kayıtlı revizyon {revision} (canlı durum değil)",
-  "cli.run.inspect.missing": "Kayıtlı Run bulunamadı: {run}",
   "cli.run.inspect.cancelRequested": "  İptal: istek kaydedilmiş; worker sonlanması doğrulanmadı.",
   "cli.run.inspect.cancelAbsent": "  İptal: istek kaydedilmemiş.",
   "cli.run.inspect.task": "Görev {task} ({kind})",

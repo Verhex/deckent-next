@@ -526,7 +526,6 @@
   "inventory.recorded": "recorded; completeness not verified",
   "inventory.next": "Next page: --after {after}",
   "cli.run.inspect.heading": "Run {run} | recorded revision {revision} (not live status)",
-  "cli.run.inspect.missing": "No recorded Run found: {run}",
   "cli.run.inspect.cancelRequested": "  Cancellation: request recorded; worker termination is not confirmed.",
   "cli.run.inspect.cancelAbsent": "  Cancellation: no request recorded.",
   "cli.run.inspect.task": "Task {task} ({kind})",

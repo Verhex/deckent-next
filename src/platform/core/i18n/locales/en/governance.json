@@ -732,6 +732,7 @@
   "error.RUN_ADMISSION_NOT_CONFIGURED": "Run admission requires an explicit pool and capacity profile.",
   "error.RUN_STORE_CORRUPT": "Run records are inconsistent; no successful update is claimed.",
   "error.RUN_STORE_CONFLICT": "The Run changed or is unavailable. Reload its recorded state.",
+  "error.RUN_NOT_FOUND": "No recorded Run found: {run}.",
   "error.RUN_COMMAND_CONFLICT": "This command identity is already bound to different Run input.",
   "error.RUN_POOL_REQUIRED": "A valid assigned execution pool is required.",
   "error.RUN_POOL_CONFLICT": "The execution pool already has different capacity settings.",
