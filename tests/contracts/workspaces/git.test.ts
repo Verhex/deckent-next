@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, lstat, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { GitWorkspaceBroker } from '#adapters/index.js';
+import { GitIntegrationDelivery, GitWorkspaceBroker } from '#adapters/index.js';
 const exec = promisify(execFile); const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -22,6 +22,43 @@ async function fixture() {
   return { root, source, workspaces, broker, request, git, marker };
 }
 describe.skipIf(process.platform === 'win32')('requires POSIX private Git custody: private Git workspace allocation', () => {
+  it('removes ambient group/other write permissions from fresh clones before patch custody', async () => {
+    const f = await fixture(); const previous = process.umask(0o002);
+    try {
+      const sibling = join(f.root, 'umask-control'); await mkdir(sibling);
+      expect((await lstat(sibling)).mode & 0o777).toBe(0o775);
+      const lease = await f.broker.allocate(f.request);
+      const gitDirectory = (await exec('/usr/bin/git', ['-C', lease.workspace, 'rev-parse', '--absolute-git-dir'])).stdout.trim();
+      for (const path of [lease.workspace, gitDirectory]) {
+        const directory = await lstat(path);
+        expect(directory.isDirectory()).toBe(true);
+        expect(directory.isSymbolicLink()).toBe(false);
+        expect(directory.mode & 0o777).toBe(0o755);
+        expect(directory.mode & 0o022).toBe(0);
+      }
+      const delivery = new GitIntegrationDelivery({ sourceRoot: lease.workspace, workspaceRoot: f.workspaces,
+        gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 });
+      const plan = { schemaVersion: 1 as const, baseCommit: lease.baseCommit, commit: lease.baseCommit,
+        ref: `refs/deckent/deliveries/${'0'.repeat(64)}`, snapshotDigest: '0'.repeat(64) };
+      await expect(delivery.delivered(plan)).resolves.toBe(false);
+      // Both freshly secured paths are enforced by the existing production custody check.
+      for (const path of [lease.workspace, gitDirectory]) {
+        await chmod(path, 0o775);
+        await expect(delivery.delivered(plan)).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+        await chmod(path, 0o755);
+      }
+    } finally { process.umask(previous); }
+  });
+  it('does not change permissions when reusing an existing workspace', async () => {
+    const f = await fixture(); const lease = await f.broker.allocate(f.request);
+    const gitDirectory = (await exec('/usr/bin/git', ['-C', lease.workspace, 'rev-parse', '--absolute-git-dir'])).stdout.trim();
+    await chmod(gitDirectory, 0o775);
+    expect(await f.broker.allocate(f.request)).toEqual(lease);
+    expect((await lstat(gitDirectory)).mode & 0o777).toBe(0o775);
+    await chmod(lease.workspace, 0o775);
+    await expect(f.broker.allocate(f.request)).rejects.toThrow('WORKSPACE_UNSAFE');
+    expect((await lstat(lease.workspace)).mode & 0o777).toBe(0o775);
+  });
   it('pins committed content without carrying owner WIP, runtime files or source hooks', async () => {
     const f = await fixture(); const lease = await f.broker.allocate(f.request);
     expect(await readFile(join(lease.workspace, 'tracked'), 'utf8')).toBe('base');
