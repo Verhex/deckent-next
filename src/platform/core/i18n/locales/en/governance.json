@@ -711,6 +711,7 @@
   "xverify.report.verifier_model": "**Verifier model:** {model}",
   "xverify.verdict": "Verdict: {verdict} (verifier: {verifier}) — host adjudication report: {report}",
   "error.INVENTORY_QUERY_INVALID": "Invalid inventory query. Check scope, cursor and page size.",
+  "error.ATTEMPT_NOT_FOUND": "No attempt of {run}/{task} was found in this scope. Check the ids with `deckent inventory`.",
   "error.INVENTORY_UNAVAILABLE": "Inventory cannot be read safely. Check the installation and storage access.",
   "error.DISPATCH_INVENTORY_LIMIT": "Requested page exceeds the configured inspection limit.",
   "error.AUTHENTICATION_REQUIRED": "A verified local identity is required.",

@@ -254,6 +254,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
       ? (p.eligibilityGapMs !== undefined ? t('error.RUN_CAPACITY_OR_ORDER.delayed', p, l) : t('error.RUN_CAPACITY_OR_ORDER.detail', p, l))
       : t('error.RUN_CAPACITY_OR_ORDER', p, l) }) },
   INVENTORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.INVENTORY_QUERY_INVALID', p, l) }) },
+  ATTEMPT_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_NOT_FOUND', p, l) }) },
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },
   AUTHENTICATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },

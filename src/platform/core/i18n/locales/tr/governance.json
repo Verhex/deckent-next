@@ -711,6 +711,7 @@
   "xverify.report.verifier_model": "**Hakem modeli:** {model}",
   "xverify.verdict": "Karar: {verdict} (hakem: {verifier}) — host adjudication raporu: {report}",
   "error.INVENTORY_QUERY_INVALID": "Envanter sorgusu geçersiz. Kapsamı, imleci ve sayfa boyutunu kontrol edin.",
+  "error.ATTEMPT_NOT_FOUND": "Bu kapsamda {run}/{task} için deneme bulunamadı. Kimlikleri `deckent inventory` ile kontrol edin.",
   "error.INVENTORY_UNAVAILABLE": "Envanter güvenle okunamıyor. Kurulumu ve depolama erişimini kontrol edin.",
   "error.DISPATCH_INVENTORY_LIMIT": "İstenen sayfa yapılandırılmış inceleme sınırını aşıyor.",
   "error.AUTHENTICATION_REQUIRED": "Doğrulanmış yerel kimlik gerekiyor.",

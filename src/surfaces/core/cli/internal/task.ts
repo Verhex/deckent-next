@@ -18,6 +18,16 @@ export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, opt
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+async function resolveLatestAttempt(context: CommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
+  let best: AttemptIdentity | undefined, after: string | null = null;
+  do {
+    const { page } = await context.inspectInventory!(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, after }, { env: context.env ?? process.env });
+    for (const { identity } of page.entries) if (identity.runId === runId && identity.taskId === taskId && (!best || identity.generation > best.generation)) best = identity;
+    after = page.nextAfter;
+  } while (after !== null);
+  if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
+  return best;
+}
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
@@ -42,11 +52,22 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
   const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
-  if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
-    || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
-  const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
+  const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action ?? '') && !attemptId && !layoutRevision && !generation;
+  let identity: AttemptIdentity;
+  let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
+  if (resolveLatest) {
+    if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
+    if (!context.inspectInventory) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    identity = await resolveLatestAttempt(context, scopeId, runId, taskId);
+    resolvedNotice = { attempt: identity.attemptId, generation: identity.generation, layout: identity.layoutRevision, run: runId, task: taskId };
+  } else {
+    if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
+      || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
+    identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
+  }
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
+  if (resolvedNotice) (json ? context.stderr ?? process.stderr : context.stdout ?? process.stdout).write(`${t('cli.task.resolvedAttempt', resolvedNotice, locale)}\n`);
   if (action === 'integration-deliver') {
     const commandId = values.get('--command-id'), integrationCommandId = values.get('--candidate-command-id');
     if (!commandId || !integrationCommandId) throw usage(!commandId ? '--command-id' : '--candidate-command-id');
