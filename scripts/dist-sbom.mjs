@@ -80,18 +80,19 @@ export function bundledPackages(root, metafile) {
   return { shipped, treeShaken };
 }
 
-/** Embedded (vendored) components of the shipped top-level packages, marked shipped only when an embedding carrier file is in the bundle.
+/** Embedded (vendored) components of every shipped package, scanned at its own installed directory and marked shipped only when an
+ * embedding carrier file is in the bundle. Scan failures remain as { carrier, problem } rows, never as shipped components.
  * `licenses` maps `name@version` to an SPDX id (dependencies.json `embedded[].license`); unknown stays null and is reported. */
 export function embeddedInBundle(root, shipped, licenses = new Map()) {
-  const topLevel = shipped.filter(item => item.dir === `node_modules/${item.name}`);
-  const scanned = scanEmbedded(root, topLevel.map(item => item.name));
-  return scanned.flatMap(host => {
-    const carrier = topLevel.find(item => item.name === host.package);
-    return host.embedded.map(component => {
+  const scanned = scanEmbedded(root, shipped.map(item => ({ name: item.name, dir: item.dir })));
+  return scanned.flatMap((host, index) => {
+    const carrier = shipped[index];
+    const embedded = host.embedded.map(component => {
       const files = component.maps.map(map => map.replaceAll('\\', '/').replace(/\.map$/u, '')).filter(file => carrier.shippedFiles.includes(file));
       return { name: component.name, version: component.version, license: licenses.get(`${component.name}@${component.version}`) ?? null,
         carrier: `${carrier.name}@${carrier.version}`, shipped: files.length > 0, carrierFiles: files };
     });
+    return host.problem ? [...embedded, { carrier: `${carrier.name}@${carrier.version}`, problem: host.problem }] : embedded;
   });
 }
 

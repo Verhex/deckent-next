@@ -5,7 +5,7 @@
 // `@modelcontextprotocol/*` packages installed beside them). Prints JSON; exit 0. Library use: lint-arch compares `scanEmbedded` with
 // dependencies.json `embedded[]` (DEPS-GOV); scripts/deps-watch.mjs feeds the result to OSV.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -27,29 +27,35 @@ function* maps(dir) {
 }
 const PNPM = /node_modules\/\.pnpm\/((?:@[^+/]+\+)?[^@/]+)@([^/_]+)[^/]*\/node_modules\//u, PLAIN = /node_modules\/((?:@[^/]+\/)?[^/.][^/]*)\//gu;
 
-/** One report row per host: `installed` is null when the host is not installed under `<root>/node_modules`. */
+/** Hosts are package names (under `<root>/node_modules`) or { name, dir? }, with dir absolute or relative to root.
+ * One report row per host; an unreadable manifest/directory/map adds `problem` instead of throwing or omitting the host. */
 export function scanEmbedded(root, hosts) {
   const modules = join(root, 'node_modules');
-  const installedVersion = name => { const file = join(modules, name, 'package.json'); return existsSync(file) ? readJson(file).version : null; };
+  const installedVersion = name => { try { return readJson(join(modules, name, 'package.json')).version ?? null; } catch { return null; } };
   const report = [];
   for (const host of hosts) {
-    const dir = join(modules, host);
-    if (!existsSync(join(dir, 'package.json'))) { report.push({ package: host, installed: null, embedded: [] }); continue; }
-    const found = new Map();
-    for (const file of maps(dir)) {
-      let sources; try { sources = readJson(file).sources ?? []; } catch { continue; }
-      for (const source of sources) {
-        const pnpm = PNPM.exec(source);
-        let name = pnpm ? pnpm[1].replace('+', '/') : null, version = pnpm ? pnpm[2] : null;
-        if (!name) { const plain = [...source.matchAll(PLAIN)].at(-1); if (!plain) continue; name = plain[1]; }
-        if (name === host) continue;
-        const key = `${name}@${version ?? '?'}`, entry = found.get(key) ?? { name, version, sourceCount: 0, maps: new Set() };
-        entry.sourceCount++; entry.maps.add(resolve(file).slice(dir.length + 1)); found.set(key, entry);
+    const name = typeof host === 'string' ? host : host.name;
+    const dir = resolve(root, (typeof host === 'string' ? undefined : host.dir) ?? join('node_modules', name));
+    const row = { package: name, installed: null, embedded: [] }, found = new Map();
+    try {
+      row.installed = readJson(join(dir, 'package.json')).version ?? null;
+      for (const file of maps(dir)) {
+        const text = readFileSync(file, 'utf8');
+        let sources; try { sources = JSON.parse(text).sources ?? []; } catch { continue; }
+        for (const source of sources) {
+          const pnpm = PNPM.exec(source);
+          let embeddedName = pnpm ? pnpm[1].replace('+', '/') : null, version = pnpm ? pnpm[2] : null;
+          if (!embeddedName) { const plain = [...source.matchAll(PLAIN)].at(-1); if (!plain) continue; embeddedName = plain[1]; }
+          if (embeddedName === name) continue;
+          const key = `${embeddedName}@${version ?? '?'}`, entry = found.get(key) ?? { name: embeddedName, version, sourceCount: 0, maps: new Set() };
+          entry.sourceCount++; entry.maps.add(relative(dir, file).replaceAll('\\', '/')); found.set(key, entry);
+        }
       }
-    }
-    report.push({ package: host, installed: installedVersion(host), embedded: [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
+    } catch (error) { row.problem = `${dir}: ${error.message}`; }
+    row.embedded = [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
       .map(entry => ({ name: entry.name, version: entry.version, installedTopLevel: installedVersion(entry.name), sourceCount: entry.sourceCount,
-        maps: [...entry.maps].sort() })) });
+        maps: [...entry.maps].sort() }));
+    report.push(row);
   }
   return report;
 }
@@ -57,6 +63,7 @@ export function scanEmbedded(root, hosts) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const report = scanEmbedded(root, process.argv.length > 2 ? process.argv.slice(2) : defaultHosts(root));
+  const problems = report.filter(entry => entry.problem);
   process.stdout.write(`${JSON.stringify({ schemaVersion: 1, root, packages: report.filter(entry => entry.embedded.length > 0),
-    scanned: report.map(entry => `${entry.package}@${entry.installed ?? 'missing'}`) }, null, 2)}\n`);
+    scanned: report.map(entry => `${entry.package}@${entry.installed ?? 'missing'}`), ...(problems.length ? { problems } : {}) }, null, 2)}\n`);
 }
