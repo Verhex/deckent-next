@@ -9,6 +9,7 @@ import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/ind
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
+import { mcpEndpointRefusal } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the 2025 `initialize` era as the fallback. */
@@ -43,9 +44,39 @@ export async function mcpServerHomeDirectory(homeRoot: string, server: Pick<McpC
     server.binding?.definitionDigest ?? null, server.id])).digest('hex').slice(0, 32);
   return join(homeRoot, `${server.id}-${identity}`);
 }
-/** Streamable HTTP never follows a redirect (Astra 2444 R1): a 3xx would carry the headers (resolved `$DECK:` secrets) and the call body to a
- * target nobody approved, also over plain HTTP. Every request of the transport goes through this fetch, so no option or path can turn it back on. */
-const noRedirectFetch: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
+/** One typed refusal for redirect policy failures; never includes a URL, header value or call body. */
+export class McpRedirectRefusedError extends Error {
+  readonly code = 'MCP_REDIRECT_REFUSED';
+  constructor(readonly reason: string) { super(`MCP_REDIRECT_REFUSED: ${reason}`); this.name = 'McpRedirectRefusedError'; }
+}
+/** Streamable HTTP redirects carry resolved `$DECK:` headers and the original call body (Astra 2444 R1): only method-preserving 307/308,
+ * within the approved origin and endpoint rule, at most three hops. Every transport request stays manual, regardless of requestInit. */
+export function createMcpRedirectFetch(approvedServerUrl: string, fetchImplementation: typeof fetch = fetch): typeof fetch {
+  const approvedOrigin = new URL(approvedServerUrl).origin;
+  return async (input, init) => {
+    let current: URL;
+    try { current = new URL(input instanceof Request ? input.url : input); }
+    catch { throw new McpRedirectRefusedError('invalid-location'); }
+    const options = { ...init, redirect: 'manual' as const };
+    // The SDK supplies URL + replayable JSON body. Request inputs retain their inherited options and a cloneable original body too.
+    const original = input instanceof Request ? new Request(input, options) : null;
+    for (let hops = 0; ; hops++) {
+      if (current.origin !== approvedOrigin) throw new McpRedirectRefusedError('cross-origin');
+      const refused = mcpEndpointRefusal(current.href);
+      if (refused) throw new McpRedirectRefusedError(refused);
+      const response = await fetchImplementation(original ? new Request(current, original.clone()) : current, original ? { redirect: 'manual' } : options);
+      if (response.status < 300 || response.status >= 400) return response;
+      // Redirect responses are not returned to the SDK; release their bodies even when the next target is refused.
+      await response.body?.cancel().catch(() => undefined);
+      if (response.status !== 307 && response.status !== 308) throw new McpRedirectRefusedError('status-' + response.status);
+      if (hops === 3) throw new McpRedirectRefusedError('hop-limit');
+      const location = response.headers.get('location');
+      if (!location?.trim()) throw new McpRedirectRefusedError('missing-location');
+      try { current = new URL(location, current); }
+      catch { throw new McpRedirectRefusedError('invalid-location'); }
+    }
+  };
+}
 /** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view.
  * `projectReadOnly`: the write view the launch enforces (false on the host, where no posture has an OS boundary). */
 type Launch = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Record<string, string>; readonly sandboxed: boolean;
@@ -271,7 +302,7 @@ export class McpClientPool implements McpPoolView {
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
     const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
-    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'error' }, fetch: noRedirectFetch })
+    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'manual' }, fetch: createMcpRedirectFetch(server.url!) })
       : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
     if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
