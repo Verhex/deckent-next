@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, modelTextPrefix } from '#domain/index.js';
 import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalFacts, type AgentToolApprovalOutcome } from '#engine/index.js';
-import { ErrorRegistry, prepareProductFile, type ProductLayout, type TrustedClock } from '#platform/index.js';
+import { ErrorRegistry, prepareProductFile, t, type Locale, type ProductLayout, type TrustedClock } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
@@ -160,14 +160,24 @@ export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; rea
 }
 
 /** The card as text (approval preview and CLI): what runs, where, with which variables (set or not) and, in the tools phase, what gets pinned. */
-export function describeMcpTrustCard(card: McpTrustCard): string {
-  const lines = [`MCP server ${card.name} (${card.scope} scope, ${card.file}) — ${card.phase === 'launch' ? 'start it?' : 'trust it and pin these tools?'}`,
-    card.transport === 'http' ? `url: ${card.command}` : `command: ${[card.command, ...card.args].join(' ')}`,
-    `variables: ${card.variables.map(variable => `${variable.name}${variable.set ? '' : ' (unset)'}`).join(', ') || 'none'}`,
-    card.transport === 'http' ? `headers: ${card.headerNames.join(', ') || 'none'}` : `env: ${card.envNames.join(', ') || 'none'}`, `realm: ${card.realm}${card.posture ? ` — ${card.posture}` : ''}`, `definition: ${card.definitionDigest}`,
-    ...(card.note ? [`note: ${card.note}`] : []),
-    ...(card.tools ? [`tools (${card.tools.length}; ${card.era ?? ''} ${card.protocolVersion ?? ''}):`, ...card.tools.map(tool => `  ${tool.name} ${tool.digest.slice(0, 12)}${
-      tool.alwaysAsk ? ' always-ask' : ''}${tool.description ? ` — ${modelTextPrefix(tool.description, 160)}` : ''}`)] : [])];
+export function describeMcpTrustCard(card: McpTrustCard, locale?: Locale): string {
+  // Existing callers retain English output regardless of the host's language.
+  locale ??= 'en';
+  const none = t('mcp.trustCard.none', {}, locale);
+  const prompt = card.phase === 'launch' ? t('mcp.trustCard.launchPrompt', {}, locale) : t('mcp.trustCard.toolsPrompt', {}, locale);
+  const lines = [t('mcp.trustCard.heading', { name: card.name, scope: card.scope, file: card.file, prompt }, locale),
+    card.transport === 'http' ? t('mcp.trustCard.url', { url: card.command }, locale)
+      : t('mcp.trustCard.command', { command: [card.command, ...card.args].join(' ') }, locale),
+    t('mcp.trustCard.variables', { variables: card.variables.map(variable => `${variable.name}${
+      variable.set ? '' : ` ${t('mcp.trustCard.unset', {}, locale)}`}`).join(', ') || none }, locale),
+    card.transport === 'http' ? t('mcp.trustCard.headers', { headers: card.headerNames.join(', ') || none }, locale)
+      : t('mcp.trustCard.env', { env: card.envNames.join(', ') || none }, locale),
+    t('mcp.trustCard.realm', { realm: `${card.realm}${card.posture ? ` — ${card.posture}` : ''}` }, locale),
+    t('mcp.trustCard.definition', { digest: card.definitionDigest }, locale),
+    ...(card.note ? [t('mcp.trustCard.note', { note: card.note }, locale)] : []),
+    ...(card.tools ? [t('mcp.trustCard.tools', { count: card.tools.length, era: card.era ?? '', protocolVersion: card.protocolVersion ?? '' }, locale),
+      ...card.tools.map(tool => `  ${tool.name} ${tool.digest.slice(0, 12)}${tool.alwaysAsk ? ` ${t('mcp.trustCard.alwaysAsk', {}, locale)}` : ''}${
+        tool.description ? ` — ${modelTextPrefix(tool.description, 160)}` : ''}`)] : [])];
   return lines.join('\n');
 }
 

@@ -2179,7 +2179,8 @@
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/domain/core/agent-turn",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
