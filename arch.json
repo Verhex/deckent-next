@@ -220,6 +220,7 @@
     "src/composition/core/cli": {
       "dependencies": [
         "src/adapters/core/terminal-history",
+        "src/adapters/core/workspace-write",
         "src/engine/core/runtime",
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
