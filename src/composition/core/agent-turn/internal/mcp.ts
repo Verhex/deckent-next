@@ -55,7 +55,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
-  signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
+  signal: input.signal, emit: input.emit, locale, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
   if (opened.notices.length) input.onNotices?.(opened.notices);
   if (!opened.settings) return null;
   // MCP-REVOKE: every call re-reads the current registry and trust at its send (the same registry context the turn opened with).
