@@ -6,7 +6,7 @@ import { fillTemplate } from './worker-line.js';
 
 /**
  * The conversation's scratch area through the runtime service (SCR-A, protocol v16): the surface reads and deletes no file. The area
- * belongs to the conversation (`/new` starts another, `/resume` returns to one), so every call names the current session.
+ * belongs to the conversation (`/clear` starts another, `/resume` returns to one), so every call names the current session.
  */
 export interface WorklineScratchPort {
   inspect(sessionId: string, signal?: AbortSignal): Promise<ScratchView>;

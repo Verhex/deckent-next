@@ -802,7 +802,7 @@
   "terminal.slash.context": "Konuşmanın modelin bağlam penceresinin ne kadarını kullandığını göster.",
   "terminal.slash.resume": "Bu scope'taki eski bir konuşmayı ok tuşlarıyla seçin ya da birini sürdürün: /resume <n|id>.",
   "terminal.slash.resumeArgument": "<n|kimlik>",
-  "terminal.slash.new": "Yeni bir konuşma başlat (mevcut konuşma kayıtlı kalır).",
+  "terminal.slash.clear": "Yeni bir konuşma başlat (mevcut konuşma kayıtlı kalır).",
   "terminal.session.entry": "{index}. {session} · {when} · {count} mesaj · {preview}",
   "terminal.session.none": "Bu scope'ta kayıtlı önceki konuşma yok.",
   "terminal.session.notFound": "Eşleşen kayıtlı konuşma yok; seçmek için /resume yazın.",

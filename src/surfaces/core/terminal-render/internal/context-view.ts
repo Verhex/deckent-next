@@ -33,7 +33,7 @@ export interface ContextViewLabels {
   readonly bar: string;
 }
 const NEUTRAL: ContextViewLabels = { threshold: 'auto {tokens} ({percent}%) · {remaining} left', split: 'system {system}% · you {user}% · bot {assistant}% · tools {tools}% · files {attachments}%',
-  compacted: 'summaries {count} · last {replaced} msgs · {when}', compactedNone: 'summaries 0', largest: '{items}', suggestNew: '/new', suggestTools: '/new', bar: '{filled} {percent}%' };
+  compacted: 'summaries {count} · last {replaced} msgs · {when}', compactedNone: 'summaries 0', largest: '{items}', suggestNew: '/clear', suggestTools: '/clear', bar: '{filled} {percent}%' };
 
 const bytes = (text: string) => Buffer.byteLength(text, 'utf8');
 const ATTACHED = '\n\n--- attached file ';
@@ -85,6 +85,6 @@ export function contextViewLines(input: { readonly measured: ContextMeasure | nu
     : labels.compactedNone);
   if (parts.largest.length) lines.push(fillTemplate(labels.largest, { items: parts.largest.map(item => `${item.name} (${pct(item.size, parts.total)}%)`).join(' · ') }));
   const fill = measured?.windowTokens ? measured.promptTokens / measured.windowTokens : 0;
-  if (fill >= CONTEXT_SUGGEST_SHARE) lines.push(fillTemplate(parts.tools * 2 > parts.total ? labels.suggestTools : labels.suggestNew, { command: '/new' }));
+  if (fill >= CONTEXT_SUGGEST_SHARE) lines.push(fillTemplate(parts.tools * 2 > parts.total ? labels.suggestTools : labels.suggestNew, { command: '/clear' }));
   return lines;
 }

@@ -20,7 +20,7 @@ describe('/context management view (TERM-UX-1 d)', () => {
     expect(parts.largest.map(item => item.name)).toEqual(['read_file', 'attachments']);
   });
 
-  it('reports fill, the summary threshold and what remains, the last summary, and suggests /new past the suggestion share', () => {
+  it('reports fill, the summary threshold and what remains, the last summary, and suggests /clear past the suggestion share', () => {
     const history = [{ role: 'user' as const, content: 'q' }, { role: 'tool' as const, toolCallId: 'c', name: 'read_file', content: 'T'.repeat(900) }];
     const lines = contextViewLines({ measured: { promptTokens: 4_000, windowTokens: 6_000, quality: 'provider-count' }, history,
       compaction: { count: 2, replacedMessages: 7, atMs: 0 }, now: 1, when: () => 'WHEN' });
@@ -29,10 +29,10 @@ describe('/context management view (TERM-UX-1 d)', () => {
     expect(text).toContain('auto 4500 (75%) · 500 left');
     expect(text).toContain('summaries 2 · last 7 msgs · WHEN');
     expect(text).toContain('read_file (100%)');
-    expect(lines.at(-1)).toBe('/new');
+    expect(lines.at(-1)).toBe('/clear');
     const calm = contextViewLines({ measured: { promptTokens: 600, windowTokens: 6_000, quality: 'upper-bound' }, history, compaction: null, now: 1, when: () => '' });
     expect(calm.join('\n')).toContain('summaries 0');
-    expect(calm.at(-1)).not.toBe('/new');
+    expect(calm.at(-1)).not.toBe('/clear');
   });
 
   it('runs through the workline: /context after a turn with a measured window, a tool result and a summary', async () => {
@@ -54,6 +54,6 @@ describe('/context management view (TERM-UX-1 d)', () => {
     await until(() => view.stdout.text.includes('summaries 1 · last 9 msgs'), 'view');
     expect(view.stdout.text).toContain('auto 4500 (75%)');
     expect(view.stdout.text).toContain('read_file (');
-    expect(view.stdout.text).toContain('/new');
+    expect(view.stdout.text).toContain('/clear');
   });
 });

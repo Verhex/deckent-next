@@ -43,14 +43,14 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
       'terminal.slash.help': t('terminal.slash.help', {}, locale), 'terminal.slash.transcript': t('terminal.slash.transcript', {}, locale),
       'terminal.slash.approvals': t('terminal.slash.approvals', {}, locale), 'terminal.slash.cancel': t('terminal.slash.cancel', {}, locale),
       'terminal.slash.context': t('terminal.slash.context', {}, locale), 'terminal.slash.resume': t('terminal.slash.resume', {}, locale),
-      'terminal.slash.resumeArgument': t('terminal.slash.resumeArgument', {}, locale), 'terminal.slash.new': t('terminal.slash.new', {}, locale),
+      'terminal.slash.resumeArgument': t('terminal.slash.resumeArgument', {}, locale), 'terminal.slash.clear': t('terminal.slash.clear', {}, locale),
       'terminal.slash.transcriptArgument': t('terminal.slash.transcriptArgument', {}, locale),
       'terminal.slash.cancelArgument': t('terminal.slash.cancelArgument', {}, locale),
       'terminal.slash.mode': t('terminal.slash.mode', {}, locale), 'terminal.slash.modeArgument': t('terminal.slash.modeArgument', {}, locale),
       'terminal.slash.reasoning': t('terminal.slash.reasoning', {}, locale), 'terminal.slash.scratch': t('terminal.slash.scratch', {}, locale) } };
 }
 
-/** Catalog strings of `/resume`, `/context` and `/new` (terminal.session.*). */
+/** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */
 export function terminalSessionLabels(locale: Locale): ConversationSessionLabels {
   return { entry: t('terminal.session.entry', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),

@@ -802,7 +802,7 @@
   "terminal.slash.context": "Show how much of the model's context window the conversation uses.",
   "terminal.slash.resume": "Choose an earlier conversation of this scope with the arrow keys, or continue one: /resume <n|id>.",
   "terminal.slash.resumeArgument": "<n|id>",
-  "terminal.slash.new": "Start a new conversation (the current one stays saved).",
+  "terminal.slash.clear": "Start a new conversation (the current one stays saved).",
   "terminal.session.entry": "{index}. {session} · {when} · {count} messages · {preview}",
   "terminal.session.none": "No earlier conversation of this scope is saved.",
   "terminal.session.notFound": "No saved conversation matches; run /resume to choose one.",
