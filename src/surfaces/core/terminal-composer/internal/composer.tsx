@@ -17,6 +17,8 @@ export interface ComposerLabels {
   readonly exitArmed: string;
   /** Keyboard help: first line is the title, one shortcut per following line. */
   readonly shortcuts: string;
+  /** Dim hint after the caret while the draft is empty; never part of the draft. */
+  readonly placeholder?: string;
   /** Slash description and argument texts by catalog key (`SlashCommand.descriptionKey` / `argumentKey`). */
   readonly slash: Readonly<Record<string, string>>;
 }
@@ -143,6 +145,9 @@ export function Composer(props: ComposerProps): ReactNode {
   // Border (2) and padding (2) plus one cell so the caret after a full row never wraps.
   const rows = layoutRows(state.text.replace(/\t/gu, ' '), (columns || 80) - 5 - displayWidth(prompt));
   const caretAt = caretRow(rows, state.cursor);
+  // Dim only in a colour tier: the `none` tier (NO_COLOR) renders the hint as plain text without ANSI codes.
+  const placeholder = state.text === '' ? labels.placeholder ?? '' : '';
+  const dimmable = Object.keys(palette.accent).length > 0;
   const match = state.search ? searchMatches(state)[state.search.skip]?.text ?? '' : '';
   return (
     <Box flexDirection="column">
@@ -154,6 +159,7 @@ export function Composer(props: ComposerProps): ReactNode {
           <Text key={index} wrap="truncate">
             {index ? indent : prompt}
             {index === caretAt ? <CaretRow text={row.text} at={state.cursor - row.start} marker={marker} /> : row.text}
+            {placeholder && index === 0 ? <Text {...(dimmable ? { dimColor: true } : {})}>{marker ? ` ${placeholder}` : placeholder}</Text> : null}
             {argument && index === rows.length - 1 ? <Text {...palette.muted}>{labels.slash[argument.argumentKey!] ?? ''}</Text> : null}
           </Text>
         ))}

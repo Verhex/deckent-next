@@ -705,6 +705,7 @@
   "terminal.status.inferenceAbsent": "No inference_serving profile configured.",
   "terminal.status.inference": "Inference profile {profile} · token budget {tokenBudget} · max-seq {maxSeqs} · endpoint {endpoint}",
   "terminal.status.hint": "Interactive terminal: `deckent`. Line mode: `deckent terminal session [--scope <id>]`.",
+  "terminal.workline.placeholder": "Ask anything · / commands · @ file",
   "terminal.workline.banner": "Deckent workline. Esc cancels a running turn; /exit, Ctrl+D or Ctrl+C twice when idle quits.",
   "terminal.workline.hint": "Enter send · Alt+Enter new line · Tab completes /commands · Up/Down history · Ctrl+R search · ? shortcuts",
   "terminal.workline.watchStarted": "Worker watch on — new workers append to the work ledger.",

@@ -1,6 +1,7 @@
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render, type Key } from 'ink';
+import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { COMPOSER_LIMITS, Composer, EMPTY_COMPOSER, WorklinePaletteProvider, caretRow, composerKey, composerMenu, displayWidth, exitArmed,
   layoutRows, mentionAt, pendingArgument, reduceComposer, resolveWorklinePalette, searchMatches,
@@ -303,11 +304,11 @@ async function until(check: () => boolean, label: string) {
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 
-function mount(props: Partial<ComposerProps> = {}, columns = 120) {
+function mount(props: Partial<ComposerProps> = {}, columns = 120, tier: Parameters<typeof resolveWorklinePalette>[0] = 'none') {
   const stdout = new Screen(columns);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const sent: string[] = [], calls = { exit: 0, cancel: 0 };
-  const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(Composer, {
+  const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette(tier), children: createElement(Composer, {
     prompt: '> ', labels, busy: false, onSubmit: value => sent.push(value), onCancel: () => calls.cancel++, onExit: () => calls.exit++, ...props,
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
@@ -406,5 +407,50 @@ describe('composer rendered by Ink (no colour tier)', () => {
     await view.keys('世界世界世界世界');
     // 16 columns - border/padding (4) - prompt (2) - caret reserve (1) = 9 cells: four wide characters per row.
     await until(() => view.stdout.text.includes('│ > 世界世界') && view.stdout.text.includes('│   世界世界|'), 'wrapped wide rows');
+  });
+
+  describe('placeholder without a prompt prefix', () => {
+    const HINT = 'ASK-ANYTHING-HINT';
+    const withHint = { prompt: '', labels: { ...labels, placeholder: HINT } };
+    const ESC = String.fromCharCode(27);
+
+    it('shows the hint after the caret while empty, drops it on the first character and never submits it', async () => {
+      const view = mount(withHint);
+      await until(() => view.stdout.text.includes(`| ${HINT}`), 'placeholder after the caret marker');
+      expect(view.stdout.text).not.toContain('> ');
+      expect(view.stdout.text).not.toMatch(new RegExp(`${ESC}\\[[0-9;]*m`, 'u'));
+      const mark = view.stdout.text.length;
+      await view.type('h');
+      await until(() => view.stdout.text.slice(mark).includes('h|'), 'first character rendered');
+      expect(view.stdout.text.slice(mark)).not.toContain(HINT);
+      await view.keys('\r');
+      await until(() => view.sent.length === 1, 'submit');
+      expect(view.sent).toEqual(['h']);
+    });
+
+    it('shows the hint again once the draft is emptied by Backspace', async () => {
+      const view = mount(withHint);
+      await view.type('x');
+      const mark = view.stdout.text.length;
+      await view.keys('\u007f');
+      await until(() => view.stdout.text.slice(mark).includes(HINT), 'placeholder back');
+    });
+
+    it('shows the hint without a marker space in a colour tier (dim needs a colour-capable stream, so it is not asserted here)', async () => {
+      const view = mount({ ...withHint, caret: 'inverse' }, 120, 'ansi16');
+      await until(() => view.stdout.text.includes(HINT), 'placeholder');
+      expect(view.stdout.text).not.toContain(`| ${HINT}`);
+    });
+
+    it('carries the catalog placeholder in both session languages', () => {
+      expect(terminalComposerLabels('en').placeholder).toBe('Ask anything · / commands · @ file');
+      expect(terminalComposerLabels('tr').placeholder).toBe('Bir görev yaz · / komutlar · @ dosya');
+    });
+
+    it('draws no placeholder when the labels carry none', async () => {
+      const view = mount({ prompt: '' });
+      await until(() => view.stdout.text.includes('|'), 'caret');
+      expect(view.stdout.text).not.toMatch(/\|\s*[A-Za-z]/u);
+    });
   });
 });

@@ -705,6 +705,7 @@
   "terminal.status.inferenceAbsent": "inference_serving profili yapılandırılmamış.",
   "terminal.status.inference": "Çıkarım profili {profile} · token bütçesi {tokenBudget} · max-seq {maxSeqs} · uç {endpoint}",
   "terminal.status.hint": "Etkileşimli terminal: `deckent`. Satır modu: `deckent terminal session [--scope <id>]`.",
+  "terminal.workline.placeholder": "Bir görev yaz · / komutlar · @ dosya",
   "terminal.workline.banner": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit, Ctrl+D veya iki kez Ctrl+C çıkar.",
   "terminal.workline.hint": "Enter gönder · Alt+Enter yeni satır · Tab /komutları tamamlar · Yukarı/Aşağı geçmiş · Ctrl+R ara · ? kısayollar",
   "terminal.workline.watchStarted": "Worker izleme açık — yeni worker'lar work ledger'a eklenir.",
