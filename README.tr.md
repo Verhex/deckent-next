@@ -32,6 +32,8 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 > **Ön sürüm `1.0.0-alpha.34`** (2026-10-13 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
+/do ile bir işi doğal dille anlatırsınız; Deckent planlar, onayınızı alır ve işçilere yaptırır.
+
 ## Deckent nedir
 
 Deckent kendi makinelerinizde çalışır; policy, onaylar, yürütme ve kalıcı kayıtları bir araya getirir. Ücretli API
