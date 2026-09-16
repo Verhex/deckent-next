@@ -78,3 +78,41 @@ calendar estimate is stated before those two measurements exist.
   Local verify now builds before e2e, and CI uses that same gate, so proof cannot run a stale binary.
 - Round-2 receipt: `/home/alperen/deckent-refactor-work/proof/K1-revision-review.json`;
   verification log: `K1-revision-verify.log` in the same directory. Original round-1 evidence is retained.
+
+## Backlog (owner-admitted product outcomes not yet realized in legacy code)
+
+Source: legacy MASTER-PLAN triage (`/home/alperen/deckent-refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md`, 510 active rows →
+286 product backlog · 124 realized-in-code · 63 legacy governance · 37 obsolete). Owner admitted these 25 on 2026-09-16.
+Each becomes a card only after its `After` dependency has landed; `Legacy` lists the MASTER ids it absorbs.
+
+| B# | Outcome | Package / tier | After | Legacy ids | Status |
+|---|---|---|---|---|---|
+| B01 | Tenant/project/session scope with one scoped capability decision, fail-closed on read/write/event/memory/run/flow/admin | kernel/enterprise | K1, K3 | TENANT-001, CAPABILITY-001 | TODO |
+| B02 | One durable approval broker (CAS, expiry, relay, typed risk tier); every approval producer binds to it; decisions only via CLI | kernel/core + surfaces/core | K3, S0 | APPROVAL-001, APPROVAL-SURFACE-UNIFICATION-001 | TODO |
+| B03 | A receipt per provider call and one admission→reservation→usage→landing→settlement ledger | providers/core | P1 | RECEIPT-001, LIMIT-001 | TODO |
+| B04 | Tamper-evident, tenant-scoped causal audit with redaction and bounded retention | observability/enterprise | K3, B01 | AUDIT-001, OPERATION-EFFECT-CONTEXT-001 | TODO |
+| B05 | Tenant-aware age/count/size retention, atomic rotation, legal hold, one archive location | kernel/enterprise | K3, B01 | STATE-RETENTION-001, TASK-RETENTION-001, ARCHIVE-PATH-AUTHORITY-001 | TODO |
+| B06 | Transactional storage backend with a distributed adapter boundary; no unsafe full-file read-modify-write; classification, residency, export/delete | kernel/enterprise | K3 | STORAGE-001, DATA-GOV-001 | TODO |
+| B07 | No silent provider, model, surface, billing or data-boundary substitution | providers/core | P1 | CM-03 | TODO |
+| B08 | Secret-free adapter SPI, signed opaque session lease (scope/TTL/nonce/audience, replay fails closed), credential-less worker execution | providers/core + runtime/core | P1, R2 | P02-637, P02-638, P02-639 | TODO |
+| B09 | Cross-platform credential custody | providers/core | B08 | P02-644 | TODO |
+| B10 | Platform proof matrix incl. macOS and Windows custody (X axis proven, not `?`) | runtime/core | R1, R2, W1 | PLATFORM-PROOF-001, 8031, 8032 | TODO |
+| B11 | One token-measurement authority for admission, tool results and checkpoints | surfaces/core | CH | TERMINAL-CONTEXT-CONTINUITY-001, TERMINAL-TOOL-BUDGET-UNITS-001 | TODO |
+| B12 | Preamble bound to a window-proportional budget; lazy tool schemas | surfaces/core | CH | TERMINAL-PREAMBLE-BUDGET-001 | TODO |
+| B13 | Deterministic read-only shell classifier + ranged/outline file reads (≈25 approvals → 0) | surfaces/core | CH, A1 | TERMINAL-READONLY-APPROVAL-001 | TODO |
+| B14 | Checkpoints carry a tool trail; host forces interim answers | surfaces/core | CH | TERMINAL-CHECKPOINT-CONTINUITY-001, TERMINAL-INTERACTION-FLOW-001 | TODO |
+| B15 | Worker prompt cost architecture (measured ≈80% reduction; stable cached prefix) | orchestration/core | O1 | WORKER-PROMPT-COST-ARCHITECTURE-001 | TODO |
+| B16 | Evaluator honesty: unproven "tests passed" penalized; goCriteria and rubric one authority; typed residual debt | orchestration/core | O4 | EVALUATOR-HONESTY-GONOGO-001 | TODO |
+| B17 | Provider-neutral canonical memory with revisioned sync, conflict journal, no silent delete, surface projections | kernel/base | M1 | MEMORY-AUTHORITY-001, MEMORY-SYNC-001, MEMORY-SURFACE-PROJECTION-001 | TODO |
+| B18 | Bounded semantic working context for the brain (no fixed item cap / byte truncation) | kernel/core | M1 | BRAIN-MEMORY-LIFECYCLE-001 | TODO |
+| B19 | Runtime i18n enforcement across TSX/MCP/connectors; six-language docs with freshness gate | kernel/base + docs lane | K2, S3, APP | I18N-SURFACE-001, DOCS-I18N-001 | TODO |
+| B20 | Versioned API contracts, VerifiedPrincipal without raw-header trust, durable outbox with tenant isolation | surfaces/enterprise | S2, B01 | API-CONTRACT-001, API-IDENTITY-001, API-EVENT-001 | TODO |
+| B21 | Enterprise auth: advisory vs enforced explicit; RBAC and org freeze share the core | kernel/enterprise | B01 | ENTERPRISE-AUTH-001 | TODO |
+| B22 | Signed provenance for supply chain; plugin sandbox check invoked fail-closed | orchestration/enterprise + runtime/enterprise | A1, R2 | SUPPLY-CHAIN-001, PLUGIN-SANDBOX-WIRE-001, PLUGIN-SANDBOX-001 | TODO |
+| B23 | One effective agent/skill catalog over shipped/override/learned/archive layers; sync never overwrites user content | orchestration/custom | A1 | 7011, 7012, 6011, 6012, 7013 | TODO |
+| B24 | Per-agent/per-skill permission matrix; solo→team→enterprise profiles; OFF = today's behavior | orchestration/enterprise | A1, B02 | AGENT-PERMISSION-MATRIX-001 | TODO |
+| B25 | SLO, HA, load/chaos thresholds and an assurance pack that names them | observability/enterprise + runtime/enterprise | O2, S2 | SLO-001, HA-001, LOAD-CHAOS-001, ASSURANCE-PACK-001 | TODO |
+
+Just below the line (not admitted, revisit after the cards): SURFACE-PARITY-001, COMPOSITE-WORKER-001, AUTONOMOUS-PERPETUAL-001,
+CURSOR-PROVIDER-001, the TRACE-* cluster. Realized-in-code rows are covered by their port cards; 30 acceptance invariants from the
+triage (§4 of the extract) are pinned to cards O1–O4, R2, K1–K3, S2–S3 by the card author.

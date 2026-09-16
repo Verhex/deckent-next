@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PLAN: Backlog section — 25 owner-admitted product outcomes triaged from the legacy MASTER-PLAN (286 candidates), with package/tier, dependency card and absorbed legacy ids.
+
 - K1 REVISE: mask resolved config secrets in both CLI formats; recover stale writer locks with owner diagnostics and preserve live/foreign ownership; package-owned API auth validation, scoped cache inputs, stable doctor tenant view, injected state paths, and removal of unused orchestration validators.
 - ARCH tiers gate: enforce tier direction, unit APIs and layout for kernel/providers/surfaces; register base defaults into core; move catalog and CLI entry paths; forbid provider credential env literals outside registry; build before real-binary tests in local/CI verification.
 
