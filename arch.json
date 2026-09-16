@@ -1,0 +1,29 @@
+{
+  "$schema": "./scripts/arch.schema.json",
+  "version": 1,
+  "packages": {
+    "kernel":        { "imports": [] },
+    "providers":     { "imports": ["kernel"] },
+    "runtime":       { "imports": ["kernel", "providers"] },
+    "orchestration": { "imports": ["kernel", "runtime", "providers"] },
+    "surfaces":      { "imports": ["kernel", "runtime", "orchestration", "providers"] },
+    "observability": { "imports": ["kernel", "runtime", "orchestration"], "importedBy": [] }
+  },
+  "apps": { "imports": ["surfaces"] },
+  "budgets": {
+    "maxLinesPerFile": 800,
+    "packageLines": { "kernel": 25000, "providers": 12000, "runtime": 40000, "orchestration": 45000, "surfaces": 45000, "observability": 12000 },
+    "totalSrcLines": 200000,
+    "testCases": 8000
+  },
+  "i18n": { "catalogDir": "src/kernel/i18n", "locales": ["en", "tr"], "callee": "t" },
+  "literals": {
+    "forbidden": ["\\bclaude-[0-9][0-9a-z.-]*\\b", "\\bgpt-[0-9][0-9a-z.-]*\\b", "\\bgemini-[0-9][0-9a-z.-]*\\b", "\\bo[134]-(mini|pro|preview)\\b", "\\b(sonnet|opus|haiku)\\b"],
+    "allow": ["src/providers/registry.ts", "src/providers/registry.json"]
+  },
+  "markdown": {
+    "trackedAllow": ["README.md", "ARCHITECTURE.md", "PLAN.md", "CHANGELOG.md"],
+    "pointerFiles": { "CLAUDE.md": 5, "AGENTS.md": 5 },
+    "writerModule": "src/kernel/docs-authority/"
+  }
+}

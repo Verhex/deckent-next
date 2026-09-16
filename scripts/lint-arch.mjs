@@ -1,0 +1,178 @@
+// lint-arch: the single architecture gate for deckent (fail-closed, no baselines).
+// Rules come from arch.json. Checks:
+//  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
+//  2. observability is never imported; apps import only surfaces
+//  3. i18n: locale catalogs have identical key sets; t('key') keys exist; no dynamic keys;
+//     surfaces never print string literals directly
+//  4. model/flow literals only in the registry allowlist
+//  5. .md writes only from kernel/docs-authority
+//  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
+//  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const arch = JSON.parse(readFileSync(join(ROOT, 'arch.json'), 'utf8'));
+const violations = [];
+const fail = (rule, file, message) => violations.push({ rule, file, message });
+const rel = (p) => relative(ROOT, p).split(sep).join('/');
+
+function walk(dir, predicate, out = []) {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) walk(path, predicate, out);
+    else if (predicate(path)) out.push(path);
+  }
+  return out;
+}
+
+const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
+const srcFiles = walk(join(ROOT, 'src'), isTs);
+const appFiles = walk(join(ROOT, 'apps'), isTs);
+const packageNames = Object.keys(arch.packages);
+
+function packageOf(file) {
+  const r = rel(file);
+  if (r.startsWith('src/')) {
+    const seg = r.split('/')[1];
+    return packageNames.includes(seg) ? seg : (seg === 'index.ts' ? '(root)' : `(unknown:${seg})`);
+  }
+  if (r.startsWith('apps/')) return `apps/${r.split('/')[1]}`;
+  return '(outside)';
+}
+
+const IMPORT_RE = /(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+function importsOf(file) {
+  const src = readFileSync(file, 'utf8');
+  const out = [];
+  for (const m of src.matchAll(IMPORT_RE)) {
+    const spec = m[1] ?? m[2];
+    if (!spec || !spec.startsWith('.')) continue;
+    const target = resolve(dirname(file), spec.replace(/\.js$/, '.ts'));
+    out.push({ spec, target, line: src.slice(0, m.index).split('\n').length });
+  }
+  return out;
+}
+
+// ---- 1 + 2: direction, public API, internal isolation, observability, apps
+for (const file of [...srcFiles, ...appFiles]) {
+  const from = packageOf(file);
+  if (from.startsWith('(unknown')) fail('layout', rel(file), `file is outside a declared package (${from}); declare it in arch.json`);
+  for (const imp of importsOf(file)) {
+    const targetRel = rel(imp.target);
+    if (!targetRel.startsWith('src/')) continue;
+    const to = packageOf(imp.target);
+    if (to === from) continue;
+    const allowed = from === '(root)' ? packageNames : from.startsWith('apps/') ? arch.apps.imports : (arch.packages[from]?.imports ?? []);
+    if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
+    const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
+    if (!isIndex) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
+    if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
+    const importedBy = arch.packages[to]?.importedBy;
+    if (Array.isArray(importedBy) && !importedBy.includes(from)) fail('read-only', `${rel(file)}:${imp.line}`, `${to} may only be imported by [${importedBy.join(', ') || 'nobody'}]`);
+  }
+}
+
+// ---- 3: i18n
+const catalogDir = join(ROOT, arch.i18n.catalogDir);
+const catalogs = {};
+for (const locale of arch.i18n.locales) {
+  const path = join(catalogDir, `${locale}.json`);
+  if (!existsSync(path)) { fail('i18n', rel(path), 'locale catalog missing'); continue; }
+  catalogs[locale] = JSON.parse(readFileSync(path, 'utf8'));
+}
+const localeNames = Object.keys(catalogs);
+if (localeNames.length > 1) {
+  const base = new Set(Object.keys(catalogs[localeNames[0]]));
+  for (const locale of localeNames.slice(1)) {
+    const keys = new Set(Object.keys(catalogs[locale]));
+    for (const k of base) if (!keys.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `missing key "${k}"`);
+    for (const k of keys) if (!base.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `extra key "${k}" not in ${localeNames[0]}`);
+  }
+}
+const knownKeys = new Set(Object.keys(catalogs[localeNames[0]] ?? {}));
+const T_CALL = new RegExp(`(?<![\\w.])${arch.i18n.callee}\\(\\s*([^)]*?)\\s*[,)]`, 'g');
+const OUTPUT_CALL = /(?:console\.(?:log|error|warn|info)|process\.(?:stdout|stderr)\.write)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+for (const file of srcFiles) {
+  if (rel(file).startsWith(`${arch.i18n.catalogDir}/`)) continue; // the t() implementation itself
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(T_CALL)) {
+    const arg = m[1].trim();
+    const lit = arg.match(/^(['"])([^'"]+)\1$/);
+    const line = src.slice(0, m.index).split('\n').length;
+    if (!lit) { fail('i18n-dynamic', `${rel(file)}:${line}`, `t() key must be a string literal (got ${arg || 'empty'})`); continue; }
+    if (!knownKeys.has(lit[2])) fail('i18n-key', `${rel(file)}:${line}`, `unknown i18n key "${lit[2]}"`);
+  }
+  if (rel(file).startsWith('src/surfaces/')) {
+    for (const m of src.matchAll(OUTPUT_CALL)) {
+      if (/[A-Za-z]{3,}/.test(m[2])) fail('i18n-literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'user-facing string literal in surface output; use t()');
+    }
+  }
+}
+
+// ---- 4: model/flow literals
+const literalAllow = new Set(arch.literals.allow);
+const literalRes = arch.literals.forbidden.map((p) => new RegExp(p, 'g'));
+for (const file of srcFiles) {
+  if (literalAllow.has(rel(file))) continue;
+  const src = readFileSync(file, 'utf8');
+  for (const re of literalRes) for (const m of src.matchAll(re)) fail('literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `hardcoded model/provider literal "${m[0]}" (only ${arch.literals.allow.join(', ')})`);
+}
+
+// ---- 5: .md write gate
+const MD_WRITE = /(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|copyFile|copyFileSync|renameSync|rename)\([^\n]*\.md/g;
+for (const file of srcFiles) {
+  if (rel(file).startsWith(arch.markdown.writerModule)) continue;
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `markdown write outside ${arch.markdown.writerModule}`);
+}
+
+// ---- 6: budgets
+const textFiles = [...walk(join(ROOT, 'src'), () => true), ...walk(join(ROOT, 'scripts'), () => true), ...walk(join(ROOT, 'tests'), () => true), ...walk(join(ROOT, 'apps'), isTs)]
+  .filter((p) => /\.(ts|tsx|mts|js|mjs|cjs|json|sh|yml|yaml)$/.test(p) && !p.endsWith('HARVEST.json'));
+for (const file of textFiles) {
+  const lines = readFileSync(file, 'utf8').split('\n').length;
+  if (lines > arch.budgets.maxLinesPerFile) fail('file-size', rel(file), `${lines} lines > ${arch.budgets.maxLinesPerFile}`);
+}
+const perPackage = {};
+let total = 0;
+for (const file of srcFiles) {
+  const lines = readFileSync(file, 'utf8').split('\n').length;
+  total += lines;
+  const pkg = packageOf(file);
+  perPackage[pkg] = (perPackage[pkg] ?? 0) + lines;
+}
+for (const [pkg, budget] of Object.entries(arch.budgets.packageLines)) {
+  if ((perPackage[pkg] ?? 0) > budget) fail('package-budget', `src/${pkg}`, `${perPackage[pkg]} lines > budget ${budget}`);
+}
+if (total > arch.budgets.totalSrcLines) fail('total-budget', 'src', `${total} lines > budget ${arch.budgets.totalSrcLines}`);
+const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|only|todo|concurrent))*\(/gm;
+let testCases = 0;
+for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) testCases += (readFileSync(file, 'utf8').match(TEST_CASE) ?? []).length;
+if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);
+
+// ---- 7: tracked markdown
+const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean); } catch { return []; } })();
+const allow = new Set(arch.markdown.trackedAllow);
+for (const file of tracked) {
+  const cap = arch.markdown.pointerFiles[file];
+  if (cap !== undefined) {
+    const lines = readFileSync(join(ROOT, file), 'utf8').trimEnd().split('\n').length;
+    if (lines > cap) fail('markdown', file, `pointer file has ${lines} lines > ${cap}`);
+    continue;
+  }
+  if (!allow.has(file)) fail('markdown', file, `tracked markdown outside allowlist [${[...allow].join(', ')}]`);
+}
+for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
+
+// ---- report
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, ${violations.length} violation(s)`;
+if (violations.length === 0) { process.stdout.write(`${summary}\n`); process.exit(0); }
+for (const v of violations) process.stdout.write(`✗ [${v.rule}] ${v.file} — ${v.message}\n`);
+process.stdout.write(`${summary}\n`);
+process.exit(1);

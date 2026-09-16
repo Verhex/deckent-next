@@ -1,0 +1,46 @@
+{
+  "name": "deckent",
+  "version": "1.0.0-alpha.1",
+  "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal · MCP · API)",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "bin": {
+    "deckent": "./dist/surfaces/cli/entry.js",
+    "deckent-mcp": "./dist/surfaces/mcp/server.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "native",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck && eslint . && node scripts/lint-arch.mjs",
+    "test": "vitest run",
+    "test:e2e": "vitest run tests/e2e",
+    "smoke": "node dist/surfaces/cli/entry.js --version",
+    "verify": "npm run lint && npm run test && npm run build && npm run smoke"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1"
+  }
+}
