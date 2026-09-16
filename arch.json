@@ -2,28 +2,106 @@
   "$schema": "./scripts/arch.schema.json",
   "version": 1,
   "packages": {
-    "kernel":        { "imports": [] },
-    "providers":     { "imports": ["kernel"] },
-    "runtime":       { "imports": ["kernel", "providers"] },
-    "orchestration": { "imports": ["kernel", "runtime", "providers"] },
-    "surfaces":      { "imports": ["kernel", "runtime", "orchestration", "providers"] },
-    "observability": { "imports": ["kernel", "runtime", "orchestration"], "importedBy": [] }
+    "kernel": {
+      "imports": []
+    },
+    "providers": {
+      "imports": [
+        "kernel"
+      ]
+    },
+    "runtime": {
+      "imports": [
+        "kernel",
+        "providers"
+      ]
+    },
+    "orchestration": {
+      "imports": [
+        "kernel",
+        "runtime",
+        "providers"
+      ]
+    },
+    "surfaces": {
+      "imports": [
+        "kernel",
+        "runtime",
+        "orchestration",
+        "providers"
+      ]
+    },
+    "observability": {
+      "imports": [
+        "kernel",
+        "runtime",
+        "orchestration"
+      ],
+      "importedBy": []
+    }
   },
-  "apps": { "imports": ["surfaces"] },
+  "apps": {
+    "imports": [
+      "surfaces"
+    ]
+  },
+  "tiers": {
+    "order": [
+      "core",
+      "base",
+      "enterprise",
+      "custom",
+      "user"
+    ],
+    "enforce": false,
+    "unitLines": 4000,
+    "note": "Tiers within every package: lower tiers never import higher ones; cross-unit imports target the unit index.ts; files under src/<pkg>/ other than index.ts must live in src/<pkg>/<tier>/<unit>/. Flip enforce=true with the K1 tier layout landing."
+  },
   "budgets": {
     "maxLinesPerFile": 800,
-    "packageLines": { "kernel": 25000, "providers": 12000, "runtime": 40000, "orchestration": 45000, "surfaces": 45000, "observability": 12000 },
+    "packageLines": {
+      "kernel": 25000,
+      "providers": 12000,
+      "runtime": 40000,
+      "orchestration": 45000,
+      "surfaces": 45000,
+      "observability": 12000
+    },
     "totalSrcLines": 200000,
     "testCases": 8000
   },
-  "i18n": { "catalogDir": "src/kernel/i18n", "locales": ["en", "tr"], "callee": "t" },
+  "i18n": {
+    "catalogDir": "src/kernel/i18n",
+    "locales": [
+      "en",
+      "tr"
+    ],
+    "callee": "t"
+  },
   "literals": {
-    "forbidden": ["\\bclaude-[0-9][0-9a-z.-]*\\b", "\\bgpt-[0-9][0-9a-z.-]*\\b", "\\bgemini-[0-9][0-9a-z.-]*\\b", "\\bo[134]-(mini|pro|preview)\\b", "\\b(sonnet|opus|haiku)\\b"],
-    "allow": ["src/providers/registry.ts", "src/providers/registry.json"]
+    "forbidden": [
+      "\\bclaude-[0-9][0-9a-z.-]*\\b",
+      "\\bgpt-[0-9][0-9a-z.-]*\\b",
+      "\\bgemini-[0-9][0-9a-z.-]*\\b",
+      "\\bo[134]-(mini|pro|preview)\\b",
+      "\\b(sonnet|opus|haiku)\\b"
+    ],
+    "allow": [
+      "src/providers/registry.ts",
+      "src/providers/registry.json"
+    ]
   },
   "markdown": {
-    "trackedAllow": ["README.md", "ARCHITECTURE.md", "PLAN.md", "CHANGELOG.md"],
-    "pointerFiles": { "CLAUDE.md": 5, "AGENTS.md": 5 },
+    "trackedAllow": [
+      "README.md",
+      "ARCHITECTURE.md",
+      "PLAN.md",
+      "CHANGELOG.md"
+    ],
+    "pointerFiles": {
+      "CLAUDE.md": 5,
+      "AGENTS.md": 5
+    },
     "writerModule": "src/kernel/docs-authority/"
   }
 }

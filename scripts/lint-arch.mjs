@@ -13,7 +13,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const rootArg = process.argv.indexOf('--root');
+const ROOT = rootArg > -1 && process.argv[rootArg + 1] ? resolve(process.argv[rootArg + 1]) : dirname(dirname(fileURLToPath(import.meta.url)));
 const arch = JSON.parse(readFileSync(join(ROOT, 'arch.json'), 'utf8'));
 const violations = [];
 const fail = (rule, file, message) => violations.push({ rule, file, message });
@@ -34,6 +35,17 @@ const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
 const srcFiles = walk(join(ROOT, 'src'), isTs);
 const appFiles = walk(join(ROOT, 'apps'), isTs);
 const packageNames = Object.keys(arch.packages);
+const tiers = arch.tiers ?? { order: [], enforce: false, unitLines: Infinity };
+const tierRank = new Map(tiers.order.map((name, index) => [name, index]));
+
+function unitOf(file) {
+  // src/<pkg>/<tier>/<unit>/... → { pkg, tier, unit } ; src/<pkg>/index.ts → { pkg, tier: null, unit: null }
+  const parts = rel(file).split('/');
+  if (parts[0] !== 'src' || parts.length < 3) return null;
+  const [, pkg, third, fourth] = parts;
+  if (parts.length === 3) return { pkg, tier: null, unit: null, rootFile: third };
+  return { pkg, tier: third, unit: parts.length >= 5 ? fourth : null, rootFile: null };
+}
 
 function packageOf(file) {
   const r = rel(file);
@@ -67,7 +79,19 @@ for (const file of [...srcFiles, ...appFiles]) {
     const targetRel = rel(imp.target);
     if (!targetRel.startsWith('src/')) continue;
     const to = packageOf(imp.target);
-    if (to === from) continue;
+    if (to === from) {
+      if (!tiers.enforce || !from.startsWith('(') && packageNames.includes(from)) {
+        const src = unitOf(file), dst = unitOf(imp.target);
+        if (tiers.enforce && src && dst && dst.tier) {
+          const srcRank = src.tier ? tierRank.get(src.tier) : Infinity; // package index.ts may import any tier
+          const dstRank = tierRank.get(dst.tier);
+          if (srcRank !== undefined && dstRank !== undefined && dstRank > srcRank) fail('tier-direction', `${rel(file)}:${imp.line}`, `${src.tier} may not import ${dst.tier} (order: ${tiers.order.join(' ← ')})`);
+          const sameUnit = src.tier === dst.tier && src.unit === dst.unit && src.unit !== null;
+          if (!sameUnit && !/^src\/[^/]+\/[^/]+\/[^/]+\/index\.ts$/.test(targetRel)) fail('unit-api', `${rel(file)}:${imp.line}`, `cross-unit import must target the unit index.ts (got ${imp.spec})`);
+        }
+      }
+      continue;
+    }
     const allowed = from === '(root)' ? packageNames : from.startsWith('apps/') ? arch.apps.imports : (arch.packages[from]?.imports ?? []);
     if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
     const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
@@ -76,6 +100,22 @@ for (const file of [...srcFiles, ...appFiles]) {
     const importedBy = arch.packages[to]?.importedBy;
     if (Array.isArray(importedBy) && !importedBy.includes(from)) fail('read-only', `${rel(file)}:${imp.line}`, `${to} may only be imported by [${importedBy.join(', ') || 'nobody'}]`);
   }
+}
+
+// ---- 2b: tier layout and unit budgets
+if (tiers.enforce) {
+  const unitLines = new Map();
+  for (const file of srcFiles) {
+    const info = unitOf(file);
+    if (!info || !packageNames.includes(info.pkg)) continue;
+    if (info.rootFile !== null) { if (info.rootFile !== 'index.ts') fail('layout', rel(file), `only index.ts may sit directly under src/${info.pkg}/; place it in src/${info.pkg}/<tier>/<unit>/`); continue; }
+    if (!tierRank.has(info.tier)) { fail('layout', rel(file), `unknown tier "${info.tier}" (tiers: ${tiers.order.join(', ')})`); continue; }
+    if (info.unit === null) { fail('layout', rel(file), `files under src/${info.pkg}/${info.tier}/ must belong to a unit directory`); continue; }
+    const key = `src/${info.pkg}/${info.tier}/${info.unit}`;
+    unitLines.set(key, (unitLines.get(key) ?? 0) + readFileSync(file, 'utf8').split('\n').length);
+    if (!existsSync(join(ROOT, key, 'index.ts'))) fail('layout', key, 'unit has no index.ts (public surface)');
+  }
+  for (const [unit, lines] of unitLines) if (lines > tiers.unitLines) fail('unit-budget', unit, `${lines} lines > unit budget ${tiers.unitLines}; split the unit or move behaviour to a higher tier`);
 }
 
 // ---- 3: i18n
@@ -157,7 +197,7 @@ for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) te
 if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);
 
 // ---- 7: tracked markdown
-const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean); } catch { return []; } })();
+const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return []; } })();
 const allow = new Set(arch.markdown.trackedAllow);
 for (const file of tracked) {
   const cap = arch.markdown.pointerFiles[file];
@@ -171,7 +211,7 @@ for (const file of tracked) {
 for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
 
 // ---- report
-const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, ${violations.length} violation(s)`;
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
 if (violations.length === 0) { process.stdout.write(`${summary}\n`); process.exit(0); }
 for (const v of violations) process.stdout.write(`✗ [${v.rule}] ${v.file} — ${v.message}\n`);
 process.stdout.write(`${summary}\n`);

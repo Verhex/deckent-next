@@ -2,14 +2,115 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "deckent arch.json",
   "type": "object",
-  "required": ["version", "packages", "apps", "budgets", "i18n", "literals", "markdown"],
+  "required": [
+    "version",
+    "packages",
+    "apps",
+    "tiers",
+    "budgets",
+    "i18n",
+    "literals",
+    "markdown"
+  ],
   "properties": {
-    "version": { "const": 1 },
-    "packages": { "type": "object", "additionalProperties": { "type": "object", "required": ["imports"], "properties": { "imports": { "type": "array", "items": { "type": "string" } }, "importedBy": { "type": "array", "items": { "type": "string" } } } } },
-    "apps": { "type": "object", "required": ["imports"], "properties": { "imports": { "type": "array", "items": { "type": "string" } } } },
-    "budgets": { "type": "object", "required": ["maxLinesPerFile", "packageLines", "totalSrcLines", "testCases"] },
-    "i18n": { "type": "object", "required": ["catalogDir", "locales", "callee"] },
-    "literals": { "type": "object", "required": ["forbidden", "allow"] },
-    "markdown": { "type": "object", "required": ["trackedAllow", "pointerFiles", "writerModule"] }
+    "version": {
+      "const": 1
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "imports"
+        ],
+        "properties": {
+          "imports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "importedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "apps": {
+      "type": "object",
+      "required": [
+        "imports"
+      ],
+      "properties": {
+        "imports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "required": [
+        "maxLinesPerFile",
+        "packageLines",
+        "totalSrcLines",
+        "testCases"
+      ]
+    },
+    "i18n": {
+      "type": "object",
+      "required": [
+        "catalogDir",
+        "locales",
+        "callee"
+      ]
+    },
+    "literals": {
+      "type": "object",
+      "required": [
+        "forbidden",
+        "allow"
+      ]
+    },
+    "markdown": {
+      "type": "object",
+      "required": [
+        "trackedAllow",
+        "pointerFiles",
+        "writerModule"
+      ]
+    },
+    "tiers": {
+      "type": "object",
+      "required": [
+        "order",
+        "enforce",
+        "unitLines"
+      ],
+      "properties": {
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "enforce": {
+          "type": "boolean"
+        },
+        "unitLines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
   }
 }
