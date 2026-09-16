@@ -38,6 +38,7 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 | AU | autonomous missions | O3 | 8k→4k | Astra | `autonomous` | TODO |
 | CH | chat/REPL (ink, node-pty) | S1,A1 | 20k→8k | Astra | `chat` | TODO |
 | X | kpi, cost, traces, audit, explain, history | K3,O2 | 10k→4k | Astra | `kpi`,`audit verify` | TODO |
+| CL1 | closure: settlement/receipt/xverify/audit chain (host-scoped custody, ed25519 anchors, HMAC audit, §12.2 five-link closure) | K1,K3,R2,P1 | 15.2k→14.7k (29 units) | Astra | settlement verify / tamper FAIL / HOLD never closes (real binary) | CARD |
 | GOLD | golden corpus: 3 fixture projects, legacy D-class outputs, parity runner | K0 | tooling | Fable | `tests/golden/` populated | TODO |
 | Z | not ported (DEFERRED unless a consumer is proven): core/catalog, notification-providers, operation-catalog, task-execution-admission, legacy win32 TS adapter, intelligence, training, extensions, sdk | — | ~30k→0 | — | — | DEFERRED |
 
