@@ -13,7 +13,7 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 | Card | Scope | Depends | Legacy→target lines | Lane | Milestone / proof | Status |
 |---|---|---|---|---|---|---|
 | K0 | skeleton, arch.json, lint-arch, eslint, build, CI, i18n kernel, CLI `--version` | — | →1.5k | Fable | `deckent --version` from dist | DONE |
-| K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `deckent config get` | CARD |
+| K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `config get` / `migrate` / kernel `doctor`; 3 fixtures, 12/12 shared-value parity | DONE |
 | K2 | kernel/i18n: 3,257 reachable keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | catalog parity vs legacy | CARD |
 | K3 | kernel/store: SQLite primitive, artifact schema/versioning, locks | K1 | 10k→1.5k | Astra | contract | TODO |
 | K4 | kernel/docs-authority: markdown write gate + DECKENT/CLAUDE/AGENTS injection | K1 | →0.4k | Astra | contract | TODO |
@@ -46,6 +46,35 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 | Card | Legacy lines consumed | New lines | Contract cases | Lane-hours | Review rounds | Parity defects |
 |---|---|---|---|---|---|---|
 | K0 | — | (see lint-arch summary) | 7 | — | — | — |
+| K1 | not measured; card inventory ≈13k | repo total: 1,642 TS + 894 catalog lines | 57 K1/gate additions; 69 total | not timed (K2 is calibration 1) | round 1 REVISE; round 2 GO (Fable) | B1/B2 addressed; doctor scoped |
 
 Projection `T = Σ(legacyLines ÷ rate) × (1 + rework) + fixed` is published here after K2 and M1; no
 calendar estimate is stated before those two measurements exist.
+
+## K1 review evidence
+
+- Round 1: Fable REVISE. B1/B2/B3 revisions are ready for round 2; the card is not DONE and has not landed.
+- Public API flows through `src/kernel/index.ts`; CLI registers provider-owned limit validation before
+  resolving config. Kernel never imports provider policy. `doctor` declares `scope: kernel`; native and
+  provider readiness remain R1/P1 work.
+- Legacy `config get` does not accept `--json`; normalized parity compares four shared keys in three
+  fixture projects (12/12). The new JSON contract, migration dry-run, strict tenant ingress and locale
+  errors are checked with the real binary. Legacy doctor has no equivalent host object: memory source
+  and total GB are compared separately, and platform is compared at the supported OS-family level.
+- Proofs: `/home/alperen/deckent-refactor-work/proof/K1-config-parity.json`,
+  `K1-doctor-parity.json`, `K1-verify.log`, and `K1-review.json` in that same directory.
+- Registered sections can be optional and validate authored layers before merge; globals migrate into
+  the platform path while preserving the legacy source. Only selection/identity/presentation settings
+  live in the core schema; unknown legacy package fields survive with warnings until their owners port.
+
+- Round 2: B1 secret provenance + masked human/JSON views; B2 pid/host/time owner metadata, dead-owner
+  recovery and live-lock diagnostics; B3 tier placement and all three requested arch switches enabled.
+  New regressions exercise actual CLI output, a killed writer, an old live owner, parallel writer processes,
+  escaped/array/projection secret paths, credential revocation on cache hits and injected Windows paths.
+- B2 safety refinement: directory ownership with retained generation tombstones prevents a delayed stale
+  reclaimer moving a new live lock. Foreign and permission-denied owners HOLD regardless of age; only
+  dead local owners or >10-minute invalid/unpublished local records auto-recover. Legacy file locks work.
+- Related notes 1–5 addressed; hand-parsed argv remains explicitly assigned to S0 (note 6).
+  Local verify now builds before e2e, and CI uses that same gate, so proof cannot run a stale binary.
+- Round-2 receipt: `/home/alperen/deckent-refactor-work/proof/K1-revision-review.json`;
+  verification log: `K1-revision-verify.log` in the same directory. Original round-1 evidence is retained.

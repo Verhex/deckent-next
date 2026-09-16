@@ -1,10 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
-const BIN = new URL('../../dist/surfaces/cli/entry.js', import.meta.url).pathname;
+const BIN = fileURLToPath(new URL('../../dist/surfaces/core/cli/internal/entry.js', import.meta.url));
 
 describe.skipIf(!existsSync(BIN))('real binary', () => {
   it('deckent --version runs from dist and exits 0', async () => {

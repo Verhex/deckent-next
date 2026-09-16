@@ -1,15 +1,15 @@
 {
   "name": "deckent",
   "version": "1.0.0-alpha.1",
-  "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal · MCP · API)",
+  "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal \u00b7 MCP \u00b7 API)",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
   },
   "bin": {
-    "deckent": "./dist/surfaces/cli/entry.js",
-    "deckent-mcp": "./dist/surfaces/mcp/server.js"
+    "deckent": "./dist/surfaces/core/cli/internal/entry.js",
+    "deckent-mcp": "./dist/surfaces/core/mcp/internal/server.js"
   },
   "exports": {
     ".": {
@@ -31,8 +31,8 @@
     "lint": "npm run typecheck && eslint . && node scripts/lint-arch.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
-    "smoke": "node dist/surfaces/cli/entry.js --version",
-    "verify": "npm run lint && npm run test && npm run build && npm run smoke"
+    "smoke": "node dist/surfaces/core/cli/internal/entry.js --version",
+    "verify": "npm run lint && npm run build && npm run test && npm run smoke"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -42,5 +42,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0",
     "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
   }
 }

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,8 +7,8 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
-const LINT = new URL('../../../scripts/lint-arch.mjs', import.meta.url).pathname;
-const ARCH = new URL('../../../arch.json', import.meta.url).pathname;
+const LINT = fileURLToPath(new URL('../../../scripts/lint-arch.mjs', import.meta.url));
+const ARCH = fileURLToPath(new URL('../../../arch.json', import.meta.url));
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(r => rm(r, { recursive: true, force: true }))); });
 
@@ -16,7 +17,7 @@ async function fixture(files: Record<string, string>, tiersEnforce = true): Prom
   const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { tiers: { enforce: boolean }; i18n: { catalogDir: string } };
   arch.tiers.enforce = tiersEnforce;
   await writeFile(join(root, 'arch.json'), JSON.stringify(arch));
-  await cp(new URL('../../../scripts', import.meta.url).pathname, join(root, 'scripts'), { recursive: true });
+  await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
   const catalogs = { [`${arch.i18n.catalogDir}/en.json`]: '{}', [`${arch.i18n.catalogDir}/tr.json`]: '{}' };
   for (const [path, content] of Object.entries({ 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files })) {
     await mkdir(join(root, path, '..'), { recursive: true });
@@ -60,4 +61,14 @@ describe('lint-arch tier contract', () => {
     expect(result.out).toContain('tiers=off');
     expect(result.code).toBe(0);
   });
+  it('rejects provider credential environment literals outside the registry', async () => {
+    const allowed = await fixture({
+      'src/providers/core/registry/index.ts': "export { key } from './internal/auth.js';\n",
+      'src/providers/core/registry/internal/auth.ts': "export const key = 'ANTHROPIC_API_KEY';\n",
+    });
+    expect((await lint(allowed)).code).toBe(0);
+    const rejected = await fixture({ 'src/kernel/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
+    expect((await lint(rejected)).out).toContain('[literal]');
+  });
+
 });

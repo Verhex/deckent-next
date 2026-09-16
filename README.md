@@ -17,13 +17,13 @@ one capability at a time, each landing with contract tests and a real-binary pro
 ```sh
 npm ci
 npm run build
-node dist/surfaces/cli/entry.js --version
+node dist/surfaces/core/cli/internal/entry.js --version
 ```
 
 ## Develop
 
 ```sh
-npm run verify   # typecheck + eslint + lint-arch + tests + build + smoke — the landing gate
+npm run verify   # typecheck + eslint + lint-arch + build + tests + smoke — the landing gate
 ```
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing anything: package direction, size limits,

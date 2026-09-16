@@ -11,7 +11,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
 const ASSET_EXTENSIONS = new Set(['.json', '.md', '.template', '.sh']);
-const BINS = ['dist/surfaces/cli/entry.js', 'dist/surfaces/mcp/server.js'];
+const BINS = ['dist/surfaces/core/cli/internal/entry.js', 'dist/surfaces/core/mcp/internal/server.js'];
 
 function run(cmd, args) {
   execFileSync(cmd, args, { cwd: ROOT, stdio: 'inherit' });

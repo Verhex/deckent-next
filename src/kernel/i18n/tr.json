@@ -1,5 +1,0 @@
-{
-  "cli.version": "{name} v{version} | Node {node} | {platform}",
-  "cli.unknownCommand": "Bilinmeyen komut: {command}. `{name} --help` çalıştırın.",
-  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]"
-}

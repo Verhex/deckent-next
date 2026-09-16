@@ -53,9 +53,9 @@
       "custom",
       "user"
     ],
-    "enforce": false,
+    "enforce": true,
     "unitLines": 4000,
-    "note": "Tiers within every package: lower tiers never import higher ones; cross-unit imports target the unit index.ts; files under src/<pkg>/ other than index.ts must live in src/<pkg>/<tier>/<unit>/. Flip enforce=true with the K1 tier layout landing."
+    "note": "Lower tiers import only lower/same-tier unit index.ts; package index.ts composes shipped units. Optional editions are loaded lazily when implemented."
   },
   "budgets": {
     "maxLinesPerFile": 800,
@@ -71,7 +71,7 @@
     "testCases": 8000
   },
   "i18n": {
-    "catalogDir": "src/kernel/i18n",
+    "catalogDir": "src/kernel/core/i18n",
     "locales": [
       "en",
       "tr"
@@ -84,11 +84,11 @@
       "\\bgpt-[0-9][0-9a-z.-]*\\b",
       "\\bgemini-[0-9][0-9a-z.-]*\\b",
       "\\bo[134]-(mini|pro|preview)\\b",
-      "\\b(sonnet|opus|haiku)\\b"
+      "\\b(sonnet|opus|haiku)\\b",
+      "\\b(ANTHROPIC|OPENAI|GOOGLE|GEMINI|XAI)_API_KEY\\b"
     ],
     "allow": [
-      "src/providers/registry.ts",
-      "src/providers/registry.json"
+      "src/providers/core/registry/internal/auth.ts"
     ]
   },
   "markdown": {
@@ -102,6 +102,6 @@
       "CLAUDE.md": 5,
       "AGENTS.md": 5
     },
-    "writerModule": "src/kernel/docs-authority/"
+    "writerModule": "src/kernel/core/docs-authority/"
   }
 }
