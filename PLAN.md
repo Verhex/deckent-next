@@ -7,14 +7,18 @@ cards, tooling/gates, golden/parity runs and reviews every card. Full rationale,
 
 Critical path: K0 → K1 → R1 → R2 → O1 → S1 (M1) → O2 (M2) → O3 (M3).
 
+Port cards (responsibility map, decisions, invariants, proof) live outside the repo at
+`/home/alperen/deckent-refactor-work/cards/<CARD>.md`; a row moves to `CARD` when its card is written.
+
 | Card | Scope | Depends | Legacy→target lines | Lane | Milestone / proof | Status |
 |---|---|---|---|---|---|---|
 | K0 | skeleton, arch.json, lint-arch, eslint, build, CI, i18n kernel, CLI `--version` | — | →1.5k | Fable | `deckent --version` from dist | DONE |
-| K1 | kernel: types/errors/constants, host/platform, config + v2 migration, output formatter, principal/tenant | K0 | 12k→4k | Astra | `deckent config get` | TODO |
-| K2 | kernel/i18n: used keys → en/tr.json, key lint (calibration card 1) | K0 | 15.4k→4k | Astra | catalog diff | TODO |
+| K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `deckent config get` | CARD |
+| K2 | kernel/i18n: 3,257 reachable keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | catalog parity vs legacy | CARD |
 | K3 | kernel/store: SQLite primitive, artifact schema/versioning, locks | K1 | 10k→1.5k | Astra | contract | TODO |
 | K4 | kernel/docs-authority: markdown write gate + DECKENT/CLAUDE/AGENTS injection | K1 | →0.4k | Astra | contract | TODO |
-| R1 | native: C sources + ABI ids verbatim; loader ≤1.5k; prebuild matrix | K1 | 7.8k→1.5k | Astra | `doctor` native check | TODO |
+| R1 | native: C sources + ABI ids verbatim; TS loader ≤1.8k (TOCTOU snapshot kept); artifact v2; prebuild matrix linux x64/arm64 + darwin | K1 | 7.8k→1.6k | Astra | `doctor` native section; UNAVAILABLE path exit 0 | CARD |
+| W1 | win32 trusted native loader authority (owner-only DACL proof) → enables R2 win32 custody; until then win32 reports typed DEGRADED | R1 | new | Astra | win32 CI local-backend smoke | TODO |
 | P1 | providers + model registry/catalog, auth probe, limit policy | K1,K2 | 20k→7k | Astra | `models`, `doctor` provider | TODO |
 | S0 | surfaces/commands core + `doctor`,`status`,`config`,`init`,`sync`,`help` | K1–K4,R1,P1 | 15k→6k | Astra | **M0** | TODO |
 | R2 | runtime/exec: spawn backend, exact-docker lifecycle, custody (posix+win32), worker image, `worker/` | K3,R1 | 56k→12–15k | Astra | fixed shell task under custody | TODO |
