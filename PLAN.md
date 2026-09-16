@@ -5,7 +5,7 @@ written, not started), `WIP`, `REVIEW`, `DONE`. Roles: **Astra** implements prod
 cards, tooling/gates, golden/parity runs and reviews every card. Full rationale, inventory and kill record:
 `/home/alperen/deckent-refactor-work/PLAN-APPROVED-2026-09-16.md` (outside the repo).
 
-Critical path: K0 → K1 → R1 → R2 → O1 → S1 (M1) → O2 (M2) → O3 (M3).
+Critical path: K0 → K1 → K1-F1 → R1 → R2 → O1 → S1 (M1) → O2 (M2) → O3 (M3). K1-F1 and ARCH-IMPORTS land before K2.
 
 Port cards (responsibility map, decisions, invariants, proof) live outside the repo at
 `/home/alperen/deckent-refactor-work/cards/<CARD>.md`; a row moves to `CARD` when its card is written.
@@ -14,7 +14,9 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 |---|---|---|---|---|---|---|
 | K0 | skeleton, arch.json, lint-arch, eslint, build, CI, i18n kernel, CLI `--version` | — | →1.5k | Fable | `deckent --version` from dist | DONE |
 | K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `config get` / `migrate` / kernel `doctor`; 3 fixtures, 12/12 shared-value parity | DONE |
-| K2 | kernel/i18n: 3,257 reachable keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | catalog parity vs legacy | CARD |
+| K1-F1 | config schema-as-data: single field registry → derived zod/defaults/aliases/env/metadata; remove base/config-defaults; registry-fed literal lint | K1 | 0.6k→0.5k | Astra | `config get` byte-parity with K1; no flow-value literal outside registry | CARD |
+| ARCH-IMPORTS | `#pkg/tier/unit` subpath-import aliases (package.json imports + tsconfig paths + lint import-style) | K1 | tooling | Fable (infra) + Astra (K1 conversion) | lint-arch import-style 0 violations | CARD |
+| K2 | kernel/i18n: 3,257 reachable keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | catalog parity vs legacy; exact Fable list pending | WIP |
 | K3 | kernel/store: SQLite primitive, artifact schema/versioning, locks | K1 | 10k→1.5k | Astra | contract | TODO |
 | K4 | kernel/docs-authority: markdown write gate + DECKENT/CLAUDE/AGENTS injection | K1 | →0.4k | Astra | contract | TODO |
 | R1 | native: C sources + ABI ids verbatim; TS loader ≤1.8k (TOCTOU snapshot kept); artifact v2; prebuild matrix linux x64/arm64 + darwin | K1 | 7.8k→1.6k | Astra | `doctor` native section; UNAVAILABLE path exit 0 | CARD |
@@ -54,7 +56,7 @@ calendar estimate is stated before those two measurements exist.
 
 ## K1 review evidence
 
-- Round 1: Fable REVISE. B1/B2/B3 revisions are ready for round 2; the card is not DONE and has not landed.
+- Round 1: Fable REVISE; round 2: GO. K1 landed as `c84df39` and was pushed; the card is DONE.
 - Public API flows through `src/kernel/index.ts`; CLI registers provider-owned limit validation before
   resolving config. Kernel never imports provider policy. `doctor` declares `scope: kernel`; native and
   provider readiness remain R1/P1 work.
@@ -117,3 +119,19 @@ Each becomes a card only after its `After` dependency has landed; `Legacy` lists
 Just below the line (not admitted, revisit after the cards): SURFACE-PARITY-001, COMPOSITE-WORKER-001, AUTONOMOUS-PERPETUAL-001,
 CURSOR-PROVIDER-001, the TRACE-* cluster. Realized-in-code rows are covered by their port cards; 30 acceptance invariants from the
 triage (§4 of the extract) are pinned to cards O1–O4, R2, K1–K3, S2–S3 by the card author.
+
+## K2 calibration / pending authority
+
+- Measurement starts 2026-09-16T13:50:03Z after preflight; actual AST-read catalog inventory is 15,477
+  lines in 14 files (including the memory-read re-export), 3,981 entries. AST text and the compiled legacy
+  oracle agree for every key; the two floor templates were compared with explicit sentinel parameters.
+- Owner selected **Fable's exact keep/delete list** when the card counts did not reproduce. No such list
+  is currently present under `deckent-refactor-work`; its path/content is required before catalog membership
+  changes. Astra's 3,374/607 reachability inventory is comparison evidence only, not deletion authority.
+- Independent work is implemented: synchronous registry and locale resolver, renderer sandbox proof,
+  ten bilingual family files holding the existing 444 K1 keys, JSON-derived key type, duplicate/placeholder
+  gates. K1's `config.invalid` was renamed to `config.valueInvalid` to reserve the conflicting legacy key.
+- K2 remains WIP: legacy-key import, full legacy/new translation parity, protected-family decisions and
+  command-surface parity assessment await the exact list. R1 has not started; no K2 commit/push.
+- Evidence: `/home/alperen/deckent-refactor-work/proof/K2-astra-inventory.json`, `K2-wip.json`, and
+  `K2-wip-verify.log`. Calibration is open; no final port rate or card closure is claimed.

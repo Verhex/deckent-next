@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PLAN: K1-F1 (config schema-as-data, owner finding: flow-value literals in defaults) and ARCH-IMPORTS (`#pkg` aliases) cards; both precede K2 landing.
+
+- K2 WIP: synchronous, immutable family registry; renderer-safe locale/translation unit; ten bilingual JSON families and derived key type; duplicate/placeholder lint. Legacy key membership is pending the owner's required Fable exact list.
+
 - PLAN: CL1 closure/settlement ledger card written (Fable); host-scoped custody, single HMAC audit primitive, cross-host UNSUPPORTED in 1.0.
 
 - PLAN: Backlog section — 25 owner-admitted product outcomes triaged from the legacy MASTER-PLAN (286 candidates), with package/tier, dependency card and absorbed legacy ids.
