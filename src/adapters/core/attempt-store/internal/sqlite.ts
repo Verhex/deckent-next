@@ -1,5 +1,5 @@
 import { SqliteRunJournal } from './runs.js';
-import type { RunStore, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
+import type { RunStore, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { DispatchClaim, DispatchTerminal, DispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -19,7 +19,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
     try {
       this.db.exec('BEGIN IMMEDIATE');
       const version = this.db.prepare('PRAGMA user_version').get()?.user_version;
-      if (version !== 0 && version !== 1 && version !== 2 && version !== 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
       if (version === 0) this.db.exec(`
         CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
           snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -33,6 +33,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
         CREATE TABLE run_receipts(scope_id TEXT NOT NULL, command_id TEXT NOT NULL, command TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(scope_id,command_id));
         PRAGMA user_version=3;
       `);
+      if (version !== 4) this.db.exec('CREATE TABLE execution_pools(pool_id TEXT PRIMARY KEY NOT NULL, policy TEXT NOT NULL); PRAGMA user_version=4;');
       this.db.exec('COMMIT');
       const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
       const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
@@ -44,6 +45,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
   async createRun(input: RunCreate) { return new SqliteRunJournal(this.db).createRun(input); }

@@ -13,12 +13,12 @@ const options = { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' } as
 const actor = { id: 'user', issuer: 'host', subject: '1000' };
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'l' };
 const graph = { schemaVersion: 1 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] })) };
-const create = { commandId: 'create', actor, identity, graph, now: 0, policy: { schemaVersion: 1 as const, capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } };
+const create = { commandId: 'create', actor, identity, graph, now: 0, policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } };
 const attempt = (taskId: string) => ({ ...identity, taskId, attemptId: 'attempt-' + taskId, generation: 1 });
 const reservation = (ids: string[], commandId = 'claim') => ({ commandId, actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: ids.map(attempt) });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-store-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options); stores.push(store); return { path, store };
+  const store = await openSqliteAttemptStore(path, options); stores.push(store); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); return { path, store };
 }
 it('atomically persists Run progress and attempts, with exact replay across independent connections and reopen', async () => {
   const f = await fixture(); await f.store.createRun(create);
@@ -57,10 +57,10 @@ it('migrates a schema-2 ledger atomically without altering prior attempt data; i
   const snapshot = createAttempt(attempt('old')); db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run('s', 'attempt-old', 0, JSON.stringify(snapshot)); db.close();
   const oldReader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 }); oldReader.close();
   const store = await openSqliteAttemptStore(path, options); stores.push(store);
-  expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createRun(create);
+  expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); await store.createRun(create);
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]); } finally { reader.close(); }
-  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(3); } finally { check.close(); }
+  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(4); } finally { check.close(); }
 });
 
 it('returns bounded busy under a separate process transaction, without partial reservation', async () => {

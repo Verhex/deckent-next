@@ -1,1 +1,1 @@
-export { planSchedulingWave, SchedulingError } from './internal/wave.js';
+export { planSchedulingWave, measureTaskOccupancy, SchedulingError } from './internal/wave.js';

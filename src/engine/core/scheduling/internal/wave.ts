@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness } from '#domain/index.js';
+import { identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness } from '#domain/index.js';
 const schedulingInputSchema = z.object({
   schemaVersion: z.literal(1),
   capacity: z.object({ executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe() }).strict(),
@@ -21,16 +21,23 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const graphIds = new Set(graph.tasks.map(task => task.id));
   if (ordering.length !== graphIds.size || new Set(ordering).size !== graphIds.size || ordering.some(id => !graphIds.has(id))) throw new SchedulingError('SCHEDULING_ORDER_INVALID');
   const readiness = inspectTaskReadiness(graph, snapshot);
-  let executionOccupied = 0; let inFlightOccupied = 0;
-  for (const task of snapshot.progress) {
-    const uncertain = task.unresolvedEffects || task.phase === 'reconciling';
-    if (task.phase === 'active' || uncertain) executionOccupied++;
-    if (task.phase === 'active' || task.phase === 'evaluating' || uncertain) inFlightOccupied++;
-  }
+  const { execution: executionOccupied, inFlight: inFlightOccupied } = measureTaskOccupancy(snapshot.progress);
   const available = Math.min(Math.max(0, capacity.executionSlots - executionOccupied), Math.max(0, capacity.inFlightSlots - inFlightOccupied));
   const ready = new Set(readiness.filter(task => task.disposition === 'ready').map(task => task.taskId));
   const ordered = ordering.filter(id => ready.has(id));
   return Object.freeze({ schemaVersion: 1 as const, graphRevision: graph.revision, observedAt: snapshot.now,
     selectedTaskIds: Object.freeze(ordered.slice(0, available)), deferredTaskIds: Object.freeze(ordered.slice(available)),
     occupancy: Object.freeze({ execution: executionOccupied, inFlight: inFlightOccupied }), readiness });
+}
+
+/** Shared occupancy semantics for per-Run plans and durable shared-pool admission. */
+export function measureTaskOccupancy(input: unknown) {
+  const progress = z.array(taskProgressSchema).parse(input);
+  let execution = 0; let inFlight = 0;
+  for (const task of progress) {
+    const uncertain = task.unresolvedEffects || task.phase === 'reconciling';
+    if (task.phase === 'active' || uncertain) execution++;
+    if (task.phase === 'active' || task.phase === 'evaluating' || uncertain) inFlight++;
+  }
+  return Object.freeze({ execution, inFlight });
 }

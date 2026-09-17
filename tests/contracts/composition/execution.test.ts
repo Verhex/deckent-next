@@ -56,9 +56,10 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
   try {
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'changed') } })); clearConfigCache();
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+    await runtime.store.createExecutionPool({ schemaVersion: 1, poolId: 'execution-test', capacity: { executionSlots: 1, inFlightSlots: 1 } });
     await runtime.store.createRun({ commandId: 'create-run', actor, identity: { runId: identity.runId, scopeId: identity.scopeId, layoutRevision: identity.layoutRevision },
       graph: { schemaVersion: 1, revision: 1, tasks: [{ id: identity.taskId, kind: 'code', dependencies: [], acceptanceCriteria: ['base-output'] }] }, now: 0,
-      policy: { schemaVersion: 1, capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] } });
+      policy: { schemaVersion: 2, poolId: 'execution-test', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] } });
     await runtime.store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 0, now: 0, identities: [identity] });
     const result = await app.execute(request); expect(result.record.terminal?.exitCode).toBe(0);
     const projected = await runtime.store.projectRunAttempt({ commandId: 'project', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 1, attemptId: identity.attemptId });

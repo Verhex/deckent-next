@@ -332,3 +332,5 @@ SCHEDULING-A DONE: Bounded deterministic wave planning with explicit policy orde
 RUN-B DONE: Durable Run and atomic task/attempt reservation in SQLite schema3;211 tests/12 Docker including separate-process lock. Per-Run capacity only; shared pool still gates runtime launch.
 
 RUN/C DONE: authoritative attempt-to-Run projection in one SQLite transaction;213 tests/12 Docker, Fable1488 PASS. Dispatch-to-Run projection remains explicit until automatic transactional wiring/reconciler is implemented.
+
+POOL/A DONE: same-ledger shared pool admission across Runs/scopes;217 tests/12 Docker,Fable1492 PASS. Schema4 and Run policy2, explicit immutable pools, no invented legacy assignment. Raw dispatch binding guard and performance/assignment workflow remain pending.

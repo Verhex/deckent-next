@@ -53,7 +53,7 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   db.prepare('INSERT INTO attempt_receipts VALUES(?,?,?,?)').run('s','create','admission',JSON.stringify(snapshot)); db.close();
   const store = await f.open(); expect(await store.load('s','a')).toEqual(snapshot);
   expect((await store.receipt('s','create'))?.command).toBe('admission'); expect((await store.claimDispatch(claim)).acquired).toBe(true);
-  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(3); check.close();
+  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(4); check.close();
 });
 
 it('atomically rolls back terminal projection with journal failure, then preserves cancellation intent on settlement', async () => {

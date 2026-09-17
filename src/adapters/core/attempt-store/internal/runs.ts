@@ -1,7 +1,8 @@
+import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
-  type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
+  type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync) {}
@@ -31,6 +32,7 @@ export class SqliteRunJournal {
       .run(receipt.snapshot.identity.scopeId, receipt.commandId, receipt.command, JSON.stringify(receipt.snapshot));
     return Object.freeze(receipt);
   }
+  async createExecutionPool(input: ExecutionPool) { return this.transaction(() => new SqliteExecutionPools(this.db).create(input)); }
   async loadRun(scopeId: string, runId: string) {
     try {
       const row = this.db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
@@ -64,7 +66,8 @@ export class SqliteRunJournal {
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const snapshot = createRun(parsed.identity, parsed.graph, parsed.now);
-      planSchedulingWave(snapshot.graph, { ...parsed.policy, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
+      new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
+      planSchedulingWave(snapshot.graph, { schemaVersion: 1, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')
         .run(scopeId, runId, snapshot.revision, JSON.stringify(snapshot), JSON.stringify(parsed.policy));
       if (row.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -80,10 +83,13 @@ export class SqliteRunJournal {
       if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const current = this.decode(row.snapshot, scopeId, runId);
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      let policy;
+      try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;
-      try { wave = planSchedulingWave(current.graph, { ...JSON.parse(String(row.policy)), snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
+      try { wave = planSchedulingWave(current.graph, { schemaVersion: 1, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) throw new RunStoreError('RUN_CAPACITY_OR_ORDER');
+      new SqliteExecutionPools(this.db).assertAvailable(policy.poolId, parsed.identities.length);
       const snapshot = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
       for (const identity of parsed.identities) {
         const attempt = createAttempt(identity);
