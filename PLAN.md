@@ -269,3 +269,6 @@ Residual STORE/B: typed contention/bounded busy policy, registered ledger path a
 
 | STORE/B | Required wait/journal/durability options, typed contention, separate-process lock proof | Fable PASS1389/1390; isolated129 verify | DONE |
 Residuals: config/layout composition STORE/C, commit-time reader contention test, nonblocking worker and platform matrix.
+
+| STORE/C | Configured registry ledger + shared SQLite option schema + trusted-host POSIX file preflight | Fable PASS1396; isolated133 verify | DONE |
+Storage wait default100ms is the same configurable registry policy in development and installed Core; not an SLO or automatic retry budget. Windows ledger opening is UNSUPPORTED until an ACL backend is verified. Same-UID worker access to managed tree remains an ISOLATION invariant.

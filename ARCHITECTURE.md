@@ -291,3 +291,5 @@ CONTRACT/C preserves exact termination cause (exit code or signal) and separates
 Runtime package metadata comes from a colocated generated artifact. package.json is the source; explicit tooling regenerates it, npm lint and build enforce freshness. No runtime directory-depth manifest dependency remains.
 
 SQLite adapter requires explicit timeout/journal/durability options, maps busy/locked outcomes, and does not retry automatically. Linux separate-process BEGIN contention is verified; commit-time reader contention, worker isolation and platform matrix remain pending.
+
+Ledger composition selects configured SQLite options and registry path. Default100ms native wait applies equally to development and installed Core and is configurable; no SLO implied. POSIX file preflight is not same-UID race-proof custody. Windows ledger opening explicitly remains unsupported pending ACL backend proof.

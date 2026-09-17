@@ -13,7 +13,8 @@
     "artifacts": "artifacts",
     "integrations": "integrations",
     "crashes": "crashes",
-    "tenants": "tenants"
+    "tenants": "tenants",
+    "ledger": "state/ledger.db"
   },
   "bootstrapResource": "config",
   "rootEnvironmentKey": "DECKENT_HOME"

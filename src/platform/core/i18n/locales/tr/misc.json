@@ -572,5 +572,6 @@
   "usage.option.until": "Kullanım aralığının sonunu belirleyin (ISO tarihi)",
   "usage.totals": "TOPLAM",
   "usage.unknown_models": "⚠ Şu model(ler) için fiyat bulunamadı: {models} — yakımları $0 sayılıyor. `deckent config update-pricing` çalıştırın veya modeli .deckent/cost-config.json dosyasına ekleyin.",
-  "config.field.layout": "Kalıcı veri kökü ve kayıtlı kaynak yolları; başlangıç konfigürasyonu sabit kalır."
+  "config.field.layout": "Kalıcı veri kökü ve kayıtlı kaynak yolları; başlangıç konfigürasyonu sabit kalır.",
+  "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri"
 }

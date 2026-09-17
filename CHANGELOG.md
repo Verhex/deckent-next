@@ -54,3 +54,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - FOUNDATION/C (Fable PASS1382): pure colocated metadata artifact; lint/build reject stale manifest projection; renderer forbids runtime package.json dependency.
 
 - STORE/B (Fable PASS1389/1390): bounded native SQLite lock waits, explicit journal/durability options, typed BUSY and conservative unknown rollback outcome; separate-process contention proof.
+
+- STORE/C (Fable PASS1396): layout-selected ledger opening with private file checks and shared validated storage settings; no automatic migration or permission repair.

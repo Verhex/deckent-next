@@ -572,5 +572,6 @@
   "usage.option.until": "Set the usage window end (ISO date)",
   "usage.totals": "TOTAL",
   "usage.unknown_models": "⚠ No price found for model(s): {models} — their burn is counted as $0. Run `deckent config update-pricing` or add the model to .deckent/cost-config.json.",
-  "config.field.layout": "Durable data root and registered resource locations; bootstrap configuration stays fixed."
+  "config.field.layout": "Durable data root and registered resource locations; bootstrap configuration stays fixed.",
+  "config.field.storage": "Storage driver and bounded SQLite options"
 }
