@@ -4,7 +4,7 @@ import { dirname, join, parse, relative, resolve, sep } from 'node:path';
 import { productResourcePath, type ProductLayout, type ProductResource } from '#platform/core/host/index.js';
 
 export class ManagedFileError extends Error {
-  constructor(readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT') {
+  constructor(readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT' | 'MANAGED_FILE_MISSING') {
     super(code); this.name = 'ManagedFileError';
   }
 }
@@ -42,7 +42,7 @@ export async function prepareProductFile(layout: ProductLayout, resource: Produc
   return path;
 }
 
-async function prepareLocation(layout: ProductLayout, resource: ProductResource, asDirectory: boolean): Promise<string> {
+async function prepareLocation(layout: ProductLayout, resource: ProductResource, asDirectory: boolean, create = true): Promise<string> {
   if (process.platform === 'win32' || layout.platform !== 'posix' || !process.getuid) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
   const uid = process.getuid(); const root = resolve(layout.root); const path = productResourcePath(layout, resource);
   if (root === parse(root).root) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
@@ -55,6 +55,7 @@ async function prepareLocation(layout: ProductLayout, resource: ProductResource,
     cursor = join(cursor, segment);
     let stat = await inspect(cursor);
     if (!stat) {
+      if (!create) throw new ManagedFileError('MANAGED_FILE_MISSING');
       try { await mkdir(cursor, { mode: 0o700 }); } catch (error) {
         if (!(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')) throw error;
       }
@@ -71,4 +72,26 @@ async function prepareLocation(layout: ProductLayout, resource: ProductResource,
 
 export async function prepareProductDirectory(layout: ProductLayout, resource: ProductResource): Promise<string> {
   return prepareLocation(layout, resource, true);
+}
+
+/** Validate an existing managed file without creating directories/files or repairing permissions.
+ * Same trusted-host preflight limitation as prepareProductFile; the returned path is not an open lease.
+ */
+export async function inspectProductFile(layout: ProductLayout, resource: ProductResource, companions: readonly string[] = []): Promise<string> {
+  const path = await prepareLocation(layout, resource, false, false);
+  const uid = process.getuid!();
+  for (const suffix of companions) {
+    if (!/^-[a-z]+$/.test(suffix)) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+    const companion = await inspect(path + suffix); if (companion) privateFile(companion, uid);
+  }
+  const existing = await inspect(path);
+  if (!existing) throw new ManagedFileError('MANAGED_FILE_MISSING');
+  privateFile(existing, uid);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = await handle.stat(); privateFile(opened, uid);
+    const linked = await lstat(path);
+    if (linked.ino !== opened.ino || linked.dev !== opened.dev || linked.isSymbolicLink()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  } finally { await handle.close(); }
+  return path;
 }
