@@ -1,3 +1,4 @@
+import { LocalOsPrincipalVerifier } from '#adapters/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
@@ -8,7 +9,7 @@ import { afterEach, expect, it } from 'vitest';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { createAttempt } from '#domain/index.js';
-import { DispatchApplication } from '#engine/index.js';
+import { DispatchApplication, DispatchPolicyAuthorization } from '#engine/index.js';
 const exec = promisify(execFile); const roots: string[] = []; const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -42,8 +43,12 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
   const workspaceRequest = { schemaVersion: 1 as const, identity, baseCommit };
   const lease = await runtime.workspaces.allocate(workspaceRequest);
   const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: ['node', '-e', "console.log(require('node:fs').readFileSync('/workspace/input','utf8'))"] };
-  const verifier = { async verify() { return { id: 'user', issuer: 'test', subject: '1', assurance: 'os-user', scopeIds: ['s'] }; } };
-  const app = new DispatchApplication(runtime.store, runtime.supervisor, verifier, { async authorize() {} }, 'runner', runtime.artifacts);
+  const verifier = new LocalOsPrincipalVerifier(['s']); const principal = await verifier.verify(undefined);
+  let actions = ['execute', 'release'];
+  const policy = new DispatchPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'test-policy', restrictions: [],
+    grants: [{ id: 'local-owner', effect: 'allow', actions, scopes: ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
+      resource: { kind: 'attempt', ids: [identity.attemptId] } }] }; } });
+  const app = new DispatchApplication(runtime.store, runtime.supervisor, verifier, policy, 'runner', runtime.artifacts);
   try {
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'changed') } })); clearConfigCache();
     await runtime.store.commit({ commandId: 'admit', command: 'test-admission', expectedRevision: null, snapshot: createAttempt(identity) });
@@ -52,6 +57,8 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
     expect(output.stdout).toBe('base\n'); expect(runtime.layout.root).toBe(f.data);
     expect(await readFile(join(f.source, 'input'), 'utf8')).toBe('owner-wip');
     await expect(stat(join(f.root, 'changed'))).rejects.toMatchObject({ code: 'ENOENT' });
+    actions = ['release'];
+    await expect(app.execute(request)).rejects.toThrow('POLICY_DENIED');
     await app.release(request);
   } finally { await runtime.supervisor.release(request); await runtime.workspaces.release(workspaceRequest); runtime.store.close(); }
 }, 20000);

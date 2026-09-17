@@ -88,3 +88,5 @@ ARTIFACT/C PASS1438: bounded per-container local logs, explicit capture complete
 CANCEL/A PASS1439: durable cancellation actor/intent precedes actual Docker kill;174 tests. Created/start race and post-controller-crash watchdog remain open; cancellation request is not terminal proof.
 
 RUNTIME-CONFIG/A PASS1442: shared runtime/artifact policy schemas and one-snapshot composition;176 tests. Execution defaults disabled. Source authorization, localized composition errors and output/artifact budget consistency remain before public ingress.
+
+POLICY/A PASS1447: verified principal/scope/action/resource grant checks and deny-only restrictions;179 tests. Admission decision evidence, shared action catalog and measured cache policy remain pending.

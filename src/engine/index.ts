@@ -7,3 +7,5 @@ export type { DispatchClaim, DispatchTerminal, DispatchRecord, DispatchStore } f
 export { DispatchApplication } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
+export { DispatchPolicyAuthorization, PolicyAuthorizationError } from '#engine/core/policy/index.js';
+export type { PolicySource } from '#engine/core/policy/index.js';
