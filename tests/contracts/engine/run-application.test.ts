@@ -26,7 +26,7 @@ async function fixture() {
 it('persists cancellation intent, blocks fresh dispatch and reservations without fabricating worker termination', async () => {
   const { store, app, path } = await fixture();
   const receipt = await app.execute(command); expect(receipt.snapshot.cancelRequested).toBe(true); expect(receipt.snapshot.revision).toBe(2);
-  expect(receipt.snapshot.progress[0]!.phase).toBe('active'); expect((await store.load('s', 'a'))!.cancelRequested).toBe(false);
+  expect(receipt.snapshot.progress[0]!.phase).toBe('active'); expect((await store.load('s', 'a'))!.cancelRequested).toBe(true);
   await expect(store.claimDispatch({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['true'] } })).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   await expect(store.reserveRunTasks({ commandId: 'late', actor: { id: 'user', issuer: 'host', subject: '1000' }, scopeId: 's', runId: 'r', now: 0, expectedRevision: 2, identities: [{ ...identity, attemptId: 'b' }] })).rejects.toThrow();
   expect(await app.execute(command)).toEqual(receipt);

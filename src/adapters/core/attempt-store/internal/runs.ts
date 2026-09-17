@@ -1,3 +1,4 @@
+import { propagateRunCancellation } from './run-cancellation.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
@@ -73,6 +74,7 @@ export class SqliteRunJournal {
       const current = this.decode(row.snapshot, scopeId, runId);
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       const snapshot = requestRunCancellation(current, parsed.expectedRevision);
+      propagateRunCancellation(this.db, current, parsed.actor);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');

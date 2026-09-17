@@ -346,3 +346,5 @@ POLICY/C DONE: versioned core action/resource vocabulary shared by authorization
 RUN/G DONE: explicit RunView v1 projection and one sanitized query mapper, no storage snapshot export.236 tests/12 Docker; Fable1513 PASS. Dedicated Run error registry entries pending.
 
 RUN/H DONE: run inspect CLI shares SDK RunView and policy/ledger path;237 tests/12 Docker; Fable1514 PASS. Linux pipe parity proven; design-critic text refinements tracked, other platforms/live UI not claimed.
+
+CANCEL/B DONE: atomic Run cancellation intent propagation to bound nonterminal Attempt/dispatch records, preserving finished evidence and prior actor.241 tests/12 Docker; Fable1516 PASS. Supervisor delivery and claim-start race remain open; large transaction latency unmeasured.
