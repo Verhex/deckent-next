@@ -742,7 +742,7 @@
   "error.AUTHENTICATION_REQUIRED": "A verified local identity is required.",
   "error.AUTHENTICATION_SCOPE_DENIED": "The identity is not admitted to this scope.",
   "error.POLICY_UNAVAILABLE": "The trusted policy cannot be read or validated. No access was granted.",
-  "error.POLICY_DENIED": "Policy does not permit inspecting this scope.",
+  "error.POLICY_DENIED": "Policy does not permit the requested operation on this resource.",
   "error.MANAGED_FILE_MISSING": "The configured ledger or its directory does not exist. Nothing was created.",
   "error.MANAGED_FILE_UNSAFE": "Managed storage failed its ownership, permission or link checks.",
   "error.MANAGED_FILE_UNSUPPORTED": "Managed storage inspection is unsupported on this platform.",

@@ -132,3 +132,5 @@ RUN/H DONE: run inspect CLI shares SDK RunView and policy/ledger path;237 tests/
 CANCEL/B DONE: atomic Run cancellation intent propagation to bound nonterminal Attempt/dispatch records, preserving finished evidence and prior actor.241 tests/12 Docker; Fable1516 PASS. Supervisor delivery and claim-start race remain open; large transaction latency unmeasured.
 
 CANCEL/C DONE: bounded cancellation delivery through existing per-attempt authorization;243 tests/13 Docker; Fable1524 PASS. Redelivery uses same commandId; retry reason classification, automatic loop and claim-start fence remain open.
+
+RUN/H-text DONE: Fable1514 design-critic N1–N6 closed by PASS1525; recorded cancellation language, generic resource denial, ASCII heading, inspect key namespace and EN/absent human proof.241 tests/12 Docker.

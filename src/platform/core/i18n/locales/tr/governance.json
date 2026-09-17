@@ -742,7 +742,7 @@
   "error.AUTHENTICATION_REQUIRED": "Doğrulanmış yerel kimlik gerekiyor.",
   "error.AUTHENTICATION_SCOPE_DENIED": "Kimliğin bu kapsama erişimi yok.",
   "error.POLICY_UNAVAILABLE": "Güvenilir politika okunamadı veya doğrulanamadı. Erişim verilmedi.",
-  "error.POLICY_DENIED": "Politika bu kapsamın incelenmesine izin vermiyor.",
+  "error.POLICY_DENIED": "Politika bu kaynak üzerinde istenen işleme izin vermiyor.",
   "error.MANAGED_FILE_MISSING": "Yapılandırılmış ledger veya dizini yok. Hiçbir dosya oluşturulmadı.",
   "error.MANAGED_FILE_UNSAFE": "Yönetilen depolama sahiplik, izin veya bağlantı denetiminden geçemedi.",
   "error.MANAGED_FILE_UNSUPPORTED": "Bu platformda yönetilen depolama incelemesi desteklenmiyor.",

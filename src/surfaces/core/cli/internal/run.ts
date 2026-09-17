@@ -19,18 +19,18 @@ export async function runInspectionCommand(argv: readonly string[], context: Com
   const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, runId }, { env: context.env ?? process.env });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
     const phases = {
-      pending: t('cli.run.phase.pending', {}, locale), active: t('cli.run.phase.active', {}, locale),
-      evaluating: t('cli.run.phase.evaluating', {}, locale), accepted: t('cli.run.phase.accepted', {}, locale),
-      failed: t('cli.run.phase.failed', {}, locale), cancelled: t('cli.run.phase.cancelled', {}, locale),
-      reconciling: t('cli.run.phase.reconciling', {}, locale),
+      pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
+      evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
+      failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
+      reconciling: t('cli.run.inspect.states.reconciling', {}, locale),
     };
     const run = data.run;
-    if (!run) return t('cli.run.missing', { run: runId }, locale);
-    return [t('cli.run.heading', { run: run.runId, revision: run.revision }, locale),
-      run.cancellationRequested ? t('cli.run.cancelRequested', {}, locale) : t('cli.run.cancelAbsent', {}, locale),
-      ...run.tasks.flatMap(task => [t('cli.run.task', { task: task.id, kind: task.kind }, locale),
-        t('cli.run.phase', { phase: phases[task.phase] }, locale),
-        ...(task.unresolvedEffects ? [t('cli.run.unresolved', {}, locale)] : [])]),
+    if (!run) return t('cli.run.inspect.missing', { run: runId }, locale);
+    return [t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+      run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
+      ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
+        t('cli.run.inspect.stateLabel', { phase: phases[task.phase] }, locale),
+        ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
     ].join('\n');
   } });
 }
