@@ -575,5 +575,7 @@
   "config.field.layout": "Durable data root and registered resource locations; bootstrap configuration stays fixed.",
   "config.field.storage": "Storage driver and bounded SQLite options",
   "config.field.artifacts": "Maximum retained artifact size in bytes",
-  "config.field.execution": "Explicit pinned Docker and Git execution capability settings; null disables execution"
+  "config.field.execution": "Explicit pinned Docker and Git execution capability settings; null disables execution",
+  "config.field.inspection": "Read-only inspection page and policy document limits",
+  "config.field.local_access": "Scopes assigned to the direct local OS identity; policy approval is also required"
 }

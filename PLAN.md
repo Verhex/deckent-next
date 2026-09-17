@@ -316,3 +316,5 @@ POLICY/B DONE: pinned-layout, owner-checked fresh file policy; 184 tests/12 Dock
 INVENTORY/C DONE: inspect existing managed files without creation/permission repair; 183 tests/12 Docker; Fable1457 PASS. POSIX trusted-host preflight remains non-atomic with subsequent database opening.
 
 INVENTORY-B DONE: Read-only SQLite inventory reader; exact rebase preserves policy exports;189 tests/12 Docker.
+
+INVENTORY-D DONE: Configured local inventory query;191 tests/12 Docker; public binding awaits policy-derived membership in INVENTORY/F.
