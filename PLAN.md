@@ -259,3 +259,6 @@ Residuals: direct-only blocked classification, sanitized schema issue paths, sha
 
 | CONTRACT/B | versioned attempt evidence and application transitions; no worker execution claimed | Independent Fable PASS 1366:e0b7a3ec4620; immutable candidate proof | DONE |
 Residuals before real supervisor: represent signal termination; journal stale replay separately; share field-wise identity comparisons; test external cancellation without request.
+
+| STORE/A | Attempt application, required authorization port, atomic SQLite snapshot/receipt and scoped replay/CAS | Fable PASS1375; isolated121 tests; proof/STORE-A-verification.json | DONE |
+Residual STORE/B: typed contention/bounded busy policy, registered ledger path and guarded0600 IO, trusted principal/policy composition, worker/pool capacity and platform proof. Node24 built-in SQLite is experimental; no production capacity/durability guarantee inferred.
