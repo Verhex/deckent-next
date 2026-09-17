@@ -1,8 +1,8 @@
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  projectDispatchTerminal, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
@@ -23,6 +23,27 @@ export class SqliteDispatchJournal {
       if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
       throw sqliteFailure(error);
     }
+  }
+  async requestDispatchCancellation(input: DispatchClaim['request'], actor: VerifiedPrincipal) {
+    const request = sandboxRequestSchema.parse(input); const principal = verifiedPrincipalSchema.parse(actor);
+    if (!principal.scopeIds.includes(request.identity.scopeId)) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    return this.transaction(() => {
+      const existing = this.read(request);
+      if (!existing) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+      if (existing.terminal || existing.cancellation) return existing;
+      const identity = request.identity;
+      const row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
+      if (!row) throw new DispatchError('DISPATCH_CORRUPT');
+      let current;
+      try { current = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
+      const next = projectDispatchCancellation(current, { request, owner: existing.owner });
+      const record = dispatchRecordSchema.parse({ ...existing, cancellation: { id: principal.id, issuer: principal.issuer, subject: principal.subject } });
+      const updated = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
+        .run(next.revision, JSON.stringify(next), identity.scopeId, identity.attemptId, current.revision);
+      if (updated.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
+      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), identity.scopeId, identity.attemptId);
+      return record;
+    });
   }
   async retainDispatchOutput(input: DispatchClaim, value: ArtifactReceipt) {
     const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);

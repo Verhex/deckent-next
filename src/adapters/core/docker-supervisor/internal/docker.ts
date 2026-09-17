@@ -49,6 +49,15 @@ export class DockerSupervisor implements ExecutionSupervisor {
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
     return Object.freeze({ handle, result: Object.freeze(result), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
   }
+  async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
+    const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
+    if (existing && ['running', 'paused'].includes(existing.State.Status)) {
+      try { await this.command(['kill', handle], this.options.controlTimeoutMs); } catch { /* Only subsequent observation proves termination. */ }
+    }
+    // Created/missing is unresolved: do not launch or delete evidence to manufacture a terminal state.
+    const observed = this.result(handle, await this.inspect(handle, digest));
+    return Object.freeze({ handle: observed.handle, result: observed.result });
+  }
   async recoverOutput(input: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
     if (!existing || existing.State.Status !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');

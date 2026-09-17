@@ -1,4 +1,4 @@
-import { AttemptError, applyAttemptObservation, sameAttemptIdentity, type AttemptSnapshot } from '#domain/index.js';
+import { AttemptError, requestAttemptCancellation, applyAttemptObservation, sameAttemptIdentity, type AttemptSnapshot } from '#domain/index.js';
 import { DispatchError, type DispatchClaim, type DispatchTerminal } from './port.js';
 
 /** Application-owned evidence projection, evaluated inside the store's atomic settlement transaction.
@@ -23,4 +23,9 @@ export function mergeDispatchTerminal(existing: DispatchTerminal, incoming: Disp
     throw new DispatchError('DISPATCH_CONFLICT');
   }
   return existing.interrupted === null && incoming.interrupted !== null ? incoming : existing;
+}
+
+export function projectDispatchCancellation(current: AttemptSnapshot, claim: DispatchClaim): AttemptSnapshot {
+  if (!sameAttemptIdentity(current.identity, claim.request.identity)) throw new DispatchError('DISPATCH_CONFLICT');
+  return requestAttemptCancellation(current, current.revision);
 }

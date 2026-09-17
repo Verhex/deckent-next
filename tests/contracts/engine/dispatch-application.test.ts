@@ -1,3 +1,5 @@
+import { DatabaseSync } from 'node:sqlite';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
@@ -43,7 +45,7 @@ it.skipIf(!imageId)('returns durable terminal after real Docker release without 
 });
 it('never retries an unknown launch and refuses release without terminal evidence', async () => {
   const f = await fixture(); let calls = 0;
-  const supervisor: ExecutionSupervisor = { async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
+  const supervisor: ExecutionSupervisor = { async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
@@ -56,7 +58,7 @@ it.skipIf(!imageId)('reconciles real terminal container after failed journal wri
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   const policy = { async authorize() { if (denied) throw new Error('DENIED'); } };
-  const failingStore = { retainDispatchOutput: f.store.retainDispatchOutput.bind(f.store), claimDispatch: f.store.claimDispatch.bind(f.store), readDispatch: f.store.readDispatch.bind(f.store),
+  const failingStore = { requestDispatchCancellation: f.store.requestDispatchCancellation.bind(f.store), retainDispatchOutput: f.store.retainDispatchOutput.bind(f.store), claimDispatch: f.store.claimDispatch.bind(f.store), readDispatch: f.store.readDispatch.bind(f.store),
     async finishDispatch(): Promise<never> { throw new Error('injected terminal write failure'); } };
   const first = new DispatchApplication(failingStore, supervisor, verifier, policy, 'process-lost', f.artifacts);
   try {
@@ -96,7 +98,7 @@ it('carries a real subprocess signal exit through dispatch and atomic Attempt pr
       if (result.code !== null || result.signal !== 'SIGTERM') throw new Error('expected real signal exit');
       return { handle: 'native-test', result: { kind: 'exited', exitCode: result.code, signal: result.signal }, stdout: '', stderr: '', interrupted: false, outputCompleteness: 'complete' };
     },
-    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() {},
+    async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() {},
   };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'native-test', f.artifacts);
   const result = await app.execute(f.request);
@@ -110,7 +112,7 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
   let arrived!: () => void; let release!: () => void;
   const atTerminal = new Promise<void>(resolve => { arrived = resolve; });
   const proceed = new Promise<void>(resolve => { release = resolve; });
-  const delayed: ExecutionSupervisor = { recoverOutput: docker.recoverOutput.bind(docker), observe: docker.observe.bind(docker), release: docker.release.bind(docker),
+  const delayed: ExecutionSupervisor = { cancel: docker.cancel.bind(docker), recoverOutput: docker.recoverOutput.bind(docker), observe: docker.observe.bind(docker), release: docker.release.bind(docker),
     async execute(request, signal) { const result = await docker.execute(request, signal); arrived(); await proceed; return result; } };
   const policy = { async authorize() {} };
   const runner = new DispatchApplication(f.store, delayed, verifier, policy, 'original', f.artifacts);
@@ -128,7 +130,7 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
 it('refuses cleanup if retained output is unreadable or partial despite terminal execution', async () => {
   const f = await fixture(); let releases = 0; let corrupt = false;
   const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false, outputCompleteness: 'complete' }; },
-    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
+    async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const artifacts = { put: f.artifacts.put.bind(f.artifacts), async read(scope: string, receipt: Parameters<typeof f.artifacts.read>[1]) {
     if (corrupt) throw new Error('ARTIFACT_CORRUPT'); return f.artifacts.read(scope, receipt);
   } };
@@ -143,7 +145,7 @@ it('refuses cleanup if retained output is unreadable or partial despite terminal
 it('retains partial output honestly and blocks destructive cleanup', async () => {
   const f = await fixture(); let releases = 0;
   const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 137 }, stdout: 'partial', stderr: '', interrupted: true, outputCompleteness: 'partial' }; },
-    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
+    async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   const result = await app.execute(f.request); expect(result.kind).toBe('terminal');
   const stored = JSON.parse(new TextDecoder().decode(await f.artifacts.read('s', result.record.output!)));
@@ -171,4 +173,48 @@ it.skipIf(!imageId)('recovers daemon-retained output after capture loss but neve
     const config = JSON.parse((await promisify(execFile)('/usr/bin/docker', ['inspect', retained.terminal!.handle])).stdout)[0].HostConfig.LogConfig;
     expect(config.Type).toBe('local'); expect(config.Config).toMatchObject({ 'max-size': '64k', 'max-file': '2', mode: 'blocking' });
   } finally { await docker.release(request); }
+});
+it.skipIf(!imageId)('persists authorized cancellation before another controller stops a confirmed running Docker worker', async () => {
+  const f = await fixture(); let deny = true;
+  const request = { ...f.request, argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/ready','yes');setInterval(()=>{},1000)"] };
+  const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
+  const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(otherStore);
+  const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
+  const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new Error('DENIED'); } }, 'operator', f.artifacts);
+  const execution = running.execute(request);
+  try {
+    let ready = false;
+    for (let i = 0; i < 100; i++) {
+      try { ready = await readFile(join(f.workspace, 'ready'), 'utf8') === 'yes'; } catch { /* startup */ }
+      if (ready) break; await sleep(50);
+    }
+    expect(ready).toBe(true);
+    await expect(cancellation.cancel(request)).rejects.toThrow('DENIED');
+    expect((await otherStore.load('s', request.identity.attemptId))?.cancelRequested).toBe(false);
+    deny = false; const cancelled = await cancellation.cancel(request);
+    expect(cancelled.kind).toBe('terminal'); expect(cancelled.record.terminal?.exitCode).not.toBe(0);
+    expect(cancelled.record.cancellation).toEqual({ id: 'user', issuer: 'test', subject: 'user' });
+    expect((await otherStore.load('s', request.identity.attemptId))?.cancelRequested).toBe(true);
+    const completed = await execution; expect(completed.kind).toBe('terminal');
+    const snapshot = await otherStore.load('s', request.identity.attemptId);
+    await cancellation.cancel(request); expect(await otherStore.load('s', request.identity.attemptId)).toEqual(snapshot);
+  } finally { await separate.cancel(request); await execution.catch(() => {}); await original.release(request); }
+}, 20000);
+
+it('does not signal a worker if the durable cancellation transaction fails', async () => {
+  const f = await fixture(); await f.store.claimDispatch({ request: f.request, owner: 'runner' }); let signals = 0;
+  const supervisor: ExecutionSupervisor = {
+    async cancel() { signals++; throw new Error('must not signal'); }, async execute() { throw new Error('unused'); },
+    async observe() { throw new Error('unused'); }, async recoverOutput() { throw new Error('unused'); }, async release() {},
+  };
+  const db = new DatabaseSync(join(f.root, 'ledger.db'));
+  db.exec("CREATE TRIGGER fail_cancel BEFORE UPDATE ON dispatches BEGIN SELECT RAISE(ABORT,'injected'); END;");
+  try {
+    const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'operator', f.artifacts);
+    await expect(app.cancel(f.request)).rejects.toThrow(); expect(signals).toBe(0);
+    expect((await f.store.load('s', f.request.identity.attemptId))?.cancelRequested).toBe(false);
+    expect((await f.store.readDispatch(f.request))?.cancellation).toBeUndefined();
+  } finally { db.close(); }
 });
