@@ -1,6 +1,6 @@
 export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '#adapters/core/contract/index.js';
-export { openSqliteAttemptStore } from '#adapters/core/attempt-store/index.js';
-export type { SqliteAttemptStore, SqliteAttemptOptions } from '#adapters/core/attempt-store/index.js';
+export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
+export type { SqliteAttemptStore, SqliteAttemptOptions, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LocalOsPrincipalVerifier } from '#adapters/core/local-principal/index.js';

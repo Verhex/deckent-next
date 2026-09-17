@@ -6,3 +6,8 @@ export async function openSqliteAttemptStore(path: string, options: SqliteAttemp
   return new SqliteAttemptStore(path, options);
 }
 export type { SqliteAttemptOptions } from './internal/options.js';
+export type { SqliteInventoryReader, SqliteInventoryOptions } from './internal/inventory-reader.js';
+export async function openSqliteInventoryReader(path: string, options: import('./internal/inventory-reader.js').SqliteInventoryOptions) {
+  const { SqliteInventoryReader } = await import('./internal/inventory-reader.js');
+  return new SqliteInventoryReader(path, options);
+}
