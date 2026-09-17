@@ -9,7 +9,6 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { createAttempt } from '#domain/index.js';
 import { DispatchApplication, DispatchPolicyAuthorization } from '#engine/index.js';
 const exec = promisify(execFile); const roots: string[] = []; const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -56,8 +55,14 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
   const app = new DispatchApplication(runtime.store, runtime.supervisor, verifier, policy, 'runner', runtime.artifacts);
   try {
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'changed') } })); clearConfigCache();
-    await runtime.store.commit({ commandId: 'admit', command: 'test-admission', expectedRevision: null, snapshot: createAttempt(identity) });
+    const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+    await runtime.store.createRun({ commandId: 'create-run', actor, identity: { runId: identity.runId, scopeId: identity.scopeId, layoutRevision: identity.layoutRevision },
+      graph: { schemaVersion: 1, revision: 1, tasks: [{ id: identity.taskId, kind: 'code', dependencies: [], acceptanceCriteria: ['base-output'] }] }, now: 0,
+      policy: { schemaVersion: 1, capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] } });
+    await runtime.store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 0, now: 0, identities: [identity] });
     const result = await app.execute(request); expect(result.record.terminal?.exitCode).toBe(0);
+    const projected = await runtime.store.projectRunAttempt({ commandId: 'project', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 1, attemptId: identity.attemptId });
+    expect(projected.snapshot.progress[0]!.phase).toBe('evaluating');
     const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', result.record.output!)));
     expect(output.stdout).toBe('base\n'); expect(runtime.layout.root).toBe(f.data);
     expect(await readFile(join(f.source, 'input'), 'utf8')).toBe('owner-wip');

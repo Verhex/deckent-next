@@ -330,3 +330,5 @@ RUN-A DONE: Pure revisioned Run graph/progress/attempt bindings;199 tests/12 Doc
 SCHEDULING-A DONE: Bounded deterministic wave planning with explicit policy ordering and execution/in-flight limits;206 tests/12 Docker. Planning alone never authorizes launch.
 
 RUN-B DONE: Durable Run and atomic task/attempt reservation in SQLite schema3;211 tests/12 Docker including separate-process lock. Per-Run capacity only; shared pool still gates runtime launch.
+
+RUN/C DONE: authoritative attempt-to-Run projection in one SQLite transaction;213 tests/12 Docker, Fable1488 PASS. Dispatch-to-Run projection remains explicit until automatic transactional wiring/reconciler is implemented.

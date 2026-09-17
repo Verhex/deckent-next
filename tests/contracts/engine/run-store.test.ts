@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteInventoryReader, type SqliteAttemptStore } from '#adapters/index.js';
-import { createAttempt } from '#domain/index.js';
+import { createAttempt, applyAttemptObservation } from '#domain/index.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' } as const;
@@ -82,4 +82,35 @@ it('returns bounded busy under a separate process transaction, without partial r
   } finally {
     if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'close'); child.kill(); await exited; }
   }
+});
+
+it('projects only stored attempt evidence, frees execution capacity but retains evaluation backpressure', async () => {
+  const { store } = await fixture(); await store.createRun({ ...create, policy: { ...create.policy, capacity: { executionSlots: 1, inFlightSlots: 2 } } });
+  await store.reserveRunTasks(reservation(['a']));
+  const finish = async (taskId: string) => {
+    const id = attempt(taskId); const current = (await store.load('s', id.attemptId))!;
+    const snapshot = applyAttemptObservation(current, { protocolVersion: 1, identity: id, sequence: 1, eventId: 'exit-' + taskId, result: { kind: 'exited', exitCode: 0 } }, current.revision);
+    await store.commit({ commandId: 'exit-' + taskId, command: 'verified-exit', expectedRevision: current.revision, snapshot });
+  };
+  await finish('a');
+  await expect(store.reserveRunTasks({ ...reservation(['b'], 'before-projection'), expectedRevision: 1 })).rejects.toThrow('RUN_CAPACITY_OR_ORDER');
+  const projectA = { commandId: 'project-a', actor, scopeId: 's', runId: 'r', expectedRevision: 1, attemptId: 'attempt-a' };
+  const receipt = await store.projectRunAttempt(projectA); expect(receipt.snapshot.progress[0]!.phase).toBe('evaluating');
+  await store.reserveRunTasks({ ...reservation(['b'], 'claim-b'), expectedRevision: 2 }); await finish('b');
+  const projected = await store.projectRunAttempt({ ...projectA, commandId: 'project-b', attemptId: 'attempt-b', expectedRevision: 3 });
+  expect(projected.snapshot.progress.filter(p => p.phase === 'evaluating')).toHaveLength(2);
+  await expect(store.reserveRunTasks({ ...reservation(['c'], 'evaluation-full'), expectedRevision: 4 })).rejects.toThrow('RUN_CAPACITY_OR_ORDER');
+  expect(await store.projectRunAttempt(projectA)).toEqual(receipt);
+});
+it('rejects caller-supplied observations and unrelated stored attempts without changing Run state', async () => {
+  const { store } = await fixture(); await store.createRun(create); await store.reserveRunTasks(reservation(['a']));
+  const project = { commandId: 'project', actor, scopeId: 's', runId: 'r', expectedRevision: 1, attemptId: 'attempt-a' };
+  await expect(store.projectRunAttempt({ ...project, observation: { result: 'exited' } } as typeof project)).rejects.toThrow();
+  await expect(store.projectRunAttempt(project)).rejects.toThrow('RUN_OBSERVATION_STALE');
+  const foreign = { ...attempt('foreign'), runId: 'other-run' };
+  const snapshot = applyAttemptObservation(createAttempt(foreign), { protocolVersion: 1, identity: foreign, sequence: 1, eventId: 'foreign-exit', result: { kind: 'exited', exitCode: 0 } }, 0);
+  await store.commit({ commandId: 'foreign', command: 'foreign', expectedRevision: null, snapshot: createAttempt(foreign) });
+  await store.commit({ commandId: 'foreign-exit', command: 'foreign-exit', expectedRevision: 0, snapshot });
+  await expect(store.projectRunAttempt({ ...project, attemptId: foreign.attemptId })).rejects.toThrow('RUN_ATTEMPT_CONFLICT');
+  expect((await store.loadRun('s', 'r'))!.revision).toBe(1);
 });

@@ -1,5 +1,5 @@
 import { SqliteRunJournal } from './runs.js';
-import type { RunStore, RunCreate, RunReservation } from '#engine/index.js';
+import type { RunStore, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { DispatchClaim, DispatchTerminal, DispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -44,6 +44,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
   async createRun(input: RunCreate) { return new SqliteRunJournal(this.db).createRun(input); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db).reserveRunTasks(input); }

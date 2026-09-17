@@ -7,6 +7,8 @@ export const runCreateSchema = z.object({ commandId: identitySchema, actor, iden
 export const runReservationSchema = z.object({ commandId: identitySchema, actor, scopeId: identitySchema, runId: identitySchema,
   expectedRevision: counterSchema, now: counterSchema, identities: z.array(attemptIdentitySchema).min(1),
 }).strict();
+export const runProjectionSchema = runReservationSchema.omit({ now: true, identities: true }).extend({ attemptId: identitySchema });
+export type RunProjection = z.infer<typeof runProjectionSchema>;
 export type RunCreate = z.infer<typeof runCreateSchema>;
 export type RunReservation = z.infer<typeof runReservationSchema>;
 export interface RunReceipt { readonly commandId: string; readonly command: string; readonly snapshot: RunSnapshot }
@@ -14,6 +16,7 @@ export interface RunReceipt { readonly commandId: string; readonly command: stri
  * Capacity here is per Run. A shared worker-pool reservation is additionally required before runtime launch.
  */
 export interface RunStore {
+  projectRunAttempt(input: RunProjection): Promise<RunReceipt>;
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   createRun(input: RunCreate): Promise<RunReceipt>;
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;
