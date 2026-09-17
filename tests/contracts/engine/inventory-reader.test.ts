@@ -1,10 +1,10 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readFile, writeFile, rm, stat, mkdir, chmod, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
-import { createAttempt } from '#domain/index.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function path() { const root = await mkdtemp(join(tmpdir(), 'deckent-reader-')); roots.push(root); return join(root, 'ledger.db'); }
@@ -27,7 +27,7 @@ it('observes committed WAL updates while exposing no write operations', async ()
   try {
     expect((await reader.listDispatches(query)).entries).toEqual([]);
     const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 };
-    await writer.commit({ commandId: 'admit', command: 'admit', expectedRevision: null, snapshot: createAttempt(identity) });
+    await admitRunAttempts(writer, [identity]);
     await writer.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } });
     expect((await reader.listDispatches(query)).entries[0]!.identity).toEqual(identity);
     expect('commit' in reader).toBe(false); expect('claimDispatch' in reader).toBe(false);
@@ -49,7 +49,7 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports mis
   const directory = file + '-readonly'; await mkdir(directory, { mode: 0o700 }); const copy = join(directory, 'ledger.db');
   try {
     const identity = { runId: 'r', taskId: 't', attemptId: 'wal-only', scopeId: 's', layoutRevision: 'l', generation: 1 };
-    await writer.commit({ commandId: 'admit', command: 'admit', expectedRevision: null, snapshot: createAttempt(identity) });
+    await admitRunAttempts(writer, [identity]);
     await writer.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } });
     // Quiescent writer, copy both files while the connection retains uncheckpointed WAL.
     await copyFile(file, copy); await copyFile(file + '-wal', copy + '-wal');

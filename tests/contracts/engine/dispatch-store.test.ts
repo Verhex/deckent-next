@@ -1,10 +1,11 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { createAttempt } from '#domain/index.js';
+import { createAttempt, requestRunCancellation } from '#domain/index.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
 const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'l' };
@@ -17,7 +18,7 @@ async function fixture() {
   const open = async () => { const store = await openSqliteAttemptStore(path, options); stores.push(store); return store; };
   return { path, open };
 }
-async function admit(store: SqliteAttemptStore) { await store.commit({ commandId: 'create', command: 'admission', expectedRevision: null, snapshot: createAttempt(identity) }); }
+async function admit(store: SqliteAttemptStore) { await admitRunAttempts(store, [identity]); }
 it('grants exactly one launch across connections, reopen and terminal recording', async () => {
   const f = await fixture(); const a = await f.open(); await admit(a); const b = await f.open();
   const results = await Promise.all([a.claimDispatch(claim), b.claimDispatch({ ...claim, owner: 'owner-2' })]);
@@ -52,7 +53,7 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run('s','a',0,JSON.stringify(snapshot));
   db.prepare('INSERT INTO attempt_receipts VALUES(?,?,?,?)').run('s','create','admission',JSON.stringify(snapshot)); db.close();
   const store = await f.open(); expect(await store.load('s','a')).toEqual(snapshot);
-  expect((await store.receipt('s','create'))?.command).toBe('admission'); expect((await store.claimDispatch(claim)).acquired).toBe(true);
+  expect((await store.receipt('s','create'))?.command).toBe('admission'); await expect(store.claimDispatch(claim)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(4); check.close();
 });
 
@@ -66,13 +67,16 @@ it('atomically rolls back terminal projection with journal failure, then preserv
   expect((await store.load('s', 'a'))?.lastObservation).toBeNull();
   expect((await store.load('s', 'a'))?.revision).toBe(1);
   expect((await store.readDispatch(claim.request))?.terminal).toBeNull();
+  expect((await store.loadRun('s', 'r'))!.revision).toBe(1);
   db.exec('DROP TRIGGER fail_terminal'); db.close();
   await store.finishDispatch(claim, terminal);
   const settled = await store.load('s', 'a');
   expect(settled).toMatchObject({ revision: 2, cancelRequested: true, lastObservation: { sequence: 1, result: { kind: 'exited', exitCode: 0 } } });
   expect(settled).not.toHaveProperty('accepted');
+  const run = (await store.loadRun('s', 'r'))!; expect(run.revision).toBe(2); expect(run.progress[0]!.phase).toBe('evaluating');
   await store.finishDispatch(claim, terminal);
   expect(await store.load('s', 'a')).toEqual(settled);
+  expect((await store.loadRun('s', 'r'))!.revision).toBe(2);
 });
 
 it('rejects contradictory terminal causes without writing terminal evidence', async () => {
@@ -102,4 +106,38 @@ it.each([true, false])('merges compatible recovery/execution evidence without a 
   expect(await b.load('s', 'a')).toEqual(snapshot);
   await expect(b.finishDispatch(claim, { ...terminal, interrupted: true })).rejects.toThrow('DISPATCH_CONFLICT');
   expect((await a.readDispatch(claim.request))?.terminal).toEqual(terminal);
+});
+
+it('refuses a real attempt row without a Run reservation', async () => {
+  const f = await fixture(); const store = await f.open();
+  await store.commit({ commandId: 'orphan', command: 'orphan', expectedRevision: null, snapshot: createAttempt(identity) });
+  await expect(store.claimDispatch(claim)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
+  expect(await store.readDispatch(claim.request)).toBeNull();
+});
+it.each(['cancelled-run', 'missing-pool'])('refuses fresh dispatch with %s despite an existing attempt', async reason => {
+  const f = await fixture(); const store = await f.open(); await admit(store);
+  const db = new DatabaseSync(f.path);
+  try {
+    if (reason === 'missing-pool') db.exec('DELETE FROM execution_pools');
+    else {
+      const run = (await store.loadRun('s', 'r'))!; const cancelled = requestRunCancellation(run, run.revision);
+      db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=?').run(cancelled.revision, JSON.stringify(cancelled), 's', 'r');
+    }
+  } finally { db.close(); }
+  await expect(store.claimDispatch(claim)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
+  expect(await store.readDispatch(claim.request)).toBeNull();
+});
+it('rolls back attempt terminal evidence if Run binding projection fails, then settles all three records together', async () => {
+  const f = await fixture(); const store = await f.open(); await admit(store); await store.claimDispatch(claim);
+  const run = (await store.loadRun('s', 'r'))!; const db = new DatabaseSync(f.path);
+  try {
+    db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify({ ...run, bindings: run.bindings.map(binding => ({ ...binding, identity: { ...binding.identity, generation: 2 } })) }), 's', 'r');
+    await expect(store.finishDispatch(claim, terminal)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
+    expect((await store.load('s', 'a'))!.lastObservation).toBeNull(); expect((await store.readDispatch(claim.request))!.terminal).toBeNull();
+    db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify(run), 's', 'r');
+    await store.finishDispatch(claim, terminal);
+    expect((await store.load('s', 'a'))!.lastObservation!.result.kind).toBe('exited');
+    expect((await store.readDispatch(claim.request))!.terminal!.exitCode).toBe(0);
+    expect((await store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('evaluating');
+  } finally { db.close(); }
 });

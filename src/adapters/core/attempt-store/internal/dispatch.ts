@@ -1,3 +1,4 @@
+import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
@@ -91,6 +92,7 @@ export class SqliteDispatchJournal {
       let attempt;
       try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
       if (!sameAttemptIdentity(identity, attempt.identity) || attempt.cancelRequested || attempt.lastObservation !== null) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+      new SqliteRunDispatch(this.db).admit(identity);
       const record = dispatchRecordSchema.parse({ schemaVersion: 1, ...claim, terminal: null });
       this.db.prepare('INSERT INTO dispatches(scope_id,attempt_id,record) VALUES(?,?,?)').run(identity.scopeId, identity.attemptId, JSON.stringify(record));
       return Object.freeze({ acquired: true, record });
@@ -118,6 +120,7 @@ export class SqliteDispatchJournal {
       const written = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
         .run(projected.revision, JSON.stringify(projected), identity.scopeId, identity.attemptId, current.revision);
       if (written.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
+      new SqliteRunDispatch(this.db).project(projected);
       const record = dispatchRecordSchema.parse({ ...existing, terminal });
       this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
       return record;

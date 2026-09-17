@@ -334,3 +334,5 @@ RUN-B DONE: Durable Run and atomic task/attempt reservation in SQLite schema3;21
 RUN/C DONE: authoritative attempt-to-Run projection in one SQLite transaction;213 tests/12 Docker, Fable1488 PASS. Dispatch-to-Run projection remains explicit until automatic transactional wiring/reconciler is implemented.
 
 POOL/A DONE: same-ledger shared pool admission across Runs/scopes;217 tests/12 Docker,Fable1492 PASS. Schema4 and Run policy2, explicit immutable pools, no invented legacy assignment. Raw dispatch binding guard and performance/assignment workflow remain pending.
+
+RUN/D DONE: full Run binding/pool guard before fresh dispatch; terminal Attempt/Run/journal written atomically.221 tests/12 real Docker; Fable1498 PASS. Historical unbound dispatch reconciliation remains open.

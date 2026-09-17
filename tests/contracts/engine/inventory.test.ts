@@ -1,3 +1,4 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,13 +11,16 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-inventory-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
-  for (const scopeId of ['s', 'other']) for (const attemptId of ['a', 'b', 'c']) {
-    const identity = { runId: 'r', taskId: 't', attemptId, scopeId, layoutRevision: 'l', generation: 1 };
-    await store.commit({ commandId: attemptId, command: 'admit', expectedRevision: null, snapshot: createAttempt(identity) });
+  for (const scopeId of ['s', 'other']) {
+    const identities = ['a', 'b', 'c'].map(attemptId => ({ runId: 'r', taskId: attemptId, attemptId, scopeId, layoutRevision: 'l', generation: 1 }));
+    await admitRunAttempts(store, identities);
+    for (const identity of identities) {
+    const { attemptId } = identity;
     const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: '/private/path', argv: ['tool', 'private-token'] } };
     await store.claimDispatch(claim);
     if (attemptId === 'b') await store.finishDispatch(claim, { handle: 'container', exitCode: 0, interrupted: false });
     if (attemptId === 'c') await store.commit({ commandId: 'cancel-c', command: 'cancel', expectedRevision: 0, snapshot: requestAttemptCancellation(createAttempt(identity), 0) });
+  }
   }
   return store;
 }

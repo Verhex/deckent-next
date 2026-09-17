@@ -1,3 +1,4 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
@@ -5,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { inspectConfiguredInventory } from '../../../src/composition/core/inventory/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { createAttempt } from '#domain/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const query = { schemaVersion: 1, scopeId: 's', after: null, limit: 1 };
@@ -47,7 +47,7 @@ describe.skipIf(process.platform === 'win32')('configured local inventory query'
     const f = await fixture(); const { store, path } = await openConfiguredAttemptStore(f.project, f.options);
     const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 };
     try {
-      await store.commit({ commandId: 'admit', command: 'test', expectedRevision: null, snapshot: createAttempt(identity) });
+      await admitRunAttempts(store, [identity]);
       await store.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/private', argv: ['secret'] } });
     } finally { store.close(); }
     await f.policy(true); const before = await readFile(path);

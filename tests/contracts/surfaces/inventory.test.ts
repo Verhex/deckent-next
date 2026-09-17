@@ -1,3 +1,4 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
@@ -6,7 +7,6 @@ import { join, resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { createAttempt } from '#domain/index.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js'); const sdk = pathToFileURL(resolve('dist/index.js')).href;
@@ -17,9 +17,10 @@ async function fixture() {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }; delete env.DECKENT_HOME;
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 1, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env });
-  try { for (const attemptId of ['a', 'b']) {
-    const identity = { runId: 'r', taskId: 't', attemptId, scopeId: 's', generation: 1, layoutRevision: opened.layout.revision };
-    await opened.store.commit({ commandId: attemptId, command: 'test', expectedRevision: null, snapshot: createAttempt(identity) });
+  try {
+    const identities = ['a', 'b'].map(attemptId => ({ runId: 'r', taskId: attemptId, attemptId, scopeId: 's', generation: 1, layoutRevision: opened.layout.revision }));
+    await admitRunAttempts(opened.store, identities);
+    for (const identity of identities) {
     await opened.store.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/secret-path', argv: ['private-token'] } });
   } } finally { opened.store.close(); }
   const policy = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [{ id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'],

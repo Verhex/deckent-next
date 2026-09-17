@@ -62,8 +62,8 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
       policy: { schemaVersion: 2, poolId: 'execution-test', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] } });
     await runtime.store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 0, now: 0, identities: [identity] });
     const result = await app.execute(request); expect(result.record.terminal?.exitCode).toBe(0);
-    const projected = await runtime.store.projectRunAttempt({ commandId: 'project', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 1, attemptId: identity.attemptId });
-    expect(projected.snapshot.progress[0]!.phase).toBe('evaluating');
+    const projected = (await runtime.store.loadRun(identity.scopeId, identity.runId))!;
+    expect(projected.progress[0]!.phase).toBe('evaluating');
     const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', result.record.output!)));
     expect(output.stdout).toBe('base\n'); expect(runtime.layout.root).toBe(f.data);
     expect(await readFile(join(f.source, 'input'), 'utf8')).toBe('owner-wip');

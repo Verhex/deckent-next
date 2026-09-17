@@ -1,3 +1,4 @@
+import { admitRunAttempts } from '../support/admission.js';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { spawn, execFile } from 'node:child_process';
@@ -8,7 +9,6 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, DockerSupervisor, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { createAttempt } from '#domain/index.js';
 import { DispatchApplication, type ExecutionSupervisor } from '#engine/index.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
@@ -20,7 +20,7 @@ async function fixture() {
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
   const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' };
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "require('node:fs').appendFileSync('/workspace/result','once')"] };
-  await store.commit({ commandId: 'admit', command: 'admit', expectedRevision: null, snapshot: createAttempt(identity) });
+  await admitRunAttempts(store, [identity]);
   const artifactRoot = join(root, 'artifacts'); await mkdir(artifactRoot, { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
   return { root, workspace, store, request, artifacts };
