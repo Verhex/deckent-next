@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "Kontrol paneli sunucusunun dinlediği TCP portu.",
   "cli.governance.xverify.arg.claim": "Bağımsız provider’ın doğrulaması gereken claim veya result ifadesi.",
   "cli.heartbeat.desc": ".deckent/HEARTBEAT.md içindeki proaktif heartbeat görevlerini çalıştırın",
-  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
+  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
   "cli.help.builtin.help_command": "komut için yardımı göster",
   "cli.help.builtin.help_option": "komut için yardımı göster",
   "cli.help.heading.arguments": "Argümanlar:",

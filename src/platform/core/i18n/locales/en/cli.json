@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "TCP port the dashboard server listens on.",
   "cli.governance.xverify.arg.claim": "Claim or result statement the independent provider should verify.",
   "cli.heartbeat.desc": "Run proactive heartbeat tasks from .deckent/HEARTBEAT.md",
-  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
+  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
   "cli.help.builtin.help_command": "display help for command",
   "cli.help.builtin.help_option": "display help for command",
   "cli.help.heading.arguments": "Arguments:",

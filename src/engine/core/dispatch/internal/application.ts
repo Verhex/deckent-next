@@ -1,11 +1,11 @@
 import type { ArtifactStore } from '#capabilities/index.js';
 import { retainOutput, retainRecoveredOutput, verifyRetainedOutput } from './output.js';
-import { identitySchema, type VerifiedPrincipal } from '#domain/index.js';
+import { identitySchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sandboxRequestSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
 export interface DispatchAuthorization {
-  authorize(action: 'execute' | 'release' | 'reconcile' | 'recover-output' | 'cancel', request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
+  authorize(action: CorePolicyAction<'attempt'>, request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
 }
 export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord }>;
 /** Internal application execution entry. Composition supplies a trusted broker workspace, verifier,
@@ -17,7 +17,7 @@ export class DispatchApplication {
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore) {
     this.owner = identitySchema.parse(owner);
   }
-  private async admit(action: 'execute' | 'release' | 'reconcile' | 'recover-output' | 'cancel', input: unknown, credential: unknown) {
+  private async admit(action: CorePolicyAction<'attempt'>, input: unknown, credential: unknown) {
     const request = sandboxRequestSchema.parse(input);
     const principal = await authenticate(this.verifier, credential, request.identity.scopeId);
     await this.authorization.authorize(action, request, principal);

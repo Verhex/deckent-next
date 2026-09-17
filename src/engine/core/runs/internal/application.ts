@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { identitySchema, counterSchema, type VerifiedPrincipal } from '#domain/index.js';
+import { identitySchema, counterSchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { RunStore } from './store.js';
 export const runQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema }).strict();
 export const runCommandSchema = runQuerySchema.extend({ commandId: identitySchema, action: z.literal('cancel'), expectedRevision: counterSchema }).strict();
 export type RunQuery = z.infer<typeof runQuerySchema>;
 export type RunCommand = z.infer<typeof runCommandSchema>;
-export interface RunAuthorization { authorize(action: 'inspect' | 'cancel', query: RunQuery, principal: VerifiedPrincipal): Promise<void> }
+export interface RunAuthorization { authorize(action: CorePolicyAction<'run'>, query: RunQuery, principal: VerifiedPrincipal): Promise<void> }
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
   constructor(private readonly readStore: Pick<RunStore, 'loadRun'>, protected readonly verifier: PrincipalVerifier,

@@ -1,3 +1,4 @@
+import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
@@ -42,6 +43,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   }
   const options: ConfigLoadOptions = { env, globalOnly: args.global,
     onWarning: warning => output(warning, value => value.message, 'warning') };
+  if (command === 'policy') {
+    if (action !== 'vocabulary' || args.positionals.length !== 2 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
+    output(getPolicyVocabulary(), data => formatValue(data));
+    return;
+  }
   if (command === 'paths') {
     if (args.dryRun || args.positionals.length !== 1) throw ErrorRegistry.createError('CLI_USAGE');
     output(await inspectProductPaths(root, { ...options, globalOnly: args.global }), data => formatValue(data));

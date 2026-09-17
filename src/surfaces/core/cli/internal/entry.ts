@@ -21,7 +21,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       await runInventoryCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
-    if (argv[0] === 'config' || argv[0] === 'doctor' || argv[0] === 'paths') {
+    if (argv[0] === 'policy' || argv[0] === 'config' || argv[0] === 'doctor' || argv[0] === 'paths') {
       await runKernelCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }

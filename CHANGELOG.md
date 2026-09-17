@@ -122,3 +122,5 @@ RUN/D DONE: full Run binding/pool guard before fresh dispatch; terminal Attempt/
 RUN/E DONE: authenticated, current-policy-checked Run inspect/cancel service; durable CAS+receipt cancellation, no fabricated worker stop.225 tests/12 real Docker; Fable1499 PASS. Surface wiring, cancellation fanout and claim-start fence remain open.
 
 RUN/F DONE: readonly configured SDK inspectRun, scope/run policy before ledger access, revision corruption checks and schema2 nonmigration.230 tests/12 Docker; Fable1504 PASS. Public RunView and shared sanitized error mapping precede CLI/MCP wiring.
+
+POLICY/C DONE: versioned core action/resource vocabulary shared by authorization types, SDK and CLI.233 tests/12 Docker; Fable1512 PASS. Generated vocabulary projection and human formatting remain followups.
