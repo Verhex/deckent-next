@@ -15,7 +15,8 @@
     "crashes": "crashes",
     "tenants": "tenants",
     "ledger": "state/ledger.db",
-    "workspaces": "workspaces"
+    "workspaces": "workspaces",
+    "policy": "policy.json"
   },
   "bootstrapResource": "config",
   "rootEnvironmentKey": "DECKENT_HOME"

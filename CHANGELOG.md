@@ -92,3 +92,5 @@ RUNTIME-CONFIG/A PASS1442: shared runtime/artifact policy schemas and one-snapsh
 POLICY/A PASS1447: verified principal/scope/action/resource grant checks and deny-only restrictions;179 tests. Admission decision evidence, shared action catalog and measured cache policy remain pending.
 
 INVENTORY/A PASS1448: bounded authenticated keyset inventory without argv/workspace data;181 tests. Moving ID order is not claim chronology; artifact completeness/owner liveness and public inspection budget remain pending.
+
+POLICY/B DONE: pinned-layout, owner-checked fresh file policy; 184 tests/12 Docker; Fable1455 PASS. Before DOGFOOD resolve layout registry revision/upgrade compatibility; installation must separate administrative policy ownership where required.

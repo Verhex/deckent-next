@@ -8,3 +8,5 @@ export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
 export type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
+export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';
+export type { FilePolicyOptions } from '#adapters/core/file-policy/index.js';

@@ -1,13 +1,14 @@
+import { createLayoutPolicySource } from '../../../src/composition/core/policy/index.js';
 import { LocalOsPrincipalVerifier } from '#adapters/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { createAttempt } from '#domain/index.js';
 import { DispatchApplication, DispatchPolicyAuthorization } from '#engine/index.js';
 const exec = promisify(execFile); const roots: string[] = []; const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -44,10 +45,14 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
   const lease = await runtime.workspaces.allocate(workspaceRequest);
   const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: ['node', '-e', "console.log(require('node:fs').readFileSync('/workspace/input','utf8'))"] };
   const verifier = new LocalOsPrincipalVerifier(['s']); const principal = await verifier.verify(undefined);
-  let actions = ['execute', 'release'];
-  const policy = new DispatchPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'test-policy', restrictions: [],
-    grants: [{ id: 'local-owner', effect: 'allow', actions, scopes: ['s'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
-      resource: { kind: 'attempt', ids: [identity.attemptId] } }] }; } });
+  const policyPath = productResourcePath(runtime.layout, 'policy');
+  const writePolicy = async (actions: string[], revision: string) => {
+    const document = { schemaVersion: 1, revision, restrictions: [], grants: [{ id: 'local-owner', effect: 'allow', actions, scopes: ['s'],
+      principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'attempt', ids: [identity.attemptId] } }] };
+    await writeFile(policyPath + '.next', JSON.stringify(document), { mode: 0o600 }); await rename(policyPath + '.next', policyPath);
+  };
+  await writePolicy(['execute', 'release'], 'initial');
+  const policy = new DispatchPolicyAuthorization(createLayoutPolicySource(runtime.layout, process.getuid!(), 65536));
   const app = new DispatchApplication(runtime.store, runtime.supervisor, verifier, policy, 'runner', runtime.artifacts);
   try {
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'changed') } })); clearConfigCache();
@@ -57,7 +62,7 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
     expect(output.stdout).toBe('base\n'); expect(runtime.layout.root).toBe(f.data);
     expect(await readFile(join(f.source, 'input'), 'utf8')).toBe('owner-wip');
     await expect(stat(join(f.root, 'changed'))).rejects.toMatchObject({ code: 'ENOENT' });
-    actions = ['release'];
+    await writePolicy(['release'], 'revoked');
     await expect(app.execute(request)).rejects.toThrow('POLICY_DENIED');
     await app.release(request);
   } finally { await runtime.supervisor.release(request); await runtime.workspaces.release(workspaceRequest); runtime.store.close(); }
