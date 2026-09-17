@@ -54,4 +54,4 @@ export type { SecretResolver, SecretResolution } from '#platform/core/config/ind
 export { inspectProductLayout, type ProductPathInspection } from '#platform/core/host/index.js';
 export { inspectProductPaths } from '#platform/core/config/index.js';
 export { SQLITE_STORAGE_OPTIONS } from '#platform/core/config-fields/index.js';
-export { prepareProductFile, ManagedFileError } from '#platform/core/managed-files/index.js';
+export { prepareProductFile, prepareProductDirectory, ManagedFileError } from '#platform/core/managed-files/index.js';

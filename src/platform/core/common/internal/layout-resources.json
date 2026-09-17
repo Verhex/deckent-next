@@ -14,7 +14,8 @@
     "integrations": "integrations",
     "crashes": "crashes",
     "tenants": "tenants",
-    "ledger": "state/ledger.db"
+    "ledger": "state/ledger.db",
+    "workspaces": "workspaces"
   },
   "bootstrapResource": "config",
   "rootEnvironmentKey": "DECKENT_HOME"

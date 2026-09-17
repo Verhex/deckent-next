@@ -282,3 +282,5 @@ Public ingress remains closed until durable dispatch fence and trusted workspace
 AUTH/A PASS: v2 command rejects caller identity; verified scope and authorization precede replay/store. Local OS verifier is direct-process only; remote policy and stable installation issuer remain gaps.
 
 WORKSPACE/A PASS: private pinned Git checkout with copied objects and replay-safe lease. Real Git and Docker tests passed; layout binding, dispatch custody, history policy and allocation recovery remain gaps.
+
+WORKSPACE/B PASS1415: shared managed-directory preflight and configured workspaces registry;149 tests including real Git→Docker isolation. Independent source-repository authorization and per-test container custody checks remain.

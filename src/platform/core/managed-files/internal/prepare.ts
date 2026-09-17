@@ -21,29 +21,8 @@ function privateFile(stat: Stats, uid: number): void {
  * Composition must keep this tree outside the writable worker sandbox; no permissions are silently repaired.
  */
 export async function prepareProductFile(layout: ProductLayout, resource: ProductResource, companions: readonly string[] = []): Promise<string> {
-  if (process.platform === 'win32' || layout.platform !== 'posix' || !process.getuid) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
-  const uid = process.getuid(); const root = resolve(layout.root); const path = productResourcePath(layout, resource);
-  if (root === parse(root).root) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-  const within = relative(root, path);
-  if (!within || within.startsWith(`..${sep}`) || within === '..' || resolve(path) !== path) throw new ManagedFileError('MANAGED_FILE_OUTSIDE_ROOT');
-  const directory = dirname(path);
-  // Validate existing ancestors before creating anything through them; reject symlink ancestors as well.
-  let cursor = parse(directory).root;
-  for (const segment of directory.slice(cursor.length).split(sep).filter(Boolean)) {
-    cursor = join(cursor, segment);
-    let stat = await inspect(cursor);
-    if (!stat) {
-      try { await mkdir(cursor, { mode: 0o700 }); } catch (error) {
-        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')) throw error;
-      }
-      stat = await lstat(cursor);
-    }
-    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-    if ((cursor === root || cursor.startsWith(root + sep)) && (stat.uid !== uid || (stat.mode & 0o022) !== 0)) {
-      throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-    }
-  }
-  if (await realpath(root) !== root || await realpath(directory) !== directory) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  const path = await prepareLocation(layout, resource, false);
+  const uid = process.getuid!();
   for (const suffix of companions) {
     if (!/^-[a-z]+$/.test(suffix)) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
     const stat = await inspect(path + suffix); if (stat) privateFile(stat, uid);
@@ -61,4 +40,35 @@ export async function prepareProductFile(layout: ProductLayout, resource: Produc
     if (linked.ino !== opened.ino || linked.dev !== opened.dev || linked.isSymbolicLink()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
   } finally { await handle.close(); }
   return path;
+}
+
+async function prepareLocation(layout: ProductLayout, resource: ProductResource, asDirectory: boolean): Promise<string> {
+  if (process.platform === 'win32' || layout.platform !== 'posix' || !process.getuid) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
+  const uid = process.getuid(); const root = resolve(layout.root); const path = productResourcePath(layout, resource);
+  if (root === parse(root).root) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  const within = relative(root, path);
+  if (!within || within.startsWith(`..${sep}`) || within === '..' || resolve(path) !== path) throw new ManagedFileError('MANAGED_FILE_OUTSIDE_ROOT');
+  const directory = asDirectory ? path : dirname(path);
+  // Validate existing ancestors before creating anything through them; reject symlink ancestors as well.
+  let cursor = parse(directory).root;
+  for (const segment of directory.slice(cursor.length).split(sep).filter(Boolean)) {
+    cursor = join(cursor, segment);
+    let stat = await inspect(cursor);
+    if (!stat) {
+      try { await mkdir(cursor, { mode: 0o700 }); } catch (error) {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')) throw error;
+      }
+      stat = await lstat(cursor);
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+    if ((cursor === root || cursor.startsWith(root + sep)) && (stat.uid !== uid || (stat.mode & 0o022) !== 0)) {
+      throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+    }
+  }
+  if (await realpath(root) !== root || await realpath(directory) !== directory) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  return path;
+}
+
+export async function prepareProductDirectory(layout: ProductLayout, resource: ProductResource): Promise<string> {
+  return prepareLocation(layout, resource, true);
 }
