@@ -1,7 +1,7 @@
 import { propagateRunCancellation } from './run-cancellation.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
+import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
@@ -32,6 +32,17 @@ export class SqliteRunJournal {
     this.db.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
       .run(receipt.snapshot.identity.scopeId, receipt.commandId, receipt.command, JSON.stringify(receipt.snapshot));
     return Object.freeze(receipt);
+  }
+  async loadRunReceipt(scopeInput: string, commandInput: string): Promise<RunReceipt | null> {
+    const scopeId = identitySchema.parse(scopeInput); const commandId = identitySchema.parse(commandInput);
+    try {
+      const row = this.db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+      if (!row) return null;
+      let snapshot;
+      try { snapshot = runSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+      if (snapshot.identity.scopeId !== scopeId || typeof row.command !== 'string') throw new RunStoreError('RUN_STORE_CORRUPT');
+      return Object.freeze({ commandId, command: row.command, snapshot });
+    } catch (error) { throw sqliteFailure(error); }
   }
   async createExecutionPool(input: ExecutionPool) { return this.transaction(() => new SqliteExecutionPools(this.db).create(input)); }
   async loadRun(scopeId: string, runId: string) {

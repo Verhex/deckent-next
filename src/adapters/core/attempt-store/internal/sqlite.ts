@@ -50,6 +50,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
   async loadCancellationDispatch(identity: AttemptIdentity) {
     try { return loadCancellationDispatch(this.db, identity); } catch (error) { throw sqliteFailure(error); }
   }
+  async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }

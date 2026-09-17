@@ -22,6 +22,7 @@ export interface RunReceipt { readonly commandId: string; readonly command: stri
  * Reservation enforces both persisted per-Run limits and the assigned shared pool in one ledger.
  */
 export interface RunStore {
+  loadRunReceipt(scopeId: string, commandId: string): Promise<RunReceipt | null>;
   cancelRun(input: RunCancellation): Promise<RunReceipt>;
   createExecutionPool(input: ExecutionPool): Promise<ExecutionPool>;
   projectRunAttempt(input: RunProjection): Promise<RunReceipt>;
