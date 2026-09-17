@@ -1,7 +1,7 @@
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
-import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
+import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
   projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
@@ -23,6 +23,21 @@ export class SqliteDispatchJournal {
       if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
       throw sqliteFailure(error);
     }
+  }
+  async listDispatches(input: DispatchInventoryQuery) {
+    const query = dispatchInventoryQuerySchema.parse(input);
+    try {
+      const rows = this.db.prepare('SELECT d.attempt_id,d.record,a.snapshot FROM dispatches d LEFT JOIN attempts a ON a.scope_id=d.scope_id AND a.attempt_id=d.attempt_id WHERE d.scope_id=? AND (? IS NULL OR d.attempt_id>?) ORDER BY d.attempt_id LIMIT ?')
+        .all(query.scopeId, query.after, query.after, query.limit + 1);
+      const entries = rows.slice(0, query.limit).map(row => {
+        let record; let attempt;
+        try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
+        if (record.request.identity.scopeId !== query.scopeId || record.request.identity.attemptId !== row.attempt_id || !sameAttemptIdentity(record.request.identity, attempt.identity)) throw new DispatchError('DISPATCH_CORRUPT');
+        return Object.freeze({ identity: record.request.identity, owner: record.owner, terminal: record.terminal,
+          cancellationRequested: attempt.cancelRequested, outputRecorded: !!record.output });
+      });
+      return Object.freeze({ entries: Object.freeze(entries), nextAfter: rows.length > query.limit ? entries.at(-1)!.identity.attemptId : null });
+    } catch (error) { throw sqliteFailure(error); }
   }
   async requestDispatchCancellation(input: DispatchClaim['request'], actor: VerifiedPrincipal) {
     const request = sandboxRequestSchema.parse(input); const principal = verifiedPrincipalSchema.parse(actor);

@@ -308,3 +308,5 @@ CANCEL/A PASS1439: durable cancellation actor/intent precedes actual Docker kill
 RUNTIME-CONFIG/A PASS1442: shared runtime/artifact policy schemas and one-snapshot composition;176 tests. Execution defaults disabled. Source authorization, localized composition errors and output/artifact budget consistency remain before public ingress.
 
 POLICY/A PASS1447: verified principal/scope/action/resource grant checks and deny-only restrictions;179 tests. Admission decision evidence, shared action catalog and measured cache policy remain pending.
+
+INVENTORY/A PASS1448: bounded authenticated keyset inventory without argv/workspace data;181 tests. Moving ID order is not claim chronology; artifact completeness/owner liveness and public inspection budget remain pending.

@@ -1,13 +1,13 @@
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
-import type { DispatchClaim, DispatchTerminal, DispatchStore } from '#engine/index.js';
+import type { DispatchClaim, DispatchTerminal, DispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, DispatchInventoryStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions) {
     const parsed = sqliteAttemptOptionsSchema.safeParse(options);
@@ -37,6 +37,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore {
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }
   async retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchOutput(claim, receipt); }
   async readDispatch(request: DispatchClaim['request']) { return new SqliteDispatchJournal(this.db).readDispatch(request); }

@@ -1,5 +1,5 @@
 import { evaluatePolicy, type VerifiedPrincipal } from '#domain/index.js';
-import type { DispatchAuthorization } from '#engine/core/dispatch/index.js';
+import type { DispatchAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<unknown> }
@@ -12,6 +12,16 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization {
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: request.identity.scopeId,
       resource: { kind: 'attempt', id: request.identity.attemptId } }); }
+    catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
+  }
+}
+
+export class DispatchInventoryPolicyAuthorization implements DispatchInventoryAuthorization {
+  constructor(private readonly source: PolicySource) {}
+  async authorize(scopeId: string, principal: VerifiedPrincipal): Promise<void> {
+    let decision;
+    try { decision = evaluatePolicy(await this.source.load(), { principal, action: 'inspect', scopeId, resource: { kind: 'scope', id: scopeId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
   }
