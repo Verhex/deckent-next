@@ -33,8 +33,8 @@ describe.skipIf(!imageId)('real Docker supervisor (explicit pinned test image re
     releases.pop(); releases.push(() => f.supervisor.release(request));
     const store = await openSqliteAttemptStore(join(f.root, 'state.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' });
     try {
-      const app = new AttemptApplication(store, { async authorize(command) { if (command.scopeId !== 'test') throw new Error('DENIED'); } });
-      const envelope = { schemaVersion: 1, principalId: 'tester', scopeId: 'test' };
+      const app = new AttemptApplication(store, { async authorize(command) { if (command.scopeId !== 'test') throw new Error('DENIED'); } }, { async verify() { return { id: 'tester', issuer: 'test', subject: '1', assurance: 'workload-verified', scopeIds: ['test'] }; } });
+      const envelope = { schemaVersion: 2, scopeId: 'test' };
       await app.execute({ ...envelope, commandId: 'create', action: { kind: 'create', identity: request.identity } });
       const result = await f.supervisor.execute(request);
       expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).toContain('isolated');

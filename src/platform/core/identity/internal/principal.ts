@@ -2,7 +2,7 @@ import { userInfo, hostname } from 'node:os';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 export type PrincipalAssurance = 'unverified' | 'os-user' | 'token-parsed' | 'token-verified';
 export type PrincipalIdentityClass = 'local' | 'oidc' | 'workload' | 'connector' | 'service';
-export interface VerifiedPrincipal {
+export interface PrincipalEvidence {
   readonly id: string;
   readonly identityClass: PrincipalIdentityClass;
   readonly assurance: PrincipalAssurance;
@@ -22,7 +22,7 @@ export interface ActorContext {
 export function resolveLocalOsActorId(read: () => { username?: string } = userInfo): string | null {
   try { return read().username || null; } catch { return null; }
 }
-export function resolveLocalOsPrincipal(provenance: string, options: { user?: () => { username?: string }; host?: () => string; uid?: () => number | undefined } = {}): VerifiedPrincipal {
+export function resolveLocalOsPrincipal(provenance: string, options: { user?: () => { username?: string }; host?: () => string; uid?: () => number | undefined } = {}): PrincipalEvidence {
   const username = resolveLocalOsActorId(options.user);
   const host = (options.host ?? hostname)();
   const uid = (options.uid ?? (() => process.getuid?.()))();
@@ -30,7 +30,7 @@ export function resolveLocalOsPrincipal(provenance: string, options: { user?: ()
     identityClass: 'local', assurance: username ? 'os-user' : 'unverified', provenance,
     verifiedBy: username ? 'os.userInfo' : 'os-user-unavailable' };
 }
-export function principalToActor(principal: VerifiedPrincipal): ActorContext {
+export function principalToActor(principal: PrincipalEvidence): ActorContext {
   return { id: principal.id, identityClass: principal.identityClass, assurance: principal.assurance, provenance: principal.provenance, ...(principal.tenantId ? { tenantId: principal.tenantId } : {}), ...(principal.role ? { role: principal.role } : {}) };
 }
 export function assessActorAssurance(actor: ActorContext): { ok: boolean; code: 'ACTOR_ASSURANCE_OK' | 'ACTOR_ASSURANCE_MISSING' | 'ACTOR_UNVERIFIED' } {

@@ -278,3 +278,5 @@ Forced WAL checkpoint and power-loss durability remain ASSURANCE/G-CAP gaps.
 
 | SUPERVISOR/A | Real Docker adapter and application/SQLite terminal-evidence consumer | Fable PASS1398; isolated133 including4 real Docker tests, zero skipped | DONE |
 Public ingress remains closed until durable dispatch fence and trusted workspace broker exist. Durable output artifacts, aggregate quotas, crash reconciliation and broader platform proof remain pending.
+
+AUTH/A PASS: v2 command rejects caller identity; verified scope and authorization precede replay/store. Local OS verifier is direct-process only; remote policy and stable installation issuer remain gaps.

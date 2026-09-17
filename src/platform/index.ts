@@ -39,7 +39,7 @@ export { healCorruptProjectConfig } from '#platform/core/config/index.js';
 export { getConfigMetadata } from '#platform/core/config/index.js';
 export { getConfigValue } from '#platform/core/config/index.js';
 export { resolveLocalOsActorId, resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance } from '#platform/core/identity/index.js';
-export type { VerifiedPrincipal, ActorContext } from '#platform/core/identity/index.js';
+export type { PrincipalEvidence, ActorContext } from '#platform/core/identity/index.js';
 export { isValidTenantId, tenantIsolationPath, resolveTenant, resolveCallerTenant, withTenant, currentTenant, tenantPath } from '#platform/core/identity/index.js';
 export { colorTier, shouldUseColor, stripAnsi } from '#platform/core/output/index.js';
 export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';

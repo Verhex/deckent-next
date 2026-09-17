@@ -60,3 +60,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - STORE/D (Fable PASS1397): separate-process tests prove DELETE commit rollback under reader contention and WAL writer progress with reader snapshot.
 
 - SUPERVISOR/A (Fable PASS1398): bounded Docker execution, retained terminal evidence/replay and explicit release; real deadline/cancel/filesystem-boundary tests. Not EXECUTION/DOGFOOD completion.
+
+AUTH/A PASS: v2 command rejects caller identity; verified scope and authorization precede replay/store. Local OS verifier is direct-process only; remote policy and stable installation issuer remain gaps.

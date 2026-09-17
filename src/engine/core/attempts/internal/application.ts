@@ -1,11 +1,13 @@
+import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { z } from 'zod';
 import { attemptIdentitySchema, attemptObservationSchema, createAttempt, applyAttemptObservation,
-  requestAttemptCancellation } from '#domain/index.js';
+  requestAttemptCancellation, identitySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, type AttemptReceipt, type AttemptStore } from './port.js';
 
-const id = z.string().min(1);
+const id = identitySchema;
+export const ATTEMPT_COMMAND_SCHEMA_VERSION = 2;
 export const attemptCommandSchema = z.object({
-  schemaVersion: z.literal(1), commandId: id, principalId: id, scopeId: id,
+  schemaVersion: z.literal(ATTEMPT_COMMAND_SCHEMA_VERSION), commandId: id, scopeId: id,
   action: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('create'), identity: attemptIdentitySchema }).strict(),
     z.object({ kind: z.literal('observe'), observation: attemptObservationSchema }).strict(),
@@ -15,17 +17,18 @@ export const attemptCommandSchema = z.object({
 export type AttemptCommand = z.infer<typeof attemptCommandSchema>;
 export interface AttemptAuthorization {
   /** Trusted ingress supplies principal; implementations must enforce scope and action authority. */
-  authorize(command: AttemptCommand): Promise<void>;
+  authorize(command: AttemptCommand, principal: VerifiedPrincipal): Promise<void>;
 }
 export class AttemptApplication {
-  constructor(private readonly store: AttemptStore, private readonly authorization: AttemptAuthorization) {}
-  async execute(input: unknown): Promise<AttemptReceipt> {
+  constructor(private readonly store: AttemptStore, private readonly authorization: AttemptAuthorization, private readonly verifier: PrincipalVerifier) {}
+  async execute(input: unknown, credential?: unknown): Promise<AttemptReceipt> {
     const command = attemptCommandSchema.parse(input);
     const { action, scopeId, commandId } = command;
     const identity = action.kind === 'create' ? action.identity : action.kind === 'observe' ? action.observation.identity : null;
     if (identity && identity.scopeId !== scopeId) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
-    await this.authorization.authorize(command);
-    const canonical = JSON.stringify(command);
+    const principal = await authenticate(this.verifier, credential, scopeId);
+    await this.authorization.authorize(command, principal);
+    const canonical = JSON.stringify({ command, actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject } });
     const replay = await this.store.receipt(scopeId, commandId);
     if (replay) {
       if (replay.command !== canonical) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');

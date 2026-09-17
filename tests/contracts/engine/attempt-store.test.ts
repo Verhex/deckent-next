@@ -9,25 +9,27 @@ import { createAttempt, requestAttemptCancellation } from '../../../src/domain/i
 const options = { busyTimeoutMs: 25, journalMode: 'wal', durability: 'full' } as const;
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(() => { for (const store of stores.splice(0)) store.close(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+const verifier = { async verify(credential: unknown) { return { id: credential === 'outsider' ? 'outsider' : 'operator', issuer: 'test', subject: credential === 'outsider' ? '2' : '1', assurance: 'token-verified', scopeIds: ['customer'] }; } };
 const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'customer', layoutRevision: 'layout', generation: 1 };
-const command = (commandId: string, action: object) => ({ schemaVersion: 1, commandId, principalId: 'operator', scopeId: 'customer', action });
+const command = (commandId: string, action: object) => ({ schemaVersion: 2, commandId, scopeId: 'customer', action });
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'deckent-attempt-store-')); roots.push(root);
   const path = join(root, 'execution.db'); const store = await openSqliteAttemptStore(path, options); stores.push(store);
-  const app = new AttemptApplication(store, { async authorize(input) { if (input.principalId !== 'operator') throw new Error('DENIED'); } });
+  const app = new AttemptApplication(store, { async authorize(_input, principal) { if (principal.id !== 'operator') throw new Error('DENIED'); } }, verifier);
   return { path, store, app };
 }
 describe('application and real SQLite attempt store', () => {
   it('persists evidence and replays old commands after restart without reverting newer state', async () => {
     const f = await fixture();
     const create = command('create', { kind: 'create', identity });
-    await f.app.execute(create);
+    await f.app.execute(create, 'private-bearer');
+    expect((await f.store.receipt('customer', 'create'))!.command).not.toContain('private-bearer');
     const observe = command('observe', { kind: 'observe', observation: { protocolVersion: 1, identity, sequence: 1, eventId: 'e1', result: { kind: 'started' } } });
     await f.app.execute(observe);
     await f.app.execute(command('cancel', { kind: 'cancel', attemptId: 'a' }));
     f.store.close(); stores.splice(stores.indexOf(f.store), 1);
     const store = await openSqliteAttemptStore(f.path, options); stores.push(store);
-    const app = new AttemptApplication(store, { async authorize() {} });
+    const app = new AttemptApplication(store, { async authorize() {} }, verifier);
     expect((await app.execute(observe)).snapshot.revision).toBe(1);
     expect((await store.load('customer', 'a'))!.revision).toBe(2);
     expect((await app.execute(create)).snapshot.revision).toBe(0);
@@ -35,7 +37,7 @@ describe('application and real SQLite attempt store', () => {
   it('rejects payload substitution and checks authorization even for replay', async () => {
     const f = await fixture(); const create = command('x', { kind: 'create', identity }); await f.app.execute(create);
     await expect(f.app.execute(command('x', { kind: 'cancel', attemptId: 'a' }))).rejects.toThrow('ATTEMPT_COMMAND_CONFLICT');
-    await expect(f.app.execute({ ...create, principalId: 'outsider' })).rejects.toThrow('DENIED');
+    await expect(f.app.execute(create, 'outsider')).rejects.toThrow('DENIED');
     expect(await f.store.load('foreign', 'a')).toBeNull(); expect(await f.store.receipt('foreign', 'x')).toBeNull();
   });
   it('atomically rejects stale revisions across independent connections', async () => {
