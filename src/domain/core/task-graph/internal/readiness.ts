@@ -1,3 +1,4 @@
+import { sanitizeIssues } from '#domain/core/primitives/index.js';
 import { readinessInputSchema, TaskGraphError, type TaskProgress } from './contract.js';
 import { validateTaskGraph } from './graph.js';
 
@@ -14,7 +15,7 @@ export type TaskReadiness = Readonly<{
 export function inspectTaskReadiness(graphInput: unknown, snapshotInput: unknown): readonly TaskReadiness[] {
   const graph = validateTaskGraph(graphInput);
   const parsed = readinessInputSchema.safeParse(snapshotInput);
-  if (!parsed.success) throw new TaskGraphError('TASK_PROGRESS_INVALID');
+  if (!parsed.success) throw new TaskGraphError('TASK_PROGRESS_INVALID', sanitizeIssues(parsed.error.issues));
   const snapshot = parsed.data;
   if (snapshot.graphRevision !== graph.revision) throw new TaskGraphError('TASK_GRAPH_REVISION_MISMATCH');
   const progress = new Map<string, TaskProgress>();

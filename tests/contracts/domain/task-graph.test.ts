@@ -48,3 +48,21 @@ describe('task graph admission and dependency eligibility', () => {
     expect(inspect([progress('original', 'accepted'), progress('fix', 'accepted'), progress('consumer')], tasks)[2]!.disposition).toBe('ready');
   });
 });
+
+describe('task schema diagnostics', () => {
+  it('rejects invalid version, kind and acceptance with sanitized field paths', () => {
+    for (const [input, path] of [
+      [{ ...graph(), schemaVersion: 2 }, ['schemaVersion']],
+      [graph([{ ...task('a'), kind: '' }]), ['tasks', 0, 'kind']],
+      [graph([{ ...task('a'), acceptanceCriteria: [] }]), ['tasks', 0, 'acceptanceCriteria']],
+      [graph([{ ...task('a'), id: 'x'.repeat(257) }]), ['tasks', 0, 'id']],
+    ] as const) {
+      try { validateTaskGraph(input); expect.fail('must reject'); }
+      catch (error) { expect(error).toMatchObject({ code: 'TASK_GRAPH_INVALID', issues: expect.arrayContaining([expect.objectContaining({ path })]) }); }
+    }
+  });
+  it('documents direct blockers without silently cascading terminal state to descendants', () => {
+    const tasks = graph([task('a'), task('b', ['a']), task('c', ['b'])]);
+    expect(inspect([progress('a', 'failed'), progress('b'), progress('c')], tasks).map(x => x.disposition)).toEqual(['terminal', 'blocked', 'waiting']);
+  });
+});

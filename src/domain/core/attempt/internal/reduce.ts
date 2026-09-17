@@ -1,5 +1,5 @@
 import { attemptIdentitySchema, attemptObservationSchema, attemptSnapshotSchema, ATTEMPT_PROTOCOL_VERSION,
-  AttemptError, type AttemptSnapshot, type AttemptPhase } from './contract.js';
+  AttemptError, sameAttemptIdentity, type AttemptSnapshot, type AttemptPhase } from './contract.js';
 
 function snapshot(input: unknown): AttemptSnapshot {
   const parsed = attemptSnapshotSchema.safeParse(input);
@@ -36,10 +36,11 @@ export function applyAttemptObservation(input: unknown, observationInput: unknow
   const parsed = attemptObservationSchema.safeParse(observationInput);
   if (!parsed.success) throw new AttemptError('ATTEMPT_INVALID');
   const observation = parsed.data;
-  if (JSON.stringify(observation.identity) !== JSON.stringify(state.identity)) throw new AttemptError('ATTEMPT_IDENTITY_MISMATCH');
+  if (!sameAttemptIdentity(observation.identity, state.identity)) throw new AttemptError('ATTEMPT_IDENTITY_MISMATCH');
   checkRevision(state, expectedRevision);
   const previous = state.lastObservation;
-  if (previous && observation.sequence <= previous.sequence) {
+  if (previous && observation.sequence < previous.sequence) throw new AttemptError('ATTEMPT_OBSERVATION_STALE');
+  if (previous && observation.sequence === previous.sequence) {
     if (JSON.stringify(previous) === JSON.stringify(observation)) return state;
     throw new AttemptError('ATTEMPT_OBSERVATION_CONFLICT');
   }

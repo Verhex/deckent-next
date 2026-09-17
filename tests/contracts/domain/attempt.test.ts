@@ -56,3 +56,23 @@ describe('attempt evidence application', () => {
     expect(() => applyAttemptObservation(reserved, event(1, { kind: 'exited', exitCode: 0, accepted: true }), 0)).toThrow('ATTEMPT_INVALID');
   });
 });
+
+describe('supervisor termination evidence', () => {
+  it('records signal exits without inventing an exit code', () => {
+    const state = applyAttemptObservation(createAttempt(identity), event(1, { kind: 'exited', exitCode: null, signal: 'SIGTERM' }), 0);
+    expect(state.lastObservation!.result).toEqual({ kind: 'exited', exitCode: null, signal: 'SIGTERM' });
+    expect(attemptPhase(state)).toBe('finished');
+    for (const result of [{ kind: 'exited', exitCode: null }, { kind: 'exited', exitCode: 0, signal: 'SIGTERM' }]) {
+      expect(() => applyAttemptObservation(createAttempt(identity), event(1, result), 0)).toThrow('ATTEMPT_INVALID');
+    }
+  });
+  it('keeps externally observed cancellation separate from a user request', () => {
+    const state = applyAttemptObservation(createAttempt(identity), event(1, { kind: 'cancelled' }), 0);
+    expect(state.cancelRequested).toBe(false);
+  });
+  it('classifies older evidence as stale; only journal receipts can establish exact historical replay', () => {
+    const started = applyAttemptObservation(createAttempt(identity), event(1), 0);
+    const exited = applyAttemptObservation(started, event(2, { kind: 'exited', exitCode: 0 }), 1);
+    expect(() => applyAttemptObservation(exited, event(1), 2)).toThrow('ATTEMPT_OBSERVATION_STALE');
+  });
+});

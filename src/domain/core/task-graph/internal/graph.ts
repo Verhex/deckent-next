@@ -1,9 +1,10 @@
+import { sanitizeIssues } from '#domain/core/primitives/index.js';
 import { taskGraphSchema, TaskGraphError, type TaskGraph } from './contract.js';
 
 /** Validate once at admission. Iterative Kahn traversal avoids stack limits on deep plans. */
 export function validateTaskGraph(input: unknown): TaskGraph {
   const parsed = taskGraphSchema.safeParse(input);
-  if (!parsed.success) throw new TaskGraphError('TASK_GRAPH_INVALID');
+  if (!parsed.success) throw new TaskGraphError('TASK_GRAPH_INVALID', sanitizeIssues(parsed.error.issues));
   const graph = parsed.data;
   const tasks = new Map(graph.tasks.map(task => [task.id, task]));
   if (tasks.size !== graph.tasks.length) throw new TaskGraphError('TASK_DUPLICATE');

@@ -262,3 +262,5 @@ Residuals before real supervisor: represent signal termination; journal stale re
 
 | STORE/A | Attempt application, required authorization port, atomic SQLite snapshot/receipt and scoped replay/CAS | Fable PASS1375; isolated121 tests; proof/STORE-A-verification.json | DONE |
 Residual STORE/B: typed contention/bounded busy policy, registered ledger path and guarded0600 IO, trusted principal/policy composition, worker/pool capacity and platform proof. Node24 built-in SQLite is experimental; no production capacity/durability guarantee inferred.
+
+| CONTRACT/C | Shared wire identity, sanitized diagnostics, signal exits, stale evidence and direct-blocker semantics | Fable PASS1378; isolated119 plus STORE/A integration126 tests | DONE |

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema } from '#domain/index.js';
+import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
@@ -61,7 +61,7 @@ export class SqliteAttemptStore implements AttemptStore {
         const currentRow = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
         if (!currentRow) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
         const current = this.decode(currentRow.snapshot);
-        if (JSON.stringify(current.identity) !== JSON.stringify(snapshot.identity) ||
+        if (!sameAttemptIdentity(current.identity, snapshot.identity) ||
           (snapshot.revision === input.expectedRevision && JSON.stringify(current) !== encoded)) {
           throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
         }
