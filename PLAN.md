@@ -318,3 +318,5 @@ INVENTORY/C DONE: inspect existing managed files without creation/permission rep
 INVENTORY-B DONE: Read-only SQLite inventory reader; exact rebase preserves policy exports;189 tests/12 Docker.
 
 INVENTORY-D DONE: Configured local inventory query;191 tests/12 Docker; public binding awaits policy-derived membership in INVENTORY/F.
+
+INVENTORY-E DONE: Readonly WAL missing-shm failure is typed, without immutable fallback;192 tests/12 Docker. Native corruption classification remains follow-up.

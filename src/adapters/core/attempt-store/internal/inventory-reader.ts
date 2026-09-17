@@ -13,13 +13,23 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     const parsed = sqliteAttemptOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
     try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
-    catch (error) { throw sqliteFailure(error); }
+    catch (error) { throw readFailure(error); }
     try {
       if (this.db.prepare('PRAGMA user_version').get()?.user_version !== 2) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    } catch (error) { this.db.close(); throw sqliteFailure(error); }
+    } catch (error) { this.db.close(); throw readFailure(error); }
   }
   async listDispatches(query: DispatchInventoryQuery) {
-    return new SqliteDispatchJournal(this.db).listDispatches(query);
+    try { return await new SqliteDispatchJournal(this.db).listDispatches(query); }
+    catch (error) { throw readFailure(error); }
   }
   close(): void { this.db.close(); }
+}
+
+function readFailure(error: unknown): unknown {
+  const mapped = sqliteFailure(error);
+  if (mapped !== error || error instanceof AttemptStoreError) return mapped;
+  if (error && typeof error === 'object' && 'errcode' in error && typeof error.errcode === 'number') {
+    return new AttemptStoreError('ATTEMPT_STORE_READ_UNAVAILABLE');
+  }
+  return error;
 }

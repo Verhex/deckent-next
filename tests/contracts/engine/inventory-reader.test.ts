@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, mkdir, chmod, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -41,4 +41,25 @@ it('leaves DELETE-journal database bytes unchanged after inspection', async () =
   const before = await readFile(file); const reader = await openSqliteInventoryReader(file, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches(query)).entries).toEqual([]); } finally { reader.close(); }
   expect(await readFile(file)).toEqual(before);
+});
+
+it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports missing WAL shared memory on a read-only directory without ignoring committed WAL', async () => {
+  const file = await path();
+  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' });
+  const directory = file + '-readonly'; await mkdir(directory, { mode: 0o700 }); const copy = join(directory, 'ledger.db');
+  try {
+    const identity = { runId: 'r', taskId: 't', attemptId: 'wal-only', scopeId: 's', layoutRevision: 'l', generation: 1 };
+    await writer.commit({ commandId: 'admit', command: 'admit', expectedRevision: null, snapshot: createAttempt(identity) });
+    await writer.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } });
+    // Quiescent writer, copy both files while the connection retains uncheckpointed WAL.
+    await copyFile(file, copy); await copyFile(file + '-wal', copy + '-wal');
+  } finally { writer.close(); }
+  await chmod(copy, 0o400); await chmod(copy + '-wal', 0o400); await chmod(directory, 0o500);
+  try {
+    await expect(openSqliteInventoryReader(copy, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_READ_UNAVAILABLE' });
+    await expect(stat(copy + '-shm')).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { await chmod(directory, 0o700); }
+  // Re-enable SQLite bookkeeping: the committed record must be visible, not silently dropped.
+  const reader = await openSqliteInventoryReader(copy, { busyTimeoutMs: 20 });
+  try { expect((await reader.listDispatches(query)).entries[0]!.identity.attemptId).toBe('wal-only'); } finally { reader.close(); }
 });
