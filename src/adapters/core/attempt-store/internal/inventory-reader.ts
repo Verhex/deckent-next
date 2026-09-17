@@ -1,3 +1,5 @@
+import { SqliteRunJournal } from './runs.js';
+import { identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
@@ -21,6 +23,13 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   async listDispatches(query: DispatchInventoryQuery) {
     try { return await new SqliteDispatchJournal(this.db).listDispatches(query); }
     catch (error) { throw readFailure(error); }
+  }
+  async loadRun(scopeId: string, runId: string) {
+    const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
+    try {
+      if (Number(this.db.prepare('PRAGMA user_version').get()?.user_version) < 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      return await new SqliteRunJournal(this.db).loadRun(scope, run);
+    } catch (error) { throw readFailure(error); }
   }
   close(): void { this.db.close(); }
 }

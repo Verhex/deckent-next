@@ -35,8 +35,11 @@ export class SqliteRunJournal {
   async createExecutionPool(input: ExecutionPool) { return this.transaction(() => new SqliteExecutionPools(this.db).create(input)); }
   async loadRun(scopeId: string, runId: string) {
     try {
-      const row = this.db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
-      return row ? this.decode(row.snapshot, scopeId, runId) : null;
+      const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
+      if (!row) return null;
+      const snapshot = this.decode(row.snapshot, scopeId, runId);
+      if (snapshot.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      return snapshot;
     } catch (error) { throw sqliteFailure(error); }
   }
   async projectRunAttempt(input: RunProjection): Promise<RunReceipt> {

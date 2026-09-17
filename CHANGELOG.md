@@ -120,3 +120,5 @@ POOL/A DONE: same-ledger shared pool admission across Runs/scopes;217 tests/12 D
 RUN/D DONE: full Run binding/pool guard before fresh dispatch; terminal Attempt/Run/journal written atomically.221 tests/12 real Docker; Fable1498 PASS. Historical unbound dispatch reconciliation remains open.
 
 RUN/E DONE: authenticated, current-policy-checked Run inspect/cancel service; durable CAS+receipt cancellation, no fabricated worker stop.225 tests/12 real Docker; Fable1499 PASS. Surface wiring, cancellation fanout and claim-start fence remain open.
+
+RUN/F DONE: readonly configured SDK inspectRun, scope/run policy before ledger access, revision corruption checks and schema2 nonmigration.230 tests/12 Docker; Fable1504 PASS. Public RunView and shared sanitized error mapping precede CLI/MCP wiring.
