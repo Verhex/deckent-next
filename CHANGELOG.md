@@ -72,3 +72,5 @@ DISPATCH/A PASS1416: atomic one-time launch claim, unresolved custody retained, 
 DISPATCH/B PASS1417: authenticate/authorize every execution/replay/release; durable claim→supervisor→terminal record; real Docker release then replay does not rerun.152 tests. Atomic Attempt projection and retained-artifact release gate remain pending.
 
 DISPATCH/C PASS1419: read-only daemon observation and separately authorized reconciliation settle exited containers without relaunch.154 tests; active-worker recovery/cancel and concurrent finish enrichment remain pending.
+
+DISPATCH/D PASS1422: engine/domain terminal projection and dispatch terminal persist atomically;155 tests including injected transaction rollback. Task acceptance and artifact durability remain separate.

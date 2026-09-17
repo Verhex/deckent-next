@@ -55,3 +55,22 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   expect((await store.receipt('s','create'))?.command).toBe('admission'); expect((await store.claimDispatch(claim)).acquired).toBe(true);
   const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(2); check.close();
 });
+
+it('atomically rolls back terminal projection with journal failure, then preserves cancellation intent on settlement', async () => {
+  const f = await fixture(); const store = await f.open(); await admit(store); await store.claimDispatch(claim);
+  await store.commit({ commandId: 'cancel-after-claim', command: 'cancel', expectedRevision: 0,
+    snapshot: { ...createAttempt(identity), revision: 1, cancelRequested: true } });
+  const db = new DatabaseSync(f.path);
+  db.exec("CREATE TRIGGER fail_terminal BEFORE UPDATE ON dispatches BEGIN SELECT RAISE(ABORT,'injected'); END;");
+  await expect(store.finishDispatch(claim, terminal)).rejects.toThrow();
+  expect((await store.load('s', 'a'))?.lastObservation).toBeNull();
+  expect((await store.load('s', 'a'))?.revision).toBe(1);
+  expect((await store.readDispatch(claim.request))?.terminal).toBeNull();
+  db.exec('DROP TRIGGER fail_terminal'); db.close();
+  await store.finishDispatch(claim, terminal);
+  const settled = await store.load('s', 'a');
+  expect(settled).toMatchObject({ revision: 2, cancelRequested: true, lastObservation: { sequence: 1, result: { kind: 'exited', exitCode: 0 } } });
+  expect(settled).not.toHaveProperty('accepted');
+  await store.finishDispatch(claim, terminal);
+  expect(await store.load('s', 'a')).toEqual(settled);
+});

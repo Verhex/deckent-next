@@ -27,6 +27,7 @@ it.skipIf(!imageId)('returns durable terminal after real Docker release without 
   const app = new DispatchApplication(f.store, supervisor, verifier, policy, 'process-1');
   try {
     const first = await app.execute(f.request); expect(first.kind).toBe('terminal'); expect(first.record.terminal?.exitCode).toBe(0);
+    expect((await f.store.load('s', f.request.identity.attemptId))?.lastObservation?.result).toEqual({ kind: 'exited', exitCode: 0 });
     await app.release(f.request);
     const restarted = new DispatchApplication(f.store, supervisor, verifier, policy, 'process-2');
     expect(await restarted.execute(f.request)).toEqual(first);

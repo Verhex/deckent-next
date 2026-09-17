@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  sandboxRequestSchema, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  projectDispatchTerminal, sandboxRequestSchema, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
@@ -52,6 +52,15 @@ export class SqliteDispatchJournal {
         if (JSON.stringify(existing.terminal) !== JSON.stringify(terminal)) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
       }
+      const identity = claim.request.identity;
+      const row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
+      if (!row) throw new DispatchError('DISPATCH_CORRUPT');
+      let current;
+      try { current = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
+      const projected = projectDispatchTerminal(current, claim, terminal);
+      const written = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
+        .run(projected.revision, JSON.stringify(projected), identity.scopeId, identity.attemptId, current.revision);
+      if (written.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
       const record = dispatchRecordSchema.parse({ ...existing, terminal });
       this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
       return record;
