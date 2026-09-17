@@ -324,3 +324,5 @@ INVENTORY-E DONE: Readonly WAL missing-shm failure is typed, without immutable f
 INVENTORY-F DONE: Inventory scope membership derives from trusted policy, not project config;195 tests/12 Docker. Future public execution must use equivalent trusted membership.
 
 INVENTORY-G DONE: Shipped read-only CLI/SDK inventory parity;198 tests/12 Docker. Follow-ups: signal/code labels, narrow text layout, config locale/output-mode, catalog prefix lint.
+
+RUN-A DONE: Pure revisioned Run graph/progress/attempt bindings;199 tests/12 Docker foundations. No durable store or acceptance closure claimed.
