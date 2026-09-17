@@ -573,5 +573,7 @@
   "usage.totals": "TOPLAM",
   "usage.unknown_models": "⚠ Şu model(ler) için fiyat bulunamadı: {models} — yakımları $0 sayılıyor. `deckent config update-pricing` çalıştırın veya modeli .deckent/cost-config.json dosyasına ekleyin.",
   "config.field.layout": "Kalıcı veri kökü ve kayıtlı kaynak yolları; başlangıç konfigürasyonu sabit kalır.",
-  "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri"
+  "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri",
+  "config.field.artifacts": "Saklanan artifact için bayt cinsinden azami boyut",
+  "config.field.execution": "Açıkça tanımlanmış sabit Docker imajı ve Git yürütme ayarları; null yürütmeyi kapatır"
 }

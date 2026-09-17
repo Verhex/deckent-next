@@ -55,3 +55,4 @@ export { inspectProductLayout, type ProductPathInspection } from '#platform/core
 export { inspectProductPaths } from '#platform/core/config/index.js';
 export { SQLITE_STORAGE_OPTIONS } from '#platform/core/config-fields/index.js';
 export { prepareProductFile, prepareProductDirectory, ManagedFileError } from '#platform/core/managed-files/index.js';
+export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from '#platform/core/config-fields/index.js';

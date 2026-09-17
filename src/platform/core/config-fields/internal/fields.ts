@@ -1,3 +1,4 @@
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { z } from 'zod';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -18,6 +19,8 @@ export const CONFIG_FIELDS = Object.freeze({
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
   storage: field('config.field.storage', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),

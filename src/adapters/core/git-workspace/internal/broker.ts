@@ -1,3 +1,4 @@
+import { GIT_EXECUTION_SETTINGS } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -7,8 +8,7 @@ import { z } from 'zod';
 import { workspaceRequestSchema, WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
 import format from './format.json' with { type: 'json' };
 const exec = promisify(execFile);
-const optionsSchema = z.object({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1), gitExecutable: z.string().min(1),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe() }).strict().readonly();
+const optionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1) }).strict().readonly();
 export type GitWorkspaceOptions = z.infer<typeof optionsSchema>;
 const recordSchema = z.object({ schemaVersion: z.literal(1), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   request: workspaceRequestSchema, status: z.enum(['allocating', 'ready']) }).strict();

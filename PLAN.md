@@ -304,3 +304,5 @@ ARTIFACT/B PASS1437: attempt-bound retained output is mandatory before container
 ARTIFACT/C PASS1438: bounded per-container local logs, explicit capture completeness and authorized partial recovery;172 tests. Blocking log backpressure and partial-history release policy remain open.
 
 CANCEL/A PASS1439: durable cancellation actor/intent precedes actual Docker kill;174 tests. Created/start race and post-controller-crash watchdog remain open; cancellation request is not terminal proof.
+
+RUNTIME-CONFIG/A PASS1442: shared runtime/artifact policy schemas and one-snapshot composition;176 tests. Execution defaults disabled. Source authorization, localized composition errors and output/artifact budget consistency remain before public ingress.
