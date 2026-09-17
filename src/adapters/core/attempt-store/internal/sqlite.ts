@@ -1,3 +1,5 @@
+import { SqliteRunJournal } from './runs.js';
+import type { RunStore, RunCreate, RunReservation } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { DispatchClaim, DispatchTerminal, DispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -7,7 +9,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity, type VerifiedPrincipal } fr
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, DispatchInventoryStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, DispatchInventoryStore, RunStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions) {
     const parsed = sqliteAttemptOptionsSchema.safeParse(options);
@@ -17,7 +19,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
     try {
       this.db.exec('BEGIN IMMEDIATE');
       const version = this.db.prepare('PRAGMA user_version').get()?.user_version;
-      if (version !== 0 && version !== 1 && version !== 2) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      if (version !== 0 && version !== 1 && version !== 2 && version !== 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
       if (version === 0) this.db.exec(`
         CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
           snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -26,6 +28,11 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
         PRAGMA user_version = 1;
       `);
       if (version === 0 || version === 1) this.db.exec(`CREATE TABLE dispatches(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id)); PRAGMA user_version=2;`);
+      if (version === 0 || version === 1 || version === 2) this.db.exec(`
+        CREATE TABLE runs(scope_id TEXT NOT NULL, run_id TEXT NOT NULL, revision INTEGER NOT NULL, snapshot TEXT NOT NULL, policy TEXT NOT NULL, PRIMARY KEY(scope_id,run_id));
+        CREATE TABLE run_receipts(scope_id TEXT NOT NULL, command_id TEXT NOT NULL, command TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(scope_id,command_id));
+        PRAGMA user_version=3;
+      `);
       this.db.exec('COMMIT');
       const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
       const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
@@ -37,6 +44,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
+  async createRun(input: RunCreate) { return new SqliteRunJournal(this.db).createRun(input); }
+  async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }
   async retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchOutput(claim, receipt); }

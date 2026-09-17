@@ -15,7 +15,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
     catch (error) { throw readFailure(error); }
     try {
-      if (this.db.prepare('PRAGMA user_version').get()?.user_version !== 2) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      if (![2, 3].includes(Number(this.db.prepare('PRAGMA user_version').get()?.user_version))) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
     } catch (error) { this.db.close(); throw readFailure(error); }
   }
   async listDispatches(query: DispatchInventoryQuery) {

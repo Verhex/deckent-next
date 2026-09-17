@@ -328,3 +328,5 @@ INVENTORY-G DONE: Shipped read-only CLI/SDK inventory parity;198 tests/12 Docker
 RUN-A DONE: Pure revisioned Run graph/progress/attempt bindings;199 tests/12 Docker foundations. No durable store or acceptance closure claimed.
 
 SCHEDULING-A DONE: Bounded deterministic wave planning with explicit policy ordering and execution/in-flight limits;206 tests/12 Docker. Planning alone never authorizes launch.
+
+RUN-B DONE: Durable Run and atomic task/attempt reservation in SQLite schema3;211 tests/12 Docker including separate-process lock. Per-Run capacity only; shared pool still gates runtime launch.
