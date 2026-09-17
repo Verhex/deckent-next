@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "checkout": "tree",
+  "lease": "lease.json",
+  "emptyConfig": "gitconfig",
+  "hooks": "hooks"
+}

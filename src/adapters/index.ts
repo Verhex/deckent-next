@@ -4,3 +4,5 @@ export type { SqliteAttemptStore, SqliteAttemptOptions } from '#adapters/core/at
 export { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LocalOsPrincipalVerifier } from '#adapters/core/local-principal/index.js';
+export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
+export type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';

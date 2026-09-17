@@ -62,3 +62,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - SUPERVISOR/A (Fable PASS1398): bounded Docker execution, retained terminal evidence/replay and explicit release; real deadline/cancel/filesystem-boundary tests. Not EXECUTION/DOGFOOD completion.
 
 AUTH/A PASS: v2 command rejects caller identity; verified scope and authorization precede replay/store. Local OS verifier is direct-process only; remote policy and stable installation issuer remain gaps.
+
+WORKSPACE/A PASS: private pinned Git checkout with copied objects and replay-safe lease. Real Git and Docker tests passed; layout binding, dispatch custody, history policy and allocation recovery remain gaps.
