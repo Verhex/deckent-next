@@ -1,3 +1,4 @@
+import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
@@ -5,8 +6,11 @@ import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type Attemp
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore {
   private readonly db: DatabaseSync;
-  constructor(path: string) {
-    this.db = new DatabaseSync(path);
+  constructor(path: string, options: SqliteAttemptOptions) {
+    const parsed = sqliteAttemptOptionsSchema.safeParse(options);
+    if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+    try { this.db = new DatabaseSync(path, { timeout: parsed.data.busyTimeoutMs }); }
+    catch (error) { throw sqliteFailure(error); }
     try {
       this.db.exec('BEGIN IMMEDIATE');
       const version = this.db.prepare('PRAGMA user_version').get()?.user_version;
@@ -19,21 +23,28 @@ export class SqliteAttemptStore implements AttemptStore {
         PRAGMA user_version = 1;
       `);
       this.db.exec('COMMIT');
+      const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
+      const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
+      const selected = this.db.prepare(journal[parsed.data.journalMode]).get()?.journal_mode;
+      if (selected !== parsed.data.journalMode) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+      this.db.exec(durability[parsed.data.durability]);
     } catch (error) {
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
-      this.db.close(); throw error;
+      this.db.close(); throw sqliteFailure(error);
     }
   }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {
-    const row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
+    let row;
+    try { row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId); }
+    catch (error) { throw sqliteFailure(error); }
     if (!row) return null;
     const snapshot = this.decode(row.snapshot);
     if (snapshot.identity.scopeId !== scopeId || snapshot.identity.attemptId !== attemptId) throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
     return snapshot;
   }
   async receipt(scopeId: string, commandId: string): Promise<AttemptReceipt | null> {
-    return this.readReceipt(scopeId, commandId);
+    try { return this.readReceipt(scopeId, commandId); } catch (error) { throw sqliteFailure(error); }
   }
   private decode(value: unknown) {
     try { return attemptSnapshotSchema.parse(JSON.parse(String(value))); }
@@ -49,8 +60,10 @@ export class SqliteAttemptStore implements AttemptStore {
   async commit(input: AttemptCommit): Promise<AttemptReceipt> {
     const snapshot = attemptSnapshotSchema.parse(input.snapshot);
     const { scopeId, attemptId } = snapshot.identity;
-    this.db.exec('BEGIN IMMEDIATE');
+    let transaction = false;
     try {
+      this.db.exec('BEGIN IMMEDIATE');
+      transaction = true;
       const existing = this.readReceipt(scopeId, input.commandId);
       if (existing) {
         if (existing.command !== input.command) throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
@@ -82,7 +95,11 @@ export class SqliteAttemptStore implements AttemptStore {
       this.db.exec('COMMIT');
       return Object.freeze({ commandId: input.commandId, command: input.command, snapshot });
     } catch (error) {
-      this.db.exec('ROLLBACK'); throw error;
+      if (transaction) {
+        try { this.db.exec('ROLLBACK'); }
+        catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); }
+      }
+      throw sqliteFailure(error);
     }
   }
 }

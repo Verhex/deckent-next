@@ -266,3 +266,6 @@ Residual STORE/B: typed contention/bounded busy policy, registered ledger path a
 | CONTRACT/C | Shared wire identity, sanitized diagnostics, signal exits, stale evidence and direct-blocker semantics | Fable PASS1378; isolated119 plus STORE/A integration126 tests | DONE |
 
 | FOUNDATION/C | Colocated public metadata projection, explicit generation and freshness check | Fable PASS1382; isolated115 verify; npm lint and build both invoke freshness tool | DONE |
+
+| STORE/B | Required wait/journal/durability options, typed contention, separate-process lock proof | Fable PASS1389/1390; isolated129 verify | DONE |
+Residuals: config/layout composition STORE/C, commit-time reader contention test, nonblocking worker and platform matrix.

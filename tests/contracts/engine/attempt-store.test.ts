@@ -6,13 +6,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AttemptApplication } from '../../../src/engine/index.js';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '../../../src/adapters/index.js';
 import { createAttempt, requestAttemptCancellation } from '../../../src/domain/index.js';
+const options = { busyTimeoutMs: 25, journalMode: 'wal', durability: 'full' } as const;
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(() => { for (const store of stores.splice(0)) store.close(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 'customer', layoutRevision: 'layout', generation: 1 };
 const command = (commandId: string, action: object) => ({ schemaVersion: 1, commandId, principalId: 'operator', scopeId: 'customer', action });
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'deckent-attempt-store-')); roots.push(root);
-  const path = join(root, 'execution.db'); const store = await openSqliteAttemptStore(path); stores.push(store);
+  const path = join(root, 'execution.db'); const store = await openSqliteAttemptStore(path, options); stores.push(store);
   const app = new AttemptApplication(store, { async authorize(input) { if (input.principalId !== 'operator') throw new Error('DENIED'); } });
   return { path, store, app };
 }
@@ -25,7 +26,7 @@ describe('application and real SQLite attempt store', () => {
     await f.app.execute(observe);
     await f.app.execute(command('cancel', { kind: 'cancel', attemptId: 'a' }));
     f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-    const store = await openSqliteAttemptStore(f.path); stores.push(store);
+    const store = await openSqliteAttemptStore(f.path, options); stores.push(store);
     const app = new AttemptApplication(store, { async authorize() {} });
     expect((await app.execute(observe)).snapshot.revision).toBe(1);
     expect((await store.load('customer', 'a'))!.revision).toBe(2);
@@ -39,7 +40,7 @@ describe('application and real SQLite attempt store', () => {
   });
   it('atomically rejects stale revisions across independent connections', async () => {
     const f = await fixture(); await f.app.execute(command('create', { kind: 'create', identity }));
-    const other = await openSqliteAttemptStore(f.path); stores.push(other);
+    const other = await openSqliteAttemptStore(f.path, options); stores.push(other);
     const next = requestAttemptCancellation(createAttempt(identity), 0);
     const outcomes = await Promise.allSettled([f.store.commit({ commandId: 'one', command: 'one', expectedRevision: 0, snapshot: next }),
       other.commit({ commandId: 'two', command: 'two', expectedRevision: 0, snapshot: next })]);
@@ -56,7 +57,7 @@ describe('application and real SQLite attempt store', () => {
   });
   it('rejects unsupported storage versions without rewriting them', async () => {
     const f = await fixture(); const db = new DatabaseSync(f.path); db.exec('PRAGMA user_version=99'); db.close();
-    await expect(openSqliteAttemptStore(f.path)).rejects.toThrow('ATTEMPT_STORE_VERSION');
+    await expect(openSqliteAttemptStore(f.path, options)).rejects.toThrow('ATTEMPT_STORE_VERSION');
   });
   it('converges duplicate application commands without double transitions', async () => {
     const f = await fixture();

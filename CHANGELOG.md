@@ -52,3 +52,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - CONTRACT/C (Fable PASS1378): signal termination and stale observations, shared bounded identity/counter primitives and sanitized validation paths; SQLite uses shared identity comparison. Combined126-test verify passed.
 
 - FOUNDATION/C (Fable PASS1382): pure colocated metadata artifact; lint/build reject stale manifest projection; renderer forbids runtime package.json dependency.
+
+- STORE/B (Fable PASS1389/1390): bounded native SQLite lock waits, explicit journal/durability options, typed BUSY and conservative unknown rollback outcome; separate-process contention proof.
