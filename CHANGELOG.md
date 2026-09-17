@@ -42,3 +42,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - FOUNDATION/B + PATH-INSPECTION (Fable PASS1357): native package boundaries, explicit CLI composition, domain import guard and shared path query; alpha.2. Unimplemented MCP binary removed.
 
 - PATH-LAYOUT/C (Fable PASS1358): fixed project config locator, configurable durable root/resources and inspectable frozen layout revision; no implicit migration.
+
+- CONTRACT/A (Fable PASS 1365:2a96fe9cd2db): pure task graph admission and dependency readiness.

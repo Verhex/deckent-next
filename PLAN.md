@@ -253,3 +253,6 @@ Residuals: restore host-test verification on HOST-SETUP landing; distinguish pro
 | PATH-LAYOUT/C | Fixed locator, validated layout config and immutable inspection snapshot | Fable PASS1358; isolated102 tests; proof/PATH-LAYOUT-C-verification.json | DONE |
 
 Residual: once config is loaded, propagate its pinned layout to all operation/crash consumers; bootstrap environment resolution does not replace an active operation snapshot.
+
+| CONTRACT/A | pure task graph admission and dependency readiness; no worker execution claimed | Independent Fable PASS 1365:2a96fe9cd2db; immutable candidate proof | DONE |
+Residuals: direct-only blocked classification, sanitized schema issue paths, shared bounded domain primitives and readonly readiness input.
