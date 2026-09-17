@@ -3,7 +3,7 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import { sandboxRequestSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
 export interface DispatchAuthorization {
-  authorize(action: 'execute' | 'release', request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
+  authorize(action: 'execute' | 'release' | 'reconcile', request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
 }
 export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord }>;
 /** Internal application execution entry. Composition supplies a trusted broker workspace, verifier,
@@ -15,7 +15,7 @@ export class DispatchApplication {
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string) {
     this.owner = identitySchema.parse(owner);
   }
-  private async admit(action: 'execute' | 'release', input: unknown, credential: unknown) {
+  private async admit(action: 'execute' | 'release' | 'reconcile', input: unknown, credential: unknown) {
     const request = sandboxRequestSchema.parse(input);
     const principal = await authenticate(this.verifier, credential, request.identity.scopeId);
     await this.authorization.authorize(action, request, principal);
@@ -31,6 +31,19 @@ export class DispatchApplication {
     const result = await this.supervisor.execute(request, signal);
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: claimed.record });
     const record = await this.store.finishDispatch(claim, { handle: result.handle, exitCode: result.result.exitCode, interrupted: result.interrupted });
+    return Object.freeze({ kind: 'terminal', record });
+  }
+  async reconcile(input: unknown, credential?: unknown): Promise<DispatchOutcome> {
+    const request = await this.admit('reconcile', input, credential);
+    const current = await this.store.readDispatch(request);
+    if (!current) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    if (current.terminal) return Object.freeze({ kind: 'terminal', record: current });
+    const observed = await this.supervisor.observe(request);
+    if (observed.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: current });
+    // Terminal evidence is settled under existing custody, not a new launch grant. Daemon inspection
+    // cannot reconstruct whether an earlier CLI was interrupted, so retain that fact as unknown.
+    const record = await this.store.finishDispatch({ request, owner: current.owner },
+      { handle: observed.handle, exitCode: observed.result.exitCode, interrupted: null });
     return Object.freeze({ kind: 'terminal', record });
   }
   async release(input: unknown, credential?: unknown): Promise<void> {

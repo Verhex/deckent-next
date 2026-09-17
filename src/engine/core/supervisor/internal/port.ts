@@ -14,6 +14,8 @@ export interface SandboxResult {
   readonly interrupted: boolean;
 }
 export interface ExecutionSupervisor {
+  /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
+  observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. */
   release(request: SandboxRequest): Promise<void>;

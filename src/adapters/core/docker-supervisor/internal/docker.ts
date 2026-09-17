@@ -49,6 +49,11 @@ export class DockerSupervisor implements ExecutionSupervisor {
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
     return Object.freeze({ handle, result: Object.freeze(result), stdout, stderr, interrupted });
   }
+  async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
+    const { digest, handle } = this.identity(input);
+    const observed = this.result(handle, await this.inspect(handle, digest));
+    return Object.freeze({ handle: observed.handle, result: observed.result });
+  }
   async execute(input: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);
     if (signal?.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
