@@ -26,14 +26,14 @@ async function fixture() {
 describe.skipIf(process.platform === 'win32')('configured local inventory query', () => {
   it('rejects budget/scope/missing policy before opening or creating the ledger', async () => {
     const f = await fixture();
-    await expect(inspectConfiguredInventory(f.project, { ...query, limit: 2 }, f.options)).rejects.toThrow('DISPATCH_INVENTORY_LIMIT');
-    await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toThrow('POLICY_UNAVAILABLE');
-    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('POLICY_UNAVAILABLE');
+    await expect(inspectConfiguredInventory(f.project, { ...query, limit: 2 }, f.options)).rejects.toMatchObject({ code: 'DISPATCH_INVENTORY_LIMIT' });
+    await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
+    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
     await expect(stat(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
-    await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('POLICY_DENIED');
+    await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await expect(stat(join(f.data, 'state'))).rejects.toMatchObject({ code: 'ENOENT' });
-    await f.policy(true); await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toThrow('POLICY_DENIED');
-    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('MANAGED_FILE_MISSING');
+    await f.policy(true); await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toMatchObject({ code: 'MANAGED_FILE_MISSING' });
     await expect(stat(join(f.data, 'state'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('rejects project-config scope injection without touching the data root', async () => {
@@ -54,6 +54,6 @@ describe.skipIf(process.platform === 'win32')('configured local inventory query'
     const result = await inspectConfiguredInventory(f.project, query, f.options);
     expect(result.schemaVersion).toBe(1); expect(result.layout.root).toBe(f.data); expect(result.page.entries[0]!.identity).toEqual(identity);
     expect(JSON.stringify(result.page)).not.toContain('secret'); expect(await readFile(path)).toEqual(before);
-    await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('POLICY_DENIED');
+    await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
 });

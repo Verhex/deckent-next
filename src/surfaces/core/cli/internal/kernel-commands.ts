@@ -1,3 +1,4 @@
+import type { InventoryQueryHandler } from './inventory.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -7,6 +8,7 @@ import {
 } from '#platform/index.js';
 
 export interface CommandContext {
+  inspectInventory?: InventoryQueryHandler;
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;

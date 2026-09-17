@@ -4,6 +4,24 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  INVENTORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.INVENTORY_QUERY_INVALID', p, l) }) },
+  INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
+  DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },
+  AUTHENTICATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
+  AUTHENTICATION_SCOPE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
+  POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
+  POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
+  MANAGED_FILE_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_MISSING', p, l) }) },
+  MANAGED_FILE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSAFE', p, l) }) },
+  MANAGED_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSUPPORTED', p, l) }) },
+  MANAGED_FILE_OUTSIDE_ROOT: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_OUTSIDE_ROOT', p, l) }) },
+  ATTEMPT_STORE_VERSION: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_VERSION', p, l) }) },
+  ATTEMPT_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_BUSY', p, l) }) },
+  ATTEMPT_STORE_OPTIONS: { category: 'config', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_OPTIONS', p, l) }) },
+  ATTEMPT_STORE_READ_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_READ_UNAVAILABLE', p, l) }) },
+  ATTEMPT_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_CORRUPT', p, l) }) },
+  DISPATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CORRUPT', p, l) }) },
+
   DECKENT_E001: { category: 'error', render: (p, l) => ({ message: t('error.DECKENT_E001', p, l), suggestion: t('remedy.DECKENT_E001', p, l), whatHappened: t('what.DECKENT_E001', p, l), why: t('why.DECKENT_E001', p, l), howToFix: Object.freeze(t('fix.DECKENT_E001', p, l).split('\n')) }) },
   DECKENT_E002: { category: 'error', render: (p, l) => ({ message: t('error.DECKENT_E002', p, l), suggestion: t('remedy.DECKENT_E002', p, l), whatHappened: t('what.DECKENT_E002', p, l), why: t('why.DECKENT_E002', p, l), howToFix: Object.freeze(t('fix.DECKENT_E002', p, l).split('\n')) }) },
   DECKENT_E003: { category: 'error', render: (p, l) => ({ message: t('error.DECKENT_E003', p, l), suggestion: t('remedy.DECKENT_E003', p, l), whatHappened: t('what.DECKENT_E003', p, l), why: t('why.DECKENT_E003', p, l), howToFix: Object.freeze(t('fix.DECKENT_E003', p, l).split('\n')) }) },

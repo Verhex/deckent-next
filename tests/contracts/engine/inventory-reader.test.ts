@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, readFile, rm, stat, mkdir, chmod, copyFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, stat, mkdir, chmod, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -62,4 +62,15 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports mis
   // Re-enable SQLite bookkeeping: the committed record must be visible, not silently dropped.
   const reader = await openSqliteInventoryReader(copy, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches(query)).entries[0]!.identity.attemptId).toBe('wal-only'); } finally { reader.close(); }
+});
+
+it('distinguishes invalid database bytes and damaged schema pages from read-access failures', async () => {
+  const file = await path(); await writeFile(file, 'not a SQLite database');
+  await expect(openSqliteInventoryReader(file, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_CORRUPT' });
+  await rm(file); const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }); writer.close();
+  const bytes = await readFile(file); bytes[100] = 0; await writeFile(file, bytes);
+  let reader;
+  try { reader = await openSqliteInventoryReader(file, { busyTimeoutMs: 20 }); await expect(reader.listDispatches(query)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_CORRUPT' }); }
+  catch (error) { expect(error).toMatchObject({ code: 'ATTEMPT_STORE_CORRUPT' }); }
+  finally { reader?.close(); }
 });

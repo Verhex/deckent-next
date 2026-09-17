@@ -29,7 +29,7 @@ function readFailure(error: unknown): unknown {
   const mapped = sqliteFailure(error);
   if (mapped !== error || error instanceof AttemptStoreError) return mapped;
   if (error && typeof error === 'object' && 'errcode' in error && typeof error.errcode === 'number') {
-    return new AttemptStoreError('ATTEMPT_STORE_READ_UNAVAILABLE');
+    return new AttemptStoreError([11, 26].includes(error.errcode & 255) ? 'ATTEMPT_STORE_CORRUPT' : 'ATTEMPT_STORE_READ_UNAVAILABLE');
   }
   return error;
 }

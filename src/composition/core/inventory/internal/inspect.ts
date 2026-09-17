@@ -1,16 +1,22 @@
+import { inventoryFailure } from './errors.js';
 import { userInfo } from 'node:os';
 import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
+import { registerProviderConfig, readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
 import { policySchema, policyScopeMembership } from '#domain/index.js';
-import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryStore } from '#engine/index.js';
+import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 
 /** Direct local CLI/SDK only, not remote peer authentication. Each invocation pins one config/layout
  * and fresh trusted policy snapshot. Project configuration cannot assign principal membership.
  */
-export async function inspectConfiguredInventory(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}) {
+export async function inspectConfiguredInventory(projectRoot: string, input: DispatchInventoryInput, options: ConfigLoadOptions = {}) {
+  try { return await inspect(projectRoot, input, options); } catch (error) { throw inventoryFailure(error); }
+}
+async function inspect(projectRoot: string, input: unknown, options: ConfigLoadOptions) {
+  registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
-  const query = dispatchInventoryQuerySchema.parse(input);
+  const parsed = dispatchInventoryInputSchema.parse(input);
+  const query = dispatchInventoryQuerySchema.parse({ ...parsed, limit: parsed.limit ?? config.inspection.maxPageSize });
   if (query.limit > config.inspection.maxPageSize) throw new DispatchInventoryError();
   const layout = config.productLayout;
   const identity = readLocalOsIdentity();

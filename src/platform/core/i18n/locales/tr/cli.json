@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "Kontrol paneli sunucusunun dinlediği TCP portu.",
   "cli.governance.xverify.arg.claim": "Bağımsız provider’ın doğrulaması gereken claim veya result ifadesi.",
   "cli.heartbeat.desc": ".deckent/HEARTBEAT.md içindeki proaktif heartbeat görevlerini çalıştırın",
-  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]",
+  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
   "cli.help.builtin.help_command": "komut için yardımı göster",
   "cli.help.builtin.help_option": "komut için yardımı göster",
   "cli.help.heading.arguments": "Argümanlar:",
@@ -510,5 +510,13 @@
   "cli.usage.desc": "Claude Code transcript'lerinden token/limit tüketimini gösterin",
   "cli.version": "{name} v{version} | Node {node} | {platform}",
   "cli.watch.desc": "Canlı bir worker'ı --follow <taskId> ile takip edin (docker logs / tmux pane / subprocess log) veya tmux dashboard split'ini açın",
-  "cli.watch.output.desc": "Worker execution’ını değiştirmeden tam worker çıktısını oku veya izle"
+  "cli.watch.output.desc": "Worker execution’ını değiştirmeden tam worker çıktısını oku veya izle",
+  "inventory.heading": "Saklanan yürütme kaydı: {count}. Bunlar kayıtlı gözlemlerdir; canlı durum veya kabul edilmiş iş sonucu değildir.",
+  "inventory.row": "Run {run} / iş {task} / girişim {attempt} | sahip {owner} | {state} | iptal: {cancel} | çıktı referansı: {output}",
+  "inventory.unresolved": "sonlanma sonucu kaydedilmemiş",
+  "inventory.exited": "süreç çıkışı: {exit}",
+  "inventory.requested": "istenmiş",
+  "inventory.absent": "kaydedilmemiş",
+  "inventory.recorded": "kayıtlı; bütünlük doğrulanmadı",
+  "inventory.next": "Sonraki sayfa: --after {after}"
 }

@@ -104,3 +104,5 @@ INVENTORY-D: Configured local inventory query;191 tests/12 Docker; public bindin
 INVENTORY-E: Readonly WAL missing-shm failure is typed, without immutable fallback;192 tests/12 Docker. Native corruption classification remains follow-up.
 
 INVENTORY-F: Inventory scope membership derives from trusted policy, not project config;195 tests/12 Docker. Future public execution must use equivalent trusted membership.
+
+INVENTORY-G: Shipped read-only CLI/SDK inventory parity;198 tests/12 Docker. Follow-ups: signal/code labels, narrow text layout, config locale/output-mode, catalog prefix lint.

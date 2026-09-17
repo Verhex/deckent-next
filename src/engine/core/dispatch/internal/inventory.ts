@@ -4,6 +4,11 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { DispatchTerminal } from './port.js';
 export const dispatchInventoryQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   after: identitySchema.nullable(), limit: z.number().int().positive().max(2_147_483_646) }).strict().readonly();
+export const dispatchInventoryInputSchema = dispatchInventoryQuerySchema.unwrap().extend({
+  after: dispatchInventoryQuerySchema.unwrap().shape.after.default(null),
+  limit: dispatchInventoryQuerySchema.unwrap().shape.limit.optional(),
+}).readonly();
+export type DispatchInventoryInput = z.input<typeof dispatchInventoryInputSchema>;
 export type DispatchInventoryQuery = z.infer<typeof dispatchInventoryQuerySchema>;
 export interface DispatchInventoryEntry {
   readonly identity: AttemptIdentity;

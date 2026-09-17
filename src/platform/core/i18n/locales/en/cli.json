@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "TCP port the dashboard server listens on.",
   "cli.governance.xverify.arg.claim": "Claim or result statement the independent provider should verify.",
   "cli.heartbeat.desc": "Run proactive heartbeat tasks from .deckent/HEARTBEAT.md",
-  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]",
+  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]",
   "cli.help.builtin.help_command": "display help for command",
   "cli.help.builtin.help_option": "display help for command",
   "cli.help.heading.arguments": "Arguments:",
@@ -510,5 +510,13 @@
   "cli.usage.desc": "Show token/limit consumption from Claude Code transcripts",
   "cli.version": "{name} v{version} | Node {node} | {platform}",
   "cli.watch.desc": "Follow a live worker (docker logs / tmux pane / subprocess log) with --follow <taskId>, or open the tmux dashboard split",
-  "cli.watch.output.desc": "Read or follow exact worker output without changing worker execution"
+  "cli.watch.output.desc": "Read or follow exact worker output without changing worker execution",
+  "inventory.heading": "Stored execution records: {count}. These are recorded observations, not live status or accepted task outcomes.",
+  "inventory.row": "Run {run} / task {task} / attempt {attempt} | owner {owner} | {state} | cancellation: {cancel} | output reference: {output}",
+  "inventory.unresolved": "terminal result not recorded",
+  "inventory.exited": "process exit: {exit}",
+  "inventory.requested": "requested",
+  "inventory.absent": "not recorded",
+  "inventory.recorded": "recorded; completeness not verified",
+  "inventory.next": "Next page: --after {after}"
 }

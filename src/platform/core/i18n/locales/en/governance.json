@@ -735,5 +735,22 @@
   "xverify.report.tier_admission.owner-pair-admitted": "**Tier admission:** owner-pair exception admitted (host/config policy; not a verifier verdict)",
   "xverify.report.tier_decision_ref": "**Owner decision reference:** {decisionRef} (opaque reference; not a verifier verdict)",
   "xverify.report.verifier_model": "**Verifier model:** {model}",
-  "xverify.verdict": "Verdict: {verdict} (verifier: {verifier}) — host adjudication report: {report}"
+  "xverify.verdict": "Verdict: {verdict} (verifier: {verifier}) — host adjudication report: {report}",
+  "error.INVENTORY_QUERY_INVALID": "Invalid inventory query. Check scope, cursor and page size.",
+  "error.INVENTORY_UNAVAILABLE": "Inventory cannot be read safely. Check the installation and storage access.",
+  "error.DISPATCH_INVENTORY_LIMIT": "Requested page exceeds the configured inspection limit.",
+  "error.AUTHENTICATION_REQUIRED": "A verified local identity is required.",
+  "error.AUTHENTICATION_SCOPE_DENIED": "The identity is not admitted to this scope.",
+  "error.POLICY_UNAVAILABLE": "The trusted policy cannot be read or validated. No access was granted.",
+  "error.POLICY_DENIED": "Policy does not permit inspecting this scope.",
+  "error.MANAGED_FILE_MISSING": "The configured ledger or its directory does not exist. Nothing was created.",
+  "error.MANAGED_FILE_UNSAFE": "Managed storage failed its ownership, permission or link checks.",
+  "error.MANAGED_FILE_UNSUPPORTED": "Managed storage inspection is unsupported on this platform.",
+  "error.MANAGED_FILE_OUTSIDE_ROOT": "The configured storage path is outside the managed data root.",
+  "error.ATTEMPT_STORE_VERSION": "The ledger schema is unsupported. Inspection does not migrate databases.",
+  "error.ATTEMPT_STORE_BUSY": "The ledger is busy. Retry the read after the current operation finishes.",
+  "error.ATTEMPT_STORE_OPTIONS": "The configured storage options are invalid.",
+  "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite cannot read the ledger in this environment. WAL inspection may require shared-memory sidecar access.",
+  "error.ATTEMPT_STORE_CORRUPT": "Stored execution data failed validation.",
+  "error.DISPATCH_CORRUPT": "Stored dispatch data is inconsistent or invalid."
 }

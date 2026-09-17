@@ -735,5 +735,22 @@
   "xverify.report.tier_admission.owner-pair-admitted": "**Tier kabulü:** sahip-çifti istisnasıyla kabul edildi (host/config politikasıdır; hakem kararı değildir)",
   "xverify.report.tier_decision_ref": "**Sahip karar referansı:** {decisionRef} (opak referans; hakem kararı değildir)",
   "xverify.report.verifier_model": "**Hakem modeli:** {model}",
-  "xverify.verdict": "Karar: {verdict} (hakem: {verifier}) — host adjudication raporu: {report}"
+  "xverify.verdict": "Karar: {verdict} (hakem: {verifier}) — host adjudication raporu: {report}",
+  "error.INVENTORY_QUERY_INVALID": "Envanter sorgusu geçersiz. Kapsamı, imleci ve sayfa boyutunu kontrol edin.",
+  "error.INVENTORY_UNAVAILABLE": "Envanter güvenle okunamıyor. Kurulumu ve depolama erişimini kontrol edin.",
+  "error.DISPATCH_INVENTORY_LIMIT": "İstenen sayfa yapılandırılmış inceleme sınırını aşıyor.",
+  "error.AUTHENTICATION_REQUIRED": "Doğrulanmış yerel kimlik gerekiyor.",
+  "error.AUTHENTICATION_SCOPE_DENIED": "Kimliğin bu kapsama erişimi yok.",
+  "error.POLICY_UNAVAILABLE": "Güvenilir politika okunamadı veya doğrulanamadı. Erişim verilmedi.",
+  "error.POLICY_DENIED": "Politika bu kapsamın incelenmesine izin vermiyor.",
+  "error.MANAGED_FILE_MISSING": "Yapılandırılmış ledger veya dizini yok. Hiçbir dosya oluşturulmadı.",
+  "error.MANAGED_FILE_UNSAFE": "Yönetilen depolama sahiplik, izin veya bağlantı denetiminden geçemedi.",
+  "error.MANAGED_FILE_UNSUPPORTED": "Bu platformda yönetilen depolama incelemesi desteklenmiyor.",
+  "error.MANAGED_FILE_OUTSIDE_ROOT": "Yapılandırılmış depolama yolu yönetilen veri kökünün dışında.",
+  "error.ATTEMPT_STORE_VERSION": "Ledger şeması desteklenmiyor. İnceleme veritabanını dönüştürmez.",
+  "error.ATTEMPT_STORE_BUSY": "Ledger meşgul. Mevcut işlem tamamlandıktan sonra okumayı tekrar deneyin.",
+  "error.ATTEMPT_STORE_OPTIONS": "Yapılandırılmış depolama seçenekleri geçersiz.",
+  "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite bu ortamda ledger kaydını okuyamıyor. WAL incelemesi paylaşımlı bellek yan dosyasına erişim gerektirebilir.",
+  "error.ATTEMPT_STORE_CORRUPT": "Saklanan yürütme verisi doğrulanamadı.",
+  "error.DISPATCH_CORRUPT": "Saklanan yürütme ataması tutarsız veya geçersiz."
 }
