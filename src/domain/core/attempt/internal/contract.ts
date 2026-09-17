@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 
+export const processExitCauseShape = { exitCode: z.number().int().safe().nullable(), signal: identity.optional() };
+export function isValidExitCause(value: { exitCode: number | null; signal?: string | undefined }): boolean {
+  return (value.exitCode === null) === (value.signal !== undefined);
+}
+export const processExitCauseSchema = z.object(processExitCauseShape).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID');
+export type ProcessExitCause = z.infer<typeof processExitCauseSchema>;
+
 export const ATTEMPT_PROTOCOL_VERSION = 1;
 export const attemptIdentitySchema = z.object({
   runId: identity, taskId: identity, attemptId: identity,
@@ -13,11 +20,11 @@ export const attemptObservationSchema = z.object({
   eventId: identity,
   result: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('started') }).strict(),
-    z.object({ kind: z.literal('exited'), exitCode: z.number().int().safe().nullable(), signal: identity.optional() }).strict(),
+    z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
     z.object({ kind: z.literal('cancelled') }).strict(),
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
   ]).superRefine((result, context) => {
-    if (result.kind === 'exited' && ((result.exitCode === null) !== (result.signal !== undefined))) {
+    if (result.kind === 'exited' && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
     }
   }).readonly(),

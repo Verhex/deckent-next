@@ -74,3 +74,20 @@ it('atomically rolls back terminal projection with journal failure, then preserv
   await store.finishDispatch(claim, terminal);
   expect(await store.load('s', 'a')).toEqual(settled);
 });
+
+it('rejects contradictory terminal causes without writing terminal evidence', async () => {
+  const f = await fixture(); const store = await f.open(); await admit(store); await store.claimDispatch(claim);
+  await expect(store.finishDispatch(claim, { ...terminal, exitCode: null })).rejects.toThrow();
+  await expect(store.finishDispatch(claim, { ...terminal, signal: 'SIGTERM' })).rejects.toThrow();
+  expect((await store.readDispatch(claim.request))?.terminal).toBeNull();
+});
+
+it('maps a competing terminal writer to dispatch conflict without altering either existing evidence', async () => {
+  const f = await fixture(); const store = await f.open(); await admit(store); await store.claimDispatch(claim);
+  const snapshot = { ...createAttempt(identity), revision: 1, lastObservation: { protocolVersion: 1 as const, identity,
+    sequence: 1, eventId: 'other-terminal', result: { kind: 'exited' as const, exitCode: 9 } } };
+  await store.commit({ commandId: 'other', command: 'other', expectedRevision: 0, snapshot });
+  await expect(store.finishDispatch(claim, terminal)).rejects.toThrow('DISPATCH_CONFLICT');
+  expect(await store.load('s', 'a')).toEqual(snapshot);
+  expect((await store.readDispatch(claim.request))?.terminal).toBeNull();
+});

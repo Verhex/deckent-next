@@ -292,3 +292,5 @@ DISPATCH/B PASS1417: authenticate/authorize every execution/replay/release; dura
 DISPATCH/C PASS1419: read-only daemon observation and separately authorized reconciliation settle exited containers without relaunch.154 tests; active-worker recovery/cancel and concurrent finish enrichment remain pending.
 
 DISPATCH/D PASS1422: engine/domain terminal projection and dispatch terminal persist atomically;155 tests including injected transaction rollback. Task acceptance and artifact durability remain separate.
+
+DISPATCH/E PASS1428: shared exit cause and field-wise request equality;161 tests. Transport interruption is read from dispatch evidence, never inferred as a process signal.

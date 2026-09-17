@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { attemptIdentitySchema } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, type ProcessExitCause } from '#domain/index.js';
 
 export const sandboxRequestSchema = z.object({
   protocolVersion: z.literal(1), identity: attemptIdentitySchema,
@@ -8,7 +8,7 @@ export const sandboxRequestSchema = z.object({
 export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
 export interface SandboxResult {
   readonly handle: string;
-  readonly result: Readonly<{ kind: 'exited'; exitCode: number } | { kind: 'unknown'; reasonCode: string }>;
+  readonly result: Readonly<({ kind: 'exited' } & ProcessExitCause) | { kind: 'unknown'; reasonCode: string }>;
   readonly stdout: string;
   readonly stderr: string;
   readonly interrupted: boolean;
@@ -25,4 +25,9 @@ export class SupervisorError extends Error {
     | 'SUPERVISOR_OPTIONS_INVALID' | 'SUPERVISOR_CANCELLED' | 'SUPERVISOR_CONTROL_FAILED' | 'SUPERVISOR_NOT_TERMINAL') {
     super(code); this.name = 'SupervisorError';
   }
+}
+
+export function sameSandboxRequest(a: SandboxRequest, b: SandboxRequest): boolean {
+  return a.protocolVersion === b.protocolVersion && sameAttemptIdentity(a.identity, b.identity) && a.workspace === b.workspace
+    && a.argv.length === b.argv.length && a.argv.every((value, index) => value === b.argv[index]);
 }

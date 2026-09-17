@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { identitySchema } from '#domain/index.js';
+import { identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 import { sandboxRequestSchema } from '#engine/core/supervisor/index.js';
 const claimObject = z.object({ request: sandboxRequestSchema, owner: identitySchema }).strict();
 export const dispatchClaimSchema = claimObject.readonly();
-export const dispatchTerminalSchema = z.object({ handle: identitySchema, exitCode: z.number().int().safe(), interrupted: z.boolean().nullable() }).strict().readonly();
+export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...processExitCauseShape, interrupted: z.boolean().nullable() }).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
 export const dispatchRecordSchema = claimObject.extend({ schemaVersion: z.literal(1), terminal: dispatchTerminalSchema.nullable() }).strict().readonly();
 export type DispatchClaim = z.infer<typeof dispatchClaimSchema>;
 export type DispatchTerminal = z.infer<typeof dispatchTerminalSchema>;

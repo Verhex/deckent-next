@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -78,4 +79,23 @@ it.skipIf(!imageId)('observes an absent container without creating or starting i
   expect((await app.reconcile(f.request)).kind).toBe('unresolved');
   expect((await supervisor.observe(f.request)).result.kind).toBe('unknown');
   await expect(readFile(join(f.workspace, 'result'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it('carries a real subprocess signal exit through dispatch and atomic Attempt projection', async () => {
+  const f = await fixture();
+  const supervisor: ExecutionSupervisor = {
+    async execute() {
+      const child = spawn(process.execPath, ['-e', 'process.kill(process.pid,"SIGTERM")'], { stdio: 'ignore' });
+      const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
+        child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal }));
+      });
+      if (result.code !== null || result.signal !== 'SIGTERM') throw new Error('expected real signal exit');
+      return { handle: 'native-test', result: { kind: 'exited', exitCode: result.code, signal: result.signal }, stdout: '', stderr: '', interrupted: false };
+    },
+    async observe() { throw new Error('not observed'); }, async release() {},
+  };
+  const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'native-test');
+  const result = await app.execute(f.request);
+  expect(result.record.terminal).toMatchObject({ exitCode: null, signal: 'SIGTERM' });
+  expect((await f.store.load('s', f.request.identity.attemptId))?.lastObservation?.result).toEqual({ kind: 'exited', exitCode: null, signal: 'SIGTERM' });
 });

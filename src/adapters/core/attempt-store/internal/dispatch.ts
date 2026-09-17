@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  projectDispatchTerminal, sandboxRequestSchema, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  projectDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
@@ -12,7 +12,7 @@ export class SqliteDispatchJournal {
     if (!row) return null;
     let record;
     try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
-    if (JSON.stringify(record.request) !== JSON.stringify(request)) throw new DispatchError('DISPATCH_CONFLICT');
+    if (!sameSandboxRequest(record.request, request)) throw new DispatchError('DISPATCH_CONFLICT');
     return record;
   }
   private transaction<T>(work: () => T): T {
