@@ -272,3 +272,6 @@ Residuals: config/layout composition STORE/C, commit-time reader contention test
 
 | STORE/C | Configured registry ledger + shared SQLite option schema + trusted-host POSIX file preflight | Fable PASS1396; isolated133 verify | DONE |
 Storage wait default100ms is the same configurable registry policy in development and installed Core; not an SLO or automatic retry budget. Windows ledger opening is UNSUPPORTED until an ACL backend is verified. Same-UID worker access to managed tree remains an ISOLATION invariant.
+
+| STORE/D | Real reader transaction during DELETE/WAL commit | Fable PASS1397; isolated131 verify | DONE |
+Forced WAL checkpoint and power-loss durability remain ASSURANCE/G-CAP gaps.

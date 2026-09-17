@@ -56,3 +56,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - STORE/B (Fable PASS1389/1390): bounded native SQLite lock waits, explicit journal/durability options, typed BUSY and conservative unknown rollback outcome; separate-process contention proof.
 
 - STORE/C (Fable PASS1396): layout-selected ledger opening with private file checks and shared validated storage settings; no automatic migration or permission repair.
+
+- STORE/D (Fable PASS1397): separate-process tests prove DELETE commit rollback under reader contention and WAL writer progress with reader snapshot.
