@@ -45,4 +45,6 @@ export { colorTier, shouldUseColor, stripAnsi } from '#kernel/core/output/index.
 export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from '#kernel/core/output/index.js';
 export { emit, createEmitter } from '#kernel/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#kernel/core/output/index.js';
+export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#kernel/core/i18n/index.js';
+export type { MessageFamily, MessageRegistry } from '#kernel/core/i18n/index.js';
 export { getConfigFieldDefault } from '#kernel/core/config-fields/index.js';

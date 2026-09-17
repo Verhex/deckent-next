@@ -83,7 +83,15 @@
         "trackedAllow",
         "pointerFiles",
         "writerModule"
-      ]
+      ],
+      "properties": {
+        "trackedAllowGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "tiers": {
       "type": "object",
@@ -121,6 +129,40 @@
       "properties": {
         "aliasPrefix": {
           "type": "string"
+        },
+        "enforce": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "vocabulary": {
+      "type": "object",
+      "required": [
+        "forbidden",
+        "scope",
+        "enforce"
+      ],
+      "properties": {
+        "canonicalChain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "enforce": {
           "type": "boolean"

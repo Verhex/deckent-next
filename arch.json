@@ -76,7 +76,19 @@
       "en",
       "tr"
     ],
-    "callee": "t"
+    "callee": "t",
+    "families": [
+      "cli",
+      "tui",
+      "run",
+      "ops",
+      "surface",
+      "governance",
+      "remote",
+      "native",
+      "desktop",
+      "misc"
+    ]
   },
   "literals": {
     "forbidden": [
@@ -108,5 +120,26 @@
     "aliasPrefix": "#",
     "enforce": true,
     "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
+  },
+  "vocabulary": {
+    "canonicalChain": [
+      "Goal",
+      "Mission",
+      "Flow",
+      "Run",
+      "WorkItem",
+      "Attempt",
+      "Operation"
+    ],
+    "forbidden": [
+      "\\b[sS]print\\w*"
+    ],
+    "scope": [
+      "src",
+      "tests",
+      "scripts"
+    ],
+    "enforce": false,
+    "note": "Catalog uses canonical run terminology. Code-wide vocabulary enforcement and the accepted Task/Run/Attempt/Operation/Effect ontology are reconciled in CONTRACT; no legacy aliases."
   }
 }

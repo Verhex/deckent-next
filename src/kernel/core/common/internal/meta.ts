@@ -1,12 +1,4 @@
-import { createRequire } from 'node:module';
-
-interface PackageManifest {
-  readonly name: string;
-  readonly version: string;
-  readonly engines: { readonly node: string };
-}
-
-const manifest = createRequire(import.meta.url)('../../../../../package.json') as PackageManifest;
+import manifest from '../../../../../package.json' with { type: 'json' };
 
 /** Package identity as shipped; the single source for name/version at runtime. */
 export const PACKAGE_NAME: string = manifest.name;

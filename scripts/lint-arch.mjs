@@ -8,6 +8,7 @@
 //  5. .md writes only from kernel/docs-authority
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+import ts from 'typescript';
 import { lintConfigVocabulary } from './config-vocabulary.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -141,11 +142,37 @@ if (tiers.enforce) {
 
 // ---- 3: i18n
 const catalogDir = join(ROOT, arch.i18n.catalogDir);
-const catalogs = {};
+const catalogs = {}, familyOwners = {};
 for (const locale of arch.i18n.locales) {
-  const path = join(catalogDir, `${locale}.json`);
-  if (!existsSync(path)) { fail('i18n', rel(path), 'locale catalog missing'); continue; }
-  catalogs[locale] = JSON.parse(readFileSync(path, 'utf8'));
+  const merged = Object.create(null);
+  familyOwners[locale] = Object.create(null);
+  for (const family of arch.i18n.families) {
+    const path = join(catalogDir, 'locales', locale, `${family}.json`);
+    if (!existsSync(path)) { fail('i18n', rel(path), 'locale family missing'); continue; }
+    const source = readFileSync(path, 'utf8');
+    const ast = ts.parseJsonText(path, source);
+    function checkDuplicates(node) {
+      if (ts.isObjectLiteralExpression(node)) {
+        const seen = new Set();
+        for (const property of node.properties) {
+          const key = property.name?.text;
+          if (seen.has(key)) fail('i18n-duplicate', rel(path), `duplicate key "${key}"`);
+          seen.add(key);
+        }
+      }
+      ts.forEachChild(node, checkDuplicates);
+    }
+    checkDuplicates(ast);
+    let entries;
+    try { entries = JSON.parse(source); } catch { fail('i18n', rel(path), 'invalid JSON'); continue; }
+    for (const [key, value] of Object.entries(entries)) {
+      if (Object.hasOwn(merged, key)) fail('i18n-duplicate', rel(path), `duplicate family key "${key}"`);
+      if (typeof value !== 'string' || !value.trim() || value.includes('\u001b')) fail('i18n-value', rel(path), `empty/nonstring/ANSI value for "${key}"`);
+      merged[key] = value;
+      familyOwners[locale][key] = family;
+    }
+  }
+  catalogs[locale] = merged;
 }
 const localeNames = Object.keys(catalogs);
 if (localeNames.length > 1) {
@@ -154,6 +181,11 @@ if (localeNames.length > 1) {
     const keys = new Set(Object.keys(catalogs[locale]));
     for (const k of base) if (!keys.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `missing key "${k}"`);
     for (const k of keys) if (!base.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `extra key "${k}" not in ${localeNames[0]}`);
+    for (const key of keys) if (base.has(key)) {
+      if (familyOwners[locale][key] !== familyOwners[localeNames[0]][key]) fail('i18n-family', arch.i18n.catalogDir, `locale families disagree for "${key}"`);
+      const placeholders = value => typeof value === 'string' ? [...new Set([...value.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort().join(',') : null;
+      if (placeholders(catalogs[locale][key]) !== placeholders(catalogs[localeNames[0]][key])) fail('i18n-placeholder', arch.i18n.catalogDir, `placeholder sets disagree for "${key}"`);
+    }
   }
 }
 const knownKeys = new Set(Object.keys(catalogs[localeNames[0]] ?? {}));
@@ -234,6 +266,17 @@ for (const file of tracked) {
   if (!allow.has(file)) fail('markdown', file, `tracked markdown outside allowlist [${[...allow].join(', ')}]`);
 }
 for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
+
+// ---- 8: vocabulary (owner: the product says run, never sprint)
+const vocab = arch.vocabulary;
+if (vocab?.enforce) {
+  const vocabRes = vocab.forbidden.map(p => new RegExp(p, 'g'));
+  const vocabFiles = vocab.scope.flatMap(dir => walk(join(ROOT, dir), p => /\.(ts|tsx|mts|js|mjs|json|sh|yml|yaml)$/.test(p) && !p.endsWith('HARVEST.json')));
+  for (const file of vocabFiles) {
+    const text = readFileSync(file, 'utf8');
+    for (const re of vocabRes) for (const m of text.matchAll(re)) fail('vocabulary', `${rel(file)}:${text.slice(0, m.index).split('\n').length}`, `forbidden vocabulary "${m[0]}" (canonical chain: ${vocab.canonicalChain.join(' → ')})`);
+  }
+}
 
 // ---- report
 const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;

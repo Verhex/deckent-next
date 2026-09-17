@@ -3,7 +3,7 @@
   "sources": {
     "src/kernel/core/common/internal/constants.ts": "7af642ee3c216354b1d6d3c09c1b1911e6aff126582056b74fdaf75e88df4018",
     "src/kernel/core/config-fields/internal/fields.ts": "afd12e403ae48a676647addd5be4d9a237af057c01d0ccd17033fce854d53806",
-    "src/kernel/core/i18n/index.ts": "f516e8b4c3ebd0b0abc16e838b162599521ff6e405840914bed2768899a4fce9"
+    "src/kernel/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
     "schema_version": [],
