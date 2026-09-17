@@ -442,5 +442,20 @@
   "what.DECKENT_E101": "Zamanlanmış flow cron doğrulaması başarısız",
   "why.DECKENT_E101": "Zamanlanmış flow, sınırları belli ve sonraki çalışma zamanı çözülebilen beş alanlı cron ifadesi gerektirir.",
   "fix.DECKENT_E101": "Beş alanlı cron ifadesini düzeltin.",
-  "config.lockReclaimed": "Kalıntı config kilidi geri alındı: {path}, pid {pid} (yaş {ageSeconds} sn)."
+  "config.lockReclaimed": "Kalıntı config kilidi geri alındı: {path}, pid {pid} (yaş {ageSeconds} sn).",
+  "config.field.schema_version": "Yapılandırma sözleşmesi sürümü.",
+  "config.field.language": "Arayüz dili.",
+  "config.field.mode": "Yapılandırılmış çalışma profili.",
+  "config.field.output_mode": "Çıktı sunum biçimi.",
+  "config.field.projectName": "Proje görünen adı.",
+  "config.field.max_workers": "Worker eşzamanlılık bütçesi; auto konak kapasitesini kullanır.",
+  "config.field.enforce_principal_assurance": "Doğrulanmış aktör güvencesini zorunlu tut.",
+  "config.field.strict_tenant_isolation": "Açık müşteri kapsamı beyanını zorunlu tut.",
+  "config.field.tenant_id": "Varsayılan müşteri kapsamı kimliği.",
+  "config.field.auth_mode": "Provider kimlik doğrulama yapılandırması.",
+  "config.field.spawn_backend": "Yürütme altyapısı tercihi.",
+  "config.field.live_trace": "Canlı tanılama izi ayarları.",
+  "config.field.providers": "İç içe provider seçimleri ve özelleştirmeleri.",
+  "config.field.provider_limits": "Provider kullanım ve bütçe politikaları.",
+  "config.section": "Kayıtlı uzantı yapılandırması."
 }

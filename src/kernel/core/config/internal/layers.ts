@@ -9,7 +9,7 @@ import { resolveDeckentHome } from '../../platform/index.js';
 import { getSystemProfile } from '../../platform/index.js';
 import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '../../utils/index.js';
 import { createDefaultConfig } from './defaults.js';
-import { CONFIG_ENVIRONMENT_KEYS } from './fields.js';
+import { CONFIG_ENVIRONMENT_KEYS } from '../../config-fields/index.js';
 import { configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
 import { versionedConfig } from './validate/version.js';
 import { applyConfigEnvironment } from './validate/environment.js';
@@ -20,12 +20,9 @@ import { readProjectConfig } from './heal.js';
 
 export interface ResolvedConfig extends DeckentConfig {
   readonly projectRoot: string;
-  /** RFC 6901 pointers, including the flattened provider projections. */
+  /** RFC 6901 pointers, relative to the canonical nested config only. */
   readonly secretPaths: readonly string[];
-  readonly brain_provider: string | null;
-  readonly worker_provider: string | null;
-  readonly fallback_provider: string | null;
-  readonly provider_overrides: Readonly<Record<string, string>>;
+
 }
 export interface ConfigLoadOptions {
   readonly force?: boolean;
@@ -86,14 +83,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });
   const secretPaths: string[] = [];
   const config = interpolateConfig(checked.config, await readDeckSecrets(root), name => warnings.push({ code: 'CONFIG_SECRET_UNRESOLVED', path: name, message: t('config.secretMissing', { key: name }, locale) }), path => secretPaths.push(path));
-  for (const path of [...secretPaths]) {
-    for (const [nested, flat] of [['brain', 'brain_provider'], ['worker', 'worker_provider'], ['fallback', 'fallback_provider'], ['overrides', 'provider_overrides']]) {
-      const prefix = `/providers/${nested}`;
-      if (path === prefix || path.startsWith(`${prefix}/`)) secretPaths.push(`/${flat}${path.slice(prefix.length)}`);
-    }
-  }
-  const value: ResolvedConfig = { ...config, projectRoot: root, secretPaths, brain_provider: config.providers.brain,
-    worker_provider: config.providers.worker, fallback_provider: config.providers.fallback, provider_overrides: { ...config.providers.overrides } };
+  const value: ResolvedConfig = { ...config, projectRoot: root, secretPaths };
   for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
   if ((await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i])) {
     if (cache.size >= 128) cache.delete(cache.keys().next().value!);

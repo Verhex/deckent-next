@@ -95,6 +95,25 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Core owns storage ports and security guarantees. Individual database-adapter commercial packaging remains
   an explicit distribution decision; do not infer the edition from database brand or capability alone.
 
+### Product data layout — owner 2026-09-17
+
+- Development/dogfood and customer installations use the same product data layout: one project/installation
+  `.deckent` root owns persistent brain/memory, tasks/runs, locks, approvals, audit, artifacts and ERP state.
+  Source code and external host products' own configuration are outside this product-state contract.
+- One versioned path registry/resolver derives logical resource locations from validated config and scope;
+  modules never assemble their own root, sibling `.brain`, `.tasks`, or arbitrary temporary directory.
+  Root relocation is configuration, not per-consumer branching. Persist resource IDs/relative references;
+  active operations keep a resolved layout revision so config changes cannot split one run across roots.
+- Terminal/Desktop and other surface-local cache/session/scratch use declared platform-local runtime/temp
+  locations with scope, permissions, owner and retention. Durable jobs/decisions never rely on temporary files.
+  Actual locations are inspectable from the shared CLI/SDK/MCP path-query contract; no surface-specific truth.
+- Remote database/blob storage remains supported: `.deckent` contains configuration references, manifests and
+  inspectable logical locations, not secret plaintext or an unsolicited mirror of every remote ERP record.
+  External systems of record remain external. Workspace/worktree allocation is a separate managed resource.
+- FOUNDATION defines the layout; CONTRACT versions resolver and inspection; STORE/ISOLATION implement/test
+  relocation, containment, symlink rejection, concurrent locks, crash cleanup and secret permissions. Existing
+  legacy stores/keys are not moved/deleted. Current BRAIN_HOME/global-scope behavior is not target completion.
+
 ### Deterministic storage and customer data access
 
 - Product-state operations (Run, Attempt, Approval, reservations, receipts) are typed domain operations.
@@ -199,7 +218,10 @@ Dependency direction (fail-closed): `kernel ← providers ← runtime ← orches
   design decision, not a lint fix.
 - Mechanism code is string-free: user-facing text comes from `kernel/core/i18n/locales/{en,tr}/*.json` through `t('key')`.
   Keys are literals (lint), catalogs have identical key sets (lint), surfaces never print literals (lint).
-- Model, provider and flow identifiers appear only in `providers/core/registry/` (lint).
+- Config field values live in `kernel/core/config-fields`; `config-literal` uses source-derived
+`scripts/config-vocabulary.json` with freshness checks before lint/build.
+
+Model, provider and flow identifiers appear only in `providers/core/registry/` (lint).
 - The product writes markdown only through `kernel/core/docs-authority`, and only `DECKENT.md` plus a bounded
   section in `CLAUDE.md`/`AGENTS.md`. No README/CHANGELOG/vision/sprint-log writers exist.
 - Every environment: Linux, macOS, Windows native, Windows WSL, Docker. A platform without proof reports a
@@ -247,3 +269,5 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 | 2026-09-17 | Owner accepted consolidated architecture review with deterministic storage, separate workspace/sandbox axes, modular composition and version compatibility; TypeScript retained, Go conditional. | Target amendment above; FOUNDATION and successor rows in PLAN.md track implementation. No runtime/gate completion inferred from this decision. |
 | 2026-09-17 | Refactor host kit tracked; owner exception; product still writes no markdown. | Exact host-kit globs plus pointers/core-memory match the gate; disabled skills excluded and host kit not shipped. |
 | 2026-09-17 | Task-centered work; run/do/autonomous execution, goal-bounded Mission, modular task kinds; IFS ERP first business integration. | Cloud MCP candidate plus Applications 10 native-adapter proof; local 6–8 workers/up to 50 tasks is a workload scenario, not a system ceiling. Historical names/semantics do not override this decision. |
+
+Decision 2026-09-17: pure config-fields SSOT + source-derived literal gate (REVIEW1323); unified .deckent product-state root accepted, implementation tracked separately.

@@ -1,7 +1,7 @@
 export { PACKAGE_NAME, PACKAGE_VERSION } from './core/common/index.js';
 export { resolveLocale, t } from './core/i18n/index.js';
 export type { Locale, MessageKey } from './core/i18n/index.js';
-export { DECKENT_DIR, BRAIN_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from './core/common/index.js';
+export { DECKENT_DIR, BRAIN_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from './core/common/index.js';
 export type { OutputMode } from './core/common/index.js';
 export { DECKENT_VERSION, NODE_ENGINE_RANGE } from './core/common/index.js';
 export { SUPPORTED_LANGUAGES } from './core/i18n/index.js';
@@ -45,3 +45,4 @@ export { colorTier, shouldUseColor, stripAnsi } from './core/output/index.js';
 export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from './core/output/index.js';
 export { emit, createEmitter } from './core/output/index.js';
 export type { OutputSink, EmitOptions } from './core/output/index.js';
+export { getConfigFieldDefault } from './core/config-fields/index.js';

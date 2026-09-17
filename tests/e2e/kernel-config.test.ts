@@ -92,7 +92,7 @@ describe('K1 blocking review reproductions', () => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
     await writeFile(join(f.project, '.deck'), `API_TOKEN=${secret}\n`);
     await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { sample: '$DECK:API_TOKEN' } } }));
-    for (const key of [undefined, 'providers', 'providers.brain', 'brain_provider', 'provider_overrides.sample']) {
+    for (const key of [undefined, 'providers', 'providers.brain', 'providers.overrides.sample']) {
       for (const format of [[], ['--json']]) {
         const result = await f.run(['config', 'get', ...(key ? [key] : []), ...format]);
         expect(result.stdout + result.stderr).not.toContain(secret);

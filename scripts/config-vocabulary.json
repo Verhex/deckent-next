@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "src/kernel/core/common/internal/constants.ts": "7af642ee3c216354b1d6d3c09c1b1911e6aff126582056b74fdaf75e88df4018",
+    "src/kernel/core/config-fields/internal/fields.ts": "1b6cd261cb754cf5c711219f47e216e618a3dccaba49a7ca05f794dfb3166c8d",
+    "src/kernel/core/i18n/index.ts": "f516e8b4c3ebd0b0abc16e838b162599521ff6e405840914bed2768899a4fce9"
+  },
+  "fields": {
+    "schema_version": [],
+    "language": [
+      "en",
+      "tr"
+    ],
+    "mode": [
+      "api",
+      "balanced",
+      "economic",
+      "performance"
+    ],
+    "output_mode": [
+      "explanatory",
+      "json",
+      "standard",
+      "verbose"
+    ],
+    "projectName": [
+      "deckent-project"
+    ],
+    "max_workers": [
+      "auto"
+    ],
+    "enforce_principal_assurance": [],
+    "strict_tenant_isolation": [],
+    "tenant_id": [
+      "local"
+    ],
+    "auth_mode": [
+      "api",
+      "hybrid",
+      "local",
+      "subscription"
+    ],
+    "spawn_backend": [
+      "auto",
+      "docker",
+      "subprocess",
+      "tmux"
+    ],
+    "live_trace": [],
+    "providers": []
+  }
+}

@@ -1,3 +1,4 @@
+import { lintConfigVocabulary } from './config-vocabulary.mjs';
 // lint-arch: the single architecture gate for deckent (fail-closed, no baselines).
 // Rules come from arch.json. Checks:
 //  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
@@ -154,6 +155,8 @@ for (const file of srcFiles) {
     }
   }
 }
+
+lintConfigVocabulary(ROOT, srcFiles, fail);
 
 // ---- 4: model/flow literals
 const literalAllow = new Set(arch.literals.allow);

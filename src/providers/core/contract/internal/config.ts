@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { validateApiMode } from '../../registry/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { ConfigValidationError, registerConfigSection } from '../../../../kernel/index.js';
+import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '../../../../kernel/index.js';
 const units = z.enum(['percent', 'requests', 'tokens', 'credits', 'usd']);
 const values = z.object({
   ratioEnforcement: z.enum(['enforce', 'observe_only']).optional(),
@@ -48,6 +48,6 @@ let registered = false;
 /** Called by application ingress before config resolution; kernel never imports provider policy. */
 export function registerProviderConfig(): void {
   if (registered) return;
-  registerConfigSection('provider_limits', LIMIT_SCHEMA, { optional: true, validateEffective: validateApiMode, validateLayers: assertProviderLimitPolicyLayerPrecedence });
+  registerConfigSection('provider_limits', LIMIT_SCHEMA, { optional: true, metadata: { descriptionKey: 'config.field.provider_limits', tier: 'core', since: CONFIG_CONTRACT_SINCE }, validateEffective: validateApiMode, validateLayers: assertProviderLimitPolicyLayerPrecedence });
   registered = true;
 }

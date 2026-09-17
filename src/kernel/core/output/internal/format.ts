@@ -1,3 +1,4 @@
+import { getConfigFieldDefault } from '../../config-fields/index.js';
 import type { OutputMode } from '../../common/index.js';
 import { t, resolveLocale, type Locale } from '../../i18n/index.js';
 import { stripAnsi } from './color.js';
@@ -12,7 +13,7 @@ export function formatTable(headers: readonly string[], rows: readonly (readonly
   }).join('  ').trimEnd()).join('\n');
 }
 export interface StatusData { status?: string; phase?: string; completedTasks?: number; totalTasks?: number; activeWorkers?: number; liveRows?: readonly string[]; memory?: { state: 'known'; count: number } | { state: 'unknown' } }
-export function formatStatus(data: StatusData, mode: OutputMode = 'standard', locale: Locale = resolveLocale()): string {
+export function formatStatus(data: StatusData, mode: OutputMode = getConfigFieldDefault('output_mode'), locale: Locale = resolveLocale()): string {
   const terminal = data.status === 'COMPLETE' || data.phase === 'COMPLETE';
   const safe = { ...data, activeWorkers: terminal ? 0 : data.activeWorkers ?? 0, liveRows: terminal ? [] : data.liveRows ?? [] };
   if (mode === 'json') return JSON.stringify(safe);

@@ -1,5 +1,5 @@
 import {
-  configDisplayView, ErrorRegistry, loadConfig, getConfigValue,
+  configDisplayView, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, resolveTenant, resolveCallerTenant,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
@@ -33,7 +33,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const [command, action, key] = args.positionals;
   let locale = resolveLocale(args.language, env);
   context.onLocale?.(locale);
-  let mode: OutputMode = 'standard';
+  let mode: OutputMode = getConfigFieldDefault('output_mode');
   function output<T>(data: T, render: (data: T) => string, level: 'info' | 'warning' = 'info') {
     emit(data, { json: args.json, mode, level, render, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
   }

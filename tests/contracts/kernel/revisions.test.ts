@@ -33,14 +33,14 @@ describe('K1 review regression contracts', () => {
     await writeFile(f.path, JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { 'a/b~c': '$DECK:API_TOKEN' } },
       redaction_probe: { extra: [{ value: '$DECK:API_TOKEN' }], credentials: { api_key: 'another plaintext value' }, note: 'Bearer token-example' } }));
     const config = await loadConfig(f.root, { env: f.env });
-    expect(config.brain_provider).toBe(secret);
-    expect(config.secretPaths).toEqual(expect.arrayContaining(['/providers/brain', '/brain_provider', '/providers/overrides/a~1b~0c', '/provider_overrides/a~1b~0c', '/redaction_probe/extra/0/value']));
+    expect(config.providers.brain).toBe(secret);
+    expect(config.secretPaths).toEqual(expect.arrayContaining(['/providers/brain', '/providers/overrides/a~1b~0c', '/redaction_probe/extra/0/value']));
     const view = configDisplayView(config);
     expect(view).toMatchObject({ providers: { brain: '[REDACTED]', overrides: { 'a/b~c': '[REDACTED]' } },
-      brain_provider: '[REDACTED]', provider_overrides: { 'a/b~c': '[REDACTED]' }, redaction_probe: { extra: [{ value: '[REDACTED]' }], credentials: { api_key: '[REDACTED]' } } });
+      redaction_probe: { extra: [{ value: '[REDACTED]' }], credentials: { api_key: '[REDACTED]' } } });
     for (const value of [secret, 'another plaintext value', 'token-example']) expect(JSON.stringify(view)).not.toContain(value);
     expect(view).not.toHaveProperty('secretPaths');
-    expect(config.brain_provider).toBe(secret);
+    expect(config.providers.brain).toBe(secret);
     expect(configDisplayView(await loadConfig(f.root, { env: f.env }))).toEqual(view);
   });
   it('reclaims a dead legacy owner once and serializes concurrent recovery callers', async () => {

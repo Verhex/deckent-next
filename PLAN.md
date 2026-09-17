@@ -40,8 +40,8 @@ Next implementation slice requires owner checkpoint; keep existing ARCH-IMPORTS/
 Northstar ARCHITECTURE içindedir. Yeni bağımsız blueprint dosyası yok.
 K1-F1/B bağımsız PASS aldı; parent K1-F1 açık. Sonraki önerilen C dilimi: registry-fed literal gate,
 output default tüketicileri, düz provider projeksiyonlarının kaldırılması, description/tier/since metadata.
-Host worker öneri sabitleri ASSURANCE kapsamındadır. Kanal1317 ile aktarılan yeni commit/otonomi
-yetkisi doğrudan owner teyidi bekler; bu kayıt yürütme yetkisi değildir.
+Host worker öneri sabitleri ASSURANCE kapsamındadır. Owner1317 yetkilerini bu oturumda doğrudan onayladı: PASS sonrası Next commit; push owner gate.
+Rutin kabul edilmiş dilimler ilerler; yeni mimari/sözleşme/yetki kararı owner checkpoint gerektirir.
 Kapsam: tek config field registry → schema/default/env/metadata; legacy alias/migrate/style kaldırma;
 strict kayıtlı alan kabulü; worker sayısına eski100 tavanını taşımama. Provider validators, lock/secret
 korumaları ve mevcut K2/ARCH-IMPORTS WIP korunur. CLI config get + doğrudan public config API kanıtı;
@@ -94,8 +94,9 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 | K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `config get` / `migrate` / kernel `doctor`; 3 fixtures, 12/12 shared-value parity | DONE |
 | EXECUTION-SURFACES-AUDIT | Source-backed execution capability map; no legacy aliases; independent Fable comparison and owner ontology checkpoint | K1-F1/A inventory | docs/proof | Astra + Fable analysis | report under deckent-refactor-work; source wiring distinct from runtime proof | REVIEW |
 | K1-F1/B | Config fields SSOT → schema/default/env/metadata; no legacy alias/migrate/style; strict fields and platform-only global read | K1-F1/A + owner2026-09-17 | code/proof | Astra, Fable review | verify84+host9, real CLI + public API; parent K1-F1 remains open for remaining gates/provider policy | DONE |
-| K1-F1/A | Historical grouped field inventory; alias/compatibility proposals withdrawn by owner; product code unchanged | K1 | docs/proof | Astra, Fable review | complete inventory + owner checkpoint; IFS first integration captured | REVIEW |
-| K1-F1 | config schema-as-data: single field registry → derived zod/defaults/env/metadata; no legacy aliases; remove base/config-defaults; registry-fed literal lint | K1 | 0.6k→0.5k | Astra | new config contract and rejected unsupported inputs; new task/entry semantics reconciled; registry authority | WIP |
+| K1-F1/A | Historical grouped field inventory; alias/compatibility proposals withdrawn by owner; product code unchanged | K1 | docs/proof | Astra, Fable review | complete inventory + owner checkpoint; IFS first integration captured | DONE |
+| K1-F1 | config schema-as-data: single field registry → derived zod/defaults/env/metadata; no legacy aliases; remove base/config-defaults; registry-fed literal lint | K1 | 0.6k→0.5k | Astra | new config contract and rejected unsupported inputs; new task/entry semantics reconciled; registry authority | DONE |
+| K1-F1/C | Registry literal gate, output defaults, canonical provider shape, metadata | K1-F1/B | code/proof | Astra / Fable | REVIEW1323 PASS; parent K1-F1 accepted with REVIEW1316 | DONE |
 | ARCH-IMPORTS | `#pkg/tier/unit` subpath-import aliases (package.json imports + tsconfig paths + lint import-style) | K1 | tooling | Fable (infra) + Astra (K1 conversion) | lint-arch import-style 0 violations | CARD |
 | K2 | kernel/i18n: 3,374 approved legacy keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | 13,496/13,496 catalog parity; CLI-format gap recorded | REVIEW |
 | K3 | kernel/store: SQLite primitive, artifact schema/versioning, locks | K1 | 10k→1.5k | Astra | contract | TODO |
@@ -225,3 +226,18 @@ triage (§4 of the extract) are pinned to cards O1–O4, R2, K1–K3, S2–S3 by
   is excluded. Review time and final rate remain open until Fable's verdict.
 - Evidence in `/home/alperen/deckent-refactor-work/proof/`: `K2-import.json`, `K2-parity.json`,
   `K2-dynamic-audit.json`, `K2-dynamic-port-tables.mts`, `K2-cli-parity.json`, `K2-verify.log`, `K2-review.json`.
+
+K1-F1/C DONE (REVIEW1323): output default/metadata/strict projection removal + source-derived literal gate. K1-F1/B commit4842353.
+
+C proof: working tree86 product+9 host; isolated commit candidate71 tests, lint/build/smoke pass.
+Output standard comparison remains format semantics; defaults derive from config-fields. Parent review requested.
+
+Owner path decision: unified `.deckent` product data root for both dev/dogfood and installed product;
+logical path registry with configurable root, layout revision and shared inspection; platform-local surface
+scratch is scoped/owned/retained, never canonical job state. No legacy data movement in this slice.
+PATH-LAYOUT: FOUNDATION → CONTRACT → STORE/ISOLATION prerequisite before runtime/ERP writes; cover existing
+BRAIN_HOME/.brain, .deck secret file, global directories and direct .deckent joins in one inventory; define
+whether each is durable, secret, cache, runtime or workspace. Verify root relocation, containment and recovery.
+B01/TENANT: unify tenant.ts local fallback with registry identity authority; tracked residual from REVIEW1323 N1.
+K2 landing checklist: regenerate scripts/config-vocabulary.json from the final source layout BEFORE lint/build.
+Host sizing heuristics remain ASSURANCE scope. `since` is historical introduction version, not current package version.

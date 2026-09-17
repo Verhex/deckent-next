@@ -442,5 +442,20 @@
   "what.DECKENT_E101": "Deckent could not parse or resolve a scheduled-flow cron expression.",
   "why.DECKENT_E101": "Scheduled flows require bounded, valid five-field cron expressions with a resolvable next run.",
   "fix.DECKENT_E101": "Inspect the detailed cron validation message\nUse valid minute, hour, day-of-month, month, and day-of-week fields\nChoose an expression that produces a date within the supported search horizon",
-  "config.lockReclaimed": "Recovered stale configuration lock {path}, pid {pid} (age {ageSeconds}s)."
+  "config.lockReclaimed": "Recovered stale configuration lock {path}, pid {pid} (age {ageSeconds}s).",
+  "config.field.schema_version": "Configuration contract version.",
+  "config.field.language": "Interface language.",
+  "config.field.mode": "Configured operating profile.",
+  "config.field.output_mode": "Output presentation format.",
+  "config.field.projectName": "Project display name.",
+  "config.field.max_workers": "Worker concurrency budget; auto uses host sizing.",
+  "config.field.enforce_principal_assurance": "Require verified principal assurance.",
+  "config.field.strict_tenant_isolation": "Require explicit customer scope claims.",
+  "config.field.tenant_id": "Default customer scope identifier.",
+  "config.field.auth_mode": "Provider authentication configuration.",
+  "config.field.spawn_backend": "Execution backend preference.",
+  "config.field.live_trace": "Live diagnostic trace settings.",
+  "config.field.providers": "Nested provider selections and overrides.",
+  "config.field.provider_limits": "Provider usage and budget policies.",
+  "config.section": "Registered extension configuration."
 }

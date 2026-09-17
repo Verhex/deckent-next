@@ -8,7 +8,7 @@ import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, interpolateConfig, getConfigMetadata,
-  getConfigValue, resolveGlobalConfigPaths,
+  getConfigValue, resolveGlobalConfigPaths, t,
 } from '../../../src/kernel/index.js';
 
 import { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '../../../src/providers/index.js';
@@ -41,9 +41,9 @@ describe('config public contract', () => {
     await writeFile(f.globalPath, JSON.stringify({ mode: 'balanced', language: 'tr', enforce_principal_assurance: true, providers: { brain: 'global-provider' } }));
     await writeFile(f.projectPath, JSON.stringify({ mode: 'economic', enforce_principal_assurance: false, providers: { brain: 'project-provider' } }));
     const first = await loadConfig(f.project, { env: f.env });
-    expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, brain_provider: 'project-provider', schema_version: 2 });
+    expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, providers: { brain: 'project-provider' }, schema_version: 2 });
     const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'performance', DECKENT_BRAIN_PROVIDER: 'env-provider' } });
-    expect(second).toMatchObject({ mode: 'performance', brain_provider: 'env-provider' });
+    expect(second).toMatchObject({ mode: 'performance', providers: { brain: 'env-provider' } });
     expect(second.providers.brain).toBe('env-provider');
   });
   it('uses only the platform config path without importing a legacy home config', async () => {
@@ -177,6 +177,15 @@ describe('new config contract and write authority', () => {
     await expect(loadConfig(f.project, { env: f.env })).rejects.toMatchObject({ code: 'CONFIG_VERSION_UNSUPPORTED' });
     expect(getConfigMetadata().find(row => row.key === 'max_workers')?.defaultValue).toBe('auto');
     expect(getConfigMetadata().some(row => row.key === 'deckent_style')).toBe(false);
+    for (const row of getConfigMetadata()) {
+      expect(row.since).toMatch(/^\d+\.\d+\.\d+/);
+      expect(row.tier).toBe('core');
+      for (const locale of ['en', 'tr'] as const) expect(t(row.descriptionKey, {}, locale)).not.toBe(row.descriptionKey);
+    }
+    expect(no).not.toHaveProperty('brain_provider');
+    expect(no).not.toHaveProperty('worker_provider');
+    expect(no).not.toHaveProperty('fallback_provider');
+    expect(no).not.toHaveProperty('provider_overrides');
   });
   it('serializes cooperating writers and refuses obsolete revision digests', async () => {
     const f = await fixture(); const events: number[] = [];
