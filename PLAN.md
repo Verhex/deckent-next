@@ -243,3 +243,5 @@ K2 landing checklist: regenerate scripts/config-vocabulary.json from the final s
 Host sizing heuristics remain ASSURANCE scope. `since` is historical introduction version, not current package version.
 
 | FOUNDATION/A | Shared source/native/app budget: 1,500 hard cap, 800 design target; monotonic build timing | Fable PASS1340 | DONE |
+
+| PATH-LAYOUT/A+B | Shared durable root/registry, read-only resolution and secret-reference boundary; scratch, config-root relocation and sandbox remain pending | Independent Fable PASS1349; isolated97 tests | DONE |

@@ -1,35 +1,37 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { ErrorRegistry } from '#kernel/core/errors/index.js';
 import { isRecord } from '#kernel/core/utils/index.js';
-export async function readDeckSecrets(projectRoot: string): Promise<Readonly<Record<string, string>>> {
-  let text: string;
-  try { text = await readFile(join(projectRoot, '.deck'), 'utf8'); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}; throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error }); }
-  const secrets: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!match) continue;
-    let value = match[2]!;
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-    else value = value.replace(/\s+#.*$/, '');
-    secrets[match[1]!] = value;
-  }
-  return secrets;
-}
-export function interpolateConfig<T>(config: T, secrets: Readonly<Record<string, string>>, missing: (key: string) => void = () => {}, resolved: (path: string) => void = () => {}): T {
-  function visit(value: unknown, path: string): unknown {
+
+/** Composition supplies the authorized secret backend; no file-format or keyring policy lives here. */
+export type SecretResolver = (reference: string) => Promise<string | undefined>;
+export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[] }
+/** References are resolved once per load and never retained in the effective-config cache. */
+export async function resolveConfigSecrets<T>(config: T, resolver: SecretResolver, missing: (key: string) => void = () => {}): Promise<SecretResolution<T>> {
+  const resolved = new Map<string, string | undefined>(), secretPaths: string[] = [];
+  async function visit(value: unknown, path: string): Promise<unknown> {
     if (typeof value === 'string') {
       const key = value.match(/^\$DECK:([A-Z_][A-Z0-9_]*)$/)?.[1];
       if (!key) return value;
-      const secret = secrets[key] || secrets[`DECKENT_${key}`];
-      if (!secret) missing(key);
-      else resolved(path);
-      return secret || value;
+      if (!resolved.has(key)) {
+        let secret: string | undefined;
+        try { secret = await resolver(key); } catch { throw new Error('SECRET_RESOLUTION_FAILED'); }
+        if (secret !== undefined && typeof secret !== 'string') throw new Error('SECRET_RESOLVER_RESULT_INVALID');
+        resolved.set(key, secret);
+      }
+      const secret = resolved.get(key);
+      if (secret === undefined || secret === '') { missing(key); return value; }
+      secretPaths.push(path); return secret;
     }
-    if (Array.isArray(value)) return value.map((child, i) => visit(child, `${path}/${i}`));
-    if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, visit(child, `${path}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`)]));
+    if (Array.isArray(value)) {
+      const result: unknown[] = [];
+      for (let i = 0; i < value.length; i++) result.push(await visit(value[i], `${path}/${i}`));
+      return result;
+    }
+    if (isRecord(value)) {
+      const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+      for (const [key, child] of Object.entries(value)) result[key] = await visit(child, `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`);
+      return result;
+    }
     return value;
   }
-  return visit(config, '') as T;
+  const output = await visit(config, '') as T;
+  return { config: output, secretPaths: Object.freeze(secretPaths), references: Object.freeze([...resolved.keys()]) };
 }

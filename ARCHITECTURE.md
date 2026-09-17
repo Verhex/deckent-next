@@ -273,3 +273,5 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 Decision 2026-09-17: pure config-fields SSOT + source-derived literal gate (REVIEW1323); unified .deckent product-state root accepted, implementation tracked separately.
 
 | 2026-09-17 | FOUNDATION/A: 1,500 source lines maximum, 800 design target; native C/Go and application sources included. | Owner size amendment; Fable PASS1340. Historical HARVEST evidence exception is one exact file path. |
+
+| 2026-09-17 | Config stores references; injected SecretResolver retrieves values per load without effective-secret caching or plaintext secret-file reads. | PATH-LAYOUT/A+B, Fable PASS1349; OS keyring backend remains unimplemented. |

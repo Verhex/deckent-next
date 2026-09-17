@@ -7,7 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { loadConfig, configDisplayView, withConfigWriteLock, clearConfigCache, registerConfigSection,
-  deckentPath, brainPath, type ConfigWarning } from '../../../src/kernel/index.js';
+  resolveProductPaths, productResourcePath, type ConfigWarning } from '../../../src/kernel/index.js';
 import { registerProviderConfig } from '../../../src/providers/index.js';
 
 registerProviderConfig();
@@ -28,7 +28,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 describe('K1 review regression contracts', () => {
   it('keeps secrets available to runtime but masks nested, array, escaped and projected display paths', async () => {
     const f = await fixture(), secret = 'private value with spaces " quotes';
-    await writeFile(join(f.root, '.deck'), `API_TOKEN='${secret}'\n`);
+    f.env = { ...f.env, API_TOKEN: secret } as typeof f.env;
     registerConfigSection('redaction_probe', z.object({ extra: z.array(z.object({ value: z.string() }).strict()), credentials: z.object({ api_key: z.string() }).strict(), note: z.string() }).strict(), { optional: true });
     await writeFile(f.path, JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { 'a/b~c': '$DECK:API_TOKEN' } },
       redaction_probe: { extra: [{ value: '$DECK:API_TOKEN' }], credentials: { api_key: 'another plaintext value' }, note: 'Bearer token-example' } }));
@@ -89,7 +89,7 @@ describe('K1 review regression contracts', () => {
   });
   it('uses injected Windows paths for both state path helpers on any test host', () => {
     const context = { platform: 'win32', env: { DECKENT_HOME: 'D:\\state', BRAIN_HOME: 'E:\\brain' } };
-    expect(deckentPath('C:\\project', context, 'config.json')).toBe('D:\\state\\config.json');
-    expect(brainPath('C:\\project', context, 'memory.db')).toBe('E:\\brain\\memory.db');
+    expect(productResourcePath(resolveProductPaths('C:\\project', context), 'config')).toBe('D:\\state\\config.json');
+    expect(productResourcePath(resolveProductPaths('C:\\project', context), 'memory')).toBe('D:\\state\\brain\\memory.db');
   });
 });

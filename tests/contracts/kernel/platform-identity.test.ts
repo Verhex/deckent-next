@@ -5,7 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import {
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, resolveGlobalConfigPaths,
-  resolveDeckentHome, resolveBrainHome, validatePath, validateExistingPath, validateTaskId,
+  resolveDeckentHome, resolveProductPaths, productResourcePath, validatePath, validateExistingPath, validateTaskId,
   suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity,
   detectHostMemory, getSystemProfile, detectEnvironment, resolveLocalOsPrincipal, resolveLocalOsActorId,
   principalToActor, assertActorAssurance, resolveCallerTenant, isValidTenantId, tenantIsolationPath,
@@ -14,25 +14,28 @@ import {
 
 describe('platform and identity contracts', () => {
   it('resolves all supported platform roles with the injected path backend', () => {
-    expect(resolveGlobalScopePaths('linux', { HOME: '/users/a' })).toMatchObject({ configDir: '/users/a/.config/deckent', dataDir: '/users/a/.local/share/deckent', stateDir: '/users/a/.local/state/deckent', cacheDir: '/users/a/.cache/deckent' });
-    expect(resolveGlobalScopePaths('wsl', { HOME: '/users/a', XDG_CONFIG_HOME: '/cfg' }).configDir).toBe('/cfg/deckent');
-    expect(resolveGlobalScopePaths('darwin', { HOME: '/Users/a' })).toMatchObject({ configDir: '/Users/a/Library/Application Support/deckent', cacheDir: '/Users/a/Library/Caches/deckent' });
-    expect(resolveGlobalScopePaths('win32', { USERPROFILE: 'C:\\Users\\a' })).toMatchObject({ configDir: 'C:\\Users\\a\\AppData\\Roaming\\deckent', stateDir: 'C:\\Users\\a\\AppData\\Local\\deckent' });
-    expect(resolveGlobalConfigPaths({ HOMEDRIVE: 'D:', HOMEPATH: '\\users\\a', APPDATA: 'E:\\roaming' }, 'win32')).toEqual({ platformPath: 'E:\\roaming\\deckent\\config.json', legacyPath: 'D:\\users\\a\\.deckent\\config.json' });
+    expect(resolveGlobalScopePaths('linux', { HOME: '/users/a' })).toMatchObject({ configDir: '/users/a/.deckent', dataDir: '/users/a/.deckent', stateDir: '/users/a/.deckent', cacheDir: '/users/a/.cache/deckent' });
+    expect(resolveGlobalScopePaths('wsl', { HOME: '/users/a', XDG_CONFIG_HOME: '/cfg' }).configDir).toBe('/users/a/.deckent');
+    expect(resolveGlobalScopePaths('darwin', { HOME: '/Users/a' })).toMatchObject({ configDir: '/Users/a/.deckent', cacheDir: '/Users/a/Library/Caches/deckent' });
+    expect(resolveGlobalScopePaths('win32', { USERPROFILE: 'C:\\Users\\a' })).toMatchObject({ configDir: 'C:\\Users\\a\\.deckent', stateDir: 'C:\\Users\\a\\.deckent' });
+    expect(resolveGlobalConfigPaths({ HOMEDRIVE: 'D:', HOMEPATH: '\\users\\a', APPDATA: 'E:\\roaming' }, 'win32')).toEqual({ platformPath: 'D:\\users\\a\\.deckent\\config.json' });
   });
   it('honors override and empty env semantics without pretending unsupported platforms work', () => {
-    expect(resolveGlobalScopePaths('linux', { DECKENT_HOME: '/isolated' })).toMatchObject({ source: 'env-override', home: null, configDir: '/isolated', stateDir: '/isolated' });
-    expect(resolveGlobalScopePaths('linux', { HOME: '/h', XDG_CONFIG_HOME: '' }).configDir).toBe('/h/.config/deckent');
+    expect(resolveGlobalScopePaths('linux', { DECKENT_HOME: '/isolated' })).toMatchObject({ source: 'env-override', home: null, configDir: '/isolated', stateDir: '/isolated', cacheDir: null });
+    expect(resolveGlobalScopePaths('linux', { HOME: '/h', XDG_CONFIG_HOME: '' }).configDir).toBe('/h/.deckent');
     expect(normalizeGlobalScopePlatform('linux', { WSL_INTEROP: 'on' })).toBe('wsl');
     expect(() => normalizeGlobalScopePlatform('freebsd', { DECKENT_HOME: '/x' })).toThrow();
     expect(() => resolveGlobalScopePaths('linux', {})).toThrow();
   });
-  it('keeps DECKENT_HOME and BRAIN_HOME independent and uses call-time overrides', () => {
+  it('keeps cache independent of the relocated durable root and rejects relative roots', () => {
+    const scope = resolveGlobalScopePaths('linux', { HOME: '/h', DECKENT_HOME: '/data', XDG_CACHE_HOME: '/cache' });
+    expect(scope).toMatchObject({ configDir: '/data', dataDir: '/data', stateDir: '/data', cacheDir: '/cache/deckent' });
+    expect(() => resolveGlobalScopePaths('linux', { HOME: '/h', DECKENT_HOME: 'relative' })).toThrow('LAYOUT_ROOT_INVALID');
+  });
+  it('uses one root for brain and other resources; obsolete independent override has no authority', () => {
     const env = { HOME: '/h', DECKENT_HOME: '/state', BRAIN_HOME: '/memory' };
     expect(resolveDeckentHome('/project', { env, platform: 'linux' })).toBe('/state');
-    expect(resolveBrainHome('/project', { env, platform: 'linux' })).toBe('/memory');
-    expect(resolveBrainHome('/project', { env: { ...env, BRAIN_HOME: '' }, platform: 'linux' })).toBe('/project/.brain');
-    expect(resolveBrainHome(undefined, { env: { HOME: '/h', DECKENT_HOME: '/state' }, platform: 'linux' })).toBe('/h/.brain');
+    expect(productResourcePath(resolveProductPaths('/project', { env, platform: 'linux' }), 'brain')).toBe('/state/brain');
     expect(resolveDeckentHome('C:\\project', { env: {}, platform: 'win32' })).toBe('C:\\project\\.deckent');
   });
   it('rejects POSIX and Windows traversal, sibling-prefix tricks, drive changes and ADS', () => {

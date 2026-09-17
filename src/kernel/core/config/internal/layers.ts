@@ -1,11 +1,10 @@
 import { lstat } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
-import { CONFIG_FILE } from '#kernel/core/common/index.js';
+import { resolve } from 'node:path';
 import { ErrorRegistry } from '#kernel/core/errors/index.js';
 import { resolveLocale, t, type Locale } from '#kernel/core/i18n/index.js';
 import { ENVIRONMENT_KEYS, envValue, type Environment } from '#kernel/core/platform/index.js';
 import { resolveGlobalConfigReadPath } from '#kernel/core/platform/index.js';
-import { resolveDeckentHome } from '#kernel/core/platform/index.js';
+import { resolveProductPaths, productResourcePath } from '#kernel/core/platform/index.js';
 import { getSystemProfile } from '#kernel/core/platform/index.js';
 import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '#kernel/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
@@ -13,7 +12,7 @@ import { CONFIG_ENVIRONMENT_KEYS } from '#kernel/core/config-fields/index.js';
 import { configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
 import { versionedConfig } from './validate/version.js';
 import { applyConfigEnvironment } from './validate/environment.js';
-import { interpolateConfig, readDeckSecrets } from './validate/interpolate.js';
+import { resolveConfigSecrets, type SecretResolver } from './validate/interpolate.js';
 import { ConfigValidationError, type ConfigWarning } from './validate/issues.js';
 import { validateConfig } from './validate/sections.js';
 import { readProjectConfig } from './heal.js';
@@ -26,6 +25,7 @@ export interface ResolvedConfig extends DeckentConfig {
 }
 export interface ConfigLoadOptions {
   readonly force?: boolean;
+  readonly secretResolver?: SecretResolver;
   readonly env?: Environment;
   readonly platform?: string;
   readonly heal?: boolean;
@@ -54,8 +54,9 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const root = resolve(projectRoot), env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const globalPath = await resolveGlobalConfigReadPath(env, platform);
-  const projectPath = join(resolveDeckentHome(root, { env, platform }), CONFIG_FILE);
-  const paths = options.globalOnly ? [globalPath, join(root, '.deck')] : [globalPath, projectPath, join(root, '.deck')];
+  const layout = resolveProductPaths(root, { env, platform });
+  const projectPath = productResourcePath(layout, 'config');
+  const paths = options.globalOnly ? [globalPath] : [globalPath, projectPath];
   const stamps = await Promise.all(paths.map(stamp));
   // Only documented noncredential inputs participate; package auth validators run on cache hits too.
   const key = digestText(JSON.stringify([root, platform, [...new Set([...ENVIRONMENT_KEYS, ...CONFIG_ENVIRONMENT_KEYS])].map(name => [name, env[name]]), stamps, configRegistryGeneration(), options.globalOnly ?? false, options.heal ?? true]));
@@ -81,11 +82,11 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   warnings.push(...checked.warnings);
   const recommended = getSystemProfile().recommendedMaxWorkers;
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });
-  const secretPaths: string[] = [];
-  const config = interpolateConfig(checked.config, await readDeckSecrets(root), name => warnings.push({ code: 'CONFIG_SECRET_UNRESOLVED', path: name, message: t('config.secretMissing', { key: name }, locale) }), path => secretPaths.push(path));
-  const value: ResolvedConfig = { ...config, projectRoot: root, secretPaths };
+  const resolver = options.secretResolver ?? (async (name: string) => Object.hasOwn(env, name) ? env[name] : undefined);
+  const secrets = await resolveConfigSecrets(checked.config, resolver, name => warnings.push({ code: 'CONFIG_SECRET_UNRESOLVED', path: name, message: t('config.secretMissing', { key: name }, locale) }));
+  const value: ResolvedConfig = { ...secrets.config, projectRoot: root, secretPaths: secrets.secretPaths };
   for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
-  if ((await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i])) {
+  if (secrets.references.length === 0 && (await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i])) {
     if (cache.size >= 128) cache.delete(cache.keys().next().value!);
     cache.set(key, { value: structuredClone(value), warnings: structuredClone(warnings) });
   }

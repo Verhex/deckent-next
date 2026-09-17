@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
-  withConfigWriteLock, readJsonFile, healCorruptProjectConfig, interpolateConfig, getConfigMetadata,
+  withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
   getConfigValue, resolveGlobalConfigPaths, t,
 } from '../../../src/kernel/index.js';
 
@@ -46,10 +46,10 @@ describe('config public contract', () => {
     expect(second).toMatchObject({ mode: 'performance', providers: { brain: 'env-provider' } });
     expect(second.providers.brain).toBe('env-provider');
   });
-  it('uses only the platform config path without importing a legacy home config', async () => {
+  it('uses the canonical global root without importing scattered platform configuration', async () => {
     const f = await fixture();
-    await mkdir(join(f.home, '.deckent'));
-    const legacy = join(f.home, '.deckent/config.json');
+    await mkdir(join(f.home, '.config', 'deckent'), { recursive: true });
+    const legacy = join(f.home, '.config', 'deckent', 'config.json');
     await writeFile(legacy, '{"language":"tr"}');
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     await saveGlobalConfig({ language: 'en' }, { env: f.env });
@@ -98,11 +98,11 @@ describe('config public contract', () => {
     const f = await fixture();
     registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { optional: true });
     await writeFile(f.projectPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
-    await writeFile(join(f.project, '.deck'), 'TOKEN="private-value"\n');
+    f.env = { ...f.env, TOKEN: 'private-value' } as typeof f.env;
     const config = await loadConfig(f.project, { env: f.env });
     expect(config['custom_secrets']).toEqual({ token: 'private-value', other: 'prefix $DECK:TOKEN' });
     const missing: string[] = [];
-    expect(interpolateConfig({ value: '$DECK:MISSING' }, {}, key => missing.push(key))).toEqual({ value: '$DECK:MISSING' });
+    expect((await resolveConfigSecrets({ value: '$DECK:MISSING' }, async () => undefined, key => missing.push(key))).config).toEqual({ value: '$DECK:MISSING' });
     expect(missing).toEqual(['MISSING']);
   });
   it('uses defaults for corrupt global data without modifying it and heals persistent project parse failure', async () => {
@@ -210,4 +210,33 @@ describe('new config contract and write authority', () => {
     expect(() => getConfigValue({}, '__proto__.polluted')).toThrow();
     expect(() => getConfigValue({}, 'missing')).toThrow();
   });
+  it('does not resolve secrets from the old sibling file and resolves fresh values from the injected backend', async () => {
+    const f = await fixture();
+    await writeFile(f.projectPath, JSON.stringify({ schema_version: 2, projectName: '$DECK:TOKEN' }));
+    await writeFile(join(f.project, '.deck'), 'TOKEN="outside-value"\n');
+    const first = await loadConfig(f.project, { env: f.env });
+    expect(first.projectName).toBe('$DECK:TOKEN');
+    const next = await loadConfig(f.project, { env: f.env, secretResolver: async name => name === 'TOKEN' ? 'inside-value' : undefined });
+    expect(next.projectName).toBe('inside-value');
+  });
+
+  it('observes secret rotation and revocation without caching resolved values', async () => {
+    const f = await fixture();
+    await writeFile(f.projectPath, JSON.stringify({ projectName: '$DECK:TOKEN' }));
+    let secret: string | undefined = 'first';
+    const options = { env: f.env, secretResolver: async () => secret };
+    expect((await loadConfig(f.project, options)).projectName).toBe('first');
+    secret = 'second';
+    expect((await loadConfig(f.project, options)).projectName).toBe('second');
+    secret = undefined;
+    expect((await loadConfig(f.project, options)).projectName).toBe('$DECK:TOKEN');
+    expect(await readdir(join(f.project, '.deckent'))).toEqual(['config.json']);
+  });
+  it('resolves repeated references once per load and does not expose backend error content', async () => {
+    let calls = 0;
+    const result = await resolveConfigSecrets({ a: '$DECK:TOKEN', b: ['$DECK:TOKEN'] }, async () => { calls++; return 'value'; });
+    expect(calls).toBe(1); expect(result.secretPaths).toEqual(['/a', '/b/0']);
+    await expect(resolveConfigSecrets({ a: '$DECK:TOKEN' }, async () => { throw new Error('private-backend-value'); })).rejects.toThrow(/^SECRET_RESOLUTION_FAILED$/);
+  });
+
 });

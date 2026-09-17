@@ -88,9 +88,9 @@ describe('K1 real binary journeys', () => {
 
 
 describe('K1 blocking review reproductions', () => {
-  it('never exposes a resolved .deck value in full, subtree or projected human/JSON config output', async () => {
+  it('never exposes a resolved secret value in full, subtree or projected human/JSON config output', async () => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
-    await writeFile(join(f.project, '.deck'), `API_TOKEN=${secret}\n`);
+    Object.assign(f.env, { API_TOKEN: secret });
     await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { sample: '$DECK:API_TOKEN' } } }));
     for (const key of [undefined, 'providers', 'providers.brain', 'providers.overrides.sample']) {
       for (const format of [[], ['--json']]) {
