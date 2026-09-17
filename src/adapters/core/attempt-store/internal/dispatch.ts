@@ -1,18 +1,18 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  sandboxRequestSchema, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
   constructor(private readonly db: DatabaseSync) {}
-  private read(claim: DispatchClaim): DispatchRecord | null {
-    const identity = claim.request.identity;
+  private read(request: DispatchClaim['request']): DispatchRecord | null {
+    const identity = request.identity;
     const row = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
     if (!row) return null;
     let record;
     try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
-    if (JSON.stringify(record.request) !== JSON.stringify(claim.request)) throw new DispatchError('DISPATCH_CONFLICT');
+    if (JSON.stringify(record.request) !== JSON.stringify(request)) throw new DispatchError('DISPATCH_CONFLICT');
     return record;
   }
   private transaction<T>(work: () => T): T {
@@ -23,10 +23,14 @@ export class SqliteDispatchJournal {
       throw sqliteFailure(error);
     }
   }
+  async readDispatch(request: DispatchClaim['request']) {
+    const parsed = sandboxRequestSchema.parse(request);
+    try { return this.read(parsed); } catch (error) { throw sqliteFailure(error); }
+  }
   async claimDispatch(input: DispatchClaim) {
     const claim = dispatchClaimSchema.parse(input);
     return this.transaction(() => {
-      const existing = this.read(claim);
+      const existing = this.read(claim.request);
       if (existing) return Object.freeze({ acquired: false, record: existing });
       const identity = claim.request.identity;
       const row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
@@ -42,7 +46,7 @@ export class SqliteDispatchJournal {
   async finishDispatch(input: DispatchClaim, value: DispatchTerminal) {
     const claim = dispatchClaimSchema.parse(input); const terminal = dispatchTerminalSchema.parse(value);
     return this.transaction(() => {
-      const existing = this.read(claim);
+      const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
       if (existing.terminal) {
         if (JSON.stringify(existing.terminal) !== JSON.stringify(terminal)) throw new DispatchError('DISPATCH_CONFLICT');

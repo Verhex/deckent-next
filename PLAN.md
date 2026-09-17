@@ -286,3 +286,5 @@ WORKSPACE/A PASS: private pinned Git checkout with copied objects and replay-saf
 WORKSPACE/B PASS1415: shared managed-directory preflight and configured workspaces registry;149 tests including real Git→Docker isolation. Independent source-repository authorization and per-test container custody checks remain.
 
 DISPATCH/A PASS1416: atomic one-time launch claim, unresolved custody retained, Next SQLite schema1→2 preserves attempt/receipt data.150 tests; downgrade unsupported. Signal result parity and unresolved inventory remain.
+
+DISPATCH/B PASS1417: authenticate/authorize every execution/replay/release; durable claim→supervisor→terminal record; real Docker release then replay does not rerun.152 tests. Atomic Attempt projection and retained-artifact release gate remain pending.

@@ -36,6 +36,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore {
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async readDispatch(request: DispatchClaim['request']) { return new SqliteDispatchJournal(this.db).readDispatch(request); }
   async claimDispatch(claim: DispatchClaim) { return new SqliteDispatchJournal(this.db).claimDispatch(claim); }
   async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }
   close(): void { this.db.close(); }

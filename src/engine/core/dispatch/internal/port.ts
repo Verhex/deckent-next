@@ -12,6 +12,7 @@ export type DispatchRecord = z.infer<typeof dispatchRecordSchema>;
  * even to the same owner. An unresolved claim requires reconciliation, never expiry-based stealing.
  */
 export interface DispatchStore {
+  readDispatch(request: DispatchClaim['request']): Promise<DispatchRecord | null>;
   claimDispatch(claim: DispatchClaim): Promise<Readonly<{ acquired: boolean; record: DispatchRecord }>>;
   finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal): Promise<DispatchRecord>;
 }
