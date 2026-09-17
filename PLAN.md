@@ -348,3 +348,5 @@ RUN/G DONE: explicit RunView v1 projection and one sanitized query mapper, no st
 RUN/H DONE: run inspect CLI shares SDK RunView and policy/ledger path;237 tests/12 Docker; Fable1514 PASS. Linux pipe parity proven; design-critic text refinements tracked, other platforms/live UI not claimed.
 
 CANCEL/B DONE: atomic Run cancellation intent propagation to bound nonterminal Attempt/dispatch records, preserving finished evidence and prior actor.241 tests/12 Docker; Fable1516 PASS. Supervisor delivery and claim-start race remain open; large transaction latency unmeasured.
+
+CANCEL/C DONE: bounded cancellation delivery through existing per-attempt authorization;243 tests/13 Docker; Fable1524 PASS. Redelivery uses same commandId; retry reason classification, automatic loop and claim-start fence remain open.

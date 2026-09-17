@@ -1,3 +1,5 @@
+import { loadCancellationDispatch } from './run-cancellation.js';
+import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
@@ -44,6 +46,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
       this.db.close(); throw sqliteFailure(error);
     }
+  }
+  async loadCancellationDispatch(identity: AttemptIdentity) {
+    try { return loadCancellationDispatch(this.db, identity); } catch (error) { throw sqliteFailure(error); }
   }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }

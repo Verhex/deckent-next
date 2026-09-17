@@ -4,3 +4,5 @@ export { RunApplication, RunInspectionApplication, runCommandSchema, runQuerySch
 export type { RunCommand, RunQuery, RunAuthorization } from './internal/application.js';
 export { runViewSchema, projectRunView } from './internal/view.js';
 export type { RunView } from './internal/view.js';
+export { RunCancellationCoordinator } from './internal/cancellation.js';
+export type { RunCancellationDispatchStore, RunCancellationOutcome } from './internal/cancellation.js';

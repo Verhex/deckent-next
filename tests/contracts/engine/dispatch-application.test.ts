@@ -1,3 +1,4 @@
+import { RunApplication, RunCancellationCoordinator, PolicyAuthorizationError } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -218,3 +219,35 @@ it('does not signal a worker if the durable cancellation transaction fails', asy
     expect((await f.store.readDispatch(f.request))?.cancellation).toBeUndefined();
   } finally { db.close(); }
 });
+
+it.skipIf(!imageId)('delivers a durable Run cancellation through a separate controller to a real Docker worker', async () => {
+  const f = await fixture(); let deny = true;
+  const request = { ...f.request, argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/ready','yes');setInterval(()=>{},1000)"] };
+  const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
+  const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(otherStore);
+  const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
+  const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new PolicyAuthorizationError('POLICY_DENIED'); } }, 'operator', f.artifacts);
+  const runApp = new RunApplication(otherStore, verifier, { async authorize() {} });
+  const coordinator = new RunCancellationCoordinator(runApp, otherStore, cancellation, 2);
+  const command = { schemaVersion: 1, action: 'cancel', commandId: 'cancel-run', scopeId: 's', runId: request.identity.runId, expectedRevision: 1 };
+  const execution = running.execute(request);
+  try {
+    let ready = false;
+    for (let i = 0; i < 100; i++) {
+      try { ready = await readFile(join(f.workspace, 'ready'), 'utf8') === 'yes'; } catch { /* startup */ }
+      if (ready) break; await sleep(50);
+    }
+    expect(ready).toBe(true);
+    expect((await coordinator.cancel(command)).outcomes[0]!.status).toBe('denied');
+    expect((await otherStore.load('s', request.identity.attemptId))?.cancelRequested).toBe(true);
+    deny = false; const cancelled = await coordinator.cancel(command);
+    expect(cancelled.outcomes[0]!.status).toBe('terminal');
+    expect((await otherStore.readDispatch(request))!.terminal!.exitCode).not.toBe(0);
+    expect((await otherStore.load('s', request.identity.attemptId))?.cancelRequested).toBe(true);
+    const completed = await execution; expect(completed.kind).toBe('terminal');
+    const snapshot = await otherStore.load('s', request.identity.attemptId);
+    await coordinator.cancel(command); expect(await otherStore.load('s', request.identity.attemptId)).toEqual(snapshot);
+  } finally { await separate.cancel(request); await execution.catch(() => {}); await original.release(request); }
+}, 20000);
