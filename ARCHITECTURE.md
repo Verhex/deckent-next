@@ -287,3 +287,5 @@ CONTRACT/B accepted: versioned attempt evidence and application transitions. Att
 STORE/A implements an attempt application service, typed store port and lazily selected SQLite adapter. Snapshot and receipt commit atomically with scoped replay/CAS. Production ingress, guarded path composition, contention policy and worker/pool isolation remain unimplemented; synchronous Node24 SQLite is an experimental baseline.
 
 CONTRACT/C preserves exact termination cause (exit code or signal) and separates stale evidence from conflicting evidence. Version1 wire identities share a256-code-unit bound; content/task descriptions are not constrained by this ID bound. Dependency blocking is direct, with no implicit terminal cascade.
+
+Runtime package metadata comes from a colocated generated artifact. package.json is the source; explicit tooling regenerates it, npm lint and build enforce freshness. No runtime directory-depth manifest dependency remains.

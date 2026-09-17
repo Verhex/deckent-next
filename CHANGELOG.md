@@ -50,3 +50,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - STORE/A (Fable PASS1375): real attempt application + SQLite transactional snapshot/receipt, restart replay, scope separation and conditional revision updates. Production composition remains pending.
 
 - CONTRACT/C (Fable PASS1378): signal termination and stale observations, shared bounded identity/counter primitives and sanitized validation paths; SQLite uses shared identity comparison. Combined126-test verify passed.
+
+- FOUNDATION/C (Fable PASS1382): pure colocated metadata artifact; lint/build reject stale manifest projection; renderer forbids runtime package.json dependency.

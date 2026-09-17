@@ -14,6 +14,7 @@ describe('K2 renderer import proof', () => {
       const manifest=JSON.parse(await readFile(new URL(${JSON.stringify(new URL('../../package.json', import.meta.url).href)}),'utf8'));
       const packageRoot=new URL('.',${JSON.stringify(new URL('../../package.json', import.meta.url).href)});
       async function load(url) {
+        if(url.endsWith('/package.json'))throw new Error('Runtime manifest dependency forbidden');
         if(modules.has(url))return modules.get(url);
         const text=await readFile(new URL(url),'utf8');
         const m=url.endsWith('.json')

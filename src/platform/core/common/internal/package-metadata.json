@@ -1,0 +1,5 @@
+{
+  "name": "deckent",
+  "version": "1.0.0-alpha.2",
+  "nodeEngine": ">=24.0.0"
+}
