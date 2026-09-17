@@ -275,3 +275,6 @@ Storage wait default100ms is the same configurable registry policy in developmen
 
 | STORE/D | Real reader transaction during DELETE/WAL commit | Fable PASS1397; isolated131 verify | DONE |
 Forced WAL checkpoint and power-loss durability remain ASSURANCE/G-CAP gaps.
+
+| SUPERVISOR/A | Real Docker adapter and application/SQLite terminal-evidence consumer | Fable PASS1398; isolated133 including4 real Docker tests, zero skipped | DONE |
+Public ingress remains closed until durable dispatch fence and trusted workspace broker exist. Durable output artifacts, aggregate quotas, crash reconciliation and broader platform proof remain pending.

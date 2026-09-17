@@ -58,3 +58,5 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - STORE/C (Fable PASS1396): layout-selected ledger opening with private file checks and shared validated storage settings; no automatic migration or permission repair.
 
 - STORE/D (Fable PASS1397): separate-process tests prove DELETE commit rollback under reader contention and WAL writer progress with reader snapshot.
+
+- SUPERVISOR/A (Fable PASS1398): bounded Docker execution, retained terminal evidence/replay and explicit release; real deadline/cancel/filesystem-boundary tests. Not EXECUTION/DOGFOOD completion.
