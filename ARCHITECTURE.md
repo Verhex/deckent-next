@@ -281,3 +281,5 @@ FOUNDATION/B accepted in Fable REVIEW1357: platform/adapters/composition package
 PATH-LAYOUT/C accepted in Fable REVIEW1358: project `.deckent/config.json` is the fixed locator, `layout.root` selects data root, and inspection exposes both. No recursive discovery or implicit migration; effective operation/crash layout propagation remains follow-up.
 
 CONTRACT/A accepted: pure task graph admission and dependency readiness. Dependency readiness is not dispatch/resource/policy admission; canonical Task acceptance is required.
+
+CONTRACT/B accepted: versioned attempt evidence and application transitions. Attempt evidence never accepts a Task; cancellation intent is separate from terminal process evidence. Durable journal and real supervisor are separate scopes.

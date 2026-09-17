@@ -1,0 +1,43 @@
+import { z } from 'zod';
+
+export const ATTEMPT_PROTOCOL_VERSION = 1;
+const identity = z.string().min(1).refine(value => value.trim() === value &&
+  ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
+const counter = z.number().int().nonnegative().safe();
+export const attemptIdentitySchema = z.object({
+  runId: identity, taskId: identity, attemptId: identity,
+  scopeId: identity, layoutRevision: identity, generation: counter.positive(),
+}).strict().readonly();
+export const attemptObservationSchema = z.object({
+  protocolVersion: z.literal(ATTEMPT_PROTOCOL_VERSION),
+  identity: attemptIdentitySchema,
+  sequence: counter.positive(),
+  eventId: identity,
+  result: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('started') }).strict(),
+    z.object({ kind: z.literal('exited'), exitCode: z.number().int().safe() }).strict(),
+    z.object({ kind: z.literal('cancelled') }).strict(),
+    z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
+  ]).readonly(),
+}).strict().readonly();
+export const attemptSnapshotSchema = z.object({
+  schemaVersion: z.literal(ATTEMPT_PROTOCOL_VERSION),
+  identity: attemptIdentitySchema,
+  revision: counter,
+  cancelRequested: z.boolean(),
+  lastObservation: attemptObservationSchema.nullable(),
+}).strict().superRefine((state, context) => {
+  const observation = state.lastObservation;
+  if (observation && (JSON.stringify(observation.identity) !== JSON.stringify(state.identity) || observation.sequence > state.revision)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_SNAPSHOT_INCONSISTENT' });
+  }
+}).readonly();
+export type AttemptIdentity = z.infer<typeof attemptIdentitySchema>;
+export type AttemptObservation = z.infer<typeof attemptObservationSchema>;
+export type AttemptSnapshot = z.infer<typeof attemptSnapshotSchema>;
+export type AttemptPhase = 'reserved' | 'running' | 'unknown' | 'finished';
+export type AttemptErrorCode = 'ATTEMPT_INVALID' | 'ATTEMPT_IDENTITY_MISMATCH' | 'ATTEMPT_REVISION_CONFLICT'
+  | 'ATTEMPT_SEQUENCE_GAP' | 'ATTEMPT_OBSERVATION_CONFLICT' | 'ATTEMPT_TRANSITION_INVALID';
+export class AttemptError extends Error {
+  constructor(readonly code: AttemptErrorCode) { super(code); this.name = 'AttemptError'; }
+}

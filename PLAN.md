@@ -256,3 +256,6 @@ Residual: once config is loaded, propagate its pinned layout to all operation/cr
 
 | CONTRACT/A | pure task graph admission and dependency readiness; no worker execution claimed | Independent Fable PASS 1365:2a96fe9cd2db; immutable candidate proof | DONE |
 Residuals: direct-only blocked classification, sanitized schema issue paths, shared bounded domain primitives and readonly readiness input.
+
+| CONTRACT/B | versioned attempt evidence and application transitions; no worker execution claimed | Independent Fable PASS 1366:e0b7a3ec4620; immutable candidate proof | DONE |
+Residuals before real supervisor: represent signal termination; journal stale replay separately; share field-wise identity comparisons; test external cancellation without request.
