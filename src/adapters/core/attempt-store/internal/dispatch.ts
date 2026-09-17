@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  projectDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+  projectDispatchTerminal, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
@@ -49,8 +49,12 @@ export class SqliteDispatchJournal {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
       if (existing.terminal) {
-        if (JSON.stringify(existing.terminal) !== JSON.stringify(terminal)) throw new DispatchError('DISPATCH_CONFLICT');
-        return existing;
+        const merged = mergeDispatchTerminal(existing.terminal, terminal);
+        if (merged === existing.terminal) return existing;
+        const enriched = dispatchRecordSchema.parse({ ...existing, terminal: merged });
+        this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
+          .run(JSON.stringify(enriched), claim.request.identity.scopeId, claim.request.identity.attemptId);
+        return enriched;
       }
       const identity = claim.request.identity;
       const row = this.db.prepare('SELECT snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);

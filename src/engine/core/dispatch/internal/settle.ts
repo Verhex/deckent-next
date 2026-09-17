@@ -13,3 +13,14 @@ export function projectDispatchTerminal(current: AttemptSnapshot, claim: Dispatc
     throw error;
   }
 }
+
+/** Monotone evidence enrichment: an unknown transport interruption may become known;
+ * neither process exit identity nor a known interruption fact can be overwritten.
+ */
+export function mergeDispatchTerminal(existing: DispatchTerminal, incoming: DispatchTerminal): DispatchTerminal {
+  if (existing.handle !== incoming.handle || existing.exitCode !== incoming.exitCode || existing.signal !== incoming.signal ||
+    (existing.interrupted !== null && incoming.interrupted !== null && existing.interrupted !== incoming.interrupted)) {
+    throw new DispatchError('DISPATCH_CONFLICT');
+  }
+  return existing.interrupted === null && incoming.interrupted !== null ? incoming : existing;
+}

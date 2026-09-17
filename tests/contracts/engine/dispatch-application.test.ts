@@ -99,3 +99,25 @@ it('carries a real subprocess signal exit through dispatch and atomic Attempt pr
   expect(result.record.terminal).toMatchObject({ exitCode: null, signal: 'SIGTERM' });
   expect((await f.store.load('s', f.request.identity.attemptId))?.lastObservation?.result).toEqual({ kind: 'exited', exitCode: null, signal: 'SIGTERM' });
 });
+it.skipIf(!imageId)('allows real execute and reconcile to race on the same completed container without duplicate transition', async () => {
+  const f = await fixture();
+  const docker = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+    memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+  let arrived!: () => void; let release!: () => void;
+  const atTerminal = new Promise<void>(resolve => { arrived = resolve; });
+  const proceed = new Promise<void>(resolve => { release = resolve; });
+  const delayed: ExecutionSupervisor = { observe: docker.observe.bind(docker), release: docker.release.bind(docker),
+    async execute(request, signal) { const result = await docker.execute(request, signal); arrived(); await proceed; return result; } };
+  const policy = { async authorize() {} };
+  const runner = new DispatchApplication(f.store, delayed, verifier, policy, 'original');
+  const recovery = new DispatchApplication(f.store, docker, verifier, policy, 'recovery');
+  const execution = runner.execute(f.request);
+  try {
+    await Promise.race([atTerminal, execution.then(() => { throw new Error('unexpected early return'); })]);
+    expect((await recovery.reconcile(f.request)).record.terminal?.interrupted).toBeNull();
+    const snapshot = await f.store.load('s', f.request.identity.attemptId);
+    release(); expect((await execution).record.terminal?.interrupted).toBe(false);
+    expect(await f.store.load('s', f.request.identity.attemptId)).toEqual(snapshot);
+    expect(await readFile(join(f.workspace, 'result'), 'utf8')).toBe('once');
+  } finally { release(); await execution.catch(() => {}); await docker.release(f.request); }
+});

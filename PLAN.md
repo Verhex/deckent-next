@@ -294,3 +294,5 @@ DISPATCH/C PASS1419: read-only daemon observation and separately authorized reco
 DISPATCH/D PASS1422: engine/domain terminal projection and dispatch terminal persist atomically;155 tests including injected transaction rollback. Task acceptance and artifact durability remain separate.
 
 DISPATCH/E PASS1428: shared exit cause and field-wise request equality;161 tests. Transport interruption is read from dispatch evidence, never inferred as a process signal.
+
+DISPATCH/F PASS1429: execute/reconcile merges only compatible unknown→known interruption evidence;164 tests. Future metadata must preserve canonical outcome and have explicit merge tests.

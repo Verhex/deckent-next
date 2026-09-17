@@ -6,4 +6,4 @@ export { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, Disp
 export type { DispatchClaim, DispatchTerminal, DispatchRecord, DispatchStore } from '#engine/core/dispatch/index.js';
 export { DispatchApplication } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
-export { projectDispatchTerminal } from '#engine/core/dispatch/index.js';
+export { projectDispatchTerminal, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';

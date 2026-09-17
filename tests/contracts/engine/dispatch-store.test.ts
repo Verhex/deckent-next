@@ -91,3 +91,15 @@ it('maps a competing terminal writer to dispatch conflict without altering eithe
   expect(await store.load('s', 'a')).toEqual(snapshot);
   expect((await store.readDispatch(claim.request))?.terminal).toBeNull();
 });
+
+it.each([true, false])('merges compatible recovery/execution evidence without a second Attempt transition (recoveryFirst=%s)', async recoveryFirst => {
+  const f = await fixture(); const a = await f.open(); const b = await f.open(); await admit(a); await a.claimDispatch(claim);
+  const unknown = { ...terminal, interrupted: null };
+  await a.finishDispatch(claim, recoveryFirst ? unknown : terminal);
+  const snapshot = await a.load('s', 'a');
+  const merged = await b.finishDispatch(claim, recoveryFirst ? terminal : unknown);
+  expect(merged.terminal).toEqual(terminal);
+  expect(await b.load('s', 'a')).toEqual(snapshot);
+  await expect(b.finishDispatch(claim, { ...terminal, interrupted: true })).rejects.toThrow('DISPATCH_CONFLICT');
+  expect((await a.readDispatch(claim.request))?.terminal).toEqual(terminal);
+});
