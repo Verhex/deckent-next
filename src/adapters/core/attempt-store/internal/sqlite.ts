@@ -1,10 +1,12 @@
+import { SqliteDispatchJournal } from './dispatch.js';
+import type { DispatchClaim, DispatchTerminal, DispatchStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions) {
     const parsed = sqliteAttemptOptionsSchema.safeParse(options);
@@ -14,7 +16,7 @@ export class SqliteAttemptStore implements AttemptStore {
     try {
       this.db.exec('BEGIN IMMEDIATE');
       const version = this.db.prepare('PRAGMA user_version').get()?.user_version;
-      if (version !== 0 && version !== 1) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      if (version !== 0 && version !== 1 && version !== 2) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
       if (version === 0) this.db.exec(`
         CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
           snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -22,6 +24,7 @@ export class SqliteAttemptStore implements AttemptStore {
           snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, command_id));
         PRAGMA user_version = 1;
       `);
+      if (version === 0 || version === 1) this.db.exec(`CREATE TABLE dispatches(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id)); PRAGMA user_version=2;`);
       this.db.exec('COMMIT');
       const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
       const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
@@ -33,6 +36,8 @@ export class SqliteAttemptStore implements AttemptStore {
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async claimDispatch(claim: DispatchClaim) { return new SqliteDispatchJournal(this.db).claimDispatch(claim); }
+  async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {
     let row;
