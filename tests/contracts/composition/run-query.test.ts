@@ -36,7 +36,7 @@ describe.skipIf(process.platform === 'win32')('SDK configured Run inspection', (
     try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); } finally { store.close(); }
     await f.policy(['r', 'missing']); const before = await readFile(path);
     const result = await inspectRun(f.project, query, f.options);
-    expect(result.layout.root).toBe(f.data); expect(result.run!.identity.runId).toBe('r'); expect(result.run!.progress[0]!.phase).toBe('active');
+    expect(result.layout.root).toBe(f.data); expect(result.run!.runId).toBe('r'); expect(result.run!.tasks[0]!.phase).toBe('active');
     expect((await inspectRun(f.project, { ...query, runId: 'missing' }, f.options)).run).toBeNull(); expect(await readFile(path)).toEqual(before);
     await f.policy([]); await expect(inspectRun(f.project, query, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });

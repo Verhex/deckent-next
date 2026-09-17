@@ -124,3 +124,5 @@ RUN/E DONE: authenticated, current-policy-checked Run inspect/cancel service; du
 RUN/F DONE: readonly configured SDK inspectRun, scope/run policy before ledger access, revision corruption checks and schema2 nonmigration.230 tests/12 Docker; Fable1504 PASS. Public RunView and shared sanitized error mapping precede CLI/MCP wiring.
 
 POLICY/C DONE: versioned core action/resource vocabulary shared by authorization types, SDK and CLI.233 tests/12 Docker; Fable1512 PASS. Generated vocabulary projection and human formatting remain followups.
+
+RUN/G DONE: explicit RunView v1 projection and one sanitized query mapper, no storage snapshot export.236 tests/12 Docker; Fable1513 PASS. Dedicated Run error registry entries pending.

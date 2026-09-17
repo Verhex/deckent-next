@@ -1,4 +1,4 @@
-import { inventoryFailure } from './errors.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { userInfo } from 'node:os';
 import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
@@ -10,7 +10,7 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
  * and fresh trusted policy snapshot. Project configuration cannot assign principal membership.
  */
 export async function inspectConfiguredInventory(projectRoot: string, input: DispatchInventoryInput, options: ConfigLoadOptions = {}) {
-  try { return await inspect(projectRoot, input, options); } catch (error) { throw inventoryFailure(error); }
+  try { return await inspect(projectRoot, input, options); } catch (error) { throw queryFailure(error); }
 }
 async function inspect(projectRoot: string, input: unknown, options: ConfigLoadOptions) {
   registerProviderConfig();

@@ -1,7 +1,8 @@
+import { projectRunView } from './view.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import type { RunStore } from './store.js';
+import { RunStoreError, type RunStore } from './store.js';
 export const runQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, runId: identitySchema }).strict();
 export const runCommandSchema = runQuerySchema.extend({ commandId: identitySchema, action: z.literal('cancel'), expectedRevision: counterSchema }).strict();
 export type RunQuery = z.infer<typeof runQuerySchema>;
@@ -15,7 +16,11 @@ export class RunInspectionApplication {
     const query = runQuerySchema.parse(input);
     const principal = await authenticate(this.verifier, credential, query.scopeId);
     await this.authorization.authorize('inspect', query, principal);
-    return this.readStore.loadRun(query.scopeId, query.runId);
+    const snapshot = await this.readStore.loadRun(query.scopeId, query.runId);
+    if (!snapshot) return null;
+    const view = projectRunView(snapshot);
+    if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
+    return view;
   }
 }
 export class RunApplication extends RunInspectionApplication {
