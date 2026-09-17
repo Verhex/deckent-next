@@ -1,7 +1,3 @@
-import { registerConfigDefaults } from './core/config/index.js';
-import { createDefaultConfig } from './base/config-defaults/index.js';
-registerConfigDefaults(createDefaultConfig);
-
 export { PACKAGE_NAME, PACKAGE_VERSION } from './core/common/index.js';
 export { resolveLocale, t } from './core/i18n/index.js';
 export type { Locale, MessageKey } from './core/i18n/index.js';
@@ -30,19 +26,17 @@ export { deepMerge, readJsonFile, writeJsonAtomic } from './core/utils/index.js'
 export { formatDuration, estimateRemaining } from './core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from './core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from './core/config/index.js';
-export { createDefaultConfig } from './base/config-defaults/index.js';
+export { createDefaultConfig } from './core/config/index.js';
 export { ConfigValidationError } from './core/config/index.js';
 export type { ConfigWarning } from './core/config/index.js';
 export { validateConfig } from './core/config/index.js';
 export { interpolateConfig } from './core/config/index.js';
-export { resolveMode, resolveOutputMode } from './core/config/index.js';
 export { configDisplayView } from './core/config/index.js';
 export { loadConfig, loadGlobalConfig, clearConfigCache } from './core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from './core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigWriteLock, pruneConfigBackups } from './core/config/index.js';
 export { healCorruptProjectConfig } from './core/config/index.js';
-export { migrateConfig, migrateConfigInMemory } from './core/config/index.js';
-export { getConfigMetadata } from './base/config-defaults/index.js';
+export { getConfigMetadata } from './core/config/index.js';
 export { getConfigValue } from './core/config/index.js';
 export { resolveLocalOsActorId, resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance } from './core/identity/index.js';
 export type { VerifiedPrincipal, ActorContext } from './core/identity/index.js';

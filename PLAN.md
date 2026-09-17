@@ -5,7 +5,85 @@ written, not started), `WIP`, `REVIEW`, `DONE`. Roles: **Astra** implements prod
 cards, tooling/gates, golden/parity runs and reviews every card. Full rationale, inventory and kill record:
 `/home/alperen/deckent-refactor-work/PLAN-APPROVED-2026-09-16.md` (outside the repo).
 
-Critical path: K0 → K1 → K1-F1 → R1 → R2 → O1 → S1 (M1) → O2 (M2) → O3 (M3). K1-F1 and ARCH-IMPORTS land before K2.
+## Owner review cadence — 2026-09-17
+
+Advance each card in small, frequent slices. Explain the scope before editing and material findings during
+work; then present legacy→Next feature mapping, affected surfaces, package/layer/dependency ownership,
+configuration/version/language impact, changed files, actual verification and remaining gaps in Turkish.
+State Fable review separately. Give Alperen a checkpoint to inspect and steer before the next substantive
+implementation slice; routine edits and checks inside the agreed slice continue without repeated permission.
+A full card is not the minimum review unit. The next proposal must name one concrete responsibility and proof.
+This applies to every product port, new capability and refactor; existing WIP and accepted decisions remain intact.
+
+## Owner checkpoint — task semantics and IFS integration (2026-09-17)
+
+Task is the work unit; run/directives, do/natural-language-or-structured and periodic autonomous are execution
+entries coordinated by goal-bounded Mission. Task-kind modules are separate from these entries and permission.
+A separate process surface is proposed for deferral, not deletion of ERP workflows. ARCHITECTURE records detail.
+First end-to-end business integration is IFS ERP: Cloud via MCP if prepared/verified, and Applications 10 via
+native connector where MCP is unavailable/unsuitable. Both owner test environments exist; Cloud access setup,
+exact supported transports and first business scenario are pending. No external calls/writes admitted by this plan.
+6–8 local workers / up to 50 tasks describe the initial workload; enterprise counts are illustrative, not hardcoded
+limits or fixed release claims. Core ports/security accepted; individual adapter packaging remains undecided.
+
+Current slice EXECUTION-SURFACES-AUDIT: source-backed capability/ownership analysis with independent Fable input.
+Owner correction: no legacy aliases, old-config conversion or compatibility burden. K1-F1/A is a historical
+field inventory; its compatibility proposals are withdrawn. New contracts precede the next product edit.
+Review the existing card amendment at `/home/alperen/deckent-refactor-work/cards/K1-F1-config-schema-as-data.md`.
+K1-F1 must not blindly preserve deckent_style semantics or claim byte parity for intentional changes. Metadata
+and schema derivation stay narrow; complex validators remain package-owned code. Lint projection freshness must
+be checked before lint consumes it. No runtime feature or env control is inferred from a schema entry alone.
+Next implementation slice requires owner checkpoint; keep existing ARCH-IMPORTS/K2 WIP intact.
+
+## Kabul edilmiş kod dilimi — K1-F1/B (REVIEW 1316)
+
+Northstar ARCHITECTURE içindedir. Yeni bağımsız blueprint dosyası yok.
+K1-F1/B bağımsız PASS aldı; parent K1-F1 açık. Sonraki önerilen C dilimi: registry-fed literal gate,
+output default tüketicileri, düz provider projeksiyonlarının kaldırılması, description/tier/since metadata.
+Host worker öneri sabitleri ASSURANCE kapsamındadır. Kanal1317 ile aktarılan yeni commit/otonomi
+yetkisi doğrudan owner teyidi bekler; bu kayıt yürütme yetkisi değildir.
+Kapsam: tek config field registry → schema/default/env/metadata; legacy alias/migrate/style kaldırma;
+strict kayıtlı alan kabulü; worker sayısına eski100 tavanını taşımama. Provider validators, lock/secret
+korumaları ve mevcut K2/ARCH-IMPORTS WIP korunur. CLI config get + doğrudan public config API kanıtı;
+MCP/SDK yürütme kontratları ve provider-native capability/metric uygulaması sonraki küçük dilimlerdir.
+
+## Owner-admitted transition — 2026-09-17
+
+Authority: live owner acceptance of the Fable/Astra review, extended with isolation, deterministic database
+adapters, modular packaging, compatibility and conditional Go. ARCHITECTURE.md contains the accepted contracts.
+This section supersedes conflicting future scope/dependency prose in the 2026-09-16 port map; it does not
+rewrite prior DONE evidence or claim new production capabilities. Legacy product remains read-only; owner 2026-09-17 admits host instructions/skills/hooks and communication.md setup there.
+
+Current WIP is preserved. K1-F1 / ARCH-IMPORTS / K2 and their existing review prerequisites establish the stable
+base before package relocation. No shared-path mutation by concurrent implementers. The old port map below is
+responsibility inventory; affected cards must be reconciled with these rows before execution.
+
+| ID | Scope / dependencies | Acceptance | Status |
+|---|---|---|---|
+| HOST-SETUP | Corrections K1/K2/B1–B3/N3–N6 applied; B1 live delivery independently verified; Fable REVIEW 1298 PASS (2026-09-17). Owner 2026-09-17: shared refactor skill, adapted Codex/Claude/Cursor hosts, Git-first workspace policy, bounded Fable channel | Hook behavioral tests, host manifests, Next verify; independent Fable review and live receipt verified in 1298 | DONE |
+| FOUNDATION | After stable K1-F1/ARCH-IMPORTS/K2 base: update package map, imports, pointers and 1,500-line/native gate consistently; keep 800 design target; separate private Enterprise composition | Preserve prior behavior/proof; current source and machine graph agree; Core installs without proprietary modules | TODO |
+| CONTRACT | On FOUNDATION: ontology/transition ownership, pure domain, application commands/queries/events, supervisor port, module/config/protocol version policy | Shared schema and compatibility vectors; explicit composition root; existing legacy shared services mapped; one writer per transition | TODO |
+| STORE | On CONTRACT; supersedes K3/B06 internal store scope: typed state/memory/search/artifact ports, deterministic adapters, capability validation, bounded concurrency, transactions/outbox/reconciliation | Real adapter conformance: concurrent updates, stale revisions, scope isolation, unknown commit, safe retry, restart, migration/restore; unsupported topology fails explicitly | TODO |
+| ISOLATION | On CONTRACT; refines R1/R2/W1: Git-first workspace broker/worktrees, separate sandbox posture, per-attempt capabilities, conflict control and verified landing | Actual subprocess/container paths: main/sibling denial, network/secrets, process ownership, changed-base conflict, cancel/crash and partial effects; platform limitations explicit | TODO |
+| EXECUTION | On CONTRACT/STORE/ISOLATION and P1 essentials: first full TS execution slice including policy/approval, provider, result store, Brain acceptance, Auditor and Nervous boundaries; shared operation port enables subsequent IFS-E2E business proof | Real request-to-accepted-result plus duplicate dispatch, disconnected client, approval race and recovery across shared surfaces | TODO |
+| IFS-E2E | First external business integration after EXECUTION; use required connector/surface primitives without waiting for unrelated legacy catalog ports. Cloud MCP candidate + Applications 10 native adapter; exact scenario/transport discovery precedes external calls | Same typed business operations, principal/scope, approval, idempotency/reconciliation and read-back evidence on both test environments; unsupported transport explicit; no live external mutations before the scenario is admitted | TODO |
+| LANG | After TS execution/capacity baseline: bounded Go supervisor comparison for an explicit cost/reliability hypothesis, same protocol and failure suite | Compare total resources, latency, recovery, packaging and maintenance cost; record keep-TS or selective-Go outcome, retire redundant implementation | TODO |
+| DOGFOOD | On accepted EXECUTION with controlled parallel DAG and verified acceptance/recovery | Stable N operates on isolated N+1; cost/usage/evidence recorded; no self-overwriting runtime; external recovery; expand only proven task scope | TODO |
+| LEARNING | On execution evidence plus M1/A1/O4 integration: outcome-to-routing/skill/model improvement; reusable domain-independent workflows | Real producer/consumer chain, selective updates, held-out evaluation and rollback; model tuning only with data/provenance controls | TODO |
+| ASSURANCE | Across capabilities; final release depends on required platform/capacity/surface and distribution proofs | Resource-derived workload/concurrency matrix measured (initial local 6–8 workers/up to 50 tasks; larger counts illustrative); bounded evaluation; backup/restore/upgrade; Core public artifacts exclude Enterprise; separate Enterprise acceptance | TODO |
+
+Ordering corrections: GOLD behavior capture begins with contracts and separates preserved behavior from known
+bugs (raw-DONE lineage gap, evaluate-lock fail-open, Desktop approval contract). G-CONTRACT design does not close
+those defects without their wired binary tests. Security scope, approval and data integrity belong in Core;
+customer org management, IdP/RLS integrations and fleet/HA administration extend them in private Enterprise.
+Public Core cutover and Enterprise release are distinct. Cross-host execution/settlement requirements must be
+reconciled with CL1's earlier host-only limitation before claiming remote support. Required adapter candidates
+are admitted by the capability map; naming PostgreSQL/Mongo/vector stores does not claim implementation.
+Timing is calibrated from execution/review work, not LOC or i18n throughput; no unmeasured 12-16 week promise.
+
+## Earlier port map (scopes reconciled through the transition above)
+
+K1-F1 and ARCH-IMPORTS land before K2. Subsequent runtime cards follow the owner-admitted transition dependencies.
 
 Port cards (responsibility map, decisions, invariants, proof) live outside the repo at
 `/home/alperen/deckent-refactor-work/cards/<CARD>.md`; a row moves to `CARD` when its card is written.
@@ -14,12 +92,15 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 |---|---|---|---|---|---|---|
 | K0 | skeleton, arch.json, lint-arch, eslint, build, CI, i18n kernel, CLI `--version` | — | →1.5k | Fable | `deckent --version` from dist | DONE |
 | K1 | kernel: types/errors/constants, host/platform, config v2 (+ registered sections), output, principal/tenant | K0 | 13k→6k | Astra | `config get` / `migrate` / kernel `doctor`; 3 fixtures, 12/12 shared-value parity | DONE |
-| K1-F1 | config schema-as-data: single field registry → derived zod/defaults/aliases/env/metadata; remove base/config-defaults; registry-fed literal lint | K1 | 0.6k→0.5k | Astra | `config get` byte-parity with K1; no flow-value literal outside registry | CARD |
+| EXECUTION-SURFACES-AUDIT | Source-backed execution capability map; no legacy aliases; independent Fable comparison and owner ontology checkpoint | K1-F1/A inventory | docs/proof | Astra + Fable analysis | report under deckent-refactor-work; source wiring distinct from runtime proof | REVIEW |
+| K1-F1/B | Config fields SSOT → schema/default/env/metadata; no legacy alias/migrate/style; strict fields and platform-only global read | K1-F1/A + owner2026-09-17 | code/proof | Astra, Fable review | verify84+host9, real CLI + public API; parent K1-F1 remains open for remaining gates/provider policy | DONE |
+| K1-F1/A | Historical grouped field inventory; alias/compatibility proposals withdrawn by owner; product code unchanged | K1 | docs/proof | Astra, Fable review | complete inventory + owner checkpoint; IFS first integration captured | REVIEW |
+| K1-F1 | config schema-as-data: single field registry → derived zod/defaults/env/metadata; no legacy aliases; remove base/config-defaults; registry-fed literal lint | K1 | 0.6k→0.5k | Astra | new config contract and rejected unsupported inputs; new task/entry semantics reconciled; registry authority | WIP |
 | ARCH-IMPORTS | `#pkg/tier/unit` subpath-import aliases (package.json imports + tsconfig paths + lint import-style) | K1 | tooling | Fable (infra) + Astra (K1 conversion) | lint-arch import-style 0 violations | CARD |
-| K2 | kernel/i18n: 3,257 reachable keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | catalog parity vs legacy; exact Fable list pending | WIP |
+| K2 | kernel/i18n: 3,374 approved legacy keys → 10 family JSONs per locale, `t()`, one locale resolver (calibration card 1) | K0 | 15.4k→0.3k + data | Astra | 13,496/13,496 catalog parity; CLI-format gap recorded | REVIEW |
 | K3 | kernel/store: SQLite primitive, artifact schema/versioning, locks | K1 | 10k→1.5k | Astra | contract | TODO |
 | K4 | kernel/docs-authority: markdown write gate + DECKENT/CLAUDE/AGENTS injection | K1 | →0.4k | Astra | contract | TODO |
-| R1 | native: C sources + ABI ids verbatim; TS loader ≤1.8k (TOCTOU snapshot kept); artifact v2; prebuild matrix linux x64/arm64 + darwin | K1 | 7.8k→1.6k | Astra | `doctor` native section; UNAVAILABLE path exit 0 | CARD |
+| R1 | native: preserve ABI/security behavior, split C mechanisms to the accepted size bound (card revision required); TS loader ≤1.8k (TOCTOU snapshot kept); artifact v2; prebuild matrix linux x64/arm64 + darwin | K1 | 7.8k→1.6k | Astra | `doctor` native section; UNAVAILABLE path exit 0 | CARD |
 | W1 | win32 trusted native loader authority (owner-only DACL proof) → enables R2 win32 custody; until then win32 reports typed DEGRADED | R1 | new | Astra | win32 CI local-backend smoke | TODO |
 | P1 | providers + model registry/catalog, auth probe, limit policy | K1,K2 | 20k→7k | Astra | `models`, `doctor` provider | TODO |
 | S0 | surfaces/commands core + `doctor`,`status`,`config`,`init`,`sync`,`help` | K1–K4,R1,P1 | 15k→6k | Astra | **M0** | TODO |
@@ -42,7 +123,7 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 | X | kpi, cost, traces, audit, explain, history | K3,O2 | 10k→4k | Astra | `kpi`,`audit verify` | TODO |
 | CL1 | closure: settlement/receipt/xverify/audit chain (host-scoped custody, ed25519 anchors, HMAC audit, §12.2 five-link closure) | K1,K3,R2,P1 | 15.2k→14.7k (29 units) | Astra | settlement verify / tamper FAIL / HOLD never closes (real binary) | CARD |
 | GOLD | golden corpus: 3 fixture projects, legacy D-class outputs, parity runner | K0 | tooling | Fable | `tests/golden/` populated | TODO |
-| Z | not ported (DEFERRED unless a consumer is proven): core/catalog, notification-providers, operation-catalog, task-execution-admission, legacy win32 TS adapter, intelligence, training, extensions, sdk | — | ~30k→0 | — | — | DEFERRED |
+| Z | not ported (DEFERRED unless a consumer is proven): core/catalog, notification-providers, operation-catalog, task-execution-admission, legacy win32 TS adapter, extensions, sdk; intelligence/training responsibilities are evaluated under LEARNING, not deferred as a capability | — | ~30k→0 | — | — | DEFERRED |
 
 ## Velocity (measured, updated per card)
 
@@ -50,9 +131,10 @@ Port cards (responsibility map, decisions, invariants, proof) live outside the r
 |---|---|---|---|---|---|---|
 | K0 | — | (see lint-arch summary) | 7 | — | — | — |
 | K1 | not measured; card inventory ≈13k | repo total: 1,642 TS + 894 catalog lines | 57 K1/gate additions; 69 total | not timed (K2 is calibration 1) | round 1 REVISE; round 2 GO (Fable) | B1/B2 addressed; doctor scoped |
+| K2 | 15,477 AST-read catalog lines | 105 TS mechanism + 7,678 physical family JSON lines | 15 new; 84 total | see K2-review.json; idle wait excluded | pending Fable | 0/13,496 catalog; 4 inherited CLI-format differences |
 
-Projection `T = Σ(legacyLines ÷ rate) × (1 + rework) + fixed` is published here after K2 and M1; no
-calendar estimate is stated before those two measurements exist.
+Calendar estimates require representative execution, review and rework measurements. Catalog/memory LOC rates
+are not an execution-engine estimate; the 2026-09-17 transition supersedes the earlier LOC formula.
 
 ## K1 review evidence
 
@@ -91,7 +173,7 @@ Each becomes a card only after its `After` dependency has landed; `Legacy` lists
 | B# | Outcome | Package / tier | After | Legacy ids | Status |
 |---|---|---|---|---|---|
 | B01 | Tenant/project/session scope with one scoped capability decision, fail-closed on read/write/event/memory/run/flow/admin | kernel/enterprise | K1, K3 | TENANT-001, CAPABILITY-001 | TODO |
-| B02 | One durable approval broker (CAS, expiry, relay, typed risk tier); every approval producer binds to it; decisions only via CLI | kernel/core + surfaces/core | K3, S0 | APPROVAL-001, APPROVAL-SURFACE-UNIFICATION-001 | TODO |
+| B02 | One durable approval broker (CAS, expiry, relay, typed risk tier); every approval producer binds to it; decisions via one verified-identity application service (CLI/Desktop/API); Dashboard observes | kernel/core + surfaces/core | K3, S0 | APPROVAL-001, APPROVAL-SURFACE-UNIFICATION-001 | TODO |
 | B03 | A receipt per provider call and one admission→reservation→usage→landing→settlement ledger | providers/core | P1 | RECEIPT-001, LIMIT-001 | TODO |
 | B04 | Tamper-evident, tenant-scoped causal audit with redaction and bounded retention | observability/enterprise | K3, B01 | AUDIT-001, OPERATION-EFFECT-CONTEXT-001 | TODO |
 | B05 | Tenant-aware age/count/size retention, atomic rotation, legal hold, one archive location | kernel/enterprise | K3, B01 | STATE-RETENTION-001, TASK-RETENTION-001, ARCHIVE-PATH-AUTHORITY-001 | TODO |
@@ -120,18 +202,26 @@ Just below the line (not admitted, revisit after the cards): SURFACE-PARITY-001,
 CURSOR-PROVIDER-001, the TRACE-* cluster. Realized-in-code rows are covered by their port cards; 30 acceptance invariants from the
 triage (§4 of the extract) are pinned to cards O1–O4, R2, K1–K3, S2–S3 by the card author.
 
-## K2 calibration / pending authority
+## K2 calibration / review evidence
 
-- Measurement starts 2026-09-16T13:50:03Z after preflight; actual AST-read catalog inventory is 15,477
-  lines in 14 files (including the memory-read re-export), 3,981 entries. AST text and the compiled legacy
-  oracle agree for every key; the two floor templates were compared with explicit sentinel parameters.
-- Owner selected **Fable's exact keep/delete list** when the card counts did not reproduce. No such list
-  is currently present under `deckent-refactor-work`; its path/content is required before catalog membership
-  changes. Astra's 3,374/607 reachability inventory is comparison evidence only, not deletion authority.
-- Independent work is implemented: synchronous registry and locale resolver, renderer sandbox proof,
-  ten bilingual family files holding the existing 444 K1 keys, JSON-derived key type, duplicate/placeholder
-  gates. K1's `config.invalid` was renamed to `config.valueInvalid` to reserve the conflicting legacy key.
-- K2 remains WIP: legacy-key import, full legacy/new translation parity, protected-family decisions and
-  command-surface parity assessment await the exact list. R1 has not started; no K2 commit/push.
-- Evidence: `/home/alperen/deckent-refactor-work/proof/K2-astra-inventory.json`, `K2-wip.json`, and
-  `K2-wip-verify.log`. Calibration is open; no final port rate or card closure is claimed.
+- Fable authority: `cards/K2-keys.json`, sha256 `5e4e5a0218b9c9a636404bd62e225f9f1bee38f7590d9fa701a7e74eb4a7b53e`.
+  Exact keep 3,374 / exclude 607; all 46 manual-audit keys retained. The AST-read source inventory is
+  15,477 lines in 14 files, including the memory-read re-export; 3,981 legacy entries.
+- Runtime catalog: 3,819 keys (3,374 legacy + 444 existing K1 + `tui.switch_unavailable`), ten families
+  per locale. Largest family file is 740 physical lines; mechanism is 105 physical lines (111 by the
+  lint gate's split-newline accounting). No size exception or generated long union was introduced.
+- Live oracle: 13,496 key/locale/parameter comparisons, zero mismatches. Portable CI fixtures contain
+  frozen legacy oracle digests plus exact family key lists, without requiring the legacy checkout.
+  All 23 dynamic legacy sites have typechecked explicit-table handoffs; current kernel callers already
+  use literal keys. Other package callers migrate on their own cards; the legacy checkout was read-only.
+- CLI surface comparison is **not byte-equal** for en/tr `--help` and `--version`: both binaries exit 0,
+  but K0 has a limited command inventory and a different version banner. This existing contract gap
+  is recorded for Fable/S0 disposition; catalog parity must not be presented as full CLI parity.
+- Local verification: 84 tests, 0 lint violations, build and smoke pass. Renderer sandbox has no Node
+  globals/built-ins in the translation unit. K2 awaits Fable review and the admitted K1-F1/ARCH-IMPORTS
+  pre-landing dependencies; no K2 commit/push, and R1 has not started.
+- Calibration has two active measurement intervals: the first stopped at `K2-wip.json` while awaiting
+  authority; the resumed interval begins at the first port-script write. Waiting time between turns
+  is excluded. Review time and final rate remain open until Fable's verdict.
+- Evidence in `/home/alperen/deckent-refactor-work/proof/`: `K2-import.json`, `K2-parity.json`,
+  `K2-dynamic-audit.json`, `K2-dynamic-port-tables.mts`, `K2-cli-parity.json`, `K2-verify.log`, `K2-review.json`.

@@ -1,4 +1,3 @@
-import { access } from 'node:fs/promises';
 import { posix, win32 } from 'node:path';
 import { CONFIG_FILE, DECKENT_DIR } from '../../common/index.js';
 import { ErrorRegistry } from '../../errors/index.js';
@@ -57,10 +56,5 @@ export function resolveGlobalConfigPaths(env: Environment = process.env, platfor
   return { platformPath, legacyPath: scope.legacyDir ? api.join(scope.legacyDir, CONFIG_FILE) : platformPath };
 }
 export async function resolveGlobalConfigReadPath(env: Environment = process.env, platform: string = process.platform): Promise<string> {
-  const paths = resolveGlobalConfigPaths(env, platform);
-  try { await access(paths.platformPath); return paths.platformPath; }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return paths.platformPath;
-    return paths.legacyPath;
-  }
+  return resolveGlobalConfigPaths(env, platform).platformPath;
 }

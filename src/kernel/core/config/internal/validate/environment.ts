@@ -1,22 +1,25 @@
 import { envValue, type Environment } from '../../../platform/index.js';
 import type { DeckentConfig } from '../schema.js';
-import { resolveMode } from './aliases.js';
+import { CONFIG_FIELDS } from '../fields.js';
 import { ConfigValidationError } from './issues.js';
+
 export function applyConfigEnvironment(config: DeckentConfig, env: Environment): DeckentConfig {
   const next = structuredClone(config);
-  const brain = envValue(env, 'DECKENT_BRAIN_PROVIDER'), worker = envValue(env, 'DECKENT_WORKER_PROVIDER');
-  if (brain) next.providers.brain = brain;
-  if (worker) next.providers.worker = worker;
-  const mode = envValue(env, 'DECKENT_MODE');
-  if (mode) next.mode = resolveMode(mode) as DeckentConfig['mode'];
-  const language = envValue(env, 'DECKENT_LANGUAGE') ?? envValue(env, 'DECKENT_LANG');
-  if (language) next.language = language as DeckentConfig['language'];
-  const style = envValue(env, 'DECKENT_STYLE');
-  if (style) next.deckent_style = style as DeckentConfig['deckent_style'];
-  const trace = envValue(env, 'DECKENT_LIVE_TRACE');
-  if (trace) {
-    if (!['0', '1', 'true', 'false'].includes(trace)) throw new ConfigValidationError([{ path: 'DECKENT_LIVE_TRACE', reason: 'BOOLEAN_REQUIRED' }]);
-    next.live_trace.enabled = trace === '1' || trace === 'true';
+  for (const [key, field] of Object.entries(CONFIG_FIELDS)) {
+    for (const binding of field.environment) {
+      const name = binding.names.find(candidate => envValue(env, candidate) !== undefined);
+      if (!name) continue;
+      const value = envValue(env, name)!;
+      let parsed: string | boolean = value;
+      if (binding.encoding === 'boolean') {
+        if (!['0', '1', 'true', 'false'].includes(value)) throw new ConfigValidationError([{ path: name, reason: 'BOOLEAN_REQUIRED' }]);
+        parsed = value === '1' || value === 'true';
+      }
+      const path = [key, ...(binding.path ?? [])];
+      let target: Record<string, unknown> = next;
+      for (const part of path.slice(0, -1)) target = target[part] as Record<string, unknown>;
+      target[path.at(-1)!] = parsed;
+    }
   }
   return next;
 }

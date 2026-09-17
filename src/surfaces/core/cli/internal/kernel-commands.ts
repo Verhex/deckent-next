@@ -1,7 +1,6 @@
-import { join } from 'node:path';
 import {
-  CONFIG_FILE, configDisplayView, ErrorRegistry, loadConfig, migrateConfig, getConfigValue, resolveGlobalConfigReadPath, resolveGlobalConfigPaths,
-  resolveDeckentHome, resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
+  configDisplayView, ErrorRegistry, loadConfig, getConfigValue,
+  resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, resolveTenant, resolveCallerTenant,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
@@ -49,13 +48,6 @@ export async function runKernelCommand(argv: readonly string[], context: Command
       const display = configDisplayView(config);
       const value = key === undefined ? display : getConfigValue(display, key);
       output(value, data => formatValue(data));
-      return;
-    }
-    if (action === 'migrate') {
-      if (args.positionals.length !== 2) throw ErrorRegistry.createError('CLI_USAGE');
-      const path = args.global ? await resolveGlobalConfigReadPath(env) : join(resolveDeckentHome(root, { env }), CONFIG_FILE);
-      const result = await migrateConfig(path, { dryRun: args.dryRun, locale, onWarning: warning => output(warning, value => value.message, 'warning'), ...(args.global ? { targetPath: resolveGlobalConfigPaths(env).platformPath } : {}) });
-      output(result, data => t('config.migration', { from: data.fromVersion, to: data.toVersion, changed: String(data.migrated), dryRun: String(data.dryRun) }, locale));
       return;
     }
     throw ErrorRegistry.createError('CLI_USAGE');

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
-  registerConfigSection, migrateConfigInMemory, migrateConfig, saveGlobalConfig, writeConfig,
+  registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, interpolateConfig, getConfigMetadata,
   getConfigValue, resolveGlobalConfigPaths,
 } from '../../../src/kernel/index.js';
@@ -39,19 +39,19 @@ describe('config public contract', () => {
   it('applies defaults → global → project → env with provider projection before env', async () => {
     const f = await fixture();
     await writeFile(f.globalPath, JSON.stringify({ mode: 'balanced', language: 'tr', enforce_principal_assurance: true, providers: { brain: 'global-provider' } }));
-    await writeFile(f.projectPath, JSON.stringify({ mode: 'pro_plan', enforce_principal_assurance: false, providers: { brain: 'project-provider' } }));
+    await writeFile(f.projectPath, JSON.stringify({ mode: 'economic', enforce_principal_assurance: false, providers: { brain: 'project-provider' } }));
     const first = await loadConfig(f.project, { env: f.env });
     expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, brain_provider: 'project-provider', schema_version: 2 });
-    const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'max_plan', DECKENT_BRAIN_PROVIDER: 'env-provider' } });
+    const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'performance', DECKENT_BRAIN_PROVIDER: 'env-provider' } });
     expect(second).toMatchObject({ mode: 'performance', brain_provider: 'env-provider' });
     expect(second.providers.brain).toBe('env-provider');
   });
-  it('uses platform config first, falls back to legacy, and writes global config to platform path', async () => {
+  it('uses only the platform config path without importing a legacy home config', async () => {
     const f = await fixture();
     await mkdir(join(f.home, '.deckent'));
     const legacy = join(f.home, '.deckent/config.json');
     await writeFile(legacy, '{"language":"tr"}');
-    expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');
+    expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     await saveGlobalConfig({ language: 'en' }, { env: f.env });
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     expect(JSON.parse(await readFile(legacy, 'utf8'))).toEqual({ language: 'tr' });
@@ -71,14 +71,13 @@ describe('config public contract', () => {
     const config = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'api', ANTHROPIC_API_KEY: 'test-secret' } });
     expect(config.mode).toBe('api'); expect(JSON.stringify(config)).not.toContain('test-secret');
   });
-  it('aggregates schema issues, warns on unknown top-level keys, rejects invalid worker bounds', () => {
+  it('aggregates schema issues, rejects unregistered fields and permits resource-defined worker capacity', () => {
     const config = createDefaultConfig();
     try { validateConfig({ ...config, language: 'xx', max_workers: 0, mode: 'wrong' }); expect.fail('must reject'); }
     catch (error) { expect(error).toBeInstanceOf(ConfigValidationError); expect((error as ConfigValidationError).issues).toHaveLength(3); }
-    for (const count of [1.5, 101, Infinity]) expect(() => validateConfig({ ...config, max_workers: count })).toThrow();
-    const result = validateConfig({ ...config, future: false });
-    expect(result.warnings).toMatchObject([{ code: 'CONFIG_UNKNOWN_KEY', path: 'future' }]);
-    expect(result.config['future']).toBe(false);
+    for (const count of [1.5, Number.MAX_SAFE_INTEGER + 1, Infinity]) expect(() => validateConfig({ ...config, max_workers: count })).toThrow();
+    expect(() => validateConfig({ ...config, future: false })).toThrow();
+    expect(validateConfig({ ...config, max_workers: 500 }).config.max_workers).toBe(500);
   });
   it('registers strict package schemas and validates authored layers before merge', async () => {
     const seen: unknown[] = [];
@@ -97,10 +96,11 @@ describe('config public contract', () => {
   });
   it('interpolates only exact $DECK references after layering and leaves missing references visible', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, '{"custom_token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}');
+    registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { optional: true });
+    await writeFile(f.projectPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
     await writeFile(join(f.project, '.deck'), 'TOKEN="private-value"\n');
     const config = await loadConfig(f.project, { env: f.env });
-    expect(config['custom_token']).toBe('private-value'); expect(config['other']).toBe('prefix $DECK:TOKEN');
+    expect(config['custom_secrets']).toEqual({ token: 'private-value', other: 'prefix $DECK:TOKEN' });
     const missing: string[] = [];
     expect(interpolateConfig({ value: '$DECK:MISSING' }, {}, key => missing.push(key))).toEqual({ value: '$DECK:MISSING' });
     expect(missing).toEqual(['MISSING']);
@@ -137,37 +137,46 @@ describe('config public contract', () => {
   });
 });
 
-describe('config migration and authority contracts', () => {
-  it('migrates versioned aliases, preserves explicit values, rejects conflicts and future versions', () => {
-    const plan = migrateConfigInMemory({ mode: 'pro_plan', output_mode: 'standart', routing_engine: 'v1', enforce_principal_assurance: false, custom: undefined });
-    expect(plan.config).toMatchObject({ schema_version: 2, mode: 'economic', output_mode: 'standard', routing_engine: 'v3', enforce_principal_assurance: false, custom: null });
-    expect(migrateConfigInMemory(plan.config).migrated).toBe(false);
-    expect(() => migrateConfigInMemory({ schema_version: 99 })).toThrow();
-    expect(() => migrateConfigInMemory({ brain_provider: 'one', providers: { brain: 'two' } })).toThrow();
-    expect(() => migrateConfigInMemory({ outputMode: 'json', output_mode: 'verbose' })).toThrow();
+describe('new config contract and write authority', () => {
+  it('rejects old versions, aliases and retired execution selectors without changing authored bytes', async () => {
+    const f = await fixture();
+    for (const input of [{ schema_version: 1 }, { mode: 'pro_plan' }, { outputMode: 'json' },
+      { brain_provider: 'old' }, { deckent_style: 'task' }, { routing_engine: 'v1' }, { output_mode: 'standart' }]) {
+      const bytes = JSON.stringify(input);
+      await writeFile(f.projectPath, bytes);
+      await expect(loadConfig(f.project, { env: f.env, force: true })).rejects.toThrow();
+      expect(await readFile(f.projectPath, 'utf8')).toBe(bytes);
+      await expect(writeConfig(f.projectPath, input)).rejects.toThrow();
+    }
+    await writeFile(f.projectPath, '{}');
+    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'max_plan' } })).rejects.toThrow();
   });
-  it('dry-run creates no lock/backup, real migration writes atomically and retains the newest three backups', async () => {
-    const f = await fixture(); await writeFile(f.projectPath, '{"language":"tr"}');
-    const before = await readFile(f.projectPath, 'utf8');
-    const dry = await migrateConfig(f.projectPath, { dryRun: true }); expect(dry.migrated).toBe(true);
-    expect(await readdir(join(f.project, '.deckent'))).toEqual(['config.json']); expect(await readFile(f.projectPath, 'utf8')).toBe(before);
+  it('retains the newest three corruption backups without leaving locks or temporary files', async () => {
+    const f = await fixture();
     for (let i = 0; i < 5; i++) {
-      await writeFile(f.projectPath, JSON.stringify({ language: i % 2 ? 'en' : 'tr' }));
-      const migrated = await migrateConfig(f.projectPath); expect(migrated.backupPath).not.toBeNull();
+      await writeFile(f.projectPath, '{broken' + i);
+      const observed = await readJsonFile(f.projectPath);
+      if (observed.kind !== 'corrupt') throw new Error('fixture must be corrupt');
+      const healed = await healCorruptProjectConfig(f.projectPath, observed);
+      expect(await readFile(healed.backupPath, 'utf8')).toBe('{broken' + i);
     }
     const names = await readdir(join(f.project, '.deckent'));
     expect(names.filter(name => name.includes('.bak.'))).toHaveLength(3);
     expect(names.some(name => name.endsWith('.tmp') || name.endsWith('.write-lock'))).toBe(false);
   });
-  it('migrates a legacy global config into the platform path without changing the source', async () => {
+  it('resolves registry environment bindings with validated booleans and no shared default mutation', async () => {
     const f = await fixture();
-    await mkdir(join(f.home, '.deckent'));
-    const source = join(f.home, '.deckent/config.json');
-    await writeFile(source, '{"language":"tr"}');
-    await migrateConfig(source, { targetPath: f.globalPath });
-    expect(await readFile(source, 'utf8')).toBe('{"language":"tr"}');
-    expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toMatchObject({ schema_version: 2, language: 'tr' });
-    await expect(migrateConfig(source, { targetPath: f.globalPath })).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    const yes = await loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: 'true', DECKENT_WORKER_PROVIDER: 'provider-a' } });
+    expect(yes.live_trace.enabled).toBe(true);
+    expect(yes.providers.worker).toBe('provider-a');
+    const no = await loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: '0' } });
+    expect(no.live_trace.enabled).toBe(false);
+    expect(no.providers.worker).toBeNull();
+    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: 'maybe' } })).rejects.toThrow();
+    await writeFile(f.projectPath, '{"schema_version":null}');
+    await expect(loadConfig(f.project, { env: f.env })).rejects.toMatchObject({ code: 'CONFIG_VERSION_UNSUPPORTED' });
+    expect(getConfigMetadata().find(row => row.key === 'max_workers')?.defaultValue).toBe('auto');
+    expect(getConfigMetadata().some(row => row.key === 'deckent_style')).toBe(false);
   });
   it('serializes cooperating writers and refuses obsolete revision digests', async () => {
     const f = await fixture(); const events: number[] = [];

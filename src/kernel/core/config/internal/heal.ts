@@ -2,7 +2,7 @@ import type { ConfigLockOptions } from './lock.js';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ErrorRegistry } from '../../errors/index.js';
 import { readJsonFile, writeJsonAtomic, type JsonRead } from '../../utils/index.js';
-import { resolveConfigDefaults as createDefaultConfig } from './default-policy.js';
+import { createDefaultConfig } from './defaults.js';
 import { withConfigWriteLock, assertConfigPreimage, backupConfig, pruneConfigBackups } from './write.js';
 
 export async function healCorruptProjectConfig(path: string, corrupt: Extract<JsonRead, { kind: 'corrupt' }>, options: ConfigLockOptions = {}): Promise<{ config: unknown; backupPath: string }> {

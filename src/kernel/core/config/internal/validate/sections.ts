@@ -1,7 +1,7 @@
 import { CORE_SCHEMA, configSections, type DeckentConfig } from '../schema.js';
 import { ConfigValidationError, type ConfigIssue, type ConfigWarning } from './issues.js';
 import { isRecord, assertSafeKeys } from '../../../utils/index.js';
-import { t, type Locale } from '../../../i18n/index.js';
+import { type Locale } from '../../../i18n/index.js';
 
 export function validateConfig(input: unknown, locale: Locale = 'en'): { config: DeckentConfig; warnings: ConfigWarning[] } {
   if (!isRecord(input)) throw new ConfigValidationError([{ path: '$', reason: 'OBJECT_REQUIRED' }], locale);
@@ -20,7 +20,7 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
       const parsed = schema.safeParse(value);
       if (!parsed.success) issues.push(...parsed.error.issues.map(i => ({ path: [key, ...i.path].join('.'), reason: i.code })));
       else config[key] = parsed.data;
-    } else warnings.push({ code: 'CONFIG_UNKNOWN_KEY', path: key, message: t('config.unknown', { key }, locale) });
+    } else issues.push({ path: key, reason: 'unrecognized_keys' });
   }
   for (const [key, { schema, options }] of sections) {
     if (Object.hasOwn(input, key) || options.optional) continue;

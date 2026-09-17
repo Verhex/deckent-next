@@ -1,4 +1,4 @@
-import { CORE_SCHEMA, configSections } from '../../../core/config/index.js';
+import { CORE_SCHEMA, configSections } from './schema.js';
 import { createDefaultConfig } from './defaults.js';
 export function getConfigMetadata(): readonly { key: string; owner: string; defaultValue: unknown }[] {
   const defaults = createDefaultConfig();

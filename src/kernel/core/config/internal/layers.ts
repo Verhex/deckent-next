@@ -8,9 +8,10 @@ import { resolveGlobalConfigReadPath } from '../../platform/index.js';
 import { resolveDeckentHome } from '../../platform/index.js';
 import { getSystemProfile } from '../../platform/index.js';
 import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '../../utils/index.js';
-import { resolveConfigDefaults as createDefaultConfig } from './default-policy.js';
+import { createDefaultConfig } from './defaults.js';
+import { CONFIG_ENVIRONMENT_KEYS } from './fields.js';
 import { configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
-import { versionedConfig } from './validate/aliases.js';
+import { versionedConfig } from './validate/version.js';
 import { applyConfigEnvironment } from './validate/environment.js';
 import { interpolateConfig, readDeckSecrets } from './validate/interpolate.js';
 import { ConfigValidationError, type ConfigWarning } from './validate/issues.js';
@@ -60,7 +61,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const paths = options.globalOnly ? [globalPath, join(root, '.deck')] : [globalPath, projectPath, join(root, '.deck')];
   const stamps = await Promise.all(paths.map(stamp));
   // Only documented noncredential inputs participate; package auth validators run on cache hits too.
-  const key = digestText(JSON.stringify([root, platform, ENVIRONMENT_KEYS.map(name => [name, env[name]]), stamps, configRegistryGeneration(), options.globalOnly ?? false, options.heal ?? true]));
+  const key = digestText(JSON.stringify([root, platform, [...new Set([...ENVIRONMENT_KEYS, ...CONFIG_ENVIRONMENT_KEYS])].map(name => [name, env[name]]), stamps, configRegistryGeneration(), options.globalOnly ?? false, options.heal ?? true]));
   const cached = options.force || envValue(env, 'DECKENT_CONFIG_RELOAD') === '1' ? undefined : cache.get(key);
   if (cached) {
     for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(cached.value), env);

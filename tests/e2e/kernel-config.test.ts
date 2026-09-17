@@ -20,7 +20,7 @@ async function fixture(kind: 'empty' | 'global-only' | 'project-override') {
   if (kind !== 'empty') await writeFile(globalPath, '{"mode":"balanced","language":"tr"}');
   if (kind === 'project-override') {
     await mkdir(join(project, '.deckent'));
-    await writeFile(join(project, '.deckent/config.json'), '{"mode":"pro_plan","language":"en"}');
+    await writeFile(join(project, '.deckent/config.json'), '{"mode":"economic","language":"en"}');
   }
   const run = (args: string[], extra: NodeJS.ProcessEnv = {}) => exec(process.execPath, [binary, ...args], { cwd: project, env: { ...env, ...extra }, timeout: 15_000, maxBuffer: 1024 * 1024 });
   return { project, run, env, root };
@@ -37,17 +37,14 @@ describe('K1 real binary journeys', () => {
       expect(JSON.parse((await f.run(['config', 'get', 'mode', '--json'], { DECKENT_MODE: 'balanced' })).stdout)).toBe('balanced');
     }
   });
-  it('dry-run preserves bytes, real migration upgrades once and leaves an exclusive backup', async () => {
+  it('rejects legacy migration and aliases without altering config bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
     const before = await readFile(path, 'utf8');
-    const plan = JSON.parse((await f.run(['config', 'migrate', '--dry-run', '--json'])).stdout);
-    expect(plan).toMatchObject({ fromVersion: 1, toVersion: 2, dryRun: true, migrated: true, backupPath: null });
+    await expect(f.run(['config', 'migrate', '--json'])).rejects.toMatchObject({ code: 2, stdout: '' });
     expect(await readFile(path, 'utf8')).toBe(before);
-    expect(await readdir(join(f.project, '.deckent'))).toEqual(['config.json']);
-    const applied = JSON.parse((await f.run(['config', 'migrate', '--json'])).stdout);
-    expect(applied.migrated).toBe(true); expect(await readFile(applied.backupPath, 'utf8')).toBe(before);
-    expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(2);
-    expect(JSON.parse((await f.run(['config', 'migrate', '--json'])).stdout).migrated).toBe(false);
+    await writeFile(path, '{"outputMode":"json"}');
+    await expect(f.run(['config', 'get', '--json'])).rejects.toMatchObject({ code: 78, stdout: '' });
+    expect(await readFile(path, 'utf8')).toBe('{"outputMode":"json"}');
   });
   it('wires platform, actual OS identity, tenant config, host sizing and Turkish output through doctor', async () => {
     const f = await fixture('project-override');
@@ -114,16 +111,18 @@ describe('K1 blocking review reproductions', () => {
     try {
       await Promise.race([once(child.stdout, 'data'), closed.then(() => { throw new Error('writer exited before taking lock'); })]);
       child.kill('SIGKILL'); await closed;
-      const result = await f.run(['config', 'migrate', '--json']);
-      expect(JSON.parse(result.stdout)).toMatchObject({ migrated: true, dryRun: false });
-      expect(JSON.parse(result.stderr)).toMatchObject({ code: 'CONFIG_LOCK_STALE_RECLAIMED' });
+      await writeFile(path, '{broken');
+      const result = await f.run(['config', 'get', '--json']);
+      expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: 2 });
+      expect(result.stderr.trim().split('\n').map(line => JSON.parse(line))).toContainEqual(expect.objectContaining({ code: 'CONFIG_LOCK_STALE_RECLAIMED' }));
       expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(2);
     } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed; }
   });
   it('returns actionable structured diagnostics for an old live lock without stealing it', async () => {
     const f = await fixture('project-override'), lock = join(f.project, '.deckent/config.json.write-lock');
     await writeFile(lock, JSON.stringify({ pid: process.pid, createdAt: new Date(Date.now() - 3600_000).toISOString() }));
-    try { await f.run(['config', 'migrate', '--json']); expect.fail('live writer must block'); }
+    await writeFile(join(f.project, '.deckent/config.json'), '{broken');
+    try { await f.run(['config', 'get', '--json']); expect.fail('live writer must block'); }
     catch (error) {
       expect(error).toMatchObject({ code: 78, stdout: '' });
       expect(JSON.parse((error as { stderr: string }).stderr)).toMatchObject({ code: 'CONFIG_WRITE_LOCKED', params: { path: lock, pid: process.pid, ageSeconds: expect.any(Number) } });

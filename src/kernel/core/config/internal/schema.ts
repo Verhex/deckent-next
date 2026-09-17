@@ -1,29 +1,9 @@
 import { z } from 'zod';
 import type { Environment } from '../../platform/index.js';
-import { OUTPUT_MODES } from '../../common/index.js';
 import { ErrorRegistry } from '../../errors/index.js';
-import { SUPPORTED_LANGUAGES } from '../../i18n/index.js';
+import { CORE_SCHEMA } from './fields.js';
+export { CORE_SCHEMA } from './fields.js';
 
-const providerId = z.string().trim().min(1).nullable();
-/** Kernel owns scalar selection, identity and presentation, never package policy schemas. */
-export const CORE_SCHEMA = z.object({
-  schema_version: z.literal(2),
-  language: z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']),
-  mode: z.enum(['performance', 'balanced', 'economic', 'api']),
-  output_mode: z.enum(OUTPUT_MODES),
-  projectName: z.string().min(1),
-  max_workers: z.union([z.number().int().min(1).max(100), z.literal('auto')]),
-  enforce_principal_assurance: z.boolean(),
-  strict_tenant_isolation: z.boolean(),
-  tenant_id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
-  deckent_style: z.enum(['sprint', 'task', 'process']),
-  auth_mode: z.enum(['subscription', 'api', 'hybrid', 'local']),
-  routing_engine: z.literal('v3'),
-  spawn_backend: z.enum(['auto', 'docker', 'subprocess', 'tmux']),
-  live_trace: z.object({ enabled: z.boolean() }).strict(),
-  providers: z.object({ brain: providerId, worker: providerId, fallback: providerId,
-    overrides: z.record(z.string()).default({}) }).strict(),
-}).strict();
 export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
 export type DeckentConfig = CoreConfig & Record<string, unknown>;
 export interface ConfigSectionOptions {
