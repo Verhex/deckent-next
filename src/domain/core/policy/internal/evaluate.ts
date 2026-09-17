@@ -39,3 +39,13 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
   return allowed ? Object.freeze({ decision: 'allow', revision: policy.revision, reason: 'GRANTED', ruleId: allowed.id })
     : Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'NO_GRANT' });
 }
+
+/** Membership candidates originate only from trusted allow grants. This is not action authorization:
+ * evaluatePolicy must still enforce resource/action matching, explicit denies and restrictions.
+ */
+export function policyScopeMembership(input: unknown, actor: { issuer: string; subject: string }, candidates: readonly string[]): readonly string[] {
+  const policy = policySchema.parse(input); const issuer = identitySchema.parse(actor.issuer); const subject = identitySchema.parse(actor.subject);
+  const scopes = [...new Set(candidates.map(candidate => identitySchema.parse(candidate)))];
+  return Object.freeze(scopes.filter(scope => policy.grants.some(rule => rule.effect === 'allow' && includes(rule.scopes, scope)
+    && (rule.principals === 'all' || rule.principals.some(principal => principal.issuer === issuer && principal.subject === subject)))));
+}

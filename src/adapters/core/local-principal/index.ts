@@ -1,1 +1,1 @@
-export { LocalOsPrincipalVerifier } from './internal/local.js';
+export { LocalOsPrincipalVerifier, readLocalOsIdentity } from './internal/local.js';

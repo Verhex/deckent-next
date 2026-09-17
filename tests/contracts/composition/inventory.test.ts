@@ -12,7 +12,7 @@ const query = { schemaVersion: 1, scopeId: 's', after: null, limit: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-inventory-composed-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const config = { layout: { root: data, resources: { policy: 'access.json', ledger: 'state/custom.db' } }, local_access: { scopeIds: ['s'] }, inspection: { maxPageSize: 1, policyMaxBytes: 65536 } };
+  const config = { layout: { root: data, resources: { policy: 'access.json', ledger: 'state/custom.db' } }, inspection: { maxPageSize: 1, policyMaxBytes: 65536 } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
   const options = { env: { HOME: join(root, 'home') } };
   async function policy(allow: boolean) {
@@ -27,13 +27,21 @@ describe.skipIf(process.platform === 'win32')('configured local inventory query'
   it('rejects budget/scope/missing policy before opening or creating the ledger', async () => {
     const f = await fixture();
     await expect(inspectConfiguredInventory(f.project, { ...query, limit: 2 }, f.options)).rejects.toThrow('DISPATCH_INVENTORY_LIMIT');
-    await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toThrow('AUTHENTICATION_SCOPE_DENIED');
+    await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toThrow('POLICY_UNAVAILABLE');
     await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('POLICY_UNAVAILABLE');
     await expect(stat(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
     await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('POLICY_DENIED');
     await expect(stat(join(f.data, 'state'))).rejects.toMatchObject({ code: 'ENOENT' });
-    await f.policy(true); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('MANAGED_FILE_MISSING');
+    await f.policy(true); await expect(inspectConfiguredInventory(f.project, { ...query, scopeId: 'other' }, f.options)).rejects.toThrow('POLICY_DENIED');
+    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow('MANAGED_FILE_MISSING');
     await expect(stat(join(f.data, 'state'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('rejects project-config scope injection without touching the data root', async () => {
+    const f = await fixture(); const path = join(f.project, '.deckent/config.json');
+    const config = JSON.parse(await readFile(path, 'utf8')); config.local_access = { scopeIds: ['s', 'other'] };
+    await writeFile(path, JSON.stringify(config)); clearConfigCache();
+    await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toThrow();
+    await expect(stat(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('reads the configured ledger and reflects subsequent policy revocation without stale authorization', async () => {
     const f = await fixture(); const { store, path } = await openConfiguredAttemptStore(f.project, f.options);

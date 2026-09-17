@@ -25,9 +25,6 @@ export const CONFIG_FIELDS = Object.freeze({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),
     policyMaxBytes: z.number().int().positive().safe().default(1048576),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  local_access: field('config.field.local_access', z.object({
-    scopeIds: z.array(z.string().min(1).max(256).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))).default([]),
-  }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),

@@ -10,10 +10,16 @@ export class LocalOsPrincipalVerifier implements PrincipalVerifier {
   constructor(scopeIds: readonly string[]) { this.scopes = Object.freeze([...scopeIds]); }
   async verify(credential: unknown) {
     if (credential !== undefined) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
-    const user = userInfo();
-    if (!user.username || !Number.isSafeInteger(user.uid) || user.uid < 0) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
-    const issuer = hostname();
-    return verifiedPrincipalSchema.parse({ id: `${user.username}@${issuer}`, issuer, subject: String(user.uid),
-      assurance: 'os-user', scopeIds: this.scopes });
+    return verifiedPrincipalSchema.parse({ ...readLocalOsIdentity(), scopeIds: this.scopes });
   }
+}
+
+/** Identity evidence only; this function assigns no scope membership or permission. */
+export function readLocalOsIdentity() {
+  const user = userInfo();
+  if (!user.username || !Number.isSafeInteger(user.uid) || user.uid < 0) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
+  const issuer = hostname();
+  return verifiedPrincipalSchema.unwrap().omit({ scopeIds: true }).readonly().parse({
+    id: `${user.username}@${issuer}`, issuer, subject: String(user.uid), assurance: 'os-user',
+  });
 }

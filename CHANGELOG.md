@@ -102,3 +102,5 @@ INVENTORY-B: Read-only SQLite inventory reader; exact rebase preserves policy ex
 INVENTORY-D: Configured local inventory query;191 tests/12 Docker; public binding awaits policy-derived membership in INVENTORY/F.
 
 INVENTORY-E: Readonly WAL missing-shm failure is typed, without immutable fallback;192 tests/12 Docker. Native corruption classification remains follow-up.
+
+INVENTORY-F: Inventory scope membership derives from trusted policy, not project config;195 tests/12 Docker. Future public execution must use equivalent trusted membership.

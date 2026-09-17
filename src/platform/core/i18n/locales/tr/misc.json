@@ -576,6 +576,5 @@
   "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri",
   "config.field.artifacts": "Saklanan artifact için bayt cinsinden azami boyut",
   "config.field.execution": "Açıkça tanımlanmış sabit Docker imajı ve Git yürütme ayarları; null yürütmeyi kapatır",
-  "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
-  "config.field.local_access": "Doğrudan yerel işletim sistemi kimliğinin kapsamları; ayrıca politika izni gerekir"
+  "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları"
 }
