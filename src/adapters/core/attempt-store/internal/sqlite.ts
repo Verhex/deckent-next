@@ -1,3 +1,4 @@
+import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { DispatchClaim, DispatchTerminal, DispatchStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
@@ -36,6 +37,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore {
       this.db.close(); throw sqliteFailure(error);
     }
   }
+  async retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchOutput(claim, receipt); }
   async readDispatch(request: DispatchClaim['request']) { return new SqliteDispatchJournal(this.db).readDispatch(request); }
   async claimDispatch(claim: DispatchClaim) { return new SqliteDispatchJournal(this.db).claimDispatch(claim); }
   async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }

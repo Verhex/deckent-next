@@ -1,3 +1,5 @@
+import type { ArtifactStore } from '#capabilities/index.js';
+import { retainOutput, verifyRetainedOutput } from './output.js';
 import { identitySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sandboxRequestSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
@@ -12,7 +14,7 @@ export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecor
 export class DispatchApplication {
   private readonly owner: string;
   constructor(private readonly store: DispatchStore, private readonly supervisor: ExecutionSupervisor,
-    private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string) {
+    private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore) {
     this.owner = identitySchema.parse(owner);
   }
   private async admit(action: 'execute' | 'release' | 'reconcile', input: unknown, credential: unknown) {
@@ -30,6 +32,8 @@ export class DispatchApplication {
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
     const result = await this.supervisor.execute(request, signal);
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: claimed.record });
+    const output = await retainOutput(this.artifacts, request, result);
+    await this.store.retainDispatchOutput(claim, output);
     const record = await this.store.finishDispatch(claim, { handle: result.handle, exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted });
     return Object.freeze({ kind: 'terminal', record });
   }
@@ -50,7 +54,8 @@ export class DispatchApplication {
     const request = await this.admit('release', input, credential);
     const record = await this.store.readDispatch(request);
     if (!record?.terminal) throw new DispatchError('DISPATCH_NOT_ADMITTED');
-    // Caller must retain required artifacts first; release never deletes the durable dispatch fence.
+    await verifyRetainedOutput(this.artifacts, record);
+    // Artifact verification is mandatory; releasing the container never deletes the durable fence.
     await this.supervisor.release(request);
   }
 }

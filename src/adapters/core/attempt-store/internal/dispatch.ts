@@ -1,3 +1,4 @@
+import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
@@ -22,6 +23,22 @@ export class SqliteDispatchJournal {
       if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
       throw sqliteFailure(error);
     }
+  }
+  async retainDispatchOutput(input: DispatchClaim, value: ArtifactReceipt) {
+    const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
+    if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
+    return this.transaction(() => {
+      const existing = this.read(claim.request);
+      if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      if (existing.output) {
+        if (existing.output.digest !== receipt.digest || existing.output.byteLength !== receipt.byteLength || existing.output.scopeId !== receipt.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
+        return existing;
+      }
+      const record = dispatchRecordSchema.parse({ ...existing, output: receipt });
+      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
+        .run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
+      return record;
+    });
   }
   async readDispatch(request: DispatchClaim['request']) {
     const parsed = sandboxRequestSchema.parse(request);
