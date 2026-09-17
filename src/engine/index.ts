@@ -11,3 +11,4 @@ export { DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, Poli
 export type { PolicySource } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
+export { planSchedulingWave, SchedulingError } from '#engine/core/scheduling/index.js';

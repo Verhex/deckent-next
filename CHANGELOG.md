@@ -108,3 +108,5 @@ INVENTORY-F: Inventory scope membership derives from trusted policy, not project
 INVENTORY-G: Shipped read-only CLI/SDK inventory parity;198 tests/12 Docker. Follow-ups: signal/code labels, narrow text layout, config locale/output-mode, catalog prefix lint.
 
 RUN-A: Pure revisioned Run graph/progress/attempt bindings;199 tests/12 Docker foundations. No durable store or acceptance closure claimed.
+
+SCHEDULING-A: Bounded deterministic wave planning with explicit policy ordering and execution/in-flight limits;206 tests/12 Docker. Planning alone never authorizes launch.
