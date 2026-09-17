@@ -42,7 +42,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     onWarning: warning => output(warning, value => value.message, 'warning') };
   if (command === 'paths') {
     if (args.dryRun || args.positionals.length !== 1) throw ErrorRegistry.createError('CLI_USAGE');
-    output(inspectProductPaths(args.global ? undefined : root, { env }), data => formatValue(data));
+    output(await inspectProductPaths(root, { ...options, globalOnly: args.global }), data => formatValue(data));
     return;
   }
   if (command === 'config') {
@@ -63,7 +63,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   locale = resolveLocale(args.language, env, config.language); mode = config.output_mode;
   context.onLocale?.(locale);
   const platform = normalizeGlobalScopePlatform(process.platform, env), host = getSystemProfile();
-  const tenant = resolveTenant(root, { env, tenantId: env['DECKENT_TENANT_ID'] || config.tenant_id });
+  const tenant = resolveTenant(root, { env, layout: config.productLayout, tenantId: env['DECKENT_TENANT_ID'] || config.tenant_id });
   const osPrincipal = resolveLocalOsPrincipal('cli');
   const claim = env['DECKENT_TENANT_ID'] || (config.tenant_id === 'local' ? undefined : config.tenant_id);
   const principal = { ...osPrincipal, ...(claim ? { tenantId: claim } : {}) };

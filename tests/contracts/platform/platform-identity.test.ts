@@ -5,7 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import {
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, resolveGlobalConfigPaths,
-  resolveDeckentHome, resolveProductPaths, productResourcePath, validatePath, validateExistingPath, validateTaskId,
+  resolveProductPaths, productResourcePath, validatePath, validateExistingPath, validateTaskId,
   suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity,
   detectHostMemory, getSystemProfile, detectEnvironment, resolveLocalOsPrincipal, resolveLocalOsActorId,
   principalToActor, assertActorAssurance, resolveCallerTenant, isValidTenantId, tenantIsolationPath,
@@ -34,9 +34,9 @@ describe('platform and identity contracts', () => {
   });
   it('uses one root for brain and other resources; obsolete independent override has no authority', () => {
     const env = { HOME: '/h', DECKENT_HOME: '/state', BRAIN_HOME: '/memory' };
-    expect(resolveDeckentHome('/project', { env, platform: 'linux' })).toBe('/state');
+    expect(resolveProductPaths('/project', { env, platform: 'linux' }).root).toBe('/state');
     expect(productResourcePath(resolveProductPaths('/project', { env, platform: 'linux' }), 'brain')).toBe('/state/brain');
-    expect(resolveDeckentHome('C:\\project', { env: {}, platform: 'win32' })).toBe('C:\\project\\.deckent');
+    expect(resolveProductPaths('C:\\project', { env: {}, platform: 'win32' }).root).toBe('C:\\project\\.deckent');
   });
   it('rejects POSIX and Windows traversal, sibling-prefix tricks, drive changes and ADS', () => {
     expect(validatePath('/safe', './child', 'linux')).toBe('/safe/child');

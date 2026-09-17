@@ -1,7 +1,7 @@
 import { posix, win32 } from 'node:path';
 import { resolveProductLayout, productResourcePath } from './layout/resolve.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-import { envValue, type Environment } from './env.js';
+import { envValue, productRootOverride, type Environment } from './env.js';
 
 export type GlobalScopePlatform = 'linux' | 'wsl' | 'darwin' | 'win32';
 export interface GlobalScopePaths {
@@ -26,7 +26,7 @@ export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Envi
   const home = platform === 'win32'
     ? envValue(env, 'USERPROFILE') ?? (drive && homePath ? win32.join(drive, homePath) : null)
     : envValue(env, 'HOME') ?? null;
-  const override = envValue(env, 'DECKENT_HOME');
+  const override = productRootOverride(env);
   if (!home && !override) throw ErrorRegistry.createError('HOME_NOT_RESOLVED');
   const layout = resolveProductLayout({ projectRoot: home ?? override!, ...(override ? { root: override } : {}), platform: platform === 'win32' ? 'win32' : 'posix' });
   // No host home means no implicit scratch location: callers must supply a platform-local location.

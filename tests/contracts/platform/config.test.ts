@@ -8,7 +8,7 @@ import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
-  getConfigValue, resolveGlobalConfigPaths, t,
+  getConfigValue, resolveGlobalConfigPaths, productResourcePath, resolveTenant, t,
 } from '../../../src/platform/index.js';
 
 import { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '../../../src/adapters/index.js';
@@ -237,6 +237,28 @@ describe('new config contract and write authority', () => {
     const result = await resolveConfigSecrets({ a: '$DECK:TOKEN', b: ['$DECK:TOKEN'] }, async () => { calls++; return 'value'; });
     expect(calls).toBe(1); expect(result.secretPaths).toEqual(['/a', '/b/0']);
     await expect(resolveConfigSecrets({ a: '$DECK:TOKEN' }, async () => { throw new Error('private-backend-value'); })).rejects.toThrow(/^SECRET_RESOLUTION_FAILED$/);
+  });
+
+  it('pins configured layouts across cache copies and reloads, including tenant resolution', async () => {
+    const f = await fixture(), firstRoot = join(f.root, 'data-a'), secondRoot = join(f.root, 'data-b');
+    await writeFile(f.projectPath, JSON.stringify({ layout: { root: firstRoot } }));
+    const first = await loadConfig(f.project, { env: f.env });
+    const cached = await loadConfig(f.project, { env: f.env });
+    expect(Object.isFrozen(cached.productLayout)).toBe(true);
+    expect(Object.isFrozen(cached.productLayout.resources)).toBe(true);
+    await writeFile(f.projectPath, JSON.stringify({ layout: { root: secondRoot } }));
+    const next = await loadConfig(f.project, { env: f.env });
+    expect(next.productLayout.revision).not.toBe(first.productLayout.revision);
+    expect(productResourcePath(first.productLayout, 'memory')).toBe(join(firstRoot, 'brain', 'memory.db'));
+    expect(resolveTenant(f.project, { tenantId: 'acme', layout: first.productLayout }).isolationRoot).toBe(join(firstRoot, 'tenants', 'acme'));
+  });
+  it('rejects invalid layout configuration instead of following arbitrary config locations', async () => {
+    const f = await fixture();
+    for (const layout of [{ root: 'relative' }, { resources: { memory: '../escape' } }, { resources: { unknown: 'x' } },
+      { resources: { config: 'elsewhere.json' } }, { resources: { tasks: 'locks' } }]) {
+      await writeFile(f.projectPath, JSON.stringify({ layout }));
+      await expect(loadConfig(f.project, { env: f.env })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
+    }
   });
 
 });

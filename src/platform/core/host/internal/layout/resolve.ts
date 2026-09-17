@@ -5,6 +5,7 @@ import { PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index
 export type ProductResource = keyof typeof registry.resources;
 export interface ProductLayoutInput {
   readonly projectRoot: string;
+  readonly bootstrapConfigPath?: string;
   readonly root?: string;
   readonly platform?: 'posix' | 'win32';
   readonly resources?: Partial<Record<ProductResource, string>>;
@@ -12,6 +13,7 @@ export interface ProductLayoutInput {
 export interface ProductLayout {
   readonly schemaVersion: number;
   readonly revision: string;
+  readonly bootstrapConfigPath: string;
   readonly root: string;
   readonly platform: 'posix' | 'win32';
   readonly resources: Readonly<Record<ProductResource, string>>;
@@ -33,17 +35,27 @@ export function resolveProductLayout(input: ProductLayoutInput): ProductLayout {
   const root = api.normalize(input.root ?? api.join(input.projectRoot, registry.rootName));
   const resources = { ...registry.resources };
   for (const [key, value] of Object.entries(input.resources ?? {})) {
+    if (key === registry.bootstrapResource) throw new LayoutError('LAYOUT_RESOURCE_INVALID');
     if (!Object.hasOwn(resources, key)) throw new LayoutError('LAYOUT_RESOURCE_UNKNOWN');
     relativeResource(value); resources[key as ProductResource] = value;
   }
-  for (const value of Object.values(resources)) relativeResource(value);
-  const snapshot = { schemaVersion: registry.schemaVersion, root, platform, resources: Object.freeze(resources) };
+  const seen = new Set<string>();
+  for (const value of Object.values(resources)) {
+    relativeResource(value);
+    const identity = platform === 'win32' ? value.toLowerCase() : value;
+    if (seen.has(identity)) throw new LayoutError('LAYOUT_RESOURCE_INVALID');
+    seen.add(identity);
+  }
+  const bootstrapConfigPath = input.bootstrapConfigPath ?? api.join(root, resources[registry.bootstrapResource as ProductResource]);
+  if (!api.isAbsolute(bootstrapConfigPath) || hasControl(bootstrapConfigPath)) throw new LayoutError('LAYOUT_ROOT_INVALID');
+  const snapshot = { bootstrapConfigPath: api.normalize(bootstrapConfigPath), schemaVersion: registry.schemaVersion, root, platform, resources: Object.freeze(resources) };
   const revision = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
   return Object.freeze({ ...snapshot, revision });
 }
 /** Callers retain this snapshot throughout one operation; config reload produces a new snapshot. */
 export function productResourcePath(layout: ProductLayout, resource: ProductResource): string {
   if (!Object.hasOwn(layout.resources, resource)) throw new LayoutError('LAYOUT_RESOURCE_UNKNOWN');
+  if (resource === registry.bootstrapResource) return layout.bootstrapConfigPath;
   const relative = layout.resources[resource]; relativeResource(relative);
   return (layout.platform === 'win32' ? win32 : posix).join(layout.root, ...relative.split('/'));
 }

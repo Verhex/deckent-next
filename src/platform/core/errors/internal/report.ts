@@ -8,7 +8,7 @@ import { exitCodeFor, type ExitCode } from './exit-codes.js';
 import { colorTier, type ColorOptions } from '#platform/core/output/index.js';
 import { emit, type OutputSink } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
-import { resolveDeckentHome, resolveProductLayout, productResourcePath } from '#platform/core/host/index.js';
+import { resolveProductPaths, productResourcePath } from '#platform/core/host/index.js';
 import type { Environment } from '#platform/core/host/index.js';
 
 export function redactSensitive(value: string): string {
@@ -68,7 +68,7 @@ async function pruneCrashes(directory: string, env: Environment): Promise<void> 
 export async function writeCrashArtifact(error: unknown, root: string, argv: readonly string[] = process.argv, env: Environment = process.env): Promise<string | null> {
   let temp: string | undefined;
   try {
-    const layout = resolveProductLayout({ projectRoot: root, root: resolveDeckentHome(root, { env }), platform: process.platform === 'win32' ? 'win32' : 'posix' });
+    const layout = resolveProductPaths(root, { env });
     const directory = productResourcePath(layout, 'crashes');
     await mkdir(directory, { recursive: true });
     if ((await lstat(directory)).isSymbolicLink()) return null;

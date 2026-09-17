@@ -10,3 +10,4 @@ export type OutputMode = typeof OUTPUT_MODES[number];
 
 /** Historical introduction version; unlike PACKAGE_VERSION this never advances on release. */
 export const CONFIG_CONTRACT_SINCE = '1.0.0-alpha.1';
+export const LAYOUT_CONTRACT_SINCE = '1.0.0-alpha.2';

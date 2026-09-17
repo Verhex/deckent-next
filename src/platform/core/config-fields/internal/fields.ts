@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
+import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 
 type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
-function field<T extends z.ZodTypeAny>(descriptionKey: string, schema: T, environment: readonly EnvironmentBinding[] = []) {
-  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since: CONFIG_CONTRACT_SINCE }) });
+function field<T extends z.ZodTypeAny>(descriptionKey: string, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
+  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since }) });
 }
 const providerId = z.string().trim().min(1).nullable().default(null);
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
@@ -13,6 +13,8 @@ export const CONFIG_FIELDS = Object.freeze({
   language: field('config.field.language', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).default('en'), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
   mode: field('config.field.mode', z.enum(['performance', 'balanced', 'economic', 'api']).default('performance'), [{ names: ['DECKENT_MODE'] }]),
   output_mode: field('config.field.output_mode', z.enum(OUTPUT_MODES).default('standard')),
+  layout: field('config.field.layout', z.object({ root: z.string().min(1).nullable().default(null), resources: z.record(z.string().min(1)).default({}) }).strict().default({}),
+    [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),

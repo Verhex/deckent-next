@@ -1,10 +1,10 @@
 import { lstat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { resolveLocale, t, type Locale } from '#platform/core/i18n/index.js';
 import { ENVIRONMENT_KEYS, envValue, type Environment } from '#platform/core/host/index.js';
 import { resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
-import { resolveProductPaths, productResourcePath } from '#platform/core/host/index.js';
+import { resolveProductLayout, productResourcePath, type ProductLayout, LayoutError } from '#platform/core/host/index.js';
 import { getSystemProfile } from '#platform/core/host/index.js';
 import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '#platform/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
@@ -19,6 +19,7 @@ import { readProjectConfig } from './heal.js';
 
 export interface ResolvedConfig extends DeckentConfig {
   readonly projectRoot: string;
+  readonly productLayout: ProductLayout;
   /** RFC 6901 pointers, relative to the canonical nested config only. */
   readonly secretPaths: readonly string[];
 
@@ -31,6 +32,10 @@ export interface ConfigLoadOptions {
   readonly heal?: boolean;
   readonly globalOnly?: boolean;
   readonly onWarning?: (warning: ConfigWarning) => void;
+}
+function cloneResolved(value: ResolvedConfig): ResolvedConfig {
+  const clone = structuredClone(value);
+  return { ...clone, productLayout: Object.freeze({ ...clone.productLayout, resources: Object.freeze(clone.productLayout.resources) }) };
 }
 interface Cached { value: ResolvedConfig; warnings: ConfigWarning[] }
 const cache = new Map<string, Cached>();
@@ -51,10 +56,10 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
   return versionedConfig(result.value);
 }
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
-  const root = resolve(projectRoot), env = options.env ?? process.env;
+  const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };
   const platform = options.platform ?? process.platform;
   const globalPath = await resolveGlobalConfigReadPath(env, platform);
-  const layout = resolveProductPaths(root, { env, platform });
+  const layout = resolveProductLayout({ projectRoot: root, platform: platform === 'win32' ? 'win32' : 'posix' });
   const projectPath = productResourcePath(layout, 'config');
   const paths = options.globalOnly ? [globalPath] : [globalPath, projectPath];
   const stamps = await Promise.all(paths.map(stamp));
@@ -63,7 +68,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const cached = options.force || envValue(env, 'DECKENT_CONFIG_RELOAD') === '1' ? undefined : cache.get(key);
   if (cached) {
     for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(cached.value), env);
-    cached.warnings.forEach(w => options.onWarning?.(w)); return structuredClone(cached.value); }
+    cached.warnings.forEach(w => options.onWarning?.(w)); return cloneResolved(cached.value); }
   const warnings: ConfigWarning[] = [];
   const global = await loadGlobalConfig({ env, platform, onWarning: w => warnings.push(w) }) ?? {};
   const project: unknown = options.globalOnly || projectPath === globalPath ? {} : await readProjectConfig(projectPath, {
@@ -84,7 +89,16 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });
   const resolver = options.secretResolver ?? (async (name: string) => Object.hasOwn(env, name) ? env[name] : undefined);
   const secrets = await resolveConfigSecrets(checked.config, resolver, name => warnings.push({ code: 'CONFIG_SECRET_UNRESOLVED', path: name, message: t('config.secretMissing', { key: name }, locale) }));
-  const value: ResolvedConfig = { ...secrets.config, projectRoot: root, secretPaths: secrets.secretPaths };
+  let productLayout: ProductLayout;
+  try {
+    const bootstrapConfigPath = options.globalOnly ? globalPath : projectPath;
+    productLayout = resolveProductLayout({ projectRoot: root, root: checked.config.layout.root ?? (options.globalOnly ? dirname(globalPath) : layout.root),
+      platform: platform === 'win32' ? 'win32' : 'posix', bootstrapConfigPath, resources: checked.config.layout.resources });
+  } catch (error) {
+    if (error instanceof LayoutError) throw new ConfigValidationError([{ path: 'layout', reason: error.code }], locale);
+    throw error;
+  }
+  const value: ResolvedConfig = { ...secrets.config, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
   for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
   if (secrets.references.length === 0 && (await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i])) {
     if (cache.size >= 128) cache.delete(cache.keys().next().value!);

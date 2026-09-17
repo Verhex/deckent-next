@@ -14,5 +14,7 @@
     "integrations": "integrations",
     "crashes": "crashes",
     "tenants": "tenants"
-  }
+  },
+  "bootstrapResource": "config",
+  "rootEnvironmentKey": "DECKENT_HOME"
 }

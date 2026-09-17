@@ -249,3 +249,7 @@ Host sizing heuristics remain ASSURANCE scope. `since` is historical introductio
 | FOUNDATION/B + PATH-INSPECTION | Exact candidate package mapping, CLI composition and shared path query | Fable PASS1357; isolated99 tests, build/smoke; proof/FOUNDATION-B-verification.json | DONE |
 
 Residuals: restore host-test verification on HOST-SETUP landing; distinguish provider policy registry from clients in CONTRACT; replace relative manifest metadata import before FOUNDATION closure.
+
+| PATH-LAYOUT/C | Fixed locator, validated layout config and immutable inspection snapshot | Fable PASS1358; isolated102 tests; proof/PATH-LAYOUT-C-verification.json | DONE |
+
+Residual: once config is loaded, propagate its pinned layout to all operation/crash consumers; bootstrap environment resolution does not replace an active operation snapshot.
