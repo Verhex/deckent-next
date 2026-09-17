@@ -1,10 +1,13 @@
 // Size discipline is enforced mechanically (ADR-D-006 amendment, owner 2026-09-16):
-// every file ≤ 800 lines, every function ≤ 150 lines (warning). Architecture rules
+// every file ≤ arch.budgets.maxLinesPerFile lines, every function ≤ 150 lines (warning). Architecture rules
 // (package direction, internal/ isolation, i18n, literals, .md write gate, budgets)
 // live in scripts/lint-arch.mjs and arch.json.
+import { readFileSync } from 'node:fs';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
+
+const arch = JSON.parse(readFileSync(new URL('./arch.json', import.meta.url), 'utf8'));
 
 export default tseslint.config(
   { ignores: ['dist/**', 'node_modules/**', 'apps/**/dist/**', 'apps/**/node_modules/**', 'coverage/**'] },
@@ -14,7 +17,7 @@ export default tseslint.config(
     files: ['**/*.{ts,tsx,mts,cts,js,mjs,cjs}'],
     languageOptions: { globals: { ...globals.node } },
     rules: {
-      'max-lines': ['error', { max: 800, skipBlankLines: false, skipComments: false }],
+      'max-lines': ['error', { max: arch.budgets.maxLinesPerFile, skipBlankLines: false, skipComments: false }],
       'max-lines-per-function': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
       'no-restricted-imports': ['error', { patterns: [{ group: ['**/internal/**'], message: 'internal/ modules are package-private; import the package index instead.' }] }],
     },

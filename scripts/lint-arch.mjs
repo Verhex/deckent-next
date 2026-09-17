@@ -12,7 +12,7 @@ import ts from 'typescript';
 import { lintConfigVocabulary } from './config-vocabulary.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootArg = process.argv.indexOf('--root');
@@ -228,11 +228,21 @@ for (const file of srcFiles) {
 }
 
 // ---- 6: budgets
-const textFiles = [...walk(join(ROOT, 'src'), () => true), ...walk(join(ROOT, 'scripts'), () => true), ...walk(join(ROOT, 'tests'), () => true), ...walk(join(ROOT, 'apps'), isTs)]
-  .filter((p) => /\.(ts|tsx|mts|js|mjs|cjs|json|sh|yml|yaml)$/.test(p) && !p.endsWith('HARVEST.json'));
+const { fileRoots, textExtensions, maxLinesPerFile, designTargetLines } = arch.budgets;
+if (!Array.isArray(fileRoots) || !fileRoots.length || !Array.isArray(textExtensions) || !textExtensions.length
+  || !Number.isSafeInteger(maxLinesPerFile) || maxLinesPerFile < 1
+  || !Number.isSafeInteger(designTargetLines) || designTargetLines < 1 || designTargetLines > maxLinesPerFile) {
+  fail('budget-config', 'arch.json', 'invalid file scope or line limits');
+}
+const textFiles = [...new Set((Array.isArray(fileRoots) ? fileRoots : []).flatMap(dir => walk(join(ROOT, dir),
+  p => Array.isArray(textExtensions) && textExtensions.includes(extname(p)))))];
+let aboveDesignTarget = 0;
 for (const file of textFiles) {
-  const lines = readFileSync(file, 'utf8').split('\n').length;
-  if (lines > arch.budgets.maxLinesPerFile) fail('file-size', rel(file), `${lines} lines > ${arch.budgets.maxLinesPerFile}`);
+  if (arch.budgets.evidenceFiles?.includes(rel(file))) continue;
+  const text = readFileSync(file, 'utf8');
+  const lines = text.length === 0 ? 0 : text.split('\n').length - Number(text.endsWith('\n'));
+  if (lines > maxLinesPerFile) fail('file-size', rel(file), `${lines} lines > ${maxLinesPerFile}`);
+  if (lines > designTargetLines) aboveDesignTarget++;
 }
 const perPackage = {};
 let total = 0;
@@ -279,7 +289,7 @@ if (vocab?.enforce) {
 }
 
 // ---- report
-const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
 if (violations.length === 0) { process.stdout.write(`${summary}\n`); process.exit(0); }
 for (const v of violations) process.stdout.write(`✗ [${v.rule}] ${v.file} — ${v.message}\n`);
 process.stdout.write(`${summary}\n`);

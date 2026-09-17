@@ -109,4 +109,18 @@ describe('lint-arch tier contract', () => {
     expect((await lint(root)).out).toContain('[import-map]');
   });
 
+  it('enforces the shared file cap for native and application sources without an extra EOF line', async () => {
+    const root = await fixture({
+      'native/supervisor/main.go': '// line\n'.repeat(1500),
+      'native/authority/main.c': '// line\n'.repeat(1500),
+      'apps/desktop/view.js': '// line\n'.repeat(1500),
+    });
+    expect((await lint(root)).code).toBe(0);
+    for (const file of ['native/supervisor/main.go', 'native/authority/main.c', 'apps/desktop/view.js']) {
+      await writeFile(join(root, file), '// line\n'.repeat(1501));
+      expect((await lint(root)).out).toContain(`[file-size] ${file}`);
+      await writeFile(join(root, file), '// line\n'.repeat(1500));
+    }
+  });
+
 });

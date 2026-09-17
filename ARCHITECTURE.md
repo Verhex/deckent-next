@@ -213,7 +213,7 @@ Dependency direction (fail-closed): `kernel ← providers ← runtime ← orches
 ## Package contract
 
 - Public API is `index.ts`; everything else is internal.
-- Every file ≤ 800 lines (eslint + lint-arch), functions ≤ 150 lines (warning).
+- Every configured text source file ≤ 1,500 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
 - Package line budgets and the total budget live in `arch.json` (`budgets`); growth past a budget is a
   design decision, not a lint fix.
 - Mechanism code is string-free: user-facing text comes from `kernel/core/i18n/locales/{en,tr}/*.json` through `t('key')`.
@@ -234,7 +234,7 @@ Model, provider and flow identifiers appear only in `providers/core/registry/` (
 - `tests/e2e/` — real binary journeys (`doctor`, `run`, `start`, `do`, …) on fixture projects under `tests/fixtures/`.
 - `tests/golden/` — normalized outputs of deterministic commands, captured from the legacy binary and
   diffed against the new one during the port.
-- Budget: ≤ 8,000 test cases total, every test file ≤ 800 lines (lint). Legacy invariant titles are in
+- Budget: ≤ 8,000 test cases total, every test file ≤ 1,500 lines (lint; 800 design target). Legacy invariant titles are in
   `tests/contracts/HARVEST.json`; each port card lists which titles it honours.
 
 ## Documents
@@ -271,3 +271,5 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 | 2026-09-17 | Task-centered work; run/do/autonomous execution, goal-bounded Mission, modular task kinds; IFS ERP first business integration. | Cloud MCP candidate plus Applications 10 native-adapter proof; local 6–8 workers/up to 50 tasks is a workload scenario, not a system ceiling. Historical names/semantics do not override this decision. |
 
 Decision 2026-09-17: pure config-fields SSOT + source-derived literal gate (REVIEW1323); unified .deckent product-state root accepted, implementation tracked separately.
+
+| 2026-09-17 | FOUNDATION/A: 1,500 source lines maximum, 800 design target; native C/Go and application sources included. | Owner size amendment; Fable PASS1340. Historical HARVEST evidence exception is one exact file path. |

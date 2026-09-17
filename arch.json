@@ -58,7 +58,7 @@
     "note": "Lower tiers import only lower/same-tier unit index.ts; package index.ts composes shipped units. Optional editions are loaded lazily when implemented."
   },
   "budgets": {
-    "maxLinesPerFile": 800,
+    "maxLinesPerFile": 1500,
     "packageLines": {
       "kernel": 25000,
       "providers": 12000,
@@ -68,7 +68,39 @@
       "observability": 12000
     },
     "totalSrcLines": 200000,
-    "testCases": 8000
+    "testCases": 8000,
+    "designTargetLines": 800,
+    "fileRoots": [
+      "src",
+      "scripts",
+      "tests",
+      "apps",
+      "native"
+    ],
+    "textExtensions": [
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".json",
+      ".sh",
+      ".yml",
+      ".yaml",
+      ".go",
+      ".c",
+      ".h",
+      ".cc",
+      ".cpp",
+      ".hpp",
+      ".rs",
+      ".py"
+    ],
+    "evidenceFiles": [
+      "tests/contracts/HARVEST.json"
+    ]
   },
   "i18n": {
     "catalogDir": "src/kernel/core/i18n",

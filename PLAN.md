@@ -241,3 +241,5 @@ whether each is durable, secret, cache, runtime or workspace. Verify root reloca
 B01/TENANT: unify tenant.ts local fallback with registry identity authority; tracked residual from REVIEW1323 N1.
 K2 landing checklist: regenerate scripts/config-vocabulary.json from the final source layout BEFORE lint/build.
 Host sizing heuristics remain ASSURANCE scope. `since` is historical introduction version, not current package version.
+
+| FOUNDATION/A | Shared source/native/app budget: 1,500 hard cap, 800 design target; monotonic build timing | Fable PASS1340 | DONE |

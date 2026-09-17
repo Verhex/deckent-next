@@ -59,8 +59,46 @@
         "maxLinesPerFile",
         "packageLines",
         "totalSrcLines",
-        "testCases"
-      ]
+        "testCases",
+        "designTargetLines",
+        "fileRoots",
+        "textExtensions"
+      ],
+      "properties": {
+        "maxLinesPerFile": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "designTargetLines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fileRoots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "textExtensions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^\\.[a-z]+$"
+          }
+        },
+        "evidenceFiles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "i18n": {
       "type": "object",

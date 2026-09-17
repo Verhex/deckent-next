@@ -60,7 +60,7 @@ function buildNative() {
   return 'built';
 }
 
-const started = Date.now();
+const started = performance.now();
 rmSync(DIST, { recursive: true, force: true });
 run(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['tsc', '-p', 'tsconfig.json']);
 const assets = copyAssets();
@@ -70,4 +70,4 @@ for (const bin of BINS) {
 }
 const native = buildNative();
 const identity = buildIdentity();
-process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, ${Date.now() - started}ms\n`);
+process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, ${Math.round(performance.now() - started)}ms\n`);
