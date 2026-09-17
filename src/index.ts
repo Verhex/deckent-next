@@ -1,1 +1,1 @@
-export * from '#kernel/index.js';
+export * from '#platform/index.js';

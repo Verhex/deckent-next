@@ -1,9 +1,6 @@
-#!/usr/bin/env node
-import { pathToFileURL } from 'node:url';
-import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#kernel/index.js';
-import { registerProviderConfig } from '#providers/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
-export type { ExitCode } from '#kernel/index.js';
+export type { ExitCode } from '#platform/index.js';
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
 export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {
@@ -18,8 +15,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
-    registerProviderConfig();
-    if (argv[0] === 'config' || argv[0] === 'doctor') {
+    context.initialize?.();
+    if (argv[0] === 'config' || argv[0] === 'doctor' || argv[0] === 'paths') {
       await runKernelCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
@@ -31,6 +28,3 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().then(code => { process.exitCode = code; });
-}

@@ -26,23 +26,26 @@
     "noImplicitOverride": true,
     "baseUrl": ".",
     "paths": {
-      "#kernel/*": [
-        "./src/kernel/*"
+      "#platform/*": [
+        "./src/platform/*"
       ],
-      "#providers/*": [
-        "./src/providers/*"
+      "#domain/*": [
+        "./src/domain/*"
       ],
-      "#runtime/*": [
-        "./src/runtime/*"
+      "#capabilities/*": [
+        "./src/capabilities/*"
       ],
-      "#orchestration/*": [
-        "./src/orchestration/*"
+      "#engine/*": [
+        "./src/engine/*"
+      ],
+      "#adapters/*": [
+        "./src/adapters/*"
       ],
       "#surfaces/*": [
         "./src/surfaces/*"
       ],
-      "#observability/*": [
-        "./src/observability/*"
+      "#composition/*": [
+        "./src/composition/*"
       ]
     }
   },

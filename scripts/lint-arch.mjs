@@ -90,6 +90,23 @@ function importsOf(file) {
   return out;
 }
 
+// Pure domain packages cannot acquire host capabilities through external modules or ambient globals.
+for (const file of srcFiles) {
+  const policy = arch.packages[packageOf(file)];
+  if (!policy?.pure) continue;
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const ambient = new Set(['process', 'globalThis', 'global', 'Buffer', 'require', 'eval', 'Function', 'Date']);
+  function visit(node) {
+    if (ts.isIdentifier(node) && ambient.has(node.text)) fail('domain-purity', rel(file), `ambient capability ${node.text}`);
+    const spec = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier : undefined;
+    if (spec && ts.isStringLiteral(spec) && !spec.text.startsWith('.') && !spec.text.startsWith('#')
+      && !(policy.externalImports ?? []).includes(spec.text)) fail('domain-purity', rel(file), `external dependency ${spec.text}`);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) fail('domain-purity', rel(file), 'dynamic import');
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+}
+
 // ---- 1 + 2: direction, public API, internal isolation, observability, apps
 for (const file of [...srcFiles, ...appFiles]) {
   const from = packageOf(file);

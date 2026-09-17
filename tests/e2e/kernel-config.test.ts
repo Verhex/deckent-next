@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveGlobalConfigPaths } from '../../src/kernel/index.js';
+import { resolveGlobalConfigPaths } from '../../src/platform/index.js';
 
 const exec = promisify(execFile);
-const binary = fileURLToPath(new URL('../../dist/surfaces/core/cli/internal/entry.js', import.meta.url));
+const binary = fileURLToPath(new URL('../../dist/composition/core/cli/internal/entry.js', import.meta.url));
 const roots: string[] = [];
 async function fixture(kind: 'empty' | 'global-only' | 'project-override') {
   const root = await mkdtemp(join(tmpdir(), `deckent-${kind}-`)); roots.push(root);
@@ -103,7 +103,7 @@ describe('K1 blocking review reproductions', () => {
   });
   it('recovers after a real writer process crashes and emits the typed warning on stderr', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
-    const module = new URL('../../dist/kernel/index.js', import.meta.url).href;
+    const module = new URL('../../dist/platform/index.js', import.meta.url).href;
     const child = spawn(process.execPath, ['--input-type=module', '-e',
       `const {withConfigWriteLock}=await import(${JSON.stringify(module)}); await withConfigWriteLock(process.argv[1],async()=>{process.stdout.write('ready');await new Promise(()=>setInterval(()=>{},1000));});`, path],
     { cwd: f.project, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -133,7 +133,7 @@ describe('K1 blocking review reproductions', () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
     const dead = await exec(process.execPath, ['-e', 'process.stdout.write(String(process.pid))']);
     await writeFile(`${path}.write-lock`, JSON.stringify({ pid: Number(dead.stdout) }));
-    const module = new URL('../../dist/kernel/index.js', import.meta.url).href;
+    const module = new URL('../../dist/platform/index.js', import.meta.url).href;
     const witness = join(f.project, 'active-writer');
     const script = `const {withConfigWriteLock}=await import(${JSON.stringify(module)});
       const {open,unlink}=await import('node:fs/promises');

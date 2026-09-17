@@ -1,12 +1,13 @@
 import {
-  configDisplayView, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
+  configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, resolveTenant, resolveCallerTenant,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
-} from '#kernel/index.js';
+} from '#platform/index.js';
 
 export interface CommandContext {
+  initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
 }
@@ -39,6 +40,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   }
   const options: ConfigLoadOptions = { env, globalOnly: args.global,
     onWarning: warning => output(warning, value => value.message, 'warning') };
+  if (command === 'paths') {
+    if (args.dryRun || args.positionals.length !== 1) throw ErrorRegistry.createError('CLI_USAGE');
+    output(inspectProductPaths(args.global ? undefined : root, { env }), data => formatValue(data));
+    return;
+  }
   if (command === 'config') {
     if (action === 'get') {
       if (args.dryRun || args.positionals.length > 3) throw ErrorRegistry.createError('CLI_USAGE');

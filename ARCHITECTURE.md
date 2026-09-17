@@ -190,23 +190,23 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 
 ## Packages (current implementation)
 
-```
-src/
-  kernel/          types · errors · config · i18n catalog · registries · store primitives · docs-authority
-  providers/       provider adapters, model registry (the only place model/provider identifiers may appear)
-  runtime/         execution: spawn backends, exact-docker lifecycle, custody (posix + win32), effects, locks, worker
-  orchestration/   planner · scheduler · sprint lifecycle · evaluation · routing · agent session · autonomous
-  surfaces/        cli · mcp · api · sdk · connectors — thin adapters over orchestration/runtime services
-  observability/   monitor · nervous · read-models — reads everything, is imported by nobody
-apps/
-  dashboard/       web observer (HTTP only; no source imports)
-  desktop/         native operator app (imports the published surfaces type API only)
-native/            exec-authority N-API addon (C), sibling of dist/ — load path is a runtime contract
-worker/            container-side mini package (runtime-only dependencies)
+```text
+src/platform/       config, errors, i18n, identity, host paths, shared metadata and utilities
+src/adapters/       provider configuration and credential validation
+src/surfaces/       CLI parsing/rendering and public surface API
+src/composition/    executable wiring: selects adapters, then invokes the CLI surface
 ```
 
-Dependency direction (fail-closed): `kernel ← providers ← runtime ← orchestration ← surfaces`.
-`observability` may import kernel/runtime/orchestration read-models and is never imported.
+`domain`, `capabilities` and `engine` are declared dependency boundaries for upcoming contracts and
+execution; their runtime capabilities are not implemented by the directory map. Domain cannot import
+platform or other packages, host modules or ambient host globals. This static guard does not prove
+all possible semantic purity. The current adapter registration is wired only by composition.
+Surfaces may consume platform/domain/capabilities/engine, never adapters. Engine may consume
+platform/domain/capabilities; adapters implement ports and may consume engine contracts. Composition
+wires all layers. New package names have no compatibility import aliases.
+Current executable: `dist/composition/core/cli/internal/entry.js`. The unimplemented MCP binary
+is not advertised; its contract and composition entry arrive with the real MCP surface.
+
 `apps/*` import only `surfaces`. Cross-package imports target the package `index.ts` and nothing else;
 `internal/` is package-private.
 
@@ -275,3 +275,5 @@ Decision 2026-09-17: pure config-fields SSOT + source-derived literal gate (REVI
 | 2026-09-17 | FOUNDATION/A: 1,500 source lines maximum, 800 design target; native C/Go and application sources included. | Owner size amendment; Fable PASS1340. Historical HARVEST evidence exception is one exact file path. |
 
 | 2026-09-17 | Config stores references; injected SecretResolver retrieves values per load without effective-secret caching or plaintext secret-file reads. | PATH-LAYOUT/A+B, Fable PASS1349; OS keyring backend remains unimplemented. |
+
+FOUNDATION/B accepted in Fable REVIEW1357: platform/adapters/composition package mapping and read-only CLI path query. Domain boundaries declared; execution is not implemented.

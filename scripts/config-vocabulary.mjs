@@ -5,7 +5,7 @@ import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const registryPath = 'src/kernel/core/config-fields/internal/fields.ts';
+export const registryPath = 'src/platform/core/config-fields/internal/fields.ts';
 export const projectionPath = 'scripts/config-vocabulary.json';
 export function projectVocabulary(root) {
   const config = ts.readConfigFile(join(root, 'tsconfig.json'), ts.sys.readFile);

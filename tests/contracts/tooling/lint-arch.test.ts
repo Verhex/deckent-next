@@ -37,9 +37,9 @@ async function lint(root: string): Promise<{ code: number; out: string }> {
 describe('lint-arch tier contract', () => {
   it('accepts lower-tier imports through unit indexes and package indexes across tiers', async () => {
     const root = await fixture({
-      'src/kernel/core/errors/index.ts': "export const x = 1;\n",
-      'src/kernel/base/defaults/index.ts': "import { x } from '../../core/errors/index.js';\nexport const y = x;\n",
-      'src/kernel/index.ts': "export { y } from './base/defaults/index.js';\n",
+      'src/platform/core/errors/index.ts': "export const x = 1;\n",
+      'src/platform/base/defaults/index.ts': "import { x } from '../../core/errors/index.js';\nexport const y = x;\n",
+      'src/platform/index.ts': "export { y } from './base/defaults/index.js';\n",
     });
     const result = await lint(root);
     expect(result.out).toContain('tiers=enforced');
@@ -47,39 +47,39 @@ describe('lint-arch tier contract', () => {
   });
   it('rejects a core module importing base, a bypass of a unit index, and a stray file under the package root', async () => {
     const root = await fixture({
-      'src/kernel/core/errors/index.ts': "import { y } from '../../base/defaults/internal/impl.js';\nexport const x = y;\n",
-      'src/kernel/base/defaults/index.ts': "export { y } from './internal/impl.js';\n",
-      'src/kernel/base/defaults/internal/impl.ts': "export const y = 2;\n",
-      'src/kernel/stray.ts': "export const s = 0;\n",
-      'src/kernel/index.ts': "export { x } from './core/errors/index.js';\n",
+      'src/platform/core/errors/index.ts': "import { y } from '../../base/defaults/internal/impl.js';\nexport const x = y;\n",
+      'src/platform/base/defaults/index.ts': "export { y } from './internal/impl.js';\n",
+      'src/platform/base/defaults/internal/impl.ts': "export const y = 2;\n",
+      'src/platform/stray.ts': "export const s = 0;\n",
+      'src/platform/index.ts': "export { x } from './core/errors/index.js';\n",
     });
     const result = await lint(root);
     expect(result.code).toBe(1);
     expect(result.out).toContain('[tier-direction]');
     expect(result.out).toContain('[unit-api]');
-    expect(result.out).toContain('[layout] src/kernel/stray.ts');
+    expect(result.out).toContain('[layout] src/platform/stray.ts');
   });
   it('leaves layout unchecked while tiers.enforce is false', async () => {
-    const root = await fixture({ 'src/kernel/stray.ts': "export const s = 0;\n", 'src/kernel/index.ts': "export { s } from './stray.js';\n" }, false);
+    const root = await fixture({ 'src/platform/stray.ts': "export const s = 0;\n", 'src/platform/index.ts': "export { s } from './stray.js';\n" }, false);
     const result = await lint(root);
     expect(result.out).toContain('tiers=off');
     expect(result.code).toBe(0);
   });
   it('rejects provider credential environment literals outside the registry', async () => {
     const allowed = await fixture({
-      'src/providers/core/registry/index.ts': "export { key } from './internal/auth.js';\n",
-      'src/providers/core/registry/internal/auth.ts': "export const key = 'ANTHROPIC_API_KEY';\n",
+      'src/adapters/core/registry/index.ts': "export { key } from './internal/auth.js';\n",
+      'src/adapters/core/registry/internal/auth.ts': "export const key = 'ANTHROPIC_API_KEY';\n",
     });
     expect((await lint(allowed)).code).toBe(0);
-    const rejected = await fixture({ 'src/kernel/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
+    const rejected = await fixture({ 'src/platform/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
     expect((await lint(rejected)).out).toContain('[literal]');
   });
 
   it('rejects duplicate JSON keys, cross-family duplicates and placeholder drift', async () => {
     const cases = [
-      { 'src/kernel/core/i18n/locales/en/cli.json': '{"x":"One","x":"Two"}', 'src/kernel/core/i18n/locales/tr/cli.json': '{"x":"Bir"}' },
-      { 'src/kernel/core/i18n/locales/en/cli.json': '{"x":"One"}', 'src/kernel/core/i18n/locales/en/tui.json': '{"x":"Two"}' },
-      { 'src/kernel/core/i18n/locales/en/cli.json': '{"x":"Name {name}"}', 'src/kernel/core/i18n/locales/tr/cli.json': '{"x":"Ad {other}"}' },
+      { 'src/platform/core/i18n/locales/en/cli.json': '{"x":"One","x":"Two"}', 'src/platform/core/i18n/locales/tr/cli.json': '{"x":"Bir"}' },
+      { 'src/platform/core/i18n/locales/en/cli.json': '{"x":"One"}', 'src/platform/core/i18n/locales/en/tui.json': '{"x":"Two"}' },
+      { 'src/platform/core/i18n/locales/en/cli.json': '{"x":"Name {name}"}', 'src/platform/core/i18n/locales/tr/cli.json': '{"x":"Ad {other}"}' },
     ];
     for (const [i, files] of cases.entries()) {
       const result = await lint(await fixture(files));
@@ -88,23 +88,23 @@ describe('lint-arch tier contract', () => {
     }
   });
   it('rejects concatenated translation keys outside the registry', async () => {
-    const result = await lint(await fixture({ 'src/kernel/core/example/index.ts': "export const label = t('prefix.' + suffix);\n" }));
+    const result = await lint(await fixture({ 'src/platform/core/example/index.ts': "export const label = t('prefix.' + suffix);\n" }));
     expect(result.out).toContain('[i18n-dynamic]');
   });
 
   it('enforces native aliases and rejects missing targets, private imports and mapping drift', async () => {
     const files = {
-      'src/kernel/core/common/index.ts': "export const x = 1;\n",
-      'src/kernel/core/example/index.ts': "import { x } from '#kernel/core/common/index.js'; export const y = x;\n",
+      'src/platform/core/common/index.ts': "export const x = 1;\n",
+      'src/platform/core/example/index.ts': "import { x } from '#platform/core/common/index.js'; export const y = x;\n",
     };
     const root = await fixture(files, true, true);
     expect((await lint(root)).code).toBe(0);
-    await writeFile(join(root, 'src/kernel/core/example/index.ts'), "import { x } from '../common/index.js'; export const y = x;");
+    await writeFile(join(root, 'src/platform/core/example/index.ts'), "import { x } from '../common/index.js'; export const y = x;");
     expect((await lint(root)).out).toContain('[import-style]');
-    await writeFile(join(root, 'src/kernel/core/example/index.ts'), "import { x } from '#kernel/core/common/internal/missing.js'; export const y = x;");
+    await writeFile(join(root, 'src/platform/core/example/index.ts'), "import { x } from '#platform/core/common/internal/missing.js'; export const y = x;");
     const bad = await lint(root);
     expect(bad.out).toContain('[import-target]'); expect(bad.out).toContain('[unit-api]');
-    await writeFile(join(root, 'src/kernel/core/example/index.ts'), files['src/kernel/core/example/index.ts']);
+    await writeFile(join(root, 'src/platform/core/example/index.ts'), files['src/platform/core/example/index.ts']);
     await writeFile(join(root, 'package.json'), '{"imports":{}}');
     expect((await lint(root)).out).toContain('[import-map]');
   });
@@ -121,6 +121,16 @@ describe('lint-arch tier contract', () => {
       expect((await lint(root)).out).toContain(`[file-size] ${file}`);
       await writeFile(join(root, file), '// line\n'.repeat(1500));
     }
+  });
+
+  it('blocks adapter ownership in surfaces and host dependencies in the pure domain', async () => {
+    const surface = await fixture({
+      'src/adapters/index.ts': 'export const adapter = 1;',
+      'src/surfaces/core/example/index.ts': "import { adapter } from '#adapters/index.js'; export const value = adapter;",
+    });
+    expect((await lint(surface)).out).toContain('[direction]');
+    const domain = await fixture({ 'src/domain/core/task/index.ts': "import fs from 'node:fs'; export const value = process.pid;" });
+    expect((await lint(domain)).out).toContain('[domain-purity]');
   });
 
 });

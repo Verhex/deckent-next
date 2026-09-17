@@ -2,42 +2,54 @@
   "$schema": "./scripts/arch.schema.json",
   "version": 1,
   "packages": {
-    "kernel": {
+    "platform": {
       "imports": []
     },
-    "providers": {
-      "imports": [
-        "kernel"
+    "domain": {
+      "imports": [],
+      "pure": true,
+      "externalImports": [
+        "zod"
       ]
     },
-    "runtime": {
+    "capabilities": {
       "imports": [
-        "kernel",
-        "providers"
+        "platform",
+        "domain"
       ]
     },
-    "orchestration": {
+    "engine": {
       "imports": [
-        "kernel",
-        "runtime",
-        "providers"
+        "platform",
+        "domain",
+        "capabilities"
+      ]
+    },
+    "adapters": {
+      "imports": [
+        "platform",
+        "domain",
+        "capabilities",
+        "engine"
       ]
     },
     "surfaces": {
       "imports": [
-        "kernel",
-        "runtime",
-        "orchestration",
-        "providers"
+        "platform",
+        "domain",
+        "capabilities",
+        "engine"
       ]
     },
-    "observability": {
+    "composition": {
       "imports": [
-        "kernel",
-        "runtime",
-        "orchestration"
-      ],
-      "importedBy": []
+        "platform",
+        "domain",
+        "capabilities",
+        "engine",
+        "adapters",
+        "surfaces"
+      ]
     }
   },
   "apps": {
@@ -57,15 +69,42 @@
     "unitLines": 4000,
     "note": "Lower tiers import only lower/same-tier unit index.ts; package index.ts composes shipped units. Optional editions are loaded lazily when implemented."
   },
+  "imports": {
+    "aliasPrefix": "#",
+    "enforce": true,
+    "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
+  },
+  "vocabulary": {
+    "canonicalChain": [
+      "Goal",
+      "Mission",
+      "Flow",
+      "Run",
+      "WorkItem",
+      "Attempt",
+      "Operation"
+    ],
+    "forbidden": [
+      "\\b[sS]print\\w*"
+    ],
+    "scope": [
+      "src",
+      "tests",
+      "scripts"
+    ],
+    "enforce": false,
+    "note": "Catalog uses canonical run terminology. Code-wide vocabulary enforcement and the accepted Task/Run/Attempt/Operation/Effect ontology are reconciled in CONTRACT; no legacy aliases."
+  },
   "budgets": {
     "maxLinesPerFile": 1500,
     "packageLines": {
-      "kernel": 25000,
-      "providers": 12000,
-      "runtime": 40000,
-      "orchestration": 45000,
+      "platform": 25000,
+      "domain": 10000,
+      "capabilities": 25000,
+      "engine": 60000,
+      "adapters": 25000,
       "surfaces": 45000,
-      "observability": 12000
+      "composition": 5000
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -103,7 +142,7 @@
     ]
   },
   "i18n": {
-    "catalogDir": "src/kernel/core/i18n",
+    "catalogDir": "src/platform/core/i18n",
     "locales": [
       "en",
       "tr"
@@ -132,7 +171,7 @@
       "\\b(ANTHROPIC|OPENAI|GOOGLE|GEMINI|XAI)_API_KEY\\b"
     ],
     "allow": [
-      "src/providers/core/registry/internal/auth.ts"
+      "src/adapters/core/registry/internal/auth.ts"
     ]
   },
   "markdown": {
@@ -146,32 +185,6 @@
       "CLAUDE.md": 5,
       "AGENTS.md": 5
     },
-    "writerModule": "src/kernel/core/docs-authority/"
-  },
-  "imports": {
-    "aliasPrefix": "#",
-    "enforce": true,
-    "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
-  },
-  "vocabulary": {
-    "canonicalChain": [
-      "Goal",
-      "Mission",
-      "Flow",
-      "Run",
-      "WorkItem",
-      "Attempt",
-      "Operation"
-    ],
-    "forbidden": [
-      "\\b[sS]print\\w*"
-    ],
-    "scope": [
-      "src",
-      "tests",
-      "scripts"
-    ],
-    "enforce": false,
-    "note": "Catalog uses canonical run terminology. Code-wide vocabulary enforcement and the accepted Task/Run/Attempt/Operation/Effect ontology are reconciled in CONTRACT; no legacy aliases."
+    "writerModule": "src/platform/core/docs-authority/"
   }
 }

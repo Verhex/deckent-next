@@ -245,3 +245,7 @@ Host sizing heuristics remain ASSURANCE scope. `since` is historical introductio
 | FOUNDATION/A | Shared source/native/app budget: 1,500 hard cap, 800 design target; monotonic build timing | Fable PASS1340 | DONE |
 
 | PATH-LAYOUT/A+B | Shared durable root/registry, read-only resolution and secret-reference boundary; scratch, config-root relocation and sandbox remain pending | Independent Fable PASS1349; isolated97 tests | DONE |
+
+| FOUNDATION/B + PATH-INSPECTION | Exact candidate package mapping, CLI composition and shared path query | Fable PASS1357; isolated99 tests, build/smoke; proof/FOUNDATION-B-verification.json | DONE |
+
+Residuals: restore host-test verification on HOST-SETUP landing; distinguish provider policy registry from clients in CONTRACT; replace relative manifest metadata import before FOUNDATION closure.

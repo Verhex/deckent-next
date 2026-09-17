@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const exec = promisify(execFile);
 describe('K2 renderer import proof', () => {
   it('loads the built translation unit synchronously without Node globals or built-in modules in its sandbox', async () => {
-    const entry = new URL('../../dist/kernel/core/i18n/index.js', import.meta.url).href;
+    const entry = new URL('../../dist/platform/core/i18n/index.js', import.meta.url).href;
     const script = `
       import vm from 'node:vm';
       import {readFile} from 'node:fs/promises';
