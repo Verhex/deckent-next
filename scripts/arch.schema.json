@@ -111,6 +111,24 @@
           "type": "string"
         }
       }
+    },
+    "imports": {
+      "type": "object",
+      "required": [
+        "aliasPrefix",
+        "enforce"
+      ],
+      "properties": {
+        "aliasPrefix": {
+          "type": "string"
+        },
+        "enforce": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
     }
   }
 }

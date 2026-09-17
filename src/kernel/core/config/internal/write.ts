@@ -3,14 +3,14 @@ import { dirname, basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { withConfigWriteLock, type ConfigLockOptions } from './lock.js';
 export { withConfigWriteLock } from './lock.js';
-import { ErrorRegistry } from '../../errors/index.js';
-import { readJsonFile, writeJsonAtomic, type JsonRecord } from '../../utils/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { readJsonFile, writeJsonAtomic, type JsonRecord } from '#kernel/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
-import { deepMerge } from '../../utils/index.js';
+import { deepMerge } from '#kernel/core/utils/index.js';
 import { versionedConfig } from './validate/version.js';
 import { validateConfig } from './validate/sections.js';
-import { resolveGlobalConfigPaths } from '../../platform/index.js';
-import type { PathContext } from '../../platform/index.js';
+import { resolveGlobalConfigPaths } from '#kernel/core/platform/index.js';
+import type { PathContext } from '#kernel/core/platform/index.js';
 
 export async function assertConfigPreimage(path: string, expected: string | null): Promise<void> {
   const current = await readJsonFile(path);

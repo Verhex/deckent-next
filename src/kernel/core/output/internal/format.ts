@@ -1,6 +1,6 @@
-import { getConfigFieldDefault } from '../../config-fields/index.js';
-import type { OutputMode } from '../../common/index.js';
-import { t, resolveLocale, type Locale } from '../../i18n/index.js';
+import { getConfigFieldDefault } from '#kernel/core/config-fields/index.js';
+import type { OutputMode } from '#kernel/core/common/index.js';
+import { t, resolveLocale, type Locale } from '#kernel/core/i18n/index.js';
 import { stripAnsi } from './color.js';
 export function formatValue(value: unknown): string {
   if (typeof value === 'string') return value;

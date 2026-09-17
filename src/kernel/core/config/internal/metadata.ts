@@ -1,5 +1,5 @@
 import { configSections } from './schema.js';
-import { CONFIG_FIELDS } from '../../config-fields/index.js';
+import { CONFIG_FIELDS } from '#kernel/core/config-fields/index.js';
 import { createDefaultConfig } from './defaults.js';
 export interface ConfigMetadata {
   readonly key: string; readonly owner: string; readonly defaultValue: unknown;

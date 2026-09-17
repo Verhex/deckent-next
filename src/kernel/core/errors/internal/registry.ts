@@ -1,5 +1,5 @@
-import { t, resolveLocale, type Locale, type Params } from '../../i18n/index.js';
-import { NODE_ENGINE_RANGE } from '../../common/index.js';
+import { t, resolveLocale, type Locale, type Params } from '#kernel/core/i18n/index.js';
+import { NODE_ENGINE_RANGE } from '#kernel/core/common/index.js';
 import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }

@@ -10,6 +10,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-vocabulary-')); roots.push(root);
   await cp(new URL('../../../src', import.meta.url), join(root, 'src'), { recursive: true });
+  await cp(new URL('../../../tsconfig.json', import.meta.url), join(root, 'tsconfig.json'));
   await mkdir(join(root, 'scripts'));
   await writeFile(join(root, projectionPath), JSON.stringify(projectVocabulary(root)));
   return root;

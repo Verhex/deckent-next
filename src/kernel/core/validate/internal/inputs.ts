@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
-import { ErrorRegistry } from '../../errors/index.js';
-import { pathApi } from '../../platform/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { pathApi } from '#kernel/core/platform/index.js';
 
 /** Lexical containment; filesystem operations additionally call validateExistingPath. */
 export function validatePath(base: string, userPath: string, platform: string = process.platform): string {

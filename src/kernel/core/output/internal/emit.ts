@@ -1,5 +1,5 @@
-import { getConfigFieldDefault } from '../../config-fields/index.js';
-import type { OutputMode } from '../../common/index.js';
+import { getConfigFieldDefault } from '#kernel/core/config-fields/index.js';
+import type { OutputMode } from '#kernel/core/common/index.js';
 import { formatValue } from './format.js';
 export type OutputLevel = 'info' | 'warning' | 'error' | 'critical';
 export interface OutputSink { write(text: string): unknown }

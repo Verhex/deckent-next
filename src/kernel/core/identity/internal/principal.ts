@@ -1,5 +1,5 @@
 import { userInfo, hostname } from 'node:os';
-import { ErrorRegistry } from '../../errors/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
 export type PrincipalAssurance = 'unverified' | 'os-user' | 'token-parsed' | 'token-verified';
 export type PrincipalIdentityClass = 'local' | 'oidc' | 'workload' | 'connector' | 'service';
 export interface VerifiedPrincipal {

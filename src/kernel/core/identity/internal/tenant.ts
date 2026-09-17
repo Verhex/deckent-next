@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { ErrorRegistry } from '../../errors/index.js';
-import { resolveDeckentHome, type PathContext } from '../../platform/index.js';
-import { pathApi } from '../../platform/index.js';
-import { envValue } from '../../platform/index.js';
-import { validatePath } from '../../validate/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { resolveDeckentHome, type PathContext } from '#kernel/core/platform/index.js';
+import { pathApi } from '#kernel/core/platform/index.js';
+import { envValue } from '#kernel/core/platform/index.js';
+import { validatePath } from '#kernel/core/validate/index.js';
 export interface TenantContext { readonly tenantId: string; readonly isolationRoot: string; readonly createdAt: string }
 const tenants = new AsyncLocalStorage<TenantContext>();
 export function isValidTenantId(id: string): boolean { return /^[a-z0-9][a-z0-9-]{0,62}$/.test(id); }

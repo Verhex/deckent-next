@@ -1,4 +1,4 @@
-import type { Environment } from '../../platform/index.js';
+import type { Environment } from '#kernel/core/platform/index.js';
 export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
 export interface ColorOptions { noColor?: boolean; env?: Environment; isTTY?: boolean; argv?: readonly string[] }
 export function colorTier(options: ColorOptions = {}): ColorTier {

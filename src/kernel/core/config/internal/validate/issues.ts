@@ -1,5 +1,5 @@
-import { DeckentError } from '../../../errors/index.js';
-import { t, resolveLocale, type Locale } from '../../../i18n/index.js';
+import { DeckentError } from '#kernel/core/errors/index.js';
+import { t, resolveLocale, type Locale } from '#kernel/core/i18n/index.js';
 export interface ConfigIssue { readonly path: string; readonly reason: string }
 export interface ConfigWarning { readonly code: string; readonly path: string; readonly message: string }
 export class ConfigValidationError extends DeckentError {

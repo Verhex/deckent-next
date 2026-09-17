@@ -3,9 +3,9 @@ import { dirname, join } from 'node:path';
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ErrorRegistry } from '../../errors/index.js';
-import { emit } from '../../output/index.js';
-import { t, resolveLocale, type Locale } from '../../i18n/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { emit } from '#kernel/core/output/index.js';
+import { t, resolveLocale, type Locale } from '#kernel/core/i18n/index.js';
 import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;

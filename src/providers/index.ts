@@ -1,1 +1,1 @@
-export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from './core/contract/index.js';
+export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '#providers/core/contract/index.js';

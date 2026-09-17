@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url';
-import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '../../../../kernel/index.js';
-import { registerProviderConfig } from '../../../../providers/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#kernel/index.js';
+import { registerProviderConfig } from '#providers/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
-export type { ExitCode } from '../../../../kernel/index.js';
+export type { ExitCode } from '#kernel/index.js';
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
 export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {

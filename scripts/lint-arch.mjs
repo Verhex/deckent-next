@@ -1,4 +1,3 @@
-import { lintConfigVocabulary } from './config-vocabulary.mjs';
 // lint-arch: the single architecture gate for deckent (fail-closed, no baselines).
 // Rules come from arch.json. Checks:
 //  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
@@ -9,6 +8,7 @@ import { lintConfigVocabulary } from './config-vocabulary.mjs';
 //  5. .md writes only from kernel/docs-authority
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+import { lintConfigVocabulary } from './config-vocabulary.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -38,6 +38,19 @@ const appFiles = walk(join(ROOT, 'apps'), isTs);
 const packageNames = Object.keys(arch.packages);
 const tiers = arch.tiers ?? { order: [], enforce: false, unitLines: Infinity };
 const tierRank = new Map(tiers.order.map((name, index) => [name, index]));
+if (arch.imports?.enforce) {
+  try {
+    const runtime = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).imports;
+    const source = JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')).compilerOptions.paths;
+    for (const pkg of packageNames) {
+      const key = `${arch.imports.aliasPrefix}${pkg}/*`;
+      if (runtime?.[key] !== `./dist/${pkg}/*` || JSON.stringify(source?.[key]) !== JSON.stringify([`./src/${pkg}/*`])) {
+        fail('import-map', 'package.json/tsconfig.json', `runtime/source mapping drift for ${key}`);
+      }
+    }
+  } catch (error) { fail('import-map', 'package.json/tsconfig.json', error.message); }
+}
+
 
 function unitOf(file) {
   // src/<pkg>/<tier>/<unit>/... → { pkg, tier, unit } ; src/<pkg>/index.ts → { pkg, tier: null, unit: null }
@@ -65,9 +78,13 @@ function importsOf(file) {
   const out = [];
   for (const m of src.matchAll(IMPORT_RE)) {
     const spec = m[1] ?? m[2];
-    if (!spec || !spec.startsWith('.')) continue;
-    const target = resolve(dirname(file), spec.replace(/\.js$/, '.ts'));
-    out.push({ spec, target, line: src.slice(0, m.index).split('\n').length });
+    if (!spec) continue;
+    const aliasPrefix = arch.imports?.aliasPrefix ?? '#';
+    let target;
+    if (spec.startsWith(aliasPrefix)) target = resolve(ROOT, 'src', spec.slice(aliasPrefix.length).replace(/\.js$/, '.ts'));
+    else if (spec.startsWith('.')) target = resolve(dirname(file), spec.replace(/\.js$/, '.ts'));
+    else continue;
+    out.push({ spec, target, aliased: spec.startsWith(aliasPrefix), line: src.slice(0, m.index).split('\n').length });
   }
   return out;
 }
@@ -79,6 +96,7 @@ for (const file of [...srcFiles, ...appFiles]) {
   for (const imp of importsOf(file)) {
     const targetRel = rel(imp.target);
     if (!targetRel.startsWith('src/')) continue;
+    if (arch.imports?.enforce && !existsSync(imp.target)) fail('import-target', `${rel(file)}:${imp.line}`, `missing target ${imp.spec}`);
     const to = packageOf(imp.target);
     if (to === from) {
       if (!tiers.enforce || !from.startsWith('(') && packageNames.includes(from)) {
@@ -89,12 +107,14 @@ for (const file of [...srcFiles, ...appFiles]) {
           if (srcRank !== undefined && dstRank !== undefined && dstRank > srcRank) fail('tier-direction', `${rel(file)}:${imp.line}`, `${src.tier} may not import ${dst.tier} (order: ${tiers.order.join(' ← ')})`);
           const sameUnit = src.tier === dst.tier && src.unit === dst.unit && src.unit !== null;
           if (!sameUnit && !/^src\/[^/]+\/[^/]+\/[^/]+\/index\.ts$/.test(targetRel)) fail('unit-api', `${rel(file)}:${imp.line}`, `cross-unit import must target the unit index.ts (got ${imp.spec})`);
+          if (!sameUnit && arch.imports?.enforce && !imp.aliased) fail('import-style', `${rel(file)}:${imp.line}`, `cross-unit import must use the ${arch.imports.aliasPrefix}<pkg>/<tier>/<unit>/index.js alias (got ${imp.spec})`);
         }
       }
       continue;
     }
     const allowed = from === '(root)' ? packageNames : from.startsWith('apps/') ? arch.apps.imports : (arch.packages[from]?.imports ?? []);
     if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
+    if (arch.imports?.enforce && !imp.aliased && !from.startsWith('apps/')) fail('import-style', `${rel(file)}:${imp.line}`, `cross-package import must use the ${arch.imports.aliasPrefix}<pkg>/index.js alias (got ${imp.spec})`);
     const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
     if (!isIndex) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
     if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
@@ -202,7 +222,9 @@ if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCase
 // ---- 7: tracked markdown
 const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return []; } })();
 const allow = new Set(arch.markdown.trackedAllow);
+const allowGlobs = (arch.markdown.trackedAllowGlobs ?? []).map(g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$'));
 for (const file of tracked) {
+  if (allowGlobs.some(re => re.test(file))) continue;
   const cap = arch.markdown.pointerFiles[file];
   if (cap !== undefined) {
     const lines = readFileSync(join(ROOT, file), 'utf8').trimEnd().split('\n').length;
@@ -214,7 +236,7 @@ for (const file of tracked) {
 for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
 
 // ---- report
-const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
 if (violations.length === 0) { process.stdout.write(`${summary}\n`); process.exit(0); }
 for (const v of violations) process.stdout.write(`✗ [${v.rule}] ${v.file} — ${v.message}\n`);
 process.stdout.write(`${summary}\n`);

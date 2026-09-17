@@ -1,15 +1,15 @@
 import { mkdir, open, rename, unlink, readdir, lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { PACKAGE_VERSION } from '../../common/index.js';
+import { PACKAGE_VERSION } from '#kernel/core/common/index.js';
 import { DeckentError } from './error.js';
 import { ErrorRegistry } from './registry.js';
 import { exitCodeFor, type ExitCode } from './exit-codes.js';
-import { colorTier, type ColorOptions } from '../../output/index.js';
-import { emit, type OutputSink } from '../../output/index.js';
-import { t, resolveLocale, type Locale } from '../../i18n/index.js';
-import { resolveDeckentHome } from '../../platform/index.js';
-import type { Environment } from '../../platform/index.js';
+import { colorTier, type ColorOptions } from '#kernel/core/output/index.js';
+import { emit, type OutputSink } from '#kernel/core/output/index.js';
+import { t, resolveLocale, type Locale } from '#kernel/core/i18n/index.js';
+import { resolveDeckentHome } from '#kernel/core/platform/index.js';
+import type { Environment } from '#kernel/core/platform/index.js';
 
 export function redactSensitive(value: string): string {
   return value.replace(/\b(?:sk-(?:ant-)?[\w-]+|gh[pousr]_[\w]+|github_pat_[\w]+|AKIA[A-Z0-9]{16})\b/g, '[REDACTED]')

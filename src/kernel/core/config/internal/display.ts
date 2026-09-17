@@ -1,4 +1,4 @@
-import { redactSensitive } from '../../errors/index.js';
+import { redactSensitive } from '#kernel/core/errors/index.js';
 import type { ResolvedConfig } from './layers.js';
 
 /** Mask provenance before selecting a subtree; never redact serialized JSON syntax. */

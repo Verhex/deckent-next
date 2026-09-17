@@ -2,7 +2,7 @@ import { lstat, open, mkdir, rename, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { ErrorRegistry } from '../../errors/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
 
 export type JsonRecord = Record<string, unknown>;
 export function isRecord(value: unknown): value is JsonRecord {

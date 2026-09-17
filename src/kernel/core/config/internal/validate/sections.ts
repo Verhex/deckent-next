@@ -1,7 +1,7 @@
 import { CORE_SCHEMA, configSections, type DeckentConfig } from '../schema.js';
 import { ConfigValidationError, type ConfigIssue, type ConfigWarning } from './issues.js';
-import { isRecord, assertSafeKeys } from '../../../utils/index.js';
-import { type Locale } from '../../../i18n/index.js';
+import { isRecord, assertSafeKeys } from '#kernel/core/utils/index.js';
+import { type Locale } from '#kernel/core/i18n/index.js';
 
 export function validateConfig(input: unknown, locale: Locale = 'en'): { config: DeckentConfig; warnings: ConfigWarning[] } {
   if (!isRecord(input)) throw new ConfigValidationError([{ path: '$', reason: 'OBJECT_REQUIRED' }], locale);

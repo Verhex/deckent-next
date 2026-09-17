@@ -1,6 +1,6 @@
-import { envValue, type Environment } from '../../../platform/index.js';
+import { envValue, type Environment } from '#kernel/core/platform/index.js';
 import type { DeckentConfig } from '../schema.js';
-import { CONFIG_FIELDS } from '../../../config-fields/index.js';
+import { CONFIG_FIELDS } from '#kernel/core/config-fields/index.js';
 import { ConfigValidationError } from './issues.js';
 
 export function applyConfigEnvironment(config: DeckentConfig, env: Environment): DeckentConfig {

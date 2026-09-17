@@ -1,7 +1,7 @@
 import type { ConfigLockOptions } from './lock.js';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ErrorRegistry } from '../../errors/index.js';
-import { readJsonFile, writeJsonAtomic, type JsonRead } from '../../utils/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { readJsonFile, writeJsonAtomic, type JsonRead } from '#kernel/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
 import { withConfigWriteLock, assertConfigPreimage, backupConfig, pruneConfigBackups } from './write.js';
 

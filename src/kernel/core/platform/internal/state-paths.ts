@@ -1,4 +1,4 @@
-import { BRAIN_DIR, DECKENT_DIR } from '../../common/index.js';
+import { BRAIN_DIR, DECKENT_DIR } from '#kernel/core/common/index.js';
 import { envValue, type Environment } from './env.js';
 import { pathApi, normalizeGlobalScopePlatform, resolveGlobalScopePaths } from './global-scope.js';
 

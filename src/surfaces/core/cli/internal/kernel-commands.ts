@@ -4,7 +4,7 @@ import {
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, resolveTenant, resolveCallerTenant,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
-} from '../../../../kernel/index.js';
+} from '#kernel/index.js';
 
 export interface CommandContext {
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;

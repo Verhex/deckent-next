@@ -12,11 +12,15 @@ const ARCH = fileURLToPath(new URL('../../../arch.json', import.meta.url));
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(r => rm(r, { recursive: true, force: true }))); });
 
-async function fixture(files: Record<string, string>, tiersEnforce = true): Promise<string> {
+async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
-  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { tiers: { enforce: boolean }; i18n: { catalogDir: string } };
+  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { tiers: { enforce: boolean }; imports: { enforce: boolean }; packages: Record<string, unknown>; i18n: { catalogDir: string } };
   arch.tiers.enforce = tiersEnforce;
+  arch.imports.enforce = importsEnforce;
   await writeFile(join(root, 'arch.json'), JSON.stringify(arch));
+  const packages = Object.keys(arch.packages);
+  await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])) }));
+  await writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { paths: Object.fromEntries(packages.map(p => [`#${p}/*`, [`./src/${p}/*`]])) } }));
   await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
   const catalogs = { [`${arch.i18n.catalogDir}/en.json`]: '{}', [`${arch.i18n.catalogDir}/tr.json`]: '{}' };
   for (const [path, content] of Object.entries({ 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files })) {
@@ -69,6 +73,22 @@ describe('lint-arch tier contract', () => {
     expect((await lint(allowed)).code).toBe(0);
     const rejected = await fixture({ 'src/kernel/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
     expect((await lint(rejected)).out).toContain('[literal]');
+  });
+  it('enforces native aliases and rejects missing targets, private imports and mapping drift', async () => {
+    const files = {
+      'src/kernel/core/common/index.ts': "export const x = 1;\n",
+      'src/kernel/core/example/index.ts': "import { x } from '#kernel/core/common/index.js'; export const y = x;\n",
+    };
+    const root = await fixture(files, true, true);
+    expect((await lint(root)).code).toBe(0);
+    await writeFile(join(root, 'src/kernel/core/example/index.ts'), "import { x } from '../common/index.js'; export const y = x;");
+    expect((await lint(root)).out).toContain('[import-style]');
+    await writeFile(join(root, 'src/kernel/core/example/index.ts'), "import { x } from '#kernel/core/common/internal/missing.js'; export const y = x;");
+    const bad = await lint(root);
+    expect(bad.out).toContain('[import-target]'); expect(bad.out).toContain('[unit-api]');
+    await writeFile(join(root, 'src/kernel/core/example/index.ts'), files['src/kernel/core/example/index.ts']);
+    await writeFile(join(root, 'package.json'), '{"imports":{}}');
+    expect((await lint(root)).out).toContain('[import-map]');
   });
 
 });

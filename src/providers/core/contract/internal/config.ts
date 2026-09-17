@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { validateApiMode } from '../../registry/index.js';
+import { validateApiMode } from '#providers/core/registry/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '../../../../kernel/index.js';
+import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '#kernel/index.js';
 const units = z.enum(['percent', 'requests', 'tokens', 'credits', 'usd']);
 const values = z.object({
   ratioEnforcement: z.enum(['enforce', 'observe_only']).optional(),

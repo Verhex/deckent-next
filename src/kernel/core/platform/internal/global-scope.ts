@@ -1,6 +1,6 @@
 import { posix, win32 } from 'node:path';
-import { CONFIG_FILE, DECKENT_DIR } from '../../common/index.js';
-import { ErrorRegistry } from '../../errors/index.js';
+import { CONFIG_FILE, DECKENT_DIR } from '#kernel/core/common/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
 import { envValue, type Environment } from './env.js';
 
 export type GlobalScopePlatform = 'linux' | 'wsl' | 'darwin' | 'win32';

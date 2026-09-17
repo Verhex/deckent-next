@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '../../common/index.js';
-import { SUPPORTED_LANGUAGES } from '../../i18n/index.js';
+import { CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#kernel/core/common/index.js';
+import { SUPPORTED_LANGUAGES } from '#kernel/core/i18n/index.js';
 
 type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
 function field<T extends z.ZodTypeAny>(descriptionKey: string, schema: T, environment: readonly EnvironmentBinding[] = []) {

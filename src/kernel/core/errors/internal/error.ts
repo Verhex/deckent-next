@@ -1,4 +1,4 @@
-import type { Locale, Params } from '../../i18n/index.js';
+import type { Locale, Params } from '#kernel/core/i18n/index.js';
 
 export type ErrorCategory = 'error' | 'usage' | 'config';
 

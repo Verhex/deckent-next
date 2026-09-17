@@ -1,2 +1,2 @@
-export { dispatch, main } from './core/cli/index.js';
-export type { ExitCode } from './core/cli/index.js';
+export { dispatch, main } from '#surfaces/core/cli/index.js';
+export type { ExitCode } from '#surfaces/core/cli/index.js';

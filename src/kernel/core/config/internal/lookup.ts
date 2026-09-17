@@ -1,5 +1,5 @@
-import { ErrorRegistry } from '../../errors/index.js';
-import { isRecord } from '../../utils/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { isRecord } from '#kernel/core/utils/index.js';
 export function getConfigValue(config: unknown, key: string): unknown {
   let current = config;
   for (const segment of key.split('.')) {

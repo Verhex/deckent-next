@@ -103,5 +103,10 @@
       "AGENTS.md": 5
     },
     "writerModule": "src/kernel/core/docs-authority/"
+  },
+  "imports": {
+    "aliasPrefix": "#",
+    "enforce": true,
+    "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
   }
 }

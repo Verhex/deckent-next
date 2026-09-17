@@ -3,8 +3,12 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "types": ["node"],
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -19,8 +23,37 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "baseUrl": ".",
+    "paths": {
+      "#kernel/*": [
+        "./src/kernel/*"
+      ],
+      "#providers/*": [
+        "./src/providers/*"
+      ],
+      "#runtime/*": [
+        "./src/runtime/*"
+      ],
+      "#orchestration/*": [
+        "./src/orchestration/*"
+      ],
+      "#surfaces/*": [
+        "./src/surfaces/*"
+      ],
+      "#observability/*": [
+        "./src/observability/*"
+      ]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "tests", "apps"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "apps"
+  ]
 }

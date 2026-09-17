@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import type { Environment } from '../../platform/index.js';
-import { ErrorRegistry } from '../../errors/index.js';
-import { CORE_SCHEMA } from '../../config-fields/index.js';
-export { CORE_SCHEMA } from '../../config-fields/index.js';
+import type { Environment } from '#kernel/core/platform/index.js';
+import { ErrorRegistry } from '#kernel/core/errors/index.js';
+import { CORE_SCHEMA } from '#kernel/core/config-fields/index.js';
+export { CORE_SCHEMA } from '#kernel/core/config-fields/index.js';
 
 export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
 export type DeckentConfig = CoreConfig & Record<string, unknown>;

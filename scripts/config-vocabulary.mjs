@@ -8,7 +8,10 @@ import { fileURLToPath } from 'node:url';
 export const registryPath = 'src/kernel/core/config-fields/internal/fields.ts';
 export const projectionPath = 'scripts/config-vocabulary.json';
 export function projectVocabulary(root) {
-  const program = ts.createProgram([join(root, registryPath)], { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext });
+  const config = ts.readConfigFile(join(root, 'tsconfig.json'), ts.sys.readFile);
+  if (config.error) throw new Error('CONFIG_TYPESCRIPT_CONFIG_MISSING');
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
+  const program = ts.createProgram([join(root, registryPath)], parsed.options);
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(join(root, registryPath));
   if (!source) throw new Error('CONFIG_REGISTRY_MISSING');
