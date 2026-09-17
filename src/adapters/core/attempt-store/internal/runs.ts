@@ -1,7 +1,7 @@
 import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
-import { runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
+import { requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
+import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 export class SqliteRunJournal {
@@ -54,6 +54,22 @@ export class SqliteRunJournal {
       try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(evidence.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (attempt.revision !== evidence.revision || attempt.identity.scopeId !== scopeId || attempt.identity.attemptId !== parsed.attemptId) throw new RunStoreError('RUN_STORE_CORRUPT');
       const snapshot = observeRunAttempt(current, parsed.expectedRevision, attempt);
+      const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
+        .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
+      if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
+      return this.record({ commandId: parsed.commandId, command, snapshot });
+    });
+  }
+  async cancelRun(input: RunCancellation): Promise<RunReceipt> {
+    const parsed = runCancellationSchema.parse(input); const command = JSON.stringify({ action: 'cancel-run', ...parsed });
+    const { scopeId, runId } = parsed;
+    return this.transaction(() => {
+      const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
+      const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
+      if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
+      const current = this.decode(row.snapshot, scopeId, runId);
+      if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      const snapshot = requestRunCancellation(current, parsed.expectedRevision);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');

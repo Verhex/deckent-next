@@ -12,6 +12,8 @@ export const runReservationSchema = z.object({ commandId: identitySchema, actor,
   expectedRevision: counterSchema, now: counterSchema, identities: z.array(attemptIdentitySchema).min(1),
 }).strict();
 export const runProjectionSchema = runReservationSchema.omit({ now: true, identities: true }).extend({ attemptId: identitySchema });
+export const runCancellationSchema = runReservationSchema.omit({ now: true, identities: true });
+export type RunCancellation = z.infer<typeof runCancellationSchema>;
 export type RunProjection = z.infer<typeof runProjectionSchema>;
 export type RunCreate = z.infer<typeof runCreateSchema>;
 export type RunReservation = z.infer<typeof runReservationSchema>;
@@ -20,6 +22,7 @@ export interface RunReceipt { readonly commandId: string; readonly command: stri
  * Reservation enforces both persisted per-Run limits and the assigned shared pool in one ledger.
  */
 export interface RunStore {
+  cancelRun(input: RunCancellation): Promise<RunReceipt>;
   createExecutionPool(input: ExecutionPool): Promise<ExecutionPool>;
   projectRunAttempt(input: RunProjection): Promise<RunReceipt>;
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;

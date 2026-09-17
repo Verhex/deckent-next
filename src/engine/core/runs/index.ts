@@ -1,2 +1,4 @@
-export { runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, executionPoolSchema, runExecutionPolicySchema } from './internal/store.js';
-export type { ExecutionPool, RunCreate, RunReservation, RunProjection, RunReceipt, RunStore } from './internal/store.js';
+export { runCancellationSchema, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, executionPoolSchema, runExecutionPolicySchema } from './internal/store.js';
+export type { ExecutionPool, RunCancellation, RunCreate, RunReservation, RunProjection, RunReceipt, RunStore } from './internal/store.js';
+export { RunApplication, runCommandSchema, runQuerySchema } from './internal/application.js';
+export type { RunCommand, RunQuery, RunAuthorization } from './internal/application.js';
