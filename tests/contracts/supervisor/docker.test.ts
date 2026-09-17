@@ -14,7 +14,7 @@ async function fixture(argv: string[], deadlineMs = 10000) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-supervisor-')); roots.push(root);
   const workspace = join(root, 'workspace'); await mkdir(workspace); await writeFile(join(root, 'sentinel'), 'host-only');
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!,
-    uid: process.getuid!(), gid: process.getgid!(), memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
+    uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
     deadlineMs, controlTimeoutMs: 10000, outputBytes: 65536 });
   const request: SandboxRequest = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test',
     generation: 1, layoutRevision: 'layout' }, workspace, argv };
@@ -41,7 +41,9 @@ describe.skipIf(!imageId)('real Docker supervisor (explicit pinned test image re
       const receipt = await app.execute({ ...envelope, commandId: 'terminal', action: { kind: 'observe', observation: {
         protocolVersion: 1, identity: request.identity, sequence: 1, eventId: 'exit', result: result.result } } });
       expect(receipt.snapshot.lastObservation!.result.kind).toBe('exited'); expect(receipt.snapshot).not.toHaveProperty('accepted');
-      expect((await f.supervisor.execute(request)).result).toEqual(result.result);
+      const replay = await f.supervisor.execute(request);
+      expect(replay.result).toEqual(result.result); expect(replay.outputCompleteness).toBe('unavailable');
+      expect(result.outputCompleteness).toBe('complete');
       expect(await readFile(join(request.workspace, 'result'), 'utf8')).toBe('once');
       expect(await readFile(join(f.root, 'sentinel'), 'utf8')).toBe('host-only');
       await expect(f.supervisor.execute({ ...request, argv: ['node', '-e', 'process.exit(0)'] })).rejects.toThrow('SUPERVISOR_IDENTITY_CONFLICT');

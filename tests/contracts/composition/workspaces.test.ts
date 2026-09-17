@@ -47,7 +47,7 @@ describe.skipIf(process.platform === 'win32')('configured workspace composition'
     const request = { schemaVersion: 1 as const, baseCommit: f.baseCommit, identity: { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: opened.layout.revision } };
     const lease = await opened.broker.allocate(request);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: opened.path, imageId: imageId!,
-      uid: process.getuid!(), gid: process.getgid!(), memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
+      uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216,
       deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
     const sandbox = { protocolVersion: 1 as const, identity: request.identity, workspace: lease.workspace,
       argv: ['node', '-e', `const fs=require('node:fs');

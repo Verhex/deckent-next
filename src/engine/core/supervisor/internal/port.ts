@@ -9,12 +9,14 @@ export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
 export interface SandboxResult {
   readonly handle: string;
   readonly result: Readonly<({ kind: 'exited' } & ProcessExitCause) | { kind: 'unknown'; reasonCode: string }>;
+  readonly outputCompleteness: 'complete' | 'partial' | 'unavailable';
   readonly stdout: string;
   readonly stderr: string;
   readonly interrupted: boolean;
 }
 export interface ExecutionSupervisor {
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
+  recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
   observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. */

@@ -82,3 +82,5 @@ DISPATCH/F PASS1429: execute/reconcile merges only compatible unknown→known in
 ARTIFACT/A PASS1430: scoped content-addressed POSIX store and configured artifact layout;163 tests. Authenticated callers, retention/GC/encryption and production maxBytes config remain required.
 
 ARTIFACT/B PASS1437: attempt-bound retained output is mandatory before container release;171 tests. Missing/partial/oversize output remains explicit operator work; no silent cleanup.
+
+ARTIFACT/C PASS1438: bounded per-container local logs, explicit capture completeness and authorized partial recovery;172 tests. Blocking log backpressure and partial-history release policy remain open.

@@ -43,11 +43,20 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (value?.Config?.Labels?.['deckent.request'] !== digest) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
     return value;
   }
-  private result(handle: string, inspection: Inspection | null, stdout = '', stderr = '', interrupted = false): SandboxResult {
+  private result(handle: string, inspection: Inspection | null, stdout = '', stderr = '', interrupted = false, captured = false): SandboxResult {
     const result = inspection?.State?.Status === 'exited' && Number.isSafeInteger(inspection.State.ExitCode)
       ? { kind: 'exited' as const, exitCode: inspection.State.ExitCode }
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
-    return Object.freeze({ handle, result: Object.freeze(result), stdout, stderr, interrupted });
+    return Object.freeze({ handle, result: Object.freeze(result), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
+  }
+  async recoverOutput(input: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>> {
+    const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
+    if (!existing || existing.State.Status !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
+    try {
+      const output = await this.command(['logs', handle], this.options.controlTimeoutMs);
+      // Bounded daemon log rotation can remove earlier output. Never infer completeness from a successful read.
+      return Object.freeze({ stdout: output.stdout, stderr: output.stderr, completeness: 'partial' });
+    } catch { throw new SupervisorError('SUPERVISOR_CONTROL_FAILED'); }
   }
   async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
     const { digest, handle } = this.identity(input);
@@ -67,7 +76,8 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const o = this.options;
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
-        '--network', 'none', '--log-driver', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+        '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
+        '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
         '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
         '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
@@ -87,12 +97,12 @@ export class DockerSupervisor implements ExecutionSupervisor {
       stderr = typeof failure.stderr === 'string' ? failure.stderr : '';
       interrupted = !!signal?.aborted || !!failure.killed || typeof failure.code !== 'number';
       const observed = await this.inspect(handle, digest);
-      if (observed?.State.Status === 'exited') return this.result(handle, observed, stdout, stderr, interrupted);
+      if (observed?.State.Status === 'exited') return this.result(handle, observed, stdout, stderr, interrupted, true);
       interrupted = true;
       // An interrupted CLI is not proof the container stopped. Kill, then inspect authoritative daemon state.
       try { await this.command(['kill', handle], o.controlTimeoutMs); } catch { /* Inspect determines terminal truth. */ }
     }
-    return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted);
+    return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true);
   }
   async release(input: SandboxRequest): Promise<void> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);

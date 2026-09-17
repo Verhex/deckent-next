@@ -1,11 +1,11 @@
 import type { ArtifactStore } from '#capabilities/index.js';
-import { retainOutput, verifyRetainedOutput } from './output.js';
+import { retainOutput, retainRecoveredOutput, verifyRetainedOutput } from './output.js';
 import { identitySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { sandboxRequestSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
 export interface DispatchAuthorization {
-  authorize(action: 'execute' | 'release' | 'reconcile', request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
+  authorize(action: 'execute' | 'release' | 'reconcile' | 'recover-output', request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
 }
 export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecord } | { kind: 'unresolved'; record: DispatchRecord }>;
 /** Internal application execution entry. Composition supplies a trusted broker workspace, verifier,
@@ -17,7 +17,7 @@ export class DispatchApplication {
     private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore) {
     this.owner = identitySchema.parse(owner);
   }
-  private async admit(action: 'execute' | 'release' | 'reconcile', input: unknown, credential: unknown) {
+  private async admit(action: 'execute' | 'release' | 'reconcile' | 'recover-output', input: unknown, credential: unknown) {
     const request = sandboxRequestSchema.parse(input);
     const principal = await authenticate(this.verifier, credential, request.identity.scopeId);
     await this.authorization.authorize(action, request, principal);
@@ -49,6 +49,15 @@ export class DispatchApplication {
     const record = await this.store.finishDispatch({ request, owner: current.owner },
       { handle: observed.handle, exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
     return Object.freeze({ kind: 'terminal', record });
+  }
+  async recoverOutput(input: unknown, credential?: unknown): Promise<DispatchRecord> {
+    const request = await this.admit('recover-output', input, credential);
+    const current = await this.store.readDispatch(request);
+    if (!current?.terminal) throw new DispatchError('DISPATCH_NOT_ADMITTED');
+    if (current.output) return current;
+    const output = await this.supervisor.recoverOutput(request);
+    const receipt = await retainRecoveredOutput(this.artifacts, request, { stdout: output.stdout, stderr: output.stderr });
+    return this.store.retainDispatchOutput({ request, owner: current.owner }, receipt);
   }
   async release(input: unknown, credential?: unknown): Promise<void> {
     const request = await this.admit('release', input, credential);

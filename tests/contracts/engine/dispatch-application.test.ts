@@ -27,7 +27,7 @@ it.skipIf(!imageId)('returns durable terminal after real Docker release without 
   const f = await fixture(); let denied = false; let authorizations = 0;
   const policy = { async authorize() { authorizations++; if (denied) throw new Error('DENIED'); } };
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-    memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   const app = new DispatchApplication(f.store, supervisor, verifier, policy, 'process-1', f.artifacts);
   try {
     const first = await app.execute(f.request); expect(first.kind).toBe('terminal'); expect(first.record.terminal?.exitCode).toBe(0);
@@ -43,7 +43,7 @@ it.skipIf(!imageId)('returns durable terminal after real Docker release without 
 });
 it('never retries an unknown launch and refuses release without terminal evidence', async () => {
   const f = await fixture(); let calls = 0;
-  const supervisor: ExecutionSupervisor = { async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
+  const supervisor: ExecutionSupervisor = { async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
@@ -54,7 +54,7 @@ it('never retries an unknown launch and refuses release without terminal evidenc
 it.skipIf(!imageId)('reconciles real terminal container after failed journal write without granting a new launch', async () => {
   const f = await fixture(); let denied = false;
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-    memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   const policy = { async authorize() { if (denied) throw new Error('DENIED'); } };
   const failingStore = { retainDispatchOutput: f.store.retainDispatchOutput.bind(f.store), claimDispatch: f.store.claimDispatch.bind(f.store), readDispatch: f.store.readDispatch.bind(f.store),
     async finishDispatch(): Promise<never> { throw new Error('injected terminal write failure'); } };
@@ -75,7 +75,7 @@ it.skipIf(!imageId)('reconciles real terminal container after failed journal wri
 it.skipIf(!imageId)('observes an absent container without creating or starting it; unclaimed recovery stays read-only', async () => {
   const f = await fixture();
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-    memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'recovery', f.artifacts);
   await expect(app.reconcile(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
@@ -94,9 +94,9 @@ it('carries a real subprocess signal exit through dispatch and atomic Attempt pr
         child.once('error', reject); child.once('exit', (code, signal) => resolve({ code, signal }));
       });
       if (result.code !== null || result.signal !== 'SIGTERM') throw new Error('expected real signal exit');
-      return { handle: 'native-test', result: { kind: 'exited', exitCode: result.code, signal: result.signal }, stdout: '', stderr: '', interrupted: false };
+      return { handle: 'native-test', result: { kind: 'exited', exitCode: result.code, signal: result.signal }, stdout: '', stderr: '', interrupted: false, outputCompleteness: 'complete' };
     },
-    async observe() { throw new Error('not observed'); }, async release() {},
+    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() {},
   };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'native-test', f.artifacts);
   const result = await app.execute(f.request);
@@ -106,11 +106,11 @@ it('carries a real subprocess signal exit through dispatch and atomic Attempt pr
 it.skipIf(!imageId)('allows real execute and reconcile to race on the same completed container without duplicate transition', async () => {
   const f = await fixture();
   const docker = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
-    memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   let arrived!: () => void; let release!: () => void;
   const atTerminal = new Promise<void>(resolve => { arrived = resolve; });
   const proceed = new Promise<void>(resolve => { release = resolve; });
-  const delayed: ExecutionSupervisor = { observe: docker.observe.bind(docker), release: docker.release.bind(docker),
+  const delayed: ExecutionSupervisor = { recoverOutput: docker.recoverOutput.bind(docker), observe: docker.observe.bind(docker), release: docker.release.bind(docker),
     async execute(request, signal) { const result = await docker.execute(request, signal); arrived(); await proceed; return result; } };
   const policy = { async authorize() {} };
   const runner = new DispatchApplication(f.store, delayed, verifier, policy, 'original', f.artifacts);
@@ -127,8 +127,8 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
 });
 it('refuses cleanup if retained output is unreadable or partial despite terminal execution', async () => {
   const f = await fixture(); let releases = 0; let corrupt = false;
-  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false }; },
-    async observe() { throw new Error('not observed'); }, async release() { releases++; } };
+  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false, outputCompleteness: 'complete' }; },
+    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const artifacts = { put: f.artifacts.put.bind(f.artifacts), async read(scope: string, receipt: Parameters<typeof f.artifacts.read>[1]) {
     if (corrupt) throw new Error('ARTIFACT_CORRUPT'); return f.artifacts.read(scope, receipt);
   } };
@@ -142,11 +142,33 @@ it('refuses cleanup if retained output is unreadable or partial despite terminal
 });
 it('retains partial output honestly and blocks destructive cleanup', async () => {
   const f = await fixture(); let releases = 0;
-  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 137 }, stdout: 'partial', stderr: '', interrupted: true }; },
-    async observe() { throw new Error('not observed'); }, async release() { releases++; } };
+  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 137 }, stdout: 'partial', stderr: '', interrupted: true, outputCompleteness: 'partial' }; },
+    async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   const result = await app.execute(f.request); expect(result.kind).toBe('terminal');
   const stored = JSON.parse(new TextDecoder().decode(await f.artifacts.read('s', result.record.output!)));
   expect(stored.completeness).toBe('partial');
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_ARTIFACT_REQUIRED'); expect(releases).toBe(0);
+});
+it.skipIf(!imageId)('recovers daemon-retained output after capture loss but never labels rotated storage complete', async () => {
+  const f = await fixture(); let denyRecovery = false;
+  const request = { ...f.request, argv: ['node', '-e', "console.log('retained-out');console.error('retained-err')"] };
+  const docker = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+    logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
+  await f.store.claimDispatch({ request, owner: 'lost' });
+  try {
+    // Actual execution occurred, but simulate the host losing the returned attach output before retaining it.
+    expect((await docker.execute(request)).result.kind).toBe('exited');
+    const app = new DispatchApplication(f.store, docker, verifier, { async authorize(action) { if (action === 'recover-output' && denyRecovery) throw new Error('DENIED'); } }, 'recovery', f.artifacts);
+    const terminal = await app.reconcile(request); expect(terminal.record.output).toBeUndefined();
+    await expect(app.release(request)).rejects.toThrow('DISPATCH_ARTIFACT_REQUIRED');
+    denyRecovery = true; await expect(app.recoverOutput(request)).rejects.toThrow('DENIED'); denyRecovery = false;
+    const retained = await app.recoverOutput(request);
+    const output = JSON.parse(new TextDecoder().decode(await f.artifacts.read('s', retained.output!)));
+    expect(output).toMatchObject({ completeness: 'partial', stdout: 'retained-out\n', stderr: 'retained-err\n', identity: request.identity });
+    expect(await app.recoverOutput(request)).toEqual(retained);
+    await expect(app.release(request)).rejects.toThrow('DISPATCH_ARTIFACT_REQUIRED');
+    const config = JSON.parse((await promisify(execFile)('/usr/bin/docker', ['inspect', retained.terminal!.handle])).stdout)[0].HostConfig.LogConfig;
+    expect(config.Type).toBe('local'); expect(config.Config).toMatchObject({ 'max-size': '64k', 'max-file': '2', mode: 'blocking' });
+  } finally { await docker.release(request); }
 });
