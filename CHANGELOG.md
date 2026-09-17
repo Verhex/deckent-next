@@ -78,3 +78,5 @@ DISPATCH/D PASS1422: engine/domain terminal projection and dispatch terminal per
 DISPATCH/E PASS1428: shared exit cause and field-wise request equality;161 tests. Transport interruption is read from dispatch evidence, never inferred as a process signal.
 
 DISPATCH/F PASS1429: execute/reconcile merges only compatible unknown→known interruption evidence;164 tests. Future metadata must preserve canonical outcome and have explicit merge tests.
+
+ARTIFACT/A PASS1430: scoped content-addressed POSIX store and configured artifact layout;163 tests. Authenticated callers, retention/GC/encryption and production maxBytes config remain required.

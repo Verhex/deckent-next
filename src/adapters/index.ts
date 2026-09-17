@@ -6,3 +6,5 @@ export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/i
 export { LocalOsPrincipalVerifier } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
 export type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
+export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
+export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
