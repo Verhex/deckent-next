@@ -1,2 +1,2 @@
-export { createReadOnlyMcpServer } from './internal/server.js';
-export type { McpQueries, McpLimits } from './internal/server.js';
+export { createMcpServer } from './internal/server.js';
+export type { McpApplications, McpLimits } from './internal/server.js';

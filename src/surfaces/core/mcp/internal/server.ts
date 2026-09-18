@@ -2,28 +2,33 @@ import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/se
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
-import { runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, type RunQuery, type DispatchInventoryInput } from '#engine/index.js';
-export interface McpQueries {
+import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, type RunCommand, type RunQuery, type DispatchInventoryInput } from '#engine/index.js';
+export interface McpApplications {
+  requestRunCancellation?(command: RunCommand): Promise<unknown>;
   inspectRun(query: RunQuery): Promise<unknown>;
   inspectInventory(query: DispatchInventoryInput): Promise<unknown>;
 }
 export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number }
-/** Local read-only protocol surface. Injected applications own identity, policy and data access. */
-export function createReadOnlyMcpServer(queries: McpQueries, limits: McpLimits, locale: Locale) {
+/** Local protocol surface. Injected applications own identity, policy and data access.
+ * Mutators are advertised only when composition explicitly supplies their application handler. */
+export function createMcpServer(applications: McpApplications, limits: McpLimits, locale: Locale) {
   z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe() }).strict().parse(limits);
   const definitions = [
-    { name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
-      invoke: (input: unknown) => queries.inspectRun(runQuerySchema.parse(input)) },
-    { name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
-      invoke: (input: unknown) => queries.inspectInventory(dispatchInventoryInputSchema.parse(input)) },
-    { name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
+    { readOnly: true, name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
+      invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
+    { readOnly: true, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
+      invoke: (input: unknown) => applications.inspectInventory(dispatchInventoryInputSchema.parse(input)) },
+    { readOnly: true, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  const requestCancellation = applications.requestRunCancellation;
+  if (requestCancellation) definitions.push({ readOnly: false, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
+    schema: runCommandSchema, invoke: (input: unknown) => requestCancellation.call(applications, runCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
     inputSchema: zodToJsonSchema(tool.schema, { $refStrategy: 'none' }) as Tool['inputSchema'],
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: tool.readOnly, destructiveHint: !tool.readOnly, idempotentHint: true, openWorldHint: false },
   })) }));
   server.setRequestHandler('tools/call', async request => {
     const tool = definitions.find(value => value.name === request.params.name);

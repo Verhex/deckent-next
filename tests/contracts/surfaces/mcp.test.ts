@@ -7,13 +7,13 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expect, it } from 'vitest';
-import { createReadOnlyMcpServer } from '#surfaces/index.js';
-import { getPolicyVocabulary, inspectRun } from '../../../src/index.js';
+import { createMcpServer } from '#surfaces/index.js';
+import { getPolicyVocabulary, inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 it('advertises real schemas and bounds concurrent calls, response size and error disclosure', async () => {
   let release!: () => void; let entered!: () => void; const waiting = new Promise<void>(r => { entered = r; }); const gate = new Promise<void>(r => { release = r; });
-  const server = createReadOnlyMcpServer({ async inspectRun() { entered(); await gate; return { oversized: 'x'.repeat(1000) }; }, async inspectInventory() { throw new Error('/private secret'); } }, { maxConcurrentCalls: 1, responseMaxBytes: 100 }, 'en');
+  const server = createMcpServer({ async inspectRun() { entered(); await gate; return { oversized: 'x'.repeat(1000) }; }, async inspectInventory() { throw new Error('/private secret'); } }, { maxConcurrentCalls: 1, responseMaxBytes: 100 }, 'en');
   const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st); const client = new Client({ name: 'test', version: '1' }); await client.connect(ct);
   try {
     const tools = await client.listTools(); expect(tools.tools.map(t => t.name)).toEqual(['inspect_run', 'inspect_inventory', 'policy_vocabulary']);
@@ -26,14 +26,14 @@ it('advertises real schemas and bounds concurrent calls, response size and error
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r', principal: 'admin' } }))).toContain('MCP_INPUT_INVALID');
   } finally { release(); await client.close(); await server.close(); }
 });
-it.skipIf(process.platform === 'win32')('serves an explicitly selected project from a different cwd with SDK parity and fresh policy', async () => {
+it.skipIf(process.platform === 'win32')('serves explicit-project inspection and cancellation intent with SDK parity and fresh policy', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-')); const project = join(root, 'project'); const data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
   const env = { HOME: join(root, 'home') }; const { store } = await openConfiguredAttemptStore(project, { env });
   try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); } finally { store.close(); }
-  const writePolicy = async (allow: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: allow ? [
-    { id: 'read', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: ['r'] } },
+  const writePolicy = async (allow: boolean, cancel = false) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: allow ? [
+    { id: 'read', effect: 'allow', actions: ['inspect', ...(cancel ? ['cancel'] : [])], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: ['r'] } },
   ] : [] }), { mode: 0o600 });
   await writePolicy(true);
   const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], cwd: root, env, stderr: 'pipe' });
@@ -43,8 +43,23 @@ it.skipIf(process.platform === 'win32')('serves an explicitly selected project f
     const result = await client.callTool({ name: 'inspect_run', arguments: query }); expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual(await inspectRun(project, query, { env }));
     expect((await client.callTool({ name: 'policy_vocabulary', arguments: {} })).structuredContent).toEqual(getPolicyVocabulary());
-    await writePolicy(false); expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
-    expect((await client.listTools()).tools.every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    const command = { ...query, commandId: 'cancel', action: 'cancel' as const, expectedRevision: 1 };
+    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
+    expect((await inspectRun(project, query, { env })).run!.cancellationRequested).toBe(false);
+    await writePolicy(true, true);
+    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: { ...command, principal: 'admin' } }))).toContain('MCP_INPUT_INVALID');
+    const cancellation = await client.callTool({ name: 'request_run_cancellation', arguments: command });
+    expect(cancellation.isError).not.toBe(true); expect(cancellation.structuredContent).toEqual(await requestRunCancellation(project, command, { env }));
+    const recorded = (await inspectRun(project, query, { env })).run!;
+    expect(recorded.cancellationRequested).toBe(true); expect(recorded.tasks[0]!.phase).toBe('active');
+    await writePolicy(true, false);
+    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
+    await writePolicy(false);
+    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('AUTHENTICATION_REQUIRED');
+    expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
+    const tools = (await client.listTools()).tools;
+    expect(tools.filter(t => t.name !== 'request_run_cancellation').every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    expect(tools.find(t => t.name === 'request_run_cancellation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
   } finally { await client.close(); await transport.close(); await rm(root, { recursive: true, force: true }); }
 }, 15000);
 

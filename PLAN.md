@@ -402,3 +402,5 @@ RUN/M landed after Fable PASS1633 + independent design critic ACCEPTABLE_FOR_PIP
 RUN/N: shared config/OS identity/fresh policy/membership/deferred ledger path for Run surfaces; no behavior change. Fable PASS1637, 331 tests/15 Docker. Empty-membership error consistency remains a follow-up.
 
 SUPERVISOR/M: bounded process-group termination observation, ENOENT-only absence; no runner changes. Fable PASS1638, 331 tests/15 Docker plus ten target repetitions. No OS reaping or escaped-session assurance.
+
+MCP/D: explicit cancellation-intent tool with native write/idempotency annotations and common SDK authority; real stdio parity, fresh policy denial. Fable PASS1639, 334 tests/15 Docker. Worker delivery not invoked by this tool; no alias for renamed internal server factory.
