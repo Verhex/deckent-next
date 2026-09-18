@@ -152,6 +152,25 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     } finally { await server.dispose(); }
   });
 
+  it('disconnects a client without cancelling an admitted handler', async () => {
+    const { options } = await fixture();
+    let release!: () => void; let entered!: () => void; let completed = false;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const server = await startLocalRuntimeSocketServer(options, async request => {
+      entered(); await gate; completed = true;
+      return { schemaVersion: 1, requestId: request.requestId, ok: true, result: null };
+    });
+    try {
+      const socket = await connect(options.endpoint);
+      socket.end(encodeServiceFrame({ schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
+      await started; server.stopAccepting(); const disposed = server.dispose(); server.disconnectClients();
+      await disposed; expect(completed).toBe(false); release();
+      for (let i = 0; i < 20 && !completed; i++) await new Promise(resolve => setTimeout(resolve, 1));
+      expect(completed).toBe(true);
+    } finally { server.disconnectClients(); await server.dispose(); }
+  });
+
   it('rejects a handler response with the wrong correlation identity', async () => {
     const { options } = await fixture();
     const server = await startLocalRuntimeSocketServer(options, async () => ({ schemaVersion: 1,
@@ -175,9 +194,9 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
     } finally { await server.dispose(); }
   });
 
-  it('times out a pre-admission half-open request while retaining the guard until disposal', async () => {
+  it('disconnects a pre-admission half-open request while retaining the guard until disposal', async () => {
     const fixtureValue = await fixture();
-    const options = { ...fixtureValue.options, headerTimeoutMs: 30 };
+    const options = { ...fixtureValue.options, headerTimeoutMs: 1_000 };
     const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
       requestId: request.requestId, ok: true, result: null }));
     const socket = await connect(options.endpoint);
@@ -185,7 +204,10 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
     server.stopAccepting();
     const guard = `\0deckent-${createHash('sha256').update(`${options.endpoint}\0${process.getuid!()}`).digest('hex')}`;
     const intruder = await connect(guard);
-    await expect(server.dispose()).resolves.toBeUndefined();
+    let disposed = false;
+    const disposing = server.dispose().then(() => { disposed = true; });
+    await new Promise(resolve => setTimeout(resolve, 20)); expect(disposed).toBe(false);
+    server.disconnectClients(); await expect(disposing).resolves.toBeUndefined();
     intruder.destroy();
     socket.destroy();
   });

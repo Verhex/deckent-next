@@ -1,4 +1,5 @@
 import { hostname, tmpdir, userInfo } from 'node:os';
+import { createConnection } from 'node:net';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -13,14 +14,14 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
 
-async function fixture(allow = true) {
+async function fixture(allow = true, shutdownGraceMs = 1000, headerTimeoutMs = 1000) {
   const project = await mkdtemp(join(tmpdir(), 'dk-svc-')); roots.push(project); const data = join(project, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'h') };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: {
     poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: fixtureDockerRegistry(['selected']),
   }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
   cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 }, service: {
-    inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000,
+    inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs, shutdownGraceMs,
   } }));
   const opened = await openConfiguredAttemptStore(project, { env }); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -37,6 +38,24 @@ async function admit(client: ReturnType<typeof createConfiguredRuntimeClient>) {
   const created = await client.createRun(command); const reserved = await client.reserveRunTasks({ schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 });
   return { command, created, reserved };
 }
+
+it('bounds half-open client cleanup by the service grace and releases ownership after disconnect', async () => {
+  const f = await fixture(true, 25, 10000);
+  const observer = { async onPage() {}, async onError() {} };
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
+  const socket = createConnection(service.endpoint); socket.on('error', () => undefined);
+  try {
+    await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
+    socket.write(Buffer.from([0, 0]));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await expect(service.stop()).resolves.toMatchObject({ state: 'incomplete', remainingRequests: 0 });
+    await service.done;
+    const restarted = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
+    await restarted.stop(); await restarted.done;
+  } finally {
+    socket.destroy(); await service.stop(); await service.done;
+  }
+}, 3000);
 
 it('serves typed create/inspect/reserve requests, enforces policy, rejects malformed input, and restarts cleanly', async () => {
   const f = await fixture(); const observer = { async onPage() {}, async onError() {} };

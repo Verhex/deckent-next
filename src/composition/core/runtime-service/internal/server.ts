@@ -36,11 +36,13 @@ async function startService(projectRoot: string, observer: ConfiguredCancellatio
   const stop = () => {
     if (stopping) return stopping;
     server.stopAccepting();
-    stopping = lifecycle.stop(config.service.shutdownGraceMs);
-    // Keep the kernel guard through actual completion, even after the caller sees an incomplete grace result.
-    void lifecycle.whenSettled().then(async () => { await server.dispose(); resolveDone(); }, async error => {
-      try { await server.dispose(); } finally { rejectDone(queryFailure(error)); }
-    }).catch(error => rejectDone(queryFailure(error)));
+    stopping = lifecycle.stop(config.service.shutdownGraceMs, () => server.dispose()).then(result => {
+      // Drop transport clients at the same deadline without aborting their admitted worker operations.
+      if (result.state === 'incomplete') server.disconnectClients();
+      return result;
+    });
+    // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle.
+    void lifecycle.whenSettled().then(resolveDone, error => rejectDone(queryFailure(error)));
     return stopping;
   };
   recovery = preparedRecovery.run(controller.signal);

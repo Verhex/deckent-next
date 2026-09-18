@@ -7,6 +7,29 @@ function deadline() {
   return { waits, value: { wait(milliseconds: number, signal: AbortSignal) { const gate = deferred<void>(); waits.push({ milliseconds, signal, release: () => gate.resolve() }); return gate.promise; } } };
 }
 
+it('includes transport finalization in the same grace deadline after work has settled', async () => {
+  const timer = deadline(); const transport = deferred<void>(); const entered = deferred<void>();
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, timer.value);
+  const stopping = lifecycle.stop(25, () => { entered.resolve(); return transport.promise; });
+  await entered.promise;
+  timer.waits[0]!.release();
+  await expect(stopping).resolves.toEqual({ state: 'incomplete', remainingRequests: 0, recoveryPending: false });
+  let settled = false; void lifecycle.whenSettled().then(() => { settled = true; });
+  await Promise.resolve(); expect(settled).toBe(false);
+  transport.resolve(); await lifecycle.whenSettled(); expect(settled).toBe(true);
+});
+
+it('does not finalize the transport before admitted work settles and finalizes only once', async () => {
+  const timer = deadline(); const operation = deferred<void>(); let finalized = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, timer.value);
+  const running = lifecycle.admit(() => operation.promise);
+  const stopping = lifecycle.stop(25, () => { finalized++; });
+  expect(lifecycle.stop(25, () => { throw new Error('second finalizer'); })).toBe(stopping);
+  await Promise.resolve(); expect(finalized).toBe(0);
+  operation.resolve(); await running;
+  await expect(stopping).resolves.toMatchObject({ state: 'clean' }); expect(finalized).toBe(1);
+});
+
 it('validates capacity and deadline dependencies before accepting work', () => {
   const timer = deadline();
   for (const maxConcurrentRequests of [0, -1, 1.5]) expect(() => new RuntimeServiceLifecycle({ maxConcurrentRequests, maxConcurrentExecutions: 1 }, () => {}, timer.value)).toThrow(RuntimeServiceLifecycleError);

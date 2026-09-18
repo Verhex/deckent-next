@@ -7,7 +7,7 @@ import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 
 export type RuntimeServiceHandler = (request: RuntimeServiceRequest) => Promise<RuntimeServiceResponse>;
-export interface LocalRuntimeSocketServer { readonly endpoint: string; stopAccepting(): void; dispose(): Promise<void> }
+export interface LocalRuntimeSocketServer { readonly endpoint: string; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -65,7 +65,12 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
-  const endpoint = createServer({ allowHalfOpen: true }, socket => accept(socket, resolved, handler));
+  const clients = new Set<Socket>();
+  const endpoint = createServer({ allowHalfOpen: true }, socket => {
+    clients.add(socket);
+    socket.once('close', () => clients.delete(socket));
+    accept(socket, resolved, handler);
+  });
   endpoint.maxConnections = resolved.maxConnections;
   try {
     await removeOwnedSocket(resolved.endpoint, true);
@@ -82,6 +87,9 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
   const stopAccepting = () => {
     if (!stopping) stopping = close(endpoint);
   };
+  const disconnectClients = () => {
+    for (const socket of clients) socket.destroy();
+  };
   const dispose = async () => {
     if (disposed) return await disposed;
     stopAccepting();
@@ -94,5 +102,5 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
     })();
     return await disposed;
   };
-  return Object.freeze({ endpoint: resolved.endpoint, stopAccepting, dispose });
+  return Object.freeze({ endpoint: resolved.endpoint, stopAccepting, disconnectClients, dispose });
 }

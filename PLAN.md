@@ -502,3 +502,5 @@ SERVICE-SURFACES PASS1840:28d1476c3aa7: feat(surfaces): connect CLI and MCP to s
 CLI-POLISH-revised PASS1853: fix(cli): complete localized help and actionable diagnostics. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
 
 EXEC-EVIDENCE-OFFLINE-rebased PASS1853: test(recovery): prove explicit reconciliation after offline worker exit. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
+
+SERVICE-SHUTDOWN-rebased PASS1853: fix(runtime): include socket finalization in shutdown grace. New output-recovery capacity investigation1852 remains open; no M1 closure claim.

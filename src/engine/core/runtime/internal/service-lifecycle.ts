@@ -35,30 +35,32 @@ export class RuntimeServiceLifecycle {
     this.active.add(tracked);
     return result;
   }
-  stop(graceMilliseconds: number): Promise<RuntimeServiceDrainResult> {
+  stop(graceMilliseconds: number, finalize: () => void | Promise<void> = () => undefined): Promise<RuntimeServiceDrainResult> {
     if (this.stopping) return this.stopping;
     try { positiveSafeInteger.parse(graceMilliseconds); }
     catch { throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS'); }
     this.accepting = false;
-    const recovery = Promise.resolve().then(this.stopRecovery).catch(() => { throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_RECOVERY_FAILED'); });
+    let recoveryPending = true;
+    const recovery = Promise.resolve().then(this.stopRecovery).then(() => { recoveryPending = false; }, () => {
+      recoveryPending = false; throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_RECOVERY_FAILED');
+    });
     const operations = [...this.active];
-    this.settled = Promise.allSettled([...operations, recovery]).then(outcomes => {
+    this.settled = Promise.allSettled([...operations, recovery]).then(async outcomes => {
+      await finalize();
       const recoveryOutcome = outcomes.at(-1)!;
       if (recoveryOutcome.status === 'rejected') throw recoveryOutcome.reason;
     });
     // Retaining a rejecting completion promise must not require every stop() caller to also observe whenSettled().
     // This consumes only the derived branch; whenSettled() preserves the original rejection for lifecycle owners.
     void this.settled.catch(() => undefined);
-    const work = this.drain(graceMilliseconds, operations, recovery); this.stopping = work;
+    const work = this.drain(graceMilliseconds, this.settled, () => recoveryPending); this.stopping = work;
     return work;
   }
   whenSettled(): Promise<void> {
     if (!this.settled) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_NOT_STOPPING');
     return this.settled;
   }
-  private async drain(graceMilliseconds: number, operations: readonly Promise<void>[], recovery: Promise<void>): Promise<RuntimeServiceDrainResult> {
-    let recoveryPending = true;
-    const completed = Promise.all([...operations, recovery.then(() => { recoveryPending = false; })]);
+  private async drain(graceMilliseconds: number, completed: Promise<void>, isRecoveryPending: () => boolean): Promise<RuntimeServiceDrainResult> {
     const controller = new AbortController();
     const elapsed = Promise.resolve().then(() => this.deadline.wait(graceMilliseconds, controller.signal));
     // Deadline failures are lifecycle failures; only the losing clean-completion deadline is consumed.
@@ -73,6 +75,6 @@ export class RuntimeServiceLifecycle {
       void elapsed.catch(() => undefined);
       return Object.freeze({ state: 'clean' as const, remainingRequests: 0, recoveryPending: false });
     }
-    return Object.freeze({ state: 'incomplete' as const, remainingRequests: this.active.size, recoveryPending });
+    return Object.freeze({ state: 'incomplete' as const, remainingRequests: this.active.size, recoveryPending: isRecoveryPending() });
   }
 }
