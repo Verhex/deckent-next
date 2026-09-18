@@ -45,7 +45,8 @@ const VERSION_HISTORY_SEGMENTS = new Set(['migration', 'migrations']);
 const versioningScope = (file) => {
   const path = rel(file).split('/');
   const migrationHistory = path[1] === 'adapters'
-    && path.some(segment => VERSION_HISTORY_SEGMENTS.has(segment.toLowerCase()))
+    && (path.some(segment => VERSION_HISTORY_SEGMENTS.has(segment.toLowerCase()))
+      || /^migration-v\d+\.ts$/i.test(path.at(-1) ?? ''))
     && path.some(segment => /(?:attempt|persistence|store)/i.test(segment));
   return path[0] === 'src' && VERSIONED_SHAPE_PACKAGES.has(path[1]) && !migrationHistory;
 };
@@ -106,7 +107,7 @@ function importsOf(file) {
 for (const file of srcFiles) {
   if (!versioningScope(file)) continue;
   const path = rel(file);
-  if (/(^|\/)(?:version-(?:\d+|[a-z]+)|v\d+)\.ts$/.test(path)) {
+  if (/(^|\/)(?:version-(?:\d+|[a-z]+)|v\d+|migration-v\d+)\.ts$/.test(path)) {
     fail('versioning', path, 'parallel versioned module; evolve the current contract in place or keep the old shape under adapter persistence migrations');
   }
   const source = readFileSync(file, 'utf8');

@@ -23,7 +23,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     catch (error) { throw sqliteFailure(error); }
     try {
       this.db.exec('BEGIN IMMEDIATE');
-      migrateLedger(this.db, migration);
+      migrateLedger(this.db, migration, this.profiles);
       this.db.exec('COMMIT');
       const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
       const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };

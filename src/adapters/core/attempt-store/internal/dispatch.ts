@@ -85,7 +85,7 @@ export class SqliteDispatchJournal {
   async claimDispatch(input: DispatchAdmission) {
     const claim = dispatchAdmissionSchema.parse(input);
     if (!this.profiles) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
-    await this.profiles.validate(claim.profile);
+    if (this.profiles.validate(claim.profile) !== undefined) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (existing) return Object.freeze({ acquired: false, record: existing });

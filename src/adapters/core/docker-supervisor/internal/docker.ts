@@ -1,4 +1,4 @@
-import { captureDockerProfile, readDockerProfile } from './profile.js';
+import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
@@ -11,6 +11,7 @@ type Inspection = { Config: { Labels: Record<string, string> }; State: { Status:
  */
 export class DockerSupervisor implements ExecutionSupervisor {
   private readonly options: DockerSupervisorOptions;
+  private endpoint?: Promise<string>;
   constructor(input: DockerSupervisorOptions, private readonly runner: DockerCommandRunner = runNodeDockerCommand) {
     const parsed = dockerSupervisorOptionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.workspaceRoot) || !isAbsolute(parsed.data.executable)) throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID');
@@ -22,15 +23,25 @@ export class DockerSupervisor implements ExecutionSupervisor {
     return value;
   }
   /** Capture resolved adapter settings, not current policy. Contains no secret values. */
-  async captureProfile() { return captureDockerProfile(this.options, await this.daemonId()); }
+  async captureProfile() { return captureDockerProfile(this.options, await this.daemonId(), await this.resolveEndpoint()); }
   static async restoreProfile(input: unknown, runner: DockerCommandRunner = runNodeDockerCommand) {
-    const { options, origin } = readDockerProfile(input);
+    const { options, origin, endpoint } = readDockerProfile(input);
     const supervisor = new DockerSupervisor(options, runner);
+    supervisor.endpoint = Promise.resolve(endpoint);
     if (await supervisor.daemonId() !== origin.daemonId) throw new SupervisorError('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
     return supervisor;
   }
+  private resolveEndpoint(): Promise<string> {
+    return this.endpoint ??= this.runner({ executable: this.options.executable,
+      args: ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
+      timeoutMs: this.options.controlTimeoutMs, outputBytes: this.options.outputBytes,
+    }).then(output => {
+      try { return dockerEndpointSchema.parse(JSON.parse(output.stdout).Host); }
+      catch { throw new SupervisorError('SUPERVISOR_PROFILE_INVALID'); }
+    });
+  }
   private async command(args: string[], timeout: number, signal?: AbortSignal) {
-    return this.runner({ executable: this.options.executable, args, timeoutMs: timeout, outputBytes: this.options.outputBytes }, signal);
+    return this.runner({ executable: this.options.executable, args: ['--host', await this.resolveEndpoint(), ...args], timeoutMs: timeout, outputBytes: this.options.outputBytes }, signal);
   }
   private identity(request: SandboxRequest) { return identifyDockerRequest(request, this.options); }
   private async inspect(handle: string, digest: string): Promise<Inspection | null> {

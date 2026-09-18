@@ -40,5 +40,5 @@ it('refuses opening a schema2 reader, then reads only after the writer migrates 
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
   const migrated = new DatabaseSync(path, { readOnly: true });
-  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { migrated.close(); }
+  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(6); } finally { migrated.close(); }
 });

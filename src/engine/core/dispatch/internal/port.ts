@@ -26,7 +26,7 @@ export type DispatchAdmission = z.infer<typeof dispatchAdmissionSchema>;
 export interface SupervisorProfileValidator {
   /** Concrete adapter validation before persistence; rejects unknown adapter/version/parameters.
    * This is a trusted composition dependency, never supplied through public request data. */
-  validate(profile: z.infer<typeof supervisorProfileSchema>): Promise<void>;
+  validate(profile: z.infer<typeof supervisorProfileSchema>): undefined;
 }
 export interface LaunchRequest { readonly claim: DispatchClaim; readonly principal: VerifiedPrincipal; readonly now: number }
 export type LaunchDecision = Readonly<{ kind: 'granted' | 'prevented'; record: DispatchRecord }>;

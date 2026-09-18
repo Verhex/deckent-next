@@ -50,11 +50,20 @@ describe('lint-arch tier contract', () => {
 
     const history = await fixture({
       'src/adapters/core/attempt-store/index.ts': 'export {};\n',
+      'src/adapters/core/attempt-store/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
       'src/adapters/core/attempt-store/migrations/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
       'src/adapters/core/attempt-store/migrations/index.ts': "export { dispatchRecordV2Schema } from './version-two.js';\n",
     });
     const historyResult = await lint(history);
     expect(historyResult.code).toBe(0);
+
+    const misplaced = await fixture({
+      'src/engine/core/dispatch/index.ts': 'export {};\n',
+      'src/engine/core/dispatch/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
+    });
+    const misplacedResult = await lint(misplaced);
+    expect(misplacedResult.code).toBe(1);
+    expect(misplacedResult.out).toContain('migration-v5.ts');
   });
 
   it('accepts lower-tier imports through unit indexes and package indexes across tiers', async () => {

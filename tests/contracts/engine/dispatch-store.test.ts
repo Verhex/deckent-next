@@ -40,7 +40,7 @@ it('linearizes launch across two writer processes, denies replay, and prevents l
     const [path, claimText, profileText, principalText] = process.argv.slice(1);
     const profile = JSON.parse(profileText); const claim = JSON.parse(claimText); const principal = JSON.parse(principalText);
     const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow', {
-      async validate(value) { if (JSON.stringify(value) !== JSON.stringify(profile)) throw new Error('TEST_SUPERVISOR_PROFILE_INVALID'); }
+      validate(value) { if (JSON.stringify(value) !== JSON.stringify(profile)) throw new Error('TEST_SUPERVISOR_PROFILE_INVALID'); return undefined; }
     });
     process.stdout.write('READY\\n');
     process.stdin.once('data', async () => {
@@ -123,7 +123,7 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   db.prepare('INSERT INTO attempt_receipts VALUES(?,?,?,?)').run('s','create','admission',JSON.stringify(snapshot)); db.close();
   const store = await f.open(); expect(await store.load('s','a')).toEqual(snapshot);
   expect((await store.receipt('s','create'))?.command).toBe('admission'); await expect(store.claimDispatch(dispatchAdmission(claim))).rejects.toThrow('DISPATCH_NOT_ADMITTED');
-  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(5); check.close();
+  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(6); check.close();
 });
 
 it('atomically rolls back terminal projection with journal failure, then preserves cancellation intent on settlement', async () => {

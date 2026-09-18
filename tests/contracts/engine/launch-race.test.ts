@@ -34,8 +34,9 @@ async function setup(barrier: 'create' | 'start' | null) {
   const hold = new Promise<void>(resolve => { releaseBarrier = () => { released = true; resolve(); }; });
   const commands: string[] = [];
   const runner = async (command: DockerCommand, signal?: AbortSignal) => {
-    commands.push(command.args[0]!);
-    if (barrier && command.args[0] === barrier && !released) { announceBarrier(); await hold; }
+    const operation = command.args[command.args[0] === '--host' ? 2 : 0];
+    commands.push(operation!);
+    if (barrier && operation === barrier && !released) { announceBarrier(); await hold; }
     return runNodeDockerCommand(command, signal);
   };
   const os = userInfo();

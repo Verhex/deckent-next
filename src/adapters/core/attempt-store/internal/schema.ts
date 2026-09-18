@@ -1,10 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AttemptStoreError } from '#engine/index.js';
+import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { requireLedgerV5Custody } from './migration-v5.js';
+import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
-export const DISPATCH_LEDGER_VERSION = 5;
-export const RUN_LEDGER_VERSION = 5;
-export const CURRENT_LEDGER_VERSION = 5;
+export const DISPATCH_LEDGER_VERSION = 6;
+export const RUN_LEDGER_VERSION = 6;
+export const CURRENT_LEDGER_VERSION = 6;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -21,13 +22,18 @@ export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   return version;
 }
 /** Caller owns BEGIN IMMEDIATE / rollback. Never migrate from read-only surface composition. */
-export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid'): void {
+export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profiles?: SupervisorProfileValidator): void {
   const version = requireLedgerVersion(db, 0);
   if (mode === 'forbid' && version !== CURRENT_LEDGER_VERSION) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
     if (next === 5) {
       requireLedgerV5Custody(db);
       db.exec('PRAGMA user_version=5;');
+      continue;
+    }
+    if (next === 6) {
+      requireLedgerV6ProfileCompatibility(db, profiles);
+      db.exec('PRAGMA user_version=6;');
       continue;
     }
     const sql = migrations[next];

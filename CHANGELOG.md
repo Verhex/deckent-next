@@ -226,3 +226,5 @@ CUSTODY/C: persist validated full supervisor profiles, migrate current ledger fo
 LAUNCH/B: Real SQLite/Docker cancellation barriers; 379 tests/24 Docker. Behavior PASS1742; layer prerequisite PASS1754, applied in following L1 commit.
 
 CANCEL/G1: Recorded-profile cancellation/reconciliation survives execution configuration change/removal; 379 tests/24 Docker; Fable PASS1748.
+
+CANCEL/G2: Docker endpoint bound in adapter profile2; ledger6 forward validation and strict migration gate; 381 tests/24 Docker; Fable PASS1751. Cross-host rebind/backup relocation remain unsupported; no automatic reset.

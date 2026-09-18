@@ -10,13 +10,14 @@ export const custodyProfile: SupervisorProfile = Object.freeze({
 });
 
 export const custodyProfiles: SupervisorProfileValidator = Object.freeze({
-  async validate(profile) {
+  validate(profile) {
     if (JSON.stringify(profile) !== JSON.stringify(custodyProfile)) throw new Error('TEST_SUPERVISOR_PROFILE_INVALID');
+    return undefined;
   },
 });
 
 export const custodyOrDockerProfiles: SupervisorProfileValidator = Object.freeze({
-  async validate(profile) {
+  validate(profile) {
     if (profile.adapterId === custodyProfile.adapterId) return custodyProfiles.validate(profile);
     if (profile.adapterId === 'docker') return validateDockerSupervisorProfile(profile);
     throw new Error('TEST_SUPERVISOR_PROFILE_INVALID');
