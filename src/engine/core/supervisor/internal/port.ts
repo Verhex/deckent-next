@@ -1,23 +1,29 @@
 import { z } from 'zod';
-import { attemptIdentitySchema, sameAttemptIdentity, type ProcessExitCause } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 
 export const sandboxRequestSchema = z.object({
   protocolVersion: z.literal(1), identity: attemptIdentitySchema,
   workspace: z.string().min(1), argv: z.array(z.string()).min(1).readonly(),
 }).strict().readonly();
 export type SandboxRequest = z.infer<typeof sandboxRequestSchema>;
-export interface SandboxResult {
-  readonly handle: string;
-  readonly result: Readonly<({ kind: 'exited' } & ProcessExitCause) | { kind: 'unknown'; reasonCode: string }>;
-  readonly outputCompleteness: 'complete' | 'partial' | 'unavailable';
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly interrupted: boolean;
-}
+const supervisorResultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
+  z.object({ kind: z.literal('unknown'), reasonCode: identitySchema }).strict(),
+]).superRefine((result, context) => {
+  if (result.kind === 'exited' && !isValidExitCause(result)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
+  }
+});
+export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema }).strict().readonly();
+export const sandboxOutputSchema = z.object({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).strict().readonly();
+export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema,
+  outputCompleteness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(), interrupted: z.boolean(),
+}).strict().readonly();
+export type SandboxResult = z.infer<typeof sandboxResultSchema>;
 export interface ExecutionSupervisor {
-  /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
   cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
+  /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
   observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. */

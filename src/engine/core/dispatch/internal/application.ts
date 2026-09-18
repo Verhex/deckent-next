@@ -2,7 +2,7 @@ import type { ArtifactStore } from '#capabilities/index.js';
 import { retainOutput, retainRecoveredOutput, verifyRetainedOutput } from './output.js';
 import { identitySchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import { sandboxRequestSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
+import { sandboxRequestSchema, sandboxResultSchema, sandboxObservationSchema, sandboxOutputSchema, SupervisorError, type ExecutionSupervisor, type SandboxRequest } from '#engine/core/supervisor/index.js';
 import { DispatchError, type DispatchRecord, type DispatchStore } from './port.js';
 export interface DispatchAuthorization {
   authorize(action: CorePolicyAction<'attempt'>, request: SandboxRequest, principal: VerifiedPrincipal): Promise<void>;
@@ -30,7 +30,7 @@ export class DispatchApplication {
     const claimed = await this.store.claimDispatch(claim);
     if (!claimed.acquired) return Object.freeze({ kind: claimed.record.terminal ? 'terminal' : 'unresolved', record: claimed.record });
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
-    const result = await this.supervisor.execute(request, signal);
+    const result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal));
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: claimed.record });
     const output = await retainOutput(this.artifacts, request, result);
     await this.store.retainDispatchOutput(claim, output);
@@ -42,7 +42,7 @@ export class DispatchApplication {
     const current = await this.store.readDispatch(request);
     if (!current) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     if (current.terminal) return Object.freeze({ kind: 'terminal', record: current });
-    const observed = await this.supervisor.observe(request);
+    const observed = sandboxObservationSchema.parse(await this.supervisor.observe(request));
     if (observed.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: current });
     // Terminal evidence is settled under existing custody, not a new launch grant. Daemon inspection
     // cannot reconstruct whether an earlier CLI was interrupted, so retain that fact as unknown.
@@ -54,7 +54,7 @@ export class DispatchApplication {
     const { request, principal } = await this.admit('cancel', input, credential);
     const current = await this.store.requestDispatchCancellation(request, principal);
     if (current.terminal) return Object.freeze({ kind: 'terminal', record: current });
-    const observed = await this.supervisor.cancel(request);
+    const observed = sandboxObservationSchema.parse(await this.supervisor.cancel(request));
     if (observed.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: current });
     const record = await this.store.finishDispatch({ request, owner: current.owner },
       { handle: observed.handle, exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
@@ -65,7 +65,7 @@ export class DispatchApplication {
     const current = await this.store.readDispatch(request);
     if (!current?.terminal) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     if (current.output) return current;
-    const output = await this.supervisor.recoverOutput(request);
+    const output = sandboxOutputSchema.parse(await this.supervisor.recoverOutput(request));
     const receipt = await retainRecoveredOutput(this.artifacts, request, { stdout: output.stdout, stderr: output.stderr });
     return this.store.retainDispatchOutput({ request, owner: current.owner }, receipt);
   }

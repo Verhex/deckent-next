@@ -251,3 +251,23 @@ it.skipIf(!imageId)('delivers a durable Run cancellation through a separate cont
     await coordinator.cancel(command); expect(await otherStore.load('s', request.identity.attemptId)).toEqual(snapshot);
   } finally { await separate.cancel(request); await execution.catch(() => {}); await original.release(request); }
 }, 20000);
+
+it('keeps malformed supervisor terminal evidence unresolved without retaining output or relaunching', async () => {
+  const f = await fixture(); let launches = 0;
+  const malformed = { handle: 'worker', result: { kind: 'exited', exitCode: 0, signal: 'SIGTERM' },
+    stdout: 'untrusted output', stderr: '', outputCompleteness: 'complete', interrupted: false };
+  const supervisor: ExecutionSupervisor = {
+    async execute() { launches++; return malformed as Awaited<ReturnType<ExecutionSupervisor['execute']>>; },
+    async observe() { return malformed as Awaited<ReturnType<ExecutionSupervisor['observe']>>; },
+    async cancel() { return malformed as Awaited<ReturnType<ExecutionSupervisor['cancel']>>; },
+    async recoverOutput() { return { stdout: '', stderr: '', completeness: 'complete' } as unknown as Awaited<ReturnType<ExecutionSupervisor['recoverOutput']>>; },
+    async release() { throw new Error('must not release'); },
+  };
+  const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'owner', f.artifacts);
+  await expect(app.execute(f.request)).rejects.toThrow();
+  const claim = await f.store.readDispatch(f.request); expect(claim?.terminal).toBeNull(); expect(claim?.output).toBeUndefined();
+  expect((await app.execute(f.request)).kind).toBe('unresolved'); expect(launches).toBe(1);
+  await expect(app.reconcile(f.request)).rejects.toThrow();
+  await expect(app.cancel(f.request)).rejects.toThrow();
+  expect((await f.store.readDispatch(f.request))?.terminal).toBeNull();
+});

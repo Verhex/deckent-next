@@ -362,3 +362,5 @@ MCP/A DONE — local stdio inspect_run / inspect_inventory / policy_vocabulary s
 RUN/K DONE — SDK admission requires positive capacity and current ledger schema inside writer transaction; no implicit migration. PASS1547,253 tests/13 Docker. Follow-up: shared schema-version constant.
 
 MCP/B DONE — real-process oversized input regression closes MCP/A transport proof gap. PASS1548,252 tests/13 Docker.
+
+SUPERVISOR/C DONE — strict runtime result validation before dispatch effects; invalid evidence remains unresolved without relaunch. PASS1549,252 tests/13 Docker. Content size stays adapter bounded.
