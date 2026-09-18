@@ -14,14 +14,15 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-admission-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  const state = { allow: true, subject: '1', contexts: 0, now: 10 };
+  const state = { allow: true, poolAllow: true, subject: '1', contexts: 0, now: 10, poolChecks: 0 };
   const verifier = { async verify() { return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
   const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'p', restrictions: [], grants: state.allow ? [
     { id: 'create', effect: 'allow', actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: ['r'] } },
   ] : [] }; } });
+  const poolAuthorization = { async authorize() { state.poolChecks++; if (!state.poolAllow) throw new Error('POLICY_DENIED'); } };
   const context = { async resolve() { state.contexts++; return { layoutRevision: 'layout', now: state.now++, execution: fixtureExecution(command.graph), policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 }, ordering: ['t'] } }; } };
-  const app = new RunAdmissionApplication(store, verifier, authorization, context);
-  return { store, app, state, context, verifier, authorization };
+  const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, context);
+  return { store, app, state, context, verifier, authorization, poolAuthorization };
 }
 it('admits only a task graph while trusted composition supplies clock, policy and layout; replay preserves the first result', async () => {
   const { app, store, state } = await fixture();
@@ -43,10 +44,16 @@ it('enforces current create policy and actor/content identity before historical 
   await expect(app.create({ ...command, graph: { ...command.graph, revision: 2 } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
   await expect(app.create({ ...command, scopeId: 'foreign' })).rejects.toThrow('AUTHENTICATION_SCOPE_DENIED');
 });
+it('requires pool use for a fresh admission without mutating a Run, but not for its receipt replay', async () => {
+  const { app, store, state } = await fixture(); state.poolAllow = false;
+  await expect(app.create(command)).rejects.toThrow('POLICY_DENIED'); expect(await store.loadRun('s', 'r')).toBeNull(); expect(state.poolChecks).toBe(1);
+  state.poolAllow = true; const first = await app.create(command); expect(state.poolChecks).toBe(2);
+  state.poolAllow = false; expect(await app.create(command)).toEqual(first); expect(state.poolChecks).toBe(2);
+});
 it('concurrent identical admissions with different sampled clock values converge on one durable receipt', async () => {
-  const { store, verifier, authorization, context } = await fixture();
+  const { store, verifier, authorization, poolAuthorization, context } = await fixture();
   let arrivals = 0; let release!: () => void; const barrier = new Promise<void>(resolve => { release = resolve; });
-  const app = new RunAdmissionApplication(store, verifier, authorization, { async resolve() {
+  const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, { async resolve() {
     const resolved = await context.resolve(); if (++arrivals === 2) release(); await barrier; return resolved;
   } });
   const [first, second] = await Promise.all([app.create(command), app.create(command)]);

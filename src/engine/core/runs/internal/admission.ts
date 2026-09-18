@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, taskGraphSchema, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { runCreateSchema, RunStoreError, type RunStore, type RunCreate, type RunReceipt } from './store.js';
 import type { RunAuthorization } from './application.js';
 import { projectRunView } from './view.js';
@@ -14,7 +15,7 @@ export interface RunAdmissionContext {
 const persistedCreate = runCreateSchema.extend({ action: z.literal('create-run') }).strict();
 export class RunAdmissionApplication {
   constructor(private readonly store: Pick<RunStore, 'createRun' | 'loadRunReceipt'>, private readonly verifier: PrincipalVerifier,
-    private readonly authorization: RunAuthorization, private readonly context: RunAdmissionContext) {}
+    private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly context: RunAdmissionContext) {}
   private replay(receipt: RunReceipt, command: RunAdmission, actor: RunCreate['actor']) {
     let previous;
     try { previous = persistedCreate.parse(JSON.parse(receipt.command)); } catch { throw new RunStoreError('RUN_COMMAND_CONFLICT'); }
@@ -33,6 +34,7 @@ export class RunAdmissionApplication {
     const replay = await this.store.loadRunReceipt(command.scopeId, command.commandId);
     if (replay) return this.replay(replay, command, actor);
     const context = await this.context.resolve(command, principal);
+    await this.poolAuthorization.authorize(context.policy.poolId, command.scopeId, principal);
     try {
       const receipt = await this.store.createRun({ commandId: command.commandId, actor, graph: command.graph,
         identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution: context.execution });
