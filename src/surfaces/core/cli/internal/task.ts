@@ -10,7 +10,13 @@ export type TaskEvaluationHandler = (root: string, command: TaskEvaluationComman
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
-  const action = argv[1]; const usage = (flag?: string) => cliUsage('task', action, resolveLocale(undefined, context.env), flag); if (action !== 'execute' && action !== 'evaluate') throw usage();
+  const action = argv[1];
+  const languageAt = argv.indexOf('--lang');
+  const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
+  const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
+  context.onLocale?.(earlyLocale);
+  const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
+  if (action !== 'execute' && action !== 'evaluate') throw usage();
   const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
@@ -24,7 +30,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
   const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
   if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
-    || !Number.isSafeInteger(Number(generation))) throw usage();
+    || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
   const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
@@ -34,13 +40,13 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.task.execute.heading', data.execution.identity, locale),
       data.execution.status === 'terminal'
-        ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? 'none', signal: data.execution.terminal?.signal ?? 'none' }, locale)
+        ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? t('cli.value.none', {}, locale), signal: data.execution.terminal?.signal ?? t('cli.value.none', {}, locale) }, locale)
         : ({ prevented: t('cli.task.execute.prevented', {}, locale), unresolved: t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }
   const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
-  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
+  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
   if (!context.evaluateTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const command = taskEvaluationCommandSchema.parse({ schemaVersion: 1, commandId, identity, expectedRevision: Number(revision) });
   const result = await context.evaluateTask(context.root ?? process.cwd(), command, options);

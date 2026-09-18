@@ -19,7 +19,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
-    if ((argv[0] === 'run' || argv[0] === 'task') && (argv[1] === '--help' || argv[1] === '-h') && argv.length === 2) {
+    const scoped = argv[0] === 'run' || argv[0] === 'task';
+    const helpAt = scoped ? ((argv[1] === '--help' || argv[1] === '-h') ? 1 : (argv[2] === '--help' || argv[2] === '-h') ? 2 : -1) : -1;
+    if (scoped && helpAt >= 0 && (argv.length === helpAt + 1 || (argv.length === helpAt + 3 && argv[helpAt + 1] === '--lang' && !!argv[helpAt + 2] && !argv[helpAt + 2]!.startsWith('-')))) {
+      locale = resolveLocale(argv[helpAt + 2], context.env); context.onLocale?.(locale);
       emit(argv[0] === 'run' ? t('cli.help.run', {}, locale) : t('cli.help.task', {}, locale),
         { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
       return 0;

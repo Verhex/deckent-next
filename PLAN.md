@@ -498,3 +498,5 @@ SERVICE/PROTOCOL PASS1834: feat(runtime): define strict correlated service proto
 SERVICE-CORE PASS1839:452692b22bdc: feat(runtime): host authenticated local service and client. Shutdown finalization correction follows reviewed SERVICE/SHUTDOWN; no DOGFOOD claim.
 
 SERVICE-SURFACES PASS1840:28d1476c3aa7: feat(surfaces): connect CLI and MCP to shared runtime service. Shutdown finalization correction follows reviewed SERVICE/SHUTDOWN; no DOGFOOD claim.
+
+CLI-POLISH-revised PASS1853: fix(cli): complete localized help and actionable diagnostics. New output-recovery capacity investigation1852 remains open; no M1 closure claim.

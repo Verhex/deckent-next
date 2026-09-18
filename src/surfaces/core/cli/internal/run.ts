@@ -10,7 +10,12 @@ export type RunAdmissionHandler = (root: string, command: RunAdmission, options:
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
-  const action = argv[1]; const usage = (flag?: string) => cliUsage('run', action, resolveLocale(undefined, context.env), flag);
+  const action = argv[1];
+  const languageAt = argv.indexOf('--lang');
+  const requestedLanguage = languageAt >= 0 ? argv[languageAt + 1] : undefined;
+  const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
+  context.onLocale?.(earlyLocale);
+  const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
     ? ['--scope', '--id', '--lang', '--command-id', '--graph'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
@@ -52,7 +57,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   }
   if (action === 'reserve') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
-    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
     if (!context.reserveRunTasks) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const command = runReservationCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: Number(revision) });
     const result = await context.reserveRunTasks(context.root ?? process.cwd(), command, { env: context.env ?? process.env });
@@ -64,7 +69,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   }
   if (action === 'cancel') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
-    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
     if (!context.deliverRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {

@@ -25,7 +25,7 @@ export async function readGraphInput(source: string, maxBytes: number, stdin: Re
     const file = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const info = await file.stat();
-      if (!info.isFile()) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID');
+      if (!info.isFile()) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID', { params: { reason: 'not-regular-file' } });
       if (info.size > maxBytes) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_LIMIT', { params: { limit: maxBytes } });
       return await consume(file.createReadStream({ autoClose: false }));
     } finally { await file.close(); }

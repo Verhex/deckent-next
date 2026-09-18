@@ -17,6 +17,20 @@ it('executes only the exact reserved identity and never presents process exit as
 });
 
 it.each([
+  [null, 'SIGTERM', 'exitCode=yok, signal=SIGTERM'],
+  [0, null, 'exitCode=0, signal=yok'],
+] as const)('localizes absent terminal fields in Turkish: %s / %s', async (exitCode, signal, expected) => {
+  let text = '';
+  const context = { stdout: { write(value: string) { text += value; } },
+    async executeTask() { return { schemaVersion: 1 as const, layout, execution: {
+      identity, status: 'terminal' as const, terminal: { exitCode, signal }, outputRecorded: true,
+    } }; } };
+  expect(await main(['task', 'execute', ...identityArgs, '--lang', 'tr'], context)).toBe(0);
+  expect(text).toContain(expected);
+  expect(text).not.toContain('none');
+});
+
+it.each([
   ['prevented', null, 'Execution was prevented before launch permission was granted.'],
   ['unresolved', null, 'the outcome is unknown'],
 ] as const)('renders %s without inventing terminal evidence', async (status, terminal, phrase) => {

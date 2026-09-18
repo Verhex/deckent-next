@@ -580,7 +580,7 @@
   "config.field.admission": "Run admission pool, capacity and scheduling order",
   "config.field.mcp": "Local MCP input, response and concurrency limits",
   "config.field.cli": "Command-line input limits, including bounded Task graph JSON",
-  "cli.run.reserve.heading": "Reserved {count} Attempts for Run {run} (command {command})",
+  "cli.run.reserve.heading": "Attempts reserved: {count} for Run {run} (command {command})",
   "cli.run.reserve.identity": "Next step: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}",
   "cli.task.execute.heading": "Attempt {attemptId} for Task {taskId} in Run {runId}",
   "cli.task.execute.terminal": "Process exit recorded: exitCode={exitCode}, signal={signal}.",
@@ -612,5 +612,6 @@
   "cli.runtime.recoveryFailed": "Cancellation recovery could not proceed: {code}.",
   "cli.runtime.stopped": "Runtime service shutdown: {state}.",
   "cli.runtime.clean": "complete",
-  "cli.runtime.incomplete": "incomplete; durable work remains"
+  "cli.runtime.incomplete": "incomplete; durable work remains",
+  "cli.value.none": "none"
 }
