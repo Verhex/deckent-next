@@ -430,3 +430,5 @@ GRAPH2/A DONE — versioned criterion definitions and bounded immutable JSON par
 GRAPH2/B DONE: Fable 1713 PASS; graph v2 carries versioned criterion definitions and exact references. v1 remains distinct; runtime admission wiring pending.
 
 STORE/G DONE: Fable 1716 PASS; Run-bound dispatch lookup and identity authorization are engine-owned ports. Runtime and wire semantics unchanged; 356 tests passed.
+
+CUSTODY-A DONE: Fable 1723:0562c1bb8227 PASS. Versioned adapter-owned profile capture/restore; point-in-time host and daemon origin checks; persistence wiring remains pending. Owner 1727 single-current-schema correction follows in GRAPH2/D and CUSTODY/C.

@@ -15,3 +15,5 @@ export { planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engi
 export * from '#engine/core/runs/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
+export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
+export type { SupervisorProfile } from '#engine/core/supervisor/index.js';

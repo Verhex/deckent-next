@@ -1,3 +1,4 @@
+import { captureDockerProfile, readDockerProfile } from './profile.js';
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
@@ -14,6 +15,19 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const parsed = dockerSupervisorOptionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.workspaceRoot) || !isAbsolute(parsed.data.executable)) throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID');
     this.options = parsed.data;
+  }
+  private async daemonId(): Promise<string> {
+    const value = (await this.command(['info', '--format', '{{.ID}}'], this.options.controlTimeoutMs)).stdout.trim();
+    if (!value) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+    return value;
+  }
+  /** Capture resolved adapter settings, not current policy. Contains no secret values. */
+  async captureProfile() { return captureDockerProfile(this.options, await this.daemonId()); }
+  static async restoreProfile(input: unknown, runner: DockerCommandRunner = runNodeDockerCommand) {
+    const { options, origin } = readDockerProfile(input);
+    const supervisor = new DockerSupervisor(options, runner);
+    if (await supervisor.daemonId() !== origin.daemonId) throw new SupervisorError('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
+    return supervisor;
   }
   private async command(args: string[], timeout: number, signal?: AbortSignal) {
     return this.runner({ executable: this.options.executable, args, timeoutMs: timeout, outputBytes: this.options.outputBytes }, signal);

@@ -31,6 +31,7 @@ export interface ExecutionSupervisor {
 }
 export class SupervisorError extends Error {
   constructor(readonly code: 'SUPERVISOR_REQUEST_INVALID' | 'SUPERVISOR_WORKSPACE_INVALID' | 'SUPERVISOR_IDENTITY_CONFLICT'
+    | 'SUPERVISOR_PROFILE_INVALID' | 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH'
     | 'SUPERVISOR_OPTIONS_INVALID' | 'SUPERVISOR_CANCELLED' | 'SUPERVISOR_CONTROL_FAILED' | 'SUPERVISOR_NOT_TERMINAL') {
     super(code); this.name = 'SupervisorError';
   }
