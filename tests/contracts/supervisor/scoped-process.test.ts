@@ -55,7 +55,7 @@ describe.skipIf(process.platform !== 'linux')('explicit Linux process profile', 
         let state = 'unknown'; const deadline = Date.now() + 2000;
         do {
           try { state = (await readFile(`/proc/${pid}/stat`, 'utf8')).split(') ')[1]!.split(' ')[0]!; }
-          catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') state = 'absent'; else throw error; }
+          catch (error) { if (error && typeof error === 'object' && 'code' in error && (error.code === 'ENOENT' || error.code === 'ESRCH')) state = 'absent'; else throw error; }
           if (['absent', 'Z', 'X'].includes(state)) break;
           await sleep(10);
         } while (Date.now() < deadline);

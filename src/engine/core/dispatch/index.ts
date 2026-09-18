@@ -5,3 +5,5 @@ export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutc
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from './internal/settle.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from './internal/inventory.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from './internal/inventory.js';
+export { DISPATCH_RECORD_V2_SCHEMA_VERSION, dispatchClaimV2Schema, dispatchRecordV2Schema } from './internal/version-two.js';
+export type { DispatchClaimV2, DispatchRecordV2 } from './internal/version-two.js';

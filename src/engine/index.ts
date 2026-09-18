@@ -17,3 +17,5 @@ export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
 export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
 export type { SupervisorProfile } from '#engine/core/supervisor/index.js';
+export { DISPATCH_RECORD_V2_SCHEMA_VERSION, dispatchClaimV2Schema, dispatchRecordV2Schema } from '#engine/core/dispatch/index.js';
+export type { DispatchClaimV2, DispatchRecordV2 } from '#engine/core/dispatch/index.js';
