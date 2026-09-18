@@ -24,8 +24,9 @@ async function fixture() {
     ] }), { mode: 0o600 });
   }
   await policy(true);
-  await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 1, revision: 1,
-    tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }] } }, options);
+  await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 2, revision: 1,
+    tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }],
+    criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } }, options);
   return { project, options, path, policy };
 }
 describe.skipIf(process.platform === 'win32')('configured SDK cancellation intent', () => {

@@ -7,7 +7,8 @@ import { RunAdmissionApplication, RunPolicyAuthorization } from '#engine/index.j
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r',
-  graph: { schemaVersion: 1, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['evidence'] }] } };
+  graph: { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['evidence'] }],
+    criterionDefinitions: [{ id: 'evidence', version: 1, description: 'Verify evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-admission-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);

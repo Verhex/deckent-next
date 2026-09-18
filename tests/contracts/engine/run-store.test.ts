@@ -12,7 +12,8 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 const options = { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' } as const;
 const actor = { id: 'user', issuer: 'host', subject: '1000' };
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'l' };
-const graph = { schemaVersion: 1 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] })) };
+const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] })),
+  criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
 const create = { commandId: 'create', actor, identity, graph, now: 0, policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } };
 const attempt = (taskId: string) => ({ ...identity, taskId, attemptId: 'attempt-' + taskId, generation: 1 });
 const reservation = (ids: string[], commandId = 'claim') => ({ commandId, actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: ids.map(attempt) });

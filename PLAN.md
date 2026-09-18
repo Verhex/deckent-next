@@ -436,3 +436,5 @@ CUSTODY-A DONE: Fable 1723:0562c1bb8227 PASS. Versioned adapter-owned profile ca
 GRAPH2-C DONE: Fable 1724:fdc8003b5022 PASS. Bounded descriptions and complete versioned criterion encoding with golden vectors; description changes require a new definition version. Owner 1727 single-current-schema correction follows in GRAPH2/D and CUSTODY/C.
 
 CUSTODY-B DONE: Fable 1725:5dcf4ffbed2a PASS. Profile-bearing dispatch contract separates prevention from observed process exit; atomic grant and durable delivery remain pending. Owner 1727 single-current-schema correction follows in GRAPH2/D and CUSTODY/C.
+
+GRAPH2/D DONE — single current graph schema 2, typed criterion references and language-neutral golden fixtures. Fable PASS 1735; 363 tests including 21 Docker tests.

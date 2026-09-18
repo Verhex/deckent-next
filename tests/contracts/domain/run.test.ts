@@ -2,10 +2,10 @@ import { expect, it } from 'vitest';
 import { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, runSnapshotSchema,
   createAttempt, applyAttemptObservation, inspectTaskReadiness } from '#domain/index.js';
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'layout' };
-const graph = { schemaVersion: 1, revision: 1, tasks: [
+const graph = { schemaVersion: 2, revision: 1, tasks: [
   { id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] },
   { id: 'b', kind: 'custom', dependencies: ['a'], acceptanceCriteria: ['verified'] },
-] };
+], criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
 const attemptIdentity = { ...identity, taskId: 'a', attemptId: 'attempt-a', generation: 1 };
 it('binds ready tasks to exact attempts without opening dependencies on process exit zero', () => {
   const created = createRun(identity, graph, 10);

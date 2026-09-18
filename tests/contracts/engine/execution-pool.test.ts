@@ -10,7 +10,8 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 const actor = { id: 'service', issuer: 'host', subject: '1000' };
 const options = { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' } as const;
 const pool = { schemaVersion: 1 as const, poolId: 'shared', capacity: { executionSlots: 1, inFlightSlots: 2 } };
-const graph = { schemaVersion: 1 as const, revision: 1, tasks: [{ id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] }] };
+const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] }],
+  criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
 const id = (scopeId: string) => ({ scopeId, runId: 'run', layoutRevision: 'layout', taskId: 'a', attemptId: 'same-local-id', generation: 1 });
 const create = (scopeId: string) => ({ commandId: 'create', actor, identity: { scopeId, runId: 'run', layoutRevision: 'layout' }, graph, now: 0,
   policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 10, inFlightSlots: 10 }, ordering: ['a'] } });

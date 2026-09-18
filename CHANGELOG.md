@@ -218,3 +218,5 @@ CUSTODY-A: Versioned adapter-owned profile capture/restore; point-in-time host a
 GRAPH2-C: Bounded descriptions and complete versioned criterion encoding with golden vectors; description changes require a new definition version.
 
 CUSTODY-B: Profile-bearing dispatch contract separates prevention from observed process exit; atomic grant and durable delivery remain pending.
+
+GRAPH2/D: consolidate task graph schema 2; remove parallel version APIs; validate criterion references with typed errors and golden encoding fixtures.

@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import { planSchedulingWave } from '#engine/index.js';
 import type { TaskGraph, TaskProgress } from '#domain/index.js';
 function fixture(count: number) {
-  const graph: TaskGraph = { schemaVersion: 1, revision: 1, tasks: Array.from({ length: count }, (_, i) => ({ id: String(i), kind: 'custom-kind', dependencies: [], acceptanceCriteria: ['verified'] })) };
+  const graph: TaskGraph = { schemaVersion: 2, revision: 1, tasks: Array.from({ length: count }, (_, i) => ({ id: String(i), kind: 'custom-kind', dependencies: [], acceptanceCriteria: ['verified'] })),
+    criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
   const progress: TaskProgress[] = graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibleAt: 0 }));
   const input = { schemaVersion: 1, capacity: { executionSlots: 6, inFlightSlots: 8 }, ordering: graph.tasks.map(task => task.id), snapshot: { graphRevision: 1, now: 10, progress } };
   return { graph, input, progress };

@@ -1,0 +1,39 @@
+[
+  {
+    "name": "empty-parameters",
+    "definition": {
+      "id": "c",
+      "version": 1,
+      "description": "Check",
+      "evaluator": {
+        "id": "e",
+        "version": 1
+      },
+      "parameters": {}
+    },
+    "encoded": "{\"definition\":{\"description\":\"Check\",\"evaluator\":{\"id\":\"e\",\"version\":1},\"id\":\"c\",\"parameters\":{},\"version\":1},\"encodingVersion\":1}",
+    "sha256": "da205f708258da8b0db010c5c0b73ae2d469463efe3038c482b9e94e1edcb819"
+  },
+  {
+    "name": "key-order-escaping-and-numbers",
+    "definition": {
+      "id": "c",
+      "version": 1,
+      "description": "Check",
+      "evaluator": {
+        "id": "e",
+        "version": 1
+      },
+      "parameters": {
+        "2": 2,
+        "10": 10,
+        "z": "line\n\t\"",
+        "é": "é",
+        "😀": 0,
+        "n": 1e-07
+      }
+    },
+    "encoded": "{\"definition\":{\"description\":\"Check\",\"evaluator\":{\"id\":\"e\",\"version\":1},\"id\":\"c\",\"parameters\":{\"10\":10,\"2\":2,\"n\":1e-7,\"z\":\"line\\n\\t\\\"\",\"é\":\"é\",\"😀\":0},\"version\":1},\"encodingVersion\":1}",
+    "sha256": "8e0d862ade2cfbdd28fbaca7a83a20dcddedb822921e85b49c8fee881f25eb71"
+  }
+]

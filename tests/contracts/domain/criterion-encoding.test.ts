@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { criterionDefinitionSchema, encodeCriterionDefinition, CRITERION_TEXT_LIMITS } from '#domain/index.js';
 const definition = { id: 'c', version: 1, description: 'Check', evaluator: { id: 'e', version: 1 }, parameters: {} };
 it('bounds descriptions while allowing ordinary multiline text', () => {
@@ -7,8 +9,14 @@ it('bounds descriptions while allowing ordinary multiline text', () => {
   }
   expect(criterionDefinitionSchema.safeParse({ ...definition, description: 'Line 1\r\n\tLine 2' }).success).toBe(true);
 });
-it('matches the versioned complete definition golden encoding', () => {
-  expect(encodeCriterionDefinition(definition)).toBe('{"definition":{"description":"Check","evaluator":{"id":"e","version":1},"id":"c","parameters":{},"version":1},"encodingVersion":1}');
+it('matches language-neutral JSON golden vectors for the complete versioned encoding', () => {
+  const vectors = JSON.parse(readFileSync(new URL('../../fixtures/task-graph/criterion-encoding-v1.json', import.meta.url), 'utf8')) as
+    { definition: unknown; encoded: string; sha256: string }[];
+  for (const vector of vectors) {
+    const encoded = encodeCriterionDefinition(vector.definition);
+    expect(encoded).toBe(vector.encoded);
+    expect(createHash('sha256').update(encoded, 'utf8').digest('hex')).toBe(vector.sha256);
+  }
 });
 it('sorts numeric-like and Unicode keys explicitly and preserves JSON escaping and number semantics', () => {
   const parameters = JSON.parse('{"2":2,"10":10,"z":"line\\n\\t\\"","é":"é","😀":-0,"n":1e-7}');

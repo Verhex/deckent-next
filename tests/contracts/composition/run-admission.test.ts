@@ -8,8 +8,9 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { clearConfigCache } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const command = { schemaVersion: 1 as const, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 1 as const, revision: 1,
-  tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }] } };
+const command = { schemaVersion: 1 as const, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 2 as const, revision: 1,
+  tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }],
+  criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-admission-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });

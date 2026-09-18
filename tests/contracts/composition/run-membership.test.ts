@@ -17,8 +17,9 @@ it.skipIf(process.platform === 'win32')('reports absent policy membership consis
       () => inspectRun(project, query, options),
       () => requestRunCancellation(project, command, options),
       () => deliverRunCancellation(project, command, options),
-      () => createRun(project, { ...query, commandId: 'create', graph: { schemaVersion: 1, revision: 1,
-        tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }] } }, options),
+      () => createRun(project, { ...query, commandId: 'create', graph: { schemaVersion: 2, revision: 1,
+        tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }],
+        criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } }, options),
     ];
     for (const call of calls) await expect(call()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(await readdir(data)).toEqual(['policy.json']);
