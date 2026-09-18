@@ -196,3 +196,5 @@ RUN/O: create, inspect, request cancellation and delivery consistently return PO
 CANCEL/E: cancellation of reserved work returns not-dispatched without creating or requiring worker directories.
 
 RUN/P: run cancel delivers to workers and reports per-attempt outcomes; help explains idempotent retries, stale revisions and recorded process exit versus Task acceptance.
+
+CANCEL/F: cancellation configuration errors identify the missing profile in typed parameters and EN/TR text.

@@ -414,3 +414,5 @@ RUN/O DONE — shared context denies authenticated identities without scope memb
 CANCEL/E DONE — no runtime directory or Docker dependency for undispatched attempts; shared lazy dispatch initialization. Fable1667 PASS, 339 tests / 17 Docker.
 
 RUN/P DONE — CLI cancel now performs configured delivery; SDK/CLI/MCP real worker parity, EN/TR stale/replay captures, Fable1671 PASS and ACCEPTABLE_FOR_PIPE_V1, 340 tests / 18 Docker. Partial-outcome summary and terminology refinements follow.
+
+CANCEL/F DONE — names missing cancellation/execution profiles before intent or runtime directory creation; Fable1676 PASS, 342 tests / 18 Docker.

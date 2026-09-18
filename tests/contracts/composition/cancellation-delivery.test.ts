@@ -87,9 +87,15 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
     expect((await f.store.load('s', f.identity.attemptId))!.lastObservation!.result.kind).toBe('exited');
   } finally { await supervisor.cancel(request).catch(() => {}); await outcome; await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); }
 }, 30000);
-it.skipIf(process.platform === 'win32')('requires an explicit cancellation profile before recording intent or creating runtime directories', async () => {
+it.skipIf(process.platform === 'win32').each(['both', 'cancellation', 'execution'])('identifies missing %s profiles before recording intent or creating runtime directories', async missing => {
   const f = await fixture(false); await f.policy(true, false);
-  await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED' });
+  const bootstrap = join(f.project, '.deckent/config.json'); const config = JSON.parse(await readFile(bootstrap, 'utf8'));
+  if (missing === 'execution') config.cancellation = { maxConcurrentDeliveries: 2 };
+  if (missing === 'cancellation') config.execution = { docker: { ...docker, imageId: 'sha256:' + 'a'.repeat(64) },
+    git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } };
+  await writeFile(bootstrap, JSON.stringify(config)); clearConfigCache();
+  const expected = missing === 'both' ? 'cancellation, execution' : missing;
+  await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing: expected } });
   expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(false);
   await expect(lstat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
   await expect(lstat(productResourcePath(f.layout, 'artifacts'))).rejects.toMatchObject({ code: 'ENOENT' });

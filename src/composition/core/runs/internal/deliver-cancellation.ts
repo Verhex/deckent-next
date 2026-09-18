@@ -16,7 +16,9 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
     const verifier = { async verify() { return principal; } }; const authorization = new RunPolicyAuthorization({ async load() { return document; } });
     const actor = await authenticate(verifier, undefined, command.scopeId);
     await authorization.authorize('cancel', command, actor);
-    if (!config.cancellation || !config.execution) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
+    if (!config.cancellation || !config.execution) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
+      params: { missing: [!config.cancellation ? 'cancellation' : null, !config.execution ? 'execution' : null].filter(Boolean).join(', ') },
+    });
     const os = userInfo(); const execution = config.execution;
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
