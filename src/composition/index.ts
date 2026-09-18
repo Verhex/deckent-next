@@ -1,3 +1,4 @@
 export { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
 export { inspectConfiguredRun } from '#composition/core/runs/index.js';
 export { createConfiguredRun } from '#composition/core/runs/index.js';
+export { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';

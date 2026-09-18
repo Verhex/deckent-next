@@ -8,3 +8,5 @@ export type { RunView } from '#engine/index.js';
 export { getPolicyVocabulary } from '#engine/index.js';
 export { createConfiguredRun as createRun } from '#composition/index.js';
 export type { RunAdmission } from '#engine/index.js';
+export { requestConfiguredRunCancellation as requestRunCancellation } from '#composition/index.js';
+export type { RunCommand } from '#engine/index.js';

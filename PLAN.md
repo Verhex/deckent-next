@@ -394,3 +394,5 @@ EVALUATION/D: pure pass/fail/HOLD Run transitions; HOLD consumes revision, accep
 STORE/E: shared writer/reader ledger version authority; schema4 unchanged, atomic migration rollback proof. 316 tests/15 Docker, Fable PASS1608.
 
 SUPERVISOR/L landed after Fable PASS1616: atomic readiness publication closes empty-PID race1605; 328 tests/15 Docker and 5 repeated targeted cancellation suites. Production behavior unchanged.
+
+RUN/L landed after Fable PASS1618: SDK requestRunCancellation uses current policy and existing versioned command, persists intent only. 331 tests/15 Docker; no worker delivery or termination claim. CLI text and shared composition context follow.

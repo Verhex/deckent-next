@@ -176,3 +176,5 @@ EVALUATION/D: pure pass/fail/HOLD Run transitions; HOLD consumes revision, accep
 STORE/E: shared writer/reader ledger version authority; schema4 unchanged, atomic migration rollback proof. 316 tests/15 Docker, Fable PASS1608.
 
 SUPERVISOR/L: remove PID readiness test race with atomic publication and validated positive identifiers.
+
+RUN/L: SDK durable Run cancellation intent with current authorization, exact replay and no implicit ledger upgrade.
