@@ -10,6 +10,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { custodyProfiles, custodyPrincipal, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { startTestRuntimeService } from '../support/runtime-service.js';
 const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js'); const sdk = pathToFileURL(resolve('dist/index.js')).href;
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -35,6 +36,7 @@ async function fixture() {
   await writeFile(configPath, JSON.stringify(config));
   const globalPath = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
   await writeFile(globalPath, JSON.stringify({ provider_limits: config.provider_limits }));
+  await startTestRuntimeService(project, env);
   return { project, data, env, ledgerPath: opened.path, layoutRevision: opened.layout.revision };
 }
 describe.skipIf(process.platform === 'win32')('shipped inventory CLI and SDK', () => {

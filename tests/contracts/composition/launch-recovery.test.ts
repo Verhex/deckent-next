@@ -13,6 +13,7 @@ import { reconcileAttempt } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE; const exec = promisify(execFile);
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps a granted pre-start crash unresolved after %s controller restart', async mode => {
@@ -39,6 +40,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
     { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'attempt', ids: [identity.attemptId] } },
   ] };
   await writeFile(join(data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
+  const runtime = await startTestRuntimeService(project, options.env);
   const program = `
     import { openSqliteAttemptStore, validateDockerSupervisorProfile } from './dist/adapters/index.js';
     const [path, claimText, profileText, principalText] = process.argv.slice(1);
@@ -77,6 +79,6 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
   } finally {
     if (timeout) clearTimeout(timeout);
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await closed.catch(() => null); }
-    store?.close(); await client?.close(); await transport?.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
+    store?.close(); await client?.close(); await transport?.close(); await stopTestRuntimeService(runtime); clearConfigCache(); await rm(root, { recursive: true, force: true });
   }
 }, 30000);

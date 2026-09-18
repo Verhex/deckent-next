@@ -14,6 +14,7 @@ import { clearConfigCache, prepareProductDirectory, productResourcePath } from '
 import { DockerSupervisor, FileArtifactStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { startTestRuntimeService } from '../support/runtime-service.js';
 const exec = promisify(execFile); const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -35,6 +36,7 @@ async function fixture(configured: boolean) {
       ...(attempt ? [{ id: 'attempt', effect: 'allow', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),
     ] }), { mode: 0o600 });
   }
+  if (configured) await startTestRuntimeService(project, options.env);
   return { project, data, options, store, layout, identity, policy, command: { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 1 } };
 }
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])('delivers via %s to a real worker only after Run and Attempt cancellation authority, preserving terminal custody', async mode => {

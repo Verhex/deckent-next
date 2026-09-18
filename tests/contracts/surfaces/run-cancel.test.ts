@@ -8,6 +8,7 @@ import { deliverRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { clearConfigCache } from '#platform/index.js';
+import { startTestRuntimeService } from '../support/runtime-service.js';
 const exec = promisify(execFile); const binary = resolve('dist/composition/core/cli/internal/entry.js'); const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
@@ -23,6 +24,7 @@ async function fixture() {
     ] : [] }), { mode: 0o600 });
   }
   await policy(true);
+  await startTestRuntimeService(project, env);
   const args = ['run', 'cancel', '--scope', 's', '--id', 'r', '--command-id', 'cancel', '--expected-revision', '1'];
   return { project, options, policy, args, run: (extra: string[]) => exec(process.execPath, [binary, ...args, ...extra], { cwd: project, env }) };
 }

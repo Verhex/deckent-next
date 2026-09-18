@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import type { TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
+import type { RuntimeServiceStartHandler } from './runtime.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -20,6 +21,8 @@ export interface CommandContext {
   executeTask?: TaskExecutionHandler;
   evaluateTask?: TaskEvaluationHandler;
   inspectInventory?: InventoryQueryHandler;
+  startRuntimeService?: RuntimeServiceStartHandler;
+  signal?: AbortSignal;
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;

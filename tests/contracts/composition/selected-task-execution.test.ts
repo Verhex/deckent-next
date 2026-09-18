@@ -6,12 +6,13 @@ import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRun, executeTask, evaluateTask, reserveRunTasks } from '../../../src/index.js';
+import { createRun, executeTask, evaluateTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { startTestRuntimeService } from '../support/runtime-service.js';
 
 const exec = promisify(execFile); const roots: string[] = [];
 const dockerEnabled = process.platform === 'linux' && !!process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -19,7 +20,7 @@ const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!;
 
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(execute = true) {
+async function fixture(execute = true, twoTasks = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-selected-task-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -35,14 +36,16 @@ async function fixture(execute = true) {
   const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
   const policy = async (allowExecute: boolean) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allowExecute ? 'allow' : 'deny', restrictions: [], grants: [
-    { id: 'create', effect: 'allow', actions: ['create', 'reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+    { id: 'create', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     ...(allowExecute ? [{ id: 'execute', effect: 'allow', actions: ['execute', 'evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
   ] }), { mode: 0o600 });
   await policy(execute);
-  const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
+  const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] },
+    ...(twoTasks ? [{ id: 't2', kind: 'selected', dependencies: ['t'], acceptanceCriteria: ['exit'] }] : [])],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   const graphPath = join(root, 'graph.json'); await writeFile(graphPath, JSON.stringify(graph));
+  await startTestRuntimeService(project, options.env);
   return { root, project, data, configPath, options, graph, graphPath, layout: opened.layout, policy };
 }
 
@@ -167,6 +170,95 @@ describe.skipIf(!dockerEnabled)('selected task execution', () => {
           await client?.close(); await transport?.close();
         }
       }
+    }
+  }, 30000);
+});
+
+describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () => {
+  it('shares one accepted Run across compiled CLI and real stdio MCP with exact artifact and receipt identity', async () => {
+    const f = await fixture();
+    const publicSurface = await reserveThroughPublicSurface('cli', f); const identity = publicSurface.identity;
+    const transport = new StdioClientTransport({ command: process.execPath,
+      args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' });
+    const client = new Client({ name: 'same-run-cross-surface', version: '1' });
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    let record: Awaited<ReturnType<typeof runtime.store.loadBoundDispatch>> = null;
+    let lease: Awaited<ReturnType<typeof runtime.workspaces.openRecorded>> = null;
+    try {
+      await client.connect(transport);
+      const executeResult = await client.callTool({ name: 'execute_task', arguments: identity });
+      expect(executeResult.isError).not.toBe(true);
+      expect(executeResult.structuredContent).toMatchObject({ execution: { identity, status: 'terminal',
+        terminal: { exitCode: 0 }, outputRecorded: true } });
+      const command = { schemaVersion: 1, commandId: 'cross-evaluate', identity, expectedRevision: 2 };
+      const evaluationResult = await client.callTool({ name: 'evaluate_task', arguments: command });
+      expect(evaluationResult.isError).not.toBe(true);
+      expect(evaluationResult.structuredContent).toMatchObject({ evaluation: { commandId: 'cross-evaluate',
+        run: { scopeId: 's', runId: 'r', tasks: [{ id: 't', phase: 'accepted' }] } } });
+
+      const inspected = await cliCall<Awaited<ReturnType<typeof inspectRun>>>(f,
+        ['run', 'inspect', '--scope', 's', '--id', 'r', '--json']);
+      expect(inspected.run).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
+      record = await runtime.store.loadBoundDispatch(identity);
+      const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));
+      expect(output).toMatchObject({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'base\n' });
+      const receipt = await runtime.store.loadRunReceipt('s', 'cross-evaluate');
+      expect(receipt?.snapshot.identity).toMatchObject({ scopeId: 's', runId: 'r' });
+      expect(JSON.parse(receipt!.command)).toMatchObject({ action: 'apply-task-evaluation', commandId: 'cross-evaluate',
+        evaluation: { identity }, dispatch: { request: { identity } } });
+      lease = await runtime.workspaces.openRecorded(identity);
+    } finally {
+      try {
+        record ??= await runtime.store.loadBoundDispatch(identity);
+        if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+      } finally {
+        lease ??= await runtime.workspaces.openRecorded(identity);
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+        runtime.store.close(); await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
+      }
+    }
+  }, 30000);
+
+  it('keeps a Run Git base fixed across sequential SDK reservations after source HEAD advances', async () => {
+    const f = await fixture(true, true); const publicSurface = await reserveThroughPublicSurface('sdk', f); const firstIdentity = publicSurface.identity;
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    let firstRecord: Awaited<ReturnType<typeof runtime.store.loadBoundDispatch>> = null;
+    let secondRecord: Awaited<ReturnType<typeof runtime.store.loadBoundDispatch>> = null;
+    let secondIdentity: Identity | null = null;
+    const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', f.project, ...args])).stdout.trim();
+    try {
+      const first = await executeTask(f.project, firstIdentity, f.options);
+      expect(first.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, outputRecorded: true });
+      const firstEvaluation = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-first', identity: firstIdentity, expectedRevision: 2 }, f.options);
+      expect(firstEvaluation.evaluation.run.tasks.find(task => task.id === 't')?.phase).toBe('accepted');
+      const firstLease = await runtime.workspaces.openRecorded(firstIdentity);
+      const firstBase = firstLease!.baseCommit;
+      await git('add', 'input'); await git('commit', '-m', 'owner source update');
+      const sourceHead = await git('rev-parse', 'HEAD'); expect(sourceHead).not.toBe(firstBase);
+      const next = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve-second', scopeId: 's', runId: 'r', expectedRevision: firstEvaluation.evaluation.run.revision }, f.options);
+      secondIdentity = next.reservation.identities[0]!; expect(secondIdentity.taskId).toBe('t2');
+      const second = await executeTask(f.project, secondIdentity, f.options);
+      expect(second.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, outputRecorded: true });
+      const secondEvaluation = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-second', identity: secondIdentity, expectedRevision: next.reservation.run.revision + 1 }, f.options);
+      expect(secondEvaluation.evaluation.run.tasks.find(task => task.id === 't2')?.phase).toBe('accepted');
+      const secondLease = await runtime.workspaces.openRecorded(secondIdentity);
+      expect(secondLease!.baseCommit).toBe(firstBase);
+      const store = await openConfiguredAttemptStore(f.project, f.options);
+      try {
+        firstRecord = await store.store.loadBoundDispatch(firstIdentity); secondRecord = await store.store.loadBoundDispatch(secondIdentity);
+        expect((await store.store.loadRunWorkspaceCustody('s', 'r'))!.baseRevision).toBe(firstBase);
+      } finally { store.store.close(); }
+      const firstOutput = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', firstRecord!.output!)));
+      const secondOutput = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', secondRecord!.output!)));
+      expect(firstOutput.stdout).toBe('base\n'); expect(secondOutput.stdout).toBe('base\n');
+      expect(secondOutput.stdout).not.toContain('owner-wip');
+    } finally {
+      for (const [record, identity] of [[firstRecord, firstIdentity], [secondRecord, secondIdentity]] as const) {
+        if (record) { const supervisor = await DockerSupervisor.restoreProfile(record.profile); await supervisor.release(record.request); }
+        const lease = identity ? await runtime.workspaces.openRecorded(identity) : null;
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      }
+      runtime.store.close(); await publicSurface.client?.close(); await publicSurface.transport?.close();
     }
   }, 30000);
 

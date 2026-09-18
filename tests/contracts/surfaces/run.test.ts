@@ -11,6 +11,7 @@ const sdk = resolve('dist/index.js');
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { startTestRuntimeService } from '../support/runtime-service.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -24,6 +25,7 @@ async function fixture() {
       { id: 'read', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids } },
     ] : [] }), { mode: 0o600 });
   }
+  await startTestRuntimeService(project, options.env);
   return { project, data, options, policy };
 }
 describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => {

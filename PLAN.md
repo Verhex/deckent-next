@@ -496,3 +496,5 @@ ADMISSION/POOL PASS1834: refactor(admission): enforce pool authorization in engi
 SERVICE/PROTOCOL PASS1834: feat(runtime): define strict correlated service protocol.
 
 SERVICE-CORE PASS1839:452692b22bdc: feat(runtime): host authenticated local service and client. Shutdown finalization correction follows reviewed SERVICE/SHUTDOWN; no DOGFOOD claim.
+
+SERVICE-SURFACES PASS1840:28d1476c3aa7: feat(surfaces): connect CLI and MCP to shared runtime service. Shutdown finalization correction follows reviewed SERVICE/SHUTDOWN; no DOGFOOD claim.

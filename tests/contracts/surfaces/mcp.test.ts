@@ -11,6 +11,7 @@ import { createMcpServer } from '#surfaces/index.js';
 import { getPolicyVocabulary, inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 it('advertises real schemas and bounds concurrent calls, response size and error disclosure', async () => {
   let release!: () => void; let entered!: () => void; const waiting = new Promise<void>(r => { entered = r; }); const gate = new Promise<void>(r => { release = r; });
   const server = createMcpServer({ async inspectRun() { entered(); await gate; return { oversized: 'x'.repeat(1000) }; }, async inspectInventory() { throw new Error('/private secret'); } }, { maxConcurrentCalls: 1, responseMaxBytes: 100 }, 'en');
@@ -36,6 +37,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     { id: 'read', effect: 'allow', actions: ['inspect', ...(cancel ? ['cancel'] : [])], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: ['r'] } },
   ] : [] }), { mode: 0o600 });
   await writePolicy(true);
+  const runtime = await startTestRuntimeService(project, env);
   const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], cwd: root, env, stderr: 'pipe' });
   const client = new Client({ name: 'deckent-proof', version: '1' });
   try {
@@ -60,7 +62,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     const tools = (await client.listTools()).tools;
     expect(tools.filter(t => !['create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(tools.find(t => t.name === 'request_run_cancellation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
-  } finally { await client.close(); await transport.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await client.close(); await transport.close(); await stopTestRuntimeService(runtime); await rm(root, { recursive: true, force: true }); }
 }, 15000);
 
 it('rejects oversized unterminated stdio input with a sanitized transport error', async () => {

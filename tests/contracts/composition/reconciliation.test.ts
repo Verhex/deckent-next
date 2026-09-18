@@ -12,6 +12,7 @@ import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { DockerSupervisor, openSqliteAttemptStore, runNodeDockerCommand, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconciles via %s real recorded work without relaunch, termination, output fabrication or business acceptance', async mode => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-reconcile-')); const project = join(root, 'project'); const data = join(root, 'data');
@@ -31,6 +32,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
     { id: 'member', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'run', ids: ['r'] } },
     ...(allow ? [{ id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(os.uid) }], resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),
   ] }), { mode: 0o600 });
+  const runtime = await startTestRuntimeService(project, options.env);
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
     args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], env: options.env, stderr: 'pipe' }) : null;
   const client = transport ? new Client({ name: 'reconcile-proof', version: '1' }) : null;
@@ -77,7 +79,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
   } finally {
     await supervisor.cancel(request).catch(() => {}); await pending?.catch(() => {});
     // Test fixture owns the process; product reconcile never releases it or manufactures an artifact receipt.
-    await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
+    await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); await stopTestRuntimeService(runtime); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
   }
 }, 30000);
 
@@ -108,6 +110,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reject
   ] }), { mode: 0o600 });
   const listContainers = async () => (await runNodeDockerCommand({ executable: docker.executable,
     args: ['--host', parameters.endpoint, 'ps', '-aq', '--filter', `name=^/${handle}$`], timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes })).stdout.trim().split('\n').filter(Boolean).sort();
+  const runtime = await startTestRuntimeService(project, options.env);
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
     args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], env: options.env, stderr: 'pipe' }) : null;
   const client = transport ? new Client({ name: 'reconcile-origin-proof', version: '1' }) : null;
@@ -139,6 +142,6 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reject
   } finally {
     await runNodeDockerCommand({ executable: docker.executable, args: ['--host', parameters.endpoint, 'rm', '-f', handle],
       timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes }).catch(() => {});
-    await client?.close(); await transport?.close(); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
+    await client?.close(); await transport?.close(); await stopTestRuntimeService(runtime); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
   }
 }, 30000);
