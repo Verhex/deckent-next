@@ -42,10 +42,27 @@ async function fixture(execute = true) {
   await policy(execute);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
-  return { root, project, data, configPath, options, graph, layout: opened.layout, policy };
+  const graphPath = join(root, 'graph.json'); await writeFile(graphPath, JSON.stringify(graph));
+  return { root, project, data, configPath, options, graph, graphPath, layout: opened.layout, policy };
 }
 
-async function reserveThroughPublicSurface(mode: 'sdk' | 'mcp', f: Awaited<ReturnType<typeof fixture>>) {
+type Identity = { scopeId: string; runId: string; taskId: string; attemptId: string; generation: number; layoutRevision: string };
+type PublicMode = 'sdk' | 'mcp' | 'cli';
+type PublicResult = Awaited<ReturnType<typeof reserveRunTasks>>;
+async function cliCall<T>(f: Awaited<ReturnType<typeof fixture>>, args: readonly string[]) {
+  try {
+    const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
+      { cwd: f.project, env: { ...process.env, ...f.options.env }, maxBuffer: 1024 * 1024 });
+    return JSON.parse(result.stdout) as T;
+  } catch (error) {
+    const failure = error as { code?: number; stderr?: string; stdout?: string };
+    expect(failure.code).toBe(1); expect(failure.stdout).toBe('');
+    const result = JSON.parse(failure.stderr!);
+    throw Object.assign(new Error(result.code), { code: result.code });
+  }
+}
+
+async function reserveThroughPublicSurface(mode: PublicMode, f: Awaited<ReturnType<typeof fixture>>) {
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
     args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' }) : null;
   const client = transport ? new Client({ name: 'selected-task-execution', version: '1' }) : null;
@@ -59,12 +76,17 @@ async function reserveThroughPublicSurface(mode: 'sdk' | 'mcp', f: Awaited<Retur
       return result.structuredContent as T;
     };
     if (client) await call('create_run', create);
+    else if (mode === 'cli') await cliCall(f, ['run', 'create', '--scope', 's', '--id', 'r', '--command-id', 'create', '--graph', f.graphPath, '--json']);
     else await createRun(f.project, create, f.options);
-    const first = client ? (await call<Awaited<ReturnType<typeof reserveRunTasks>>>('reserve_run_tasks', reserve)).reservation : (await reserveRunTasks(f.project, reserve, f.options)).reservation;
-    const replay = client ? (await call<Awaited<ReturnType<typeof reserveRunTasks>>>('reserve_run_tasks', reserve)).reservation : (await reserveRunTasks(f.project, reserve, f.options)).reservation;
+    const first = client ? (await call<PublicResult>('reserve_run_tasks', reserve)).reservation
+      : mode === 'cli' ? (await cliCall<PublicResult>(f, ['run', 'reserve', '--scope', 's', '--id', 'r', '--command-id', 'reserve', '--expected-revision', '0', '--json'])).reservation
+      : (await reserveRunTasks(f.project, reserve, f.options)).reservation;
+    const replay = client ? (await call<PublicResult>('reserve_run_tasks', reserve)).reservation
+      : mode === 'cli' ? (await cliCall<PublicResult>(f, ['run', 'reserve', '--scope', 's', '--id', 'r', '--command-id', 'reserve', '--expected-revision', '0', '--json'])).reservation
+      : (await reserveRunTasks(f.project, reserve, f.options)).reservation;
     expect(replay.identities).toEqual(first.identities);
     expect(first.identities).toHaveLength(1);
-    return { client, transport, identity: first.identities[0] as { scopeId: string; runId: string; taskId: string; attemptId: string; generation: number; layoutRevision: string } };
+    return { client, transport, mode, identity: first.identities[0] as Identity };
   } catch (error) {
     try { await client?.close(); } finally { await transport?.close(); }
     throw error;
@@ -72,12 +94,14 @@ async function reserveThroughPublicSurface(mode: 'sdk' | 'mcp', f: Awaited<Retur
 }
 
 describe.skipIf(!dockerEnabled)('selected task execution', () => {
-  it.each(['sdk', 'mcp'] as const)('executes the pinned profile in a detached Git base through %s, evaluates it, and replays without current execution settings', async mode => {
+  it.each(['sdk', 'mcp', 'cli'] as const)('executes the pinned profile in a detached Git base through %s, evaluates it, and replays without current execution settings', async mode => {
     const f = await fixture(); const publicSurface = await reserveThroughPublicSurface(mode, f); const identity = publicSurface.identity;
     const runtime = await openConfiguredExecution(f.project, f.project, f.options); let record: Awaited<ReturnType<typeof runtime.store.loadBoundDispatch>> = null;
     let lease: Awaited<ReturnType<typeof runtime.workspaces.openRecorded>> = null;
     const { transport, client } = publicSurface;
     const execute = async () => {
+      if (!client && mode === 'cli') return cliCall<Awaited<ReturnType<typeof executeTask>>>(f, ['task', 'execute', '--scope', identity.scopeId, '--run', identity.runId,
+        '--task', identity.taskId, '--attempt', identity.attemptId, '--generation', String(identity.generation), '--layout-revision', identity.layoutRevision, '--json']);
       if (!client) return executeTask(f.project, identity, f.options);
       const result = await client.callTool({ name: 'execute_task', arguments: identity });
       if (result.isError) {
@@ -87,6 +111,9 @@ describe.skipIf(!dockerEnabled)('selected task execution', () => {
       return result.structuredContent as Awaited<ReturnType<typeof executeTask>>;
     };
     const evaluate = async (command: { schemaVersion: 1; commandId: string; identity: typeof identity; expectedRevision: number }) => {
+      if (!client && mode === 'cli') return cliCall<Awaited<ReturnType<typeof evaluateTask>>>(f, ['task', 'evaluate', '--scope', identity.scopeId, '--run', identity.runId,
+        '--task', identity.taskId, '--attempt', identity.attemptId, '--generation', String(identity.generation), '--layout-revision', identity.layoutRevision,
+        '--command-id', command.commandId, '--expected-revision', String(command.expectedRevision), '--json']);
       if (!client) return evaluateTask(f.project, command, f.options);
       const result = await client.callTool({ name: 'evaluate_task', arguments: command });
       if (result.isError) {

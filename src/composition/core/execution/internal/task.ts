@@ -29,7 +29,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const selected = selectReservedTaskProfile(await store.loadRun(identity.scopeId, identity.runId), await store.load(identity.scopeId, identity.attemptId), identity);
       const profile = resolveDockerTaskProfile(selected);
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      if (os.uid <= 0 || os.gid < 0) throw new Error('EXECUTION_HOST_UNSUPPORTED');
+      if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
       const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       const broker = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot });

@@ -1,12 +1,18 @@
-import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import type { RunCommand, RunQuery, RunView, RunCancellationOutcome } from '#engine/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { runAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand } from '#engine/index.js';
+import { resolve } from 'node:path';
+import { readGraphInput } from './graph-input.js';
+import type { AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
+export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
+export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
-  if (action !== 'inspect' && action !== 'cancel') throw ErrorRegistry.createError('CLI_USAGE');
-  const allowed = action === 'cancel' ? ['--scope', '--id', '--lang', '--command-id', '--expected-revision'] : ['--scope', '--id', '--lang'];
+  if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw ErrorRegistry.createError('CLI_USAGE');
+  const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -18,6 +24,32 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const scopeId = values.get('--scope'); const runId = values.get('--id');
   if (!scopeId || !runId) throw ErrorRegistry.createError('CLI_USAGE');
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
+  if (action === 'create') {
+    const commandId = values.get('--command-id'); const source = values.get('--graph');
+    if (!commandId || !source) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!context.createRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const root = context.root ?? process.cwd(); const options = { env: context.env ?? process.env };
+    const config = await loadConfig(root, options);
+    const graph = await readGraphInput(source === '-' ? source : resolve(root, source), config.cli.graphInputMaxBytes, context.stdin);
+    const parsed = runAdmissionSchema.safeParse({ schemaVersion: 1, commandId, scopeId, runId, graph });
+    if (!parsed.success) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID');
+    const result = await context.createRun(root, parsed.data, options);
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
+      run: data.admission.run.runId, revision: data.admission.run.revision,
+    }, locale) }); return;
+  }
+  if (action === 'reserve') {
+    const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!context.reserveRunTasks) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const command = runReservationCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: Number(revision) });
+    const result = await context.reserveRunTasks(context.root ?? process.cwd(), command, { env: context.env ?? process.env });
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
+      t('cli.run.reserve.heading', { run: runId, command: commandId, count: data.reservation.identities.length }, locale),
+      ...data.reservation.identities.map(identity => t('cli.run.reserve.identity', identity, locale)),
+    ].join('\n') });
+    return;
+  }
   if (action === 'cancel') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');

@@ -765,6 +765,7 @@
   "error.CANCELLATION_NOT_CONFIGURED": "İptal teslim sınırları yapılandırılmamış. Eksik: {missing}.",
   "remedy.RUN_STORE_CONFLICT": "Durumu run inspect --scope <id> --id <run> ile okuyun. Değiştirilmiş iptal komutu için yeni --command-id ve güncel --expected-revision kullanın. Önceki yanıt belirsizse önce aynı komut kimliği ve girdiyi tekrar deneyin.",
   "error.EXECUTION_NOT_CONFIGURED": "Kayıtlı worker yönetimi için açık bir yürütme profili gerekir.",
+  "error.EXECUTION_HOST_UNSUPPORTED": "Görev yürütme, root olmayan bir host kullanıcısı ve geçerli bir birincil grup gerektirir.",
   "error.EXECUTION_PROFILE_INVALID": "Seçilen yürütme profili desteklenmiyor veya parametreleri geçersiz.",
   "error.TASK_EVALUATOR_INVALID": "Seçilen değerlendirici desteklenmiyor veya parametreleri geçersiz.",
   "error.TASK_KIND_NOT_REGISTERED": "İş türü için kayıtlı yürütme profili yok.",
@@ -782,5 +783,9 @@
   "error.EVALUATION_EVIDENCE_SCOPE": "Kanıt farklı bir erişim kapsamına ait.",
   "error.EVALUATION_EVIDENCE_LIMIT": "Kanıt, yapılandırılmış doğrulama bütçesini aşıyor.",
   "error.EVALUATION_EVIDENCE_CORRUPT": "Kanıt bütünlüğü doğrulanamadı. İş kabulü kaydedilmedi.",
-  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Değerlendirme kanıtı kullanılamıyor. İş kabulü kaydedilmedi."
+  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Değerlendirme kanıtı kullanılamıyor. İş kabulü kaydedilmedi.",
+  "error.CLI_GRAPH_INPUT_LIMIT": "Grafik girdisi cli.graphInputMaxBytes sınırını aşıyor.",
+  "error.CLI_GRAPH_INPUT_INVALID": "Grafik girdisi geçerli UTF-8 JSON içeren normal bir dosya veya pipe olmalı.",
+  "error.CLI_GRAPH_INPUT_TTY": "Grafik JSON verisini stdin üzerinden pipe ile gönderin veya bir grafik dosyası belirtin. Etkileşimli stdin desteklenmiyor.",
+  "error.CLI_GRAPH_INPUT_UNAVAILABLE": "Grafik girdisi okunamadı."
 }

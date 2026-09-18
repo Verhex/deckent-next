@@ -765,6 +765,7 @@
   "error.CANCELLATION_NOT_CONFIGURED": "Cancellation delivery limits are not configured. Missing: {missing}.",
   "remedy.RUN_STORE_CONFLICT": "Read state with run inspect --scope <id> --id <run>. For a changed cancellation command, use a new --command-id and the current --expected-revision. If the previous response was uncertain, retry the unchanged command ID and input first.",
   "error.EXECUTION_NOT_CONFIGURED": "An explicit execution profile is required to manage the recorded worker.",
+  "error.EXECUTION_HOST_UNSUPPORTED": "Task execution requires a non-root host user with a valid primary group.",
   "error.EXECUTION_PROFILE_INVALID": "The selected execution profile is not supported or has invalid parameters.",
   "error.TASK_EVALUATOR_INVALID": "The selected evaluator is not supported or has invalid parameters.",
   "error.TASK_KIND_NOT_REGISTERED": "The task kind has no registered execution profile.",
@@ -782,5 +783,9 @@
   "error.EVALUATION_EVIDENCE_SCOPE": "Evidence belongs to a different access scope.",
   "error.EVALUATION_EVIDENCE_LIMIT": "Evidence exceeds the configured verification budget.",
   "error.EVALUATION_EVIDENCE_CORRUPT": "Evidence integrity could not be verified. Task acceptance was not recorded.",
-  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Evaluation evidence is unavailable. Task acceptance was not recorded."
+  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Evaluation evidence is unavailable. Task acceptance was not recorded.",
+  "error.CLI_GRAPH_INPUT_LIMIT": "Graph input exceeds cli.graphInputMaxBytes.",
+  "error.CLI_GRAPH_INPUT_INVALID": "Graph input must be a regular file or pipe containing valid UTF-8 JSON.",
+  "error.CLI_GRAPH_INPUT_TTY": "Pipe graph JSON to stdin or provide a graph file. Interactive stdin is not supported.",
+  "error.CLI_GRAPH_INPUT_UNAVAILABLE": "The graph input could not be read."
 }

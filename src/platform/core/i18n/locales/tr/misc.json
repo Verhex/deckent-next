@@ -579,6 +579,16 @@
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
   "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",
   "config.field.mcp": "Yerel MCP girdi, yanıt ve eşzamanlılık sınırları",
+  "config.field.cli": "Sınırlı Task grafı JSON girdisi dahil komut satırı girdi sınırları",
+  "cli.run.reserve.heading": "Run {run} için {count} deneme ayrıldı (komut {command})",
+  "cli.run.reserve.identity": "kapsam={scopeId} run={runId} görev={taskId} attempt={attemptId} nesil={generation} yerleşim={layoutRevision}",
+  "cli.task.execute.heading": "Run {runId} içindeki görev {taskId} için deneme {attemptId}",
+  "cli.task.execute.claimed": "Yürütme sahipliği kaydedildi.",
+  "cli.task.execute.terminal": "Worker için kayıtlı bir terminal süreç sonucu var.",
+  "cli.task.execute.prevented": "Yürütme izni verilmeden başlatma engellendi.",
+  "cli.task.execute.unresolved": "Yürütme sahipliği kayıtlı, ancak terminal süreç sonucu yok.",
+  "cli.task.execute.notice": "Terminal süreç sonucu, görev kabulü değildir.",
+  "cli.task.evaluate.result": "Görev {task} değerlendirme komutu {command}: aşama={phase}, Run revizyonu={revision}",
   "mcp.tool.inspectRun": "Kayıtlı Run ve işlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme girişimlerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
   "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez.",
@@ -591,5 +601,6 @@
   "mcp.tool.executeTask": "Run’a sabitlenmiş görev profiliyle ayrılmış tek bir Attempt kimliğini yürüt. Yetkili rezervasyon veya runtime tarafından döndürülen tam kimliği kullanın; bu araç görev ayırmaz veya kimlik uydurmaz. argv, çalışma alanı, imaj veya temel commit göndermeyin. Güncel Attempt yürütme izni gerekir. terminal yalnız kayıtlı süreç çıkışıdır; görev kabulü değildir. Aynı kimliğin tekrarı kayıtlı yürütme sahipliğini döndürür ve yeniden başlatmaz; politika yeniden denetlenir. Kabul edilmiş görev dış etkiler üretebilir.",
   "mcp.tool.evaluateTask": "Run’a sabitlenmiş ölçütlerden ve doğrulanmış saklanan çıktıdan görev hükmü türetip kalıcı kayda işler. Tam Attempt kimliğini, kararlı commandId değerini ve güncel Run revizyonunu gönderin; hüküm veya değerlendirici göndermeyin. Tekrar dahil güncel Attempt değerlendirme izni gerekir. Görevi yürütmez veya yeniden başlatmaz.",
   "cli.run.cancel.prevented": "Başlatma izni verilmeden yürütme engellendi",
-  "inventory.launchPending": "Başlatma izni bekliyor"
+  "inventory.launchPending": "Başlatma izni bekliyor",
+  "cli.run.create.result": "Run {run}, {revision} revizyonuyla kaydedildi. Görevler henüz başlatılmadı."
 }

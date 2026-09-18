@@ -579,6 +579,16 @@
   "config.field.inspection": "Read-only inspection page and policy document limits",
   "config.field.admission": "Run admission pool, capacity and scheduling order",
   "config.field.mcp": "Local MCP input, response and concurrency limits",
+  "config.field.cli": "Command-line input limits, including bounded Task graph JSON",
+  "cli.run.reserve.heading": "Reserved {count} Attempt(s) for Run {run} (command {command})",
+  "cli.run.reserve.identity": "scope={scopeId} run={runId} task={taskId} attempt={attemptId} generation={generation} layout={layoutRevision}",
+  "cli.task.execute.heading": "Attempt {attemptId} for Task {taskId} in Run {runId}",
+  "cli.task.execute.claimed": "Execution custody was recorded.",
+  "cli.task.execute.terminal": "The worker has a recorded terminal process result.",
+  "cli.task.execute.prevented": "Launch was prevented before execution permission was granted.",
+  "cli.task.execute.unresolved": "Execution custody is recorded, but no terminal process result is available.",
+  "cli.task.execute.notice": "A terminal process result is not Task acceptance.",
+  "cli.task.evaluate.result": "Task {task} evaluation command {command}: phase={phase}, Run revision={revision}",
   "mcp.tool.inspectRun": "Read a recorded Run and its tasks. This is not live worker status or proof of acceptance. Requires current Run inspection policy.",
   "mcp.tool.inspectInventory": "Read a bounded page of recorded execution attempts in one authorized scope. Does not start or stop workers.",
   "mcp.tool.policyVocabulary": "List built-in policy resource and action identifiers. This metadata grants no permissions.",
@@ -591,5 +601,6 @@
   "mcp.tool.executeTask": "Execute one reserved Attempt identity with its Run-pinned task profile. Use an exact identity returned by an authorized reservation or runtime; this tool does not reserve tasks or invent an identity. Do not supply argv, workspace, image or a base commit. Requires current per-Attempt execute permission. Terminal means recorded process exit, not Task acceptance. Repeating the exact identity returns recorded custody and never relaunches it; policy is checked again. The admitted task may perform external effects.",
   "mcp.tool.evaluateTask": "Derive and persist a Task verdict from its Run-pinned criteria and verified retained output. Supply the exact Attempt identity, a stable commandId and the current Run revision; never supply a verdict or evaluator. Requires current per-Attempt evaluate permission, including replay. This does not execute or relaunch the task.",
   "cli.run.cancel.prevented": "Launch prevented before permission was granted",
-  "inventory.launchPending": "Launch permission pending"
+  "inventory.launchPending": "Launch permission pending",
+  "cli.run.create.result": "Run {run} admitted at revision {revision}. Tasks have not started."
 }

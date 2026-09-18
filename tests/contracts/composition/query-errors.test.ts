@@ -12,6 +12,13 @@ it('preserves registered errors and redacts unknown native/storage details throu
   const safe = queryFailure(raw); expect(safe.code).toBe('INVENTORY_UNAVAILABLE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
   expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');
 });
+it('preserves the registered unsupported execution-host failure with localized guidance', () => {
+  const failure = ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
+  expect(queryFailure(failure)).toBe(failure);
+  expect(failure.code).toBe('EXECUTION_HOST_UNSUPPORTED');
+  expect(failure.localize?.('en').message).toContain('non-root host user');
+  expect(failure.localize?.('tr').message).toContain('root olmayan');
+});
 it.each([
   new TaskEvaluationError('TASK_EVALUATION_STALE'),
   new TaskEvaluationError('TASK_EVALUATION_NOT_READY'),

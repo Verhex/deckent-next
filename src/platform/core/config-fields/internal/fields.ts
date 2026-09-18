@@ -21,6 +21,7 @@ export const CONFIG_FIELDS = Object.freeze({
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  cli: field('config.field.cli', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),

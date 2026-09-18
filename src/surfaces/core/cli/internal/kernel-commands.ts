@@ -1,4 +1,6 @@
-import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
+import type { RunAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
+import type { Readable } from 'node:stream';
+import type { TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import {
@@ -10,8 +12,13 @@ import {
 } from '#platform/index.js';
 
 export interface CommandContext {
+  createRun?: RunAdmissionHandler;
+  stdin?: Readable & { isTTY?: boolean };
   inspectRun?: RunQueryHandler;
   deliverRunCancellation?: RunCancellationDeliveryHandler;
+  reserveRunTasks?: RunReservationHandler;
+  executeTask?: TaskExecutionHandler;
+  evaluateTask?: TaskEvaluationHandler;
   inspectInventory?: InventoryQueryHandler;
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;

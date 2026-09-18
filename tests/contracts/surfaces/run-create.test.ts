@@ -1,0 +1,53 @@
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { afterEach, expect, it } from 'vitest';
+import { runCommand } from '../../../src/surfaces/core/cli/index.js';
+
+const roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
+  criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+const command = ['run', 'create', '--scope', 's', '--id', 'r', '--command-id', 'c', '--graph'] as const;
+async function fixture(cli: Record<string, unknown> = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-run-create-')); roots.push(root); await mkdir(join(root, '.deckent'), { recursive: true });
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ cli }));
+  const output: string[] = []; const calls: unknown[] = [];
+  const result = { schemaVersion: 1 as const, layout: { fixture: true }, admission: { schemaVersion: 1 as const, commandId: 'c',
+    run: { runId: 'r', revision: 0, scopeId: 's', layoutRevision: 'layout', cancellationRequested: false, tasks: [], criteria: [] } } };
+  return { root, output, calls, result, context: {
+    root, env: { HOME: join(root, 'home') }, stdout: { write(value: string) { output.push(value); } },
+    async createRun(_root: string, received: unknown) { calls.push(received); return result as never; },
+  } };
+}
+
+it('passes the same validated graph from a file or pipe to admission and emits the exact JSON result', async () => {
+  const f = await fixture(); const file = join(f.root, 'graph.json'); await writeFile(file, JSON.stringify(graph));
+  await runCommand([...command, file, '--json'], f.context);
+  expect(f.calls).toEqual([{ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph }]);
+  expect(JSON.parse(f.output.pop()!)).toEqual(f.result);
+  f.calls.length = 0;
+  await runCommand([...command, '-', '--json'], { ...f.context, stdin: Readable.from([JSON.stringify(graph)]) });
+  expect(f.calls).toEqual([{ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph }]);
+  expect(JSON.parse(f.output.pop()!)).toEqual(f.result);
+});
+
+it('rejects unknown or duplicate flags, invalid graphs, and oversized input before calling admission', async () => {
+  const f = await fixture({ graphInputMaxBytes: 8 }); const invalid = join(f.root, 'invalid.json'); const large = join(f.root, 'large.json');
+  await writeFile(invalid, '{}'); await writeFile(large, JSON.stringify(graph));
+  await expect(runCommand([...command, invalid, '--extra'], f.context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
+  await expect(runCommand([...command, invalid, '--scope', 's'], f.context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
+  await expect(runCommand([...command, invalid], f.context)).rejects.toMatchObject({ code: 'CLI_GRAPH_INPUT_INVALID' });
+  await expect(runCommand([...command, large], f.context)).rejects.toMatchObject({ code: 'CLI_GRAPH_INPUT_LIMIT' });
+  expect(f.calls).toEqual([]);
+});
+
+it('uses the configured graph limit and reports admission without claiming execution in English or Turkish', async () => {
+  const f = await fixture({ graphInputMaxBytes: Buffer.byteLength(JSON.stringify(graph)) }); const file = join(f.root, 'graph.json'); await writeFile(file, JSON.stringify(graph));
+  await runCommand([...command, file, '--lang', 'en'], f.context);
+  expect(f.output.pop()).toContain('Tasks have not started');
+  await runCommand([...command, file, '--lang', 'tr'], f.context);
+  expect(f.output.pop()).toContain('Görevler henüz başlatılmadı');
+  expect(f.output).toEqual([]); expect(f.calls).toHaveLength(2);
+});

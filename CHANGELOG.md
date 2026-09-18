@@ -252,3 +252,5 @@ EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selectio
 - Add authenticated SDK task reservation with scheduler selection, generated Attempt identities and exact receipt replay (Fable PASS1791).
 
 - Expose MCP run creation and scheduler reservation; verify public SDK/MCP workflow with system-generated identities and real Docker (Fable PASS1794).
+
+- Wire CLI run creation/reservation and task execution/evaluation with bounded file/pipe graph input and actual Docker parity (functional Fable PASS1798; text acceptance follow-up open).
