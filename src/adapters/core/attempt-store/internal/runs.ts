@@ -56,6 +56,17 @@ export class SqliteRunJournal {
       return snapshot;
     } catch (error) { throw sqliteFailure(error); }
   }
+  async loadRunExecutionPolicy(scopeInput: string, runInput: string) {
+    const scopeId = identitySchema.parse(scopeInput); const runId = identitySchema.parse(runInput);
+    try {
+      const row = this.db.prepare('SELECT revision,snapshot,policy FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
+      if (!row) throw new RunStoreError('RUN_STORE_CONFLICT');
+      const snapshot = this.decode(row.snapshot, scopeId, runId);
+      if (snapshot.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      try { assertRunExecution(snapshot.graph, snapshot.execution); return runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); }
+      catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+    } catch (error) { throw sqliteFailure(error); }
+  }
   async projectRunAttempt(input: RunProjection): Promise<RunReceipt> {
     const parsed = runProjectionSchema.parse(input); const command = JSON.stringify({ action: 'project-run-attempt', ...parsed });
     const { scopeId, runId } = parsed;

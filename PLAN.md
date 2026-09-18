@@ -466,3 +466,5 @@ EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evalu
 - EXECUTION/SELECTED PASS 1783: pinned profile → recorded Git base → Docker → artifact → evaluator proved; 488 tests. Per-attempt base and new-path race evidence remain M1 follow-ups.
 
 - TASK/SURFACES PASS1787: typed SDK/MCP execution/evaluation and EN/TR errors; 496 tests with actual Docker. Public reservation residual tracked separately in requests1785/1786; CLI and autonomous cancellation remain open.
+
+- RUN/RESERVATION PASS1791: persisted policy, generated identities, authorized replay and atomic reservation; 511 tests. Pool authorization extraction L1 follow-up; file-policy timing limits remain explicit.

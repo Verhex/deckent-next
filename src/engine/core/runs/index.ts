@@ -14,3 +14,5 @@ export { decideCancellationDeliveryClaim, decideCancellationDeliveryFinish } fro
 export { resolveExecutionRegistry, assertRunExecution, ExecutionRegistryError } from './internal/registry.js';
 export type { ExecutionRegistryValidation } from './internal/registry.js';
 export { selectReservedTaskProfile } from './internal/execution.js';
+export { RunReservationApplication, runReservationCommandSchema } from './internal/reservation.js';
+export type { RunReservationCommand, RunReservationStore, ReservationRuntime } from './internal/reservation.js';

@@ -248,3 +248,5 @@ EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selectio
 - Execute reserved tasks using pinned Docker profiles and recorded Git workspaces; prove artifact-backed acceptance and replay without relaunch (Fable PASS 1783).
 
 - Expose task execution/evaluation through SDK and MCP with strict shared schemas and localized typed errors (Fable PASS1787).
+
+- Add authenticated SDK task reservation with scheduler selection, generated Attempt identities and exact receipt replay (Fable PASS1791).

@@ -5,3 +5,4 @@ export { deliverConfiguredRunCancellation } from './internal/deliver-cancellatio
 export { reconcileConfiguredAttempt } from './internal/reconcile.js';
 export { evaluateConfiguredTask } from './internal/evaluate.js';
 export { loadConfiguredRunContext } from './internal/context.js';
+export { reserveConfiguredRunTasks } from './internal/reserve.js';

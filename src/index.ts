@@ -15,3 +15,5 @@ export { reconcileConfiguredAttempt as reconcileAttempt } from '#composition/ind
 export type { AttemptIdentity } from '#domain/index.js';
 export { executeConfiguredTask as executeTask, evaluateConfiguredTask as evaluateTask } from '#composition/index.js';
 export type { TaskEvaluationCommand } from '#engine/index.js';
+export { reserveConfiguredRunTasks as reserveRunTasks } from '#composition/index.js';
+export type { RunReservationCommand } from '#engine/index.js';

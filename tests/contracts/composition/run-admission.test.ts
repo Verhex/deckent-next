@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRun, inspectRun } from '../../../src/index.js';
+import { createRun, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
@@ -24,7 +24,7 @@ async function fixture() {
   async function policy(run: boolean, pool: boolean) {
     const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
     const grants = [
-      ...(run ? [{ id: 'run', effect: 'allow', actions: ['create', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'r2'] } }] : []),
+      ...(run ? [{ id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'r2'] } }] : []),
       ...(pool ? [{ id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } }] : []),
     ];
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants }), { mode: 0o600 });
@@ -86,6 +86,28 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     try { expect(await reopened.store.loadRun('s', 'r')).toEqual(snapshot); } finally { reopened.store.close(); }
     expect(JSON.stringify(first)).not.toContain('parameters');
     expect(first.admission.run.criteria[0]?.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+  });
+  it('reserves persisted admitted policy after admission config is removed, with a system UUID and exact replay', async () => {
+    const f = await fixture(); await f.policy(true, true); await createRun(f.project, command, f.options);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission = null; await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    const reservation = { schemaVersion: 1 as const, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 };
+    const first = await reserveRunTasks(f.project, reservation, f.options);
+    expect(first.reservation.identities).toHaveLength(1); expect(first.reservation.identities[0]!.attemptId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
+    expect(first.reservation.run.tasks[0]!.phase).toBe('active'); expect(await reserveRunTasks(f.project, reservation, f.options)).toEqual(first);
+  });
+  it('requires current pool authority for a fresh reservation without changing the ledger', async () => {
+    const f = await fixture(); await f.policy(true, true); await createRun(f.project, command, f.options); const before = await readFile(f.path);
+    await f.policy(true, false);
+    await expect(reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await readFile(f.path)).toEqual(before);
+  });
+  it('requires fresh Run reserve authority before returning a historical reservation replay', async () => {
+    const f = await fixture(); await f.policy(true, true); await createRun(f.project, command, f.options);
+    const reservation = { schemaVersion: 1 as const, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 };
+    await reserveRunTasks(f.project, reservation, f.options); const before = await readFile(f.path);
+    await f.policy(false, true);
+    await expect(reserveRunTasks(f.project, reservation, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await readFile(f.path)).toEqual(before);
   });
   it.each(['kind', 'profile', 'evaluator'])('rejects unsupported %s before writing a Run', async invalid => {
     const f = await fixture(); await f.policy(true, true);

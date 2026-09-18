@@ -52,6 +52,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
   async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db).commitTaskEvaluation(input); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
+  async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRunExecutionPolicy(scopeId, runId); }
   async createRun(input: RunCreate) { return new SqliteRunJournal(this.db).createRun(input); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
