@@ -1,6 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -22,6 +22,8 @@ async function bounded<T>(promise: Promise<T>, child: Child, label: string) {
 }
 
 it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cancellation in a fresh process after the execution controller is killed', async () => {
+  const sdk = resolve('dist/index.js');
+  await access(sdk).catch(() => { throw new Error('Compiled SDK is required for this process test; run npm run build first.'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancel-recovery-process-')); const project = join(root, 'project'), data = join(root, 'data');
   const configPath = join(project, '.deckent/config.json'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -50,7 +52,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cance
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
   const identity = (await reserveRunTasks(project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 }, options)).reservation.identities[0]!;
-  const sdk = resolve('dist/index.js'); const executeProgram = `
+  const executeProgram = `
     const [sdk,project,identityText]=process.argv.slice(1); const {executeTask}=await import(sdk);
     await executeTask(project,JSON.parse(identityText),{env:{...process.env,HOME:process.env.HOME}});`;
   const execution = spawn(process.execPath, ['--input-type=module', '-e', executeProgram, sdk, project, JSON.stringify(identity)], { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] });
