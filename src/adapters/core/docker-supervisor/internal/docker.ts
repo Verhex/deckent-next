@@ -1,26 +1,22 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
-const exec = promisify(execFile);
+import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 type Inspection = { Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
 export class DockerSupervisor implements ExecutionSupervisor {
   private readonly options: DockerSupervisorOptions;
-  constructor(input: DockerSupervisorOptions) {
+  constructor(input: DockerSupervisorOptions, private readonly runner: DockerCommandRunner = runNodeDockerCommand) {
     const parsed = dockerSupervisorOptionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.workspaceRoot) || !isAbsolute(parsed.data.executable)) throw new SupervisorError('SUPERVISOR_OPTIONS_INVALID');
     this.options = parsed.data;
   }
   private async command(args: string[], timeout: number, signal?: AbortSignal) {
-    const deadline = AbortSignal.timeout(timeout);
-    return exec(this.options.executable, args, { maxBuffer: this.options.outputBytes, encoding: 'utf8',
-      signal: signal ? AbortSignal.any([signal, deadline]) : deadline });
+    return this.runner({ executable: this.options.executable, args, timeoutMs: timeout, outputBytes: this.options.outputBytes }, signal);
   }
   private identity(request: SandboxRequest) { return identifyDockerRequest(request, this.options); }
   private async inspect(handle: string, digest: string): Promise<Inspection | null> {

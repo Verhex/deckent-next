@@ -374,3 +374,5 @@ SUPERVISOR/E DONE — NUL options rejected, missing binary and invalid UTF8 reda
 SUPERVISOR/F DONE — stop closes local stdio after killing control PID; inherited pipe writers cannot extend deadline. PASS1563,268 tests/14 Docker. Descendant termination remains unproven, explicitly outside this fix.
 
 SUPERVISOR/G DONE — single TS identity/options normalization and digest producer preserves existing bytes; golden Unicode cases plus old/new real Docker crossing. PASS1564,276 tests/14 Docker plus crossing proof. Not exported through product SDK.
+
+SUPERVISOR/H DONE — injectable internal command runner, default Node execFile behavior preserved; typed redacted failures. PASS1568,279 tests/14 Docker plus injected crossing. Explicit env, byte output and group custody remain next comparison prerequisites.

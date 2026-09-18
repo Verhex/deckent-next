@@ -1,7 +1,7 @@
 export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteAttemptOptions, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
-export { DockerSupervisor, identifyDockerRequest } from '#adapters/core/docker-supervisor/index.js';
+export { DockerSupervisor, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LocalOsPrincipalVerifier, readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
@@ -12,3 +12,4 @@ export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/in
 export type { FilePolicyOptions } from '#adapters/core/file-policy/index.js';
 export { ProcessSupervisor } from '#adapters/core/process-supervisor/index.js';
 export type { ProcessSupervisorOptions } from '#adapters/core/process-supervisor/index.js';
+export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
