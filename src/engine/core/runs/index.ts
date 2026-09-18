@@ -16,3 +16,7 @@ export type { ExecutionRegistryValidation } from './internal/registry.js';
 export { selectReservedTaskProfile } from './internal/execution.js';
 export { RunReservationApplication, runReservationCommandSchema } from './internal/reservation.js';
 export type { RunReservationCommand, RunReservationStore, ReservationRuntime } from './internal/reservation.js';
+export { cancellationRecoveryQuerySchema, cancellationRecoveryPageSchema, cancellationRecoveryPage } from './internal/recovery-query.js';
+export type { CancellationRecoveryQuery, CancellationRecoveryPage, CancellationRecoveryQueryStore } from './internal/recovery-query.js';
+export { CancellationRecoveryApplication, cancellationRecoveryCommandSchema } from './internal/recovery.js';
+export type { CancellationRecoveryCommand, CancellationRecoveryOutcome } from './internal/recovery.js';

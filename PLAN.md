@@ -472,3 +472,5 @@ EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evalu
 - RESERVATION/SURFACES PASS1794: SDK/MCP public create→reserve→execute→evaluate, 511 tests. Public-producer residual closed at SDK/MCP scope; Run-scoped Attempt policy selectors remain follow-up; M1/DOGFOOD still open.
 
 - CLI/WORKFLOW functional PASS1798: real compiled CLI create→reserve→execute→evaluate, configurable bounded graph input, 533 tests. CLI/TEXT C1–C6 mandatory before M1; terminology/help/actionable failures/exit evidence remain open.
+
+CANCEL/RECOVERY PASS1804: bounded durable discovery and shared delivery application landed. Runtime hosting and typed failure observability remain follow-up; no M1 claim.
