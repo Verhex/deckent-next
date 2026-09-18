@@ -24,7 +24,7 @@ export function validateProcessExitCriterion(evaluator: EvaluatorDefinition, cri
 
 /** Pure process-exit result. It consumes only already validated terminal evidence;
  * it does not read artifacts, infer intent or mutate Run/Task state. */
-export function evaluateProcessExit(parameters: ProcessExitParameters, terminalEvidence: unknown): 'pass' | 'fail' {
+export function evaluateProcessExit(parameters: unknown, terminalEvidence: unknown): 'pass' | 'fail' {
   const { acceptedExitCodes } = parametersSchema.parse(parameters);
   const terminal = processExitCauseSchema.parse(terminalEvidence);
   return terminal.signal === undefined && terminal.exitCode !== null && acceptedExitCodes.includes(terminal.exitCode) ? 'pass' : 'fail';

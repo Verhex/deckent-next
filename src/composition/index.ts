@@ -4,3 +4,4 @@ export { createConfiguredRun } from '#composition/core/runs/index.js';
 export { requestConfiguredRunCancellation } from '#composition/core/runs/index.js';
 export { deliverConfiguredRunCancellation } from '#composition/core/runs/index.js';
 export { reconcileConfiguredAttempt } from '#composition/core/runs/index.js';
+export { evaluateConfiguredTask } from '#composition/core/runs/index.js';

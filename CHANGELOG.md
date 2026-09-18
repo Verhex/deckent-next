@@ -242,3 +242,5 @@ REGISTRY/A: versioned kind/profile/evaluator data pinned at Run admission; RunVi
 EVAL/E-OUTPUT: reject foreign/partial/malformed retained execution output before evaluation; single bounded read and hash-before-parse validation. Fable1773 PASS.
 
 EVAL/E-STORE: atomic Task acceptance with exact custody/revision fences, normalized idempotent receipts and rollback. Fable1775 PASS.
+
+EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selection, policy checks and replay integrity. Fable1779 PASS.
