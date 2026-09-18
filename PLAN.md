@@ -468,3 +468,5 @@ EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evalu
 - TASK/SURFACES PASS1787: typed SDK/MCP execution/evaluation and EN/TR errors; 496 tests with actual Docker. Public reservation residual tracked separately in requests1785/1786; CLI and autonomous cancellation remain open.
 
 - RUN/RESERVATION PASS1791: persisted policy, generated identities, authorized replay and atomic reservation; 511 tests. Pool authorization extraction L1 follow-up; file-policy timing limits remain explicit.
+
+- RESERVATION/SURFACES PASS1794: SDK/MCP public create→reserve→execute→evaluate, 511 tests. Public-producer residual closed at SDK/MCP scope; Run-scoped Attempt policy selectors remain follow-up; M1/DOGFOOD still open.

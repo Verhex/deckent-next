@@ -4,8 +4,11 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
-  type RunCommand, type RunQuery, type DispatchInventoryInput, type TaskEvaluationCommand } from '#engine/index.js';
+  runAdmissionSchema, runReservationCommandSchema, type RunCommand, type RunQuery, type DispatchInventoryInput,
+  type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 export interface McpApplications {
+  createRun?(command: RunAdmission): Promise<unknown>;
+  reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
   evaluateTask?(command: TaskEvaluationCommand): Promise<unknown>;
   reconcileAttempt?(identity: AttemptIdentity): Promise<unknown>;
@@ -27,6 +30,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  const createRun = applications.createRun;
+  if (createRun) definitions.push({ readOnly: false, destructive: false, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
+    schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });
+  const reserveRunTasks = applications.reserveRunTasks;
+  if (reserveRunTasks) definitions.push({ readOnly: false, destructive: false, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
+    schema: runReservationCommandSchema, invoke: (input: unknown) => reserveRunTasks.call(applications, runReservationCommandSchema.parse(input)) });
   const requestCancellation = applications.requestRunCancellation;
   if (requestCancellation) definitions.push({ readOnly: false, destructive: true, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
     schema: runCommandSchema, invoke: (input: unknown) => requestCancellation.call(applications, runCommandSchema.parse(input)) });
