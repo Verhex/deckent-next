@@ -6,13 +6,14 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunApplication, RunPolicyAuthorization } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const identity = { runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
 const command = { schemaVersion: 1, action: 'cancel', commandId: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-app-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, [identity]);
   const state = { allow: true, authenticated: true, subject: '1000', accesses: 0 };
   const verifier = { async verify() { if (!state.authenticated) throw new Error('no session'); return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
@@ -27,10 +28,10 @@ it('persists cancellation intent, blocks fresh dispatch and reservations without
   const { store, app, path } = await fixture();
   const receipt = await app.execute(command); expect(receipt.snapshot.cancelRequested).toBe(true); expect(receipt.snapshot.revision).toBe(2);
   expect(receipt.snapshot.progress[0]!.phase).toBe('active'); expect((await store.load('s', 'a'))!.cancelRequested).toBe(true);
-  await expect(store.claimDispatch({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['true'] } })).rejects.toThrow('DISPATCH_NOT_ADMITTED');
+  await expect(store.claimDispatch(dispatchAdmission({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['true'] } }))).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   await expect(store.reserveRunTasks({ commandId: 'late', actor: { id: 'user', issuer: 'host', subject: '1000' }, scopeId: 's', runId: 'r', now: 0, expectedRevision: 2, identities: [{ ...identity, attemptId: 'b' }] })).rejects.toThrow();
   expect(await app.execute(command)).toEqual(receipt);
-  const reopened = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(reopened);
   expect((await reopened.loadRun('s', 'r'))!.cancelRequested).toBe(true);
   expect((await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' }))!.revision).toBe(2);
 });

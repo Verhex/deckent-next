@@ -30,9 +30,15 @@ it('rejects column/snapshot revision divergence in both read-only and writable r
     await expect(writer.loadRun('s', 'r')).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
   } finally { reader.close(); writer.close(); }
 });
-it('refuses Run queries on schema2 instead of creating tables or upgrading the ledger', async () => {
+it('refuses opening a schema2 reader, then reads only after the writer migrates to current schema', async () => {
   const path = await fixture(); const db = new DatabaseSync(path); db.exec('DROP TABLE runs; DROP TABLE run_receipts; DROP TABLE execution_pools; PRAGMA user_version=2'); db.close();
-  const before = await readFile(path); const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
-  try { await expect(reader.loadRun('s', 'r')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' }); } finally { reader.close(); }
+  const before = await readFile(path);
+  await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(before);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' });
+  try { expect((await store.load('s', 'a'))!.identity.attemptId).toBe('a'); } finally { store.close(); }
+  const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
+  try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
+  const migrated = new DatabaseSync(path, { readOnly: true });
+  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { migrated.close(); }
 });

@@ -438,3 +438,5 @@ GRAPH2-C DONE: Fable 1724:fdc8003b5022 PASS. Bounded descriptions and complete v
 CUSTODY-B DONE: Fable 1725:5dcf4ffbed2a PASS. Profile-bearing dispatch contract separates prevention from observed process exit; atomic grant and durable delivery remain pending. Owner 1727 single-current-schema correction follows in GRAPH2/D and CUSTODY/C.
 
 GRAPH2/D DONE — single current graph schema 2, typed criterion references and language-neutral golden fixtures. Fable PASS 1735; 363 tests including 21 Docker tests.
+
+CUSTODY/C + LAUNCH/A foundation DONE — canonical dispatch schema 2 and ledger 5, required adapter validation, transactional single-use grant and cancellation prevention. Fable PASS 1737; 376 tests /21 Docker. LAUNCH/B must move pure launch decisions into engine; durable delivery remains open.

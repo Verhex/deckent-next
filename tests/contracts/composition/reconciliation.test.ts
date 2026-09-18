@@ -9,8 +9,9 @@ import { expect, it } from 'vitest';
 import { reconcileAttempt } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor, openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { custodyPrincipal } from '../support/custody.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconciles via %s real recorded work without relaunch, termination, output fabrication or business acceptance', async mode => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-reconcile-')); const project = join(root, 'project'); const data = join(root, 'data');
@@ -19,7 +20,8 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, execution: { docker,
     git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
-  const options = { env: { HOME: join(root, 'home') } }; const { store, layout } = await openConfiguredAttemptStore(project, options);
+  const options = { env: { HOME: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+  const { layout } = opened; const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', { validate: validateDockerSupervisorProfile });
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: randomUUID(), generation: 1, layoutRevision: layout.revision };
   const workspaceRoot = await prepareProductDirectory(layout, 'workspaces'); await prepareProductDirectory(layout, 'artifacts');
   const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const os = userInfo();
@@ -45,13 +47,15 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
       await client.connect(transport);
       expect((await client.listTools()).tools.find(tool => tool.name === 'reconcile_attempt')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     }
-    await admitRunAttempts(store, [identity]); await store.claimDispatch({ owner: 'original-controller', request });
+    const claim = { owner: 'original-controller', request };
+    await admitRunAttempts(store, [identity]); await store.claimDispatch({ ...claim, profile: await supervisor.captureProfile() });
     await policy(false); await expect(reconcile(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await policy(true);
     await expect(reconcile({ ...identity, workspace: '/caller/path' } as typeof identity)).rejects.toMatchObject({ code: mode === 'mcp' ? 'MCP_INPUT_INVALID' : 'INVENTORY_QUERY_INVALID' });
     await expect(reconcile({ ...identity, generation: 2 })).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
     const absent = await reconcile(identity); expect(absent.reconciliation).toMatchObject({ status: 'unresolved', terminal: null, outputRecorded: false });
     expect((await store.readDispatch(request))!.terminal).toBeNull();
+    await store.grantLaunch({ claim, principal: custodyPrincipal, now: 1 });
     pending = supervisor.execute(request); let ready = false;
     for (let i = 0; i < 500; i++) { try { ready = await readFile(join(workspace, 'ready'), 'utf8') === 'yes'; } catch { /* Owned worker startup. */ } if (ready) break; await sleep(10); }
     expect(ready).toBe(true);

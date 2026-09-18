@@ -26,6 +26,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MANAGED_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSUPPORTED', p, l) }) },
   MANAGED_FILE_OUTSIDE_ROOT: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_OUTSIDE_ROOT', p, l) }) },
   ATTEMPT_STORE_VERSION: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_VERSION', p, l) }) },
+  LEDGER_RESET_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.LEDGER_RESET_REQUIRED', p, l) }) },
   ATTEMPT_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_BUSY', p, l) }) },
   ATTEMPT_STORE_OPTIONS: { category: 'config', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_OPTIONS', p, l) }) },
   ATTEMPT_STORE_READ_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_READ_UNAVAILABLE', p, l) }) },

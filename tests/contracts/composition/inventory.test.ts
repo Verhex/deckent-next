@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { inspectConfiguredInventory } from '../../../src/composition/core/inventory/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openSqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const query = { schemaVersion: 1, scopeId: 's', after: null, limit: 1 };
@@ -44,15 +46,16 @@ describe.skipIf(process.platform === 'win32')('configured local inventory query'
     await expect(stat(f.data)).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('reads the configured ledger and reflects subsequent policy revocation without stale authorization', async () => {
-    const f = await fixture(); const { store, path } = await openConfiguredAttemptStore(f.project, f.options);
+    const f = await fixture(); const opened = await openConfiguredAttemptStore(f.project, f.options); opened.store.close();
+    const { path } = opened; const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
     const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 };
     try {
       await admitRunAttempts(store, [identity]);
-      await store.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/private', argv: ['secret'] } });
+      await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/private', argv: ['secret'] } }));
     } finally { store.close(); }
     await f.policy(true); const before = await readFile(path);
     const result = await inspectConfiguredInventory(f.project, query, f.options);
-    expect(result.schemaVersion).toBe(1); expect(result.layout.root).toBe(f.data); expect(result.page.entries[0]!.identity).toEqual(identity);
+    expect(result.schemaVersion).toBe(1); expect(result.layout.root).toBe(f.data); expect(result.page.entries[0]!).toMatchObject({ identity, launch: 'pending' });
     expect(JSON.stringify(result.page)).not.toContain('secret'); expect(await readFile(path)).toEqual(before);
     await f.policy(false); await expect(inspectConfiguredInventory(f.project, query, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });

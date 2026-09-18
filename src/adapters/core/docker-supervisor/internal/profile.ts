@@ -24,3 +24,6 @@ export function readDockerProfile(input: unknown) {
     || current.uid !== origin.uid || current.gid !== origin.gid) throw new SupervisorError('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
   return parameters.data;
 }
+
+/** Pure adapter shape/origin validation for trusted persistence composition. */
+export async function validateDockerSupervisorProfile(input: SupervisorProfile): Promise<void> { readDockerProfile(input); }

@@ -1,13 +1,14 @@
+import { grantDispatchLaunch } from './launch.js';
 import { SqliteRunDispatch } from './run-dispatch.js';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
-import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
-  projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
+import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
+  projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
 export class SqliteDispatchJournal {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(private readonly db: DatabaseSync, private readonly profiles?: SupervisorProfileValidator) {}
   private read(request: DispatchClaim['request']): DispatchRecord | null {
     const identity = request.identity;
     const row = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
@@ -34,7 +35,7 @@ export class SqliteDispatchJournal {
         let record; let attempt;
         try { record = dispatchRecordSchema.parse(JSON.parse(String(row.record))); attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
         if (record.request.identity.scopeId !== query.scopeId || record.request.identity.attemptId !== row.attempt_id || !sameAttemptIdentity(record.request.identity, attempt.identity)) throw new DispatchError('DISPATCH_CORRUPT');
-        return Object.freeze({ identity: record.request.identity, owner: record.owner, terminal: record.terminal,
+        return Object.freeze({ identity: record.request.identity, owner: record.owner, launch: record.launch, terminal: record.terminal,
           cancellationRequested: attempt.cancelRequested, outputRecorded: !!record.output });
       });
       return Object.freeze({ entries: Object.freeze(entries), nextAfter: rows.length > query.limit ? entries.at(-1)!.identity.attemptId : null });
@@ -81,8 +82,10 @@ export class SqliteDispatchJournal {
     const parsed = sandboxRequestSchema.parse(request);
     try { return this.read(parsed); } catch (error) { throw sqliteFailure(error); }
   }
-  async claimDispatch(input: DispatchClaim) {
-    const claim = dispatchClaimSchema.parse(input);
+  async claimDispatch(input: DispatchAdmission) {
+    const claim = dispatchAdmissionSchema.parse(input);
+    if (!this.profiles) throw new DispatchError('DISPATCH_PROFILE_VALIDATION_REQUIRED');
+    await this.profiles.validate(claim.profile);
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (existing) return Object.freeze({ acquired: false, record: existing });
@@ -93,11 +96,12 @@ export class SqliteDispatchJournal {
       try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
       if (!sameAttemptIdentity(identity, attempt.identity) || attempt.cancelRequested || attempt.lastObservation !== null) throw new DispatchError('DISPATCH_NOT_ADMITTED');
       new SqliteRunDispatch(this.db).admit(identity);
-      const record = dispatchRecordSchema.parse({ schemaVersion: 1, ...claim, terminal: null });
+      const record = dispatchRecordSchema.parse({ schemaVersion: 2, ...claim, launch: 'pending', terminal: null });
       this.db.prepare('INSERT INTO dispatches(scope_id,attempt_id,record) VALUES(?,?,?)').run(identity.scopeId, identity.attemptId, JSON.stringify(record));
       return Object.freeze({ acquired: true, record });
     });
   }
+  async grantLaunch(input: LaunchRequest) { return this.transaction(() => grantDispatchLaunch(this.db, input)); }
   async finishDispatch(input: DispatchClaim, value: DispatchTerminal) {
     const claim = dispatchClaimSchema.parse(input); const terminal = dispatchTerminalSchema.parse(value);
     return this.transaction(() => {

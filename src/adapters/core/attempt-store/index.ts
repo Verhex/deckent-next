@@ -1,9 +1,9 @@
 import type { SqliteAttemptOptions } from './internal/options.js';
 export type { SqliteAttemptStore } from './internal/sqlite.js';
 /** Load the native driver only when this storage adapter is selected by composition. */
-export async function openSqliteAttemptStore(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow') {
+export async function openSqliteAttemptStore(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', profiles?: import('#engine/index.js').SupervisorProfileValidator) {
   const { SqliteAttemptStore } = await import('./internal/sqlite.js');
-  return new SqliteAttemptStore(path, options, migration);
+  return new SqliteAttemptStore(path, options, migration, profiles);
 }
 export type { SqliteAttemptOptions } from './internal/options.js';
 export type { SqliteInventoryReader, SqliteInventoryOptions } from './internal/inventory-reader.js';

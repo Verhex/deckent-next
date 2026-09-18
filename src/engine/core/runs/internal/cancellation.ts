@@ -4,7 +4,7 @@ import { AuthenticationError } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 import type { RunApplication } from './application.js';
 export interface RunCancellationDispatchStore { loadCancellationDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
-export type RunCancellationOutcome = Readonly<{ attemptId: string; taskId: string; status: 'not-dispatched' | 'terminal' | 'unresolved' | 'denied' | 'unavailable' }>;
+export type RunCancellationOutcome = Readonly<{ attemptId: string; taskId: string; status: 'not-dispatched' | 'prevented' | 'terminal' | 'unresolved' | 'denied' | 'unavailable' }>;
 /** Bounded, repeatable delivery after durable Run intent. Never treats a transport failure as termination. */
 export class RunCancellationCoordinator {
   private readonly concurrency: number;

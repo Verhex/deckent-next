@@ -35,6 +35,28 @@ async function lint(root: string): Promise<{ code: number; out: string }> {
 }
 
 describe('lint-arch tier contract', () => {
+  it('rejects side-by-side current version modules and V2 APIs, while allowing migration history', async () => {
+    const rejected = await fixture({
+      'src/engine/core/dispatch/internal/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
+      'src/engine/core/dispatch/internal/version-three.ts': 'export const TaskGraphV3 = {} as const;\n// export const CommentV4Schema = {};\nexport const ProviderV2Client = {} as const;\n',
+      'src/engine/core/dispatch/index.ts': "export {\n  dispatchRecordV2Schema,\n  TaskGraphV3,\n  ProviderV2Client,\n} from './internal/version-two.js';\n",
+    });
+    const rejectedResult = await lint(rejected);
+    expect(rejectedResult.code).toBe(1);
+    expect(rejectedResult.out).toContain('[versioning] src/engine/core/dispatch/internal/version-two.ts');
+    expect(rejectedResult.out).toContain('parallel versioned contract API');
+    expect(rejectedResult.out).not.toContain('ProviderV2Client');
+    expect(rejectedResult.out).not.toContain('CommentV4Schema');
+
+    const history = await fixture({
+      'src/adapters/core/attempt-store/index.ts': 'export {};\n',
+      'src/adapters/core/attempt-store/migrations/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
+      'src/adapters/core/attempt-store/migrations/index.ts': "export { dispatchRecordV2Schema } from './version-two.js';\n",
+    });
+    const historyResult = await lint(history);
+    expect(historyResult.code).toBe(0);
+  });
+
   it('accepts lower-tier imports through unit indexes and package indexes across tiers', async () => {
     const root = await fixture({
       'src/platform/core/errors/index.ts': "export const x = 1;\n",

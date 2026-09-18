@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
+import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function path() { const root = await mkdtemp(join(tmpdir(), 'deckent-reader-')); roots.push(root); return join(root, 'ledger.db'); }
@@ -22,13 +23,13 @@ it('does not create missing ledgers or migrate unsupported schemas', async () =>
 });
 it('observes committed WAL updates while exposing no write operations', async () => {
   const file = await path();
-  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' });
+  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
   const reader = await openSqliteInventoryReader(file, { busyTimeoutMs: 20 });
   try {
     expect((await reader.listDispatches(query)).entries).toEqual([]);
     const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 };
     await admitRunAttempts(writer, [identity]);
-    await writer.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } });
+    await writer.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } }));
     expect((await reader.listDispatches(query)).entries[0]!.identity).toEqual(identity);
     expect('commit' in reader).toBe(false); expect('claimDispatch' in reader).toBe(false);
     const probe = new DatabaseSync(file, { readOnly: true });
@@ -37,7 +38,7 @@ it('observes committed WAL updates while exposing no write operations', async ()
 });
 it('leaves DELETE-journal database bytes unchanged after inspection', async () => {
   const file = await path();
-  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }); writer.close();
+  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, 'allow', custodyProfiles); writer.close();
   const before = await readFile(file); const reader = await openSqliteInventoryReader(file, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches(query)).entries).toEqual([]); } finally { reader.close(); }
   expect(await readFile(file)).toEqual(before);
@@ -45,12 +46,12 @@ it('leaves DELETE-journal database bytes unchanged after inspection', async () =
 
 it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports missing WAL shared memory on a read-only directory without ignoring committed WAL', async () => {
   const file = await path();
-  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' });
+  const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
   const directory = file + '-readonly'; await mkdir(directory, { mode: 0o700 }); const copy = join(directory, 'ledger.db');
   try {
     const identity = { runId: 'r', taskId: 't', attemptId: 'wal-only', scopeId: 's', layoutRevision: 'l', generation: 1 };
     await admitRunAttempts(writer, [identity]);
-    await writer.claimDispatch({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } });
+    await writer.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['tool'] } }));
     // Quiescent writer, copy both files while the connection retains uncheckpointed WAL.
     await copyFile(file, copy); await copyFile(file + '-wal', copy + '-wal');
   } finally { writer.close(); }
@@ -67,7 +68,7 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('reports mis
 it('distinguishes invalid database bytes and damaged schema pages from read-access failures', async () => {
   const file = await path(); await writeFile(file, 'not a SQLite database');
   await expect(openSqliteInventoryReader(file, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_CORRUPT' });
-  await rm(file); const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }); writer.close();
+  await rm(file); const writer = await openSqliteAttemptStore(file, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, 'allow', custodyProfiles); writer.close();
   const bytes = await readFile(file); bytes[100] = 0; await writeFile(file, bytes);
   let reader;
   try { reader = await openSqliteInventoryReader(file, { busyTimeoutMs: 20 }); await expect(reader.listDispatches(query)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_CORRUPT' }); }

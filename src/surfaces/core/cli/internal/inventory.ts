@@ -20,7 +20,7 @@ export async function runInventoryCommand(argv: readonly string[], context: Comm
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
     t('inventory.heading', { count: data.page.entries.length }, locale),
     ...data.page.entries.map(entry => t('inventory.row', { run: entry.identity.runId, task: entry.identity.taskId, attempt: entry.identity.attemptId,
-      owner: entry.owner, state: entry.terminal === null ? t('inventory.unresolved', {}, locale) : t('inventory.exited', { exit: entry.terminal.exitCode ?? entry.terminal.signal ?? '?' }, locale),
+      owner: entry.owner, state: entry.launch === 'prevented-before-launch' ? t('cli.run.cancel.prevented', {}, locale) : entry.launch === 'pending' ? t('inventory.launchPending', {}, locale) : entry.terminal === null ? t('inventory.unresolved', {}, locale) : t('inventory.exited', { exit: entry.terminal.exitCode ?? entry.terminal.signal ?? '?' }, locale),
       cancel: entry.cancellationRequested ? t('inventory.requested', {}, locale) : t('inventory.absent', {}, locale),
       output: entry.outputRecorded ? t('inventory.recorded', {}, locale) : t('inventory.absent', {}, locale) }, locale)),
     ...(data.page.nextAfter === null ? [] : [t('inventory.next', { after: data.page.nextAfter }, locale)]),

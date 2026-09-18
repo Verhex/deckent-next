@@ -7,3 +7,5 @@ export const supervisorProfileSchema = z.object({ schemaVersion: z.literal(1), a
   adapterVersion: counterSchema.positive(), parameters: immutableJsonObjectSchema,
 }).strict().readonly();
 export type SupervisorProfile = z.infer<typeof supervisorProfileSchema>;
+
+export interface SupervisorProfileSource { captureProfile(): Promise<SupervisorProfile> }

@@ -748,6 +748,7 @@
   "error.MANAGED_FILE_UNSUPPORTED": "Managed storage inspection is unsupported on this platform.",
   "error.MANAGED_FILE_OUTSIDE_ROOT": "The configured storage path is outside the managed data root.",
   "error.ATTEMPT_STORE_VERSION": "The ledger schema is unsupported. Inspection does not migrate databases.",
+  "error.LEDGER_RESET_REQUIRED": "This development ledger lacks required custody or criterion evidence. Reset the development database before continuing.",
   "error.ATTEMPT_STORE_BUSY": "The ledger is busy. Retry the read after the current operation finishes.",
   "error.ATTEMPT_STORE_OPTIONS": "The configured storage options are invalid.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite cannot read the ledger in this environment. WAL inspection may require shared-memory sidecar access.",

@@ -748,6 +748,7 @@
   "error.MANAGED_FILE_UNSUPPORTED": "Bu platformda yönetilen depolama incelemesi desteklenmiyor.",
   "error.MANAGED_FILE_OUTSIDE_ROOT": "Yapılandırılmış depolama yolu yönetilen veri kökünün dışında.",
   "error.ATTEMPT_STORE_VERSION": "Ledger şeması desteklenmiyor. İnceleme veritabanını dönüştürmez.",
+  "error.LEDGER_RESET_REQUIRED": "Bu geliştirme ledger kaydında gerekli custody veya kriter kanıtı yok. Devam etmeden önce geliştirme veritabanını sıfırlayın.",
   "error.ATTEMPT_STORE_BUSY": "Ledger meşgul. Mevcut işlem tamamlandıktan sonra okumayı tekrar deneyin.",
   "error.ATTEMPT_STORE_OPTIONS": "Yapılandırılmış depolama seçenekleri geçersiz.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite bu ortamda ledger kaydını okuyamıyor. WAL incelemesi paylaşımlı bellek yan dosyasına erişim gerektirebilir.",

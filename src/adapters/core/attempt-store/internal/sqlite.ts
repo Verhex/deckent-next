@@ -6,7 +6,7 @@ import { SqliteRunJournal } from './runs.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
-import type { DispatchClaim, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
+import type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
@@ -15,7 +15,7 @@ import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type Attemp
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore {
   private readonly db: DatabaseSync;
-  constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow') {
+  constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
     const parsed = sqliteAttemptOptionsSchema.safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -52,7 +52,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }
   async retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchOutput(claim, receipt); }
   async readDispatch(request: DispatchClaim['request']) { return new SqliteDispatchJournal(this.db).readDispatch(request); }
-  async claimDispatch(claim: DispatchClaim) { return new SqliteDispatchJournal(this.db).claimDispatch(claim); }
+  async claimDispatch(claim: DispatchAdmission) { return new SqliteDispatchJournal(this.db, this.profiles).claimDispatch(claim); }
+  async grantLaunch(input: LaunchRequest) { return new SqliteDispatchJournal(this.db).grantLaunch(input); }
   async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {

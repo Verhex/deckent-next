@@ -27,9 +27,10 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       const labels = {
         terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
         denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
+        prevented: t('cli.run.cancel.prevented', {}, locale),
         'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
       };
-      const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched').length;
+      const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
       return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
         ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
         ...data.delivery.outcomes.map(item => t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale)),

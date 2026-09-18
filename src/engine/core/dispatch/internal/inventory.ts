@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import type { DispatchTerminal } from './port.js';
+import type { DispatchRecord, DispatchTerminal } from './port.js';
 export const dispatchInventoryQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   after: identitySchema.nullable(), limit: z.number().int().positive().max(2_147_483_646) }).strict().readonly();
 export const dispatchInventoryInputSchema = dispatchInventoryQuerySchema.unwrap().extend({
@@ -13,6 +13,7 @@ export type DispatchInventoryQuery = z.infer<typeof dispatchInventoryQuerySchema
 export interface DispatchInventoryEntry {
   readonly identity: AttemptIdentity;
   readonly owner: string;
+  readonly launch: DispatchRecord['launch'];
   readonly terminal: DispatchTerminal | null;
   readonly cancellationRequested: boolean;
   /** Retention reference only. This does not prove completeness, availability or permission to release. */

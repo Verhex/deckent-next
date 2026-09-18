@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, DockerSupervisor, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication, type ExecutionSupervisor } from '#engine/index.js';
+import { custodyOrDockerProfiles, custodyProfile, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 const verifier = { async verify() { return { id: 'user', issuer: 'test', subject: 'user', assurance: 'os-user', scopeIds: ['s'] }; } };
@@ -18,7 +19,7 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-dispatch-app-')); roots.push(root);
   const workspace = join(root, 'workspace'); await mkdir(workspace);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(store);
   const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' };
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "require('node:fs').appendFileSync('/workspace/result','once')"] };
   await admitRunAttempts(store, [identity]);
@@ -46,12 +47,12 @@ it.skipIf(!imageId)('returns durable terminal after real Docker release without 
 });
 it('never retries an unknown launch and refuses release without terminal evidence', async () => {
   const f = await fixture(); let calls = 0;
-  const supervisor: ExecutionSupervisor = { async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; }, async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async execute() { calls++; throw new Error('transport interrupted'); }, async release() { throw new Error('must not release'); } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
   await expect(app.execute(f.request)).rejects.toThrow('transport interrupted');
-  expect((await app.execute(f.request)).kind).toBe('unresolved'); expect(calls).toBe(1);
+  const unresolved = await app.execute(f.request); expect(unresolved.kind).toBe('unresolved'); expect(unresolved.record.launch).toBe('granted'); expect(calls).toBe(1);
   await expect(app.release(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
 });
 it.skipIf(!imageId)('reconciles real terminal container after failed journal write without granting a new launch', async () => {
@@ -59,7 +60,7 @@ it.skipIf(!imageId)('reconciles real terminal container after failed journal wri
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
   const policy = { async authorize() { if (denied) throw new Error('DENIED'); } };
-  const failingStore = { requestDispatchCancellation: f.store.requestDispatchCancellation.bind(f.store), retainDispatchOutput: f.store.retainDispatchOutput.bind(f.store), claimDispatch: f.store.claimDispatch.bind(f.store), readDispatch: f.store.readDispatch.bind(f.store),
+  const failingStore = { requestDispatchCancellation: f.store.requestDispatchCancellation.bind(f.store), retainDispatchOutput: f.store.retainDispatchOutput.bind(f.store), claimDispatch: f.store.claimDispatch.bind(f.store), grantLaunch: f.store.grantLaunch.bind(f.store), readDispatch: f.store.readDispatch.bind(f.store),
     async finishDispatch(): Promise<never> { throw new Error('injected terminal write failure'); } };
   const first = new DispatchApplication(failingStore, supervisor, verifier, policy, 'process-lost', f.artifacts);
   try {
@@ -82,7 +83,7 @@ it.skipIf(!imageId)('observes an absent container without creating or starting i
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'recovery', f.artifacts);
   await expect(app.reconcile(f.request)).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   expect(await f.store.readDispatch(f.request)).toBeNull();
-  await f.store.claimDispatch({ request: f.request, owner: 'lost' });
+  await f.store.claimDispatch(dispatchAdmission({ request: f.request, owner: 'lost' }));
   expect((await app.reconcile(f.request)).kind).toBe('unresolved');
   expect((await supervisor.observe(f.request)).result.kind).toBe('unknown');
   await expect(readFile(join(f.workspace, 'result'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -90,7 +91,8 @@ it.skipIf(!imageId)('observes an absent container without creating or starting i
 
 it('carries a real subprocess signal exit through dispatch and atomic Attempt projection', async () => {
   const f = await fixture();
-  const supervisor: ExecutionSupervisor = {
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = {
+    async captureProfile() { return custodyProfile; },
     async execute() {
       const child = spawn(process.execPath, ['-e', 'process.kill(process.pid,"SIGTERM")'], { stdio: 'ignore' });
       const result = await new Promise<{ code: number | null; signal: string | null }>((resolve, reject) => {
@@ -113,7 +115,7 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
   let arrived!: () => void; let release!: () => void;
   const atTerminal = new Promise<void>(resolve => { arrived = resolve; });
   const proceed = new Promise<void>(resolve => { release = resolve; });
-  const delayed: ExecutionSupervisor = { cancel: docker.cancel.bind(docker), recoverOutput: docker.recoverOutput.bind(docker), observe: docker.observe.bind(docker), release: docker.release.bind(docker),
+  const delayed: ExecutionSupervisor & { captureProfile(): ReturnType<typeof docker.captureProfile> } = { captureProfile: docker.captureProfile.bind(docker), cancel: docker.cancel.bind(docker), recoverOutput: docker.recoverOutput.bind(docker), observe: docker.observe.bind(docker), release: docker.release.bind(docker),
     async execute(request, signal) { const result = await docker.execute(request, signal); arrived(); await proceed; return result; } };
   const policy = { async authorize() {} };
   const runner = new DispatchApplication(f.store, delayed, verifier, policy, 'original', f.artifacts);
@@ -130,7 +132,7 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
 });
 it('refuses cleanup if retained output is unreadable or partial despite terminal execution', async () => {
   const f = await fixture(); let releases = 0; let corrupt = false;
-  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false, outputCompleteness: 'complete' }; },
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; }, async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false, outputCompleteness: 'complete' }; },
     async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const artifacts = { put: f.artifacts.put.bind(f.artifacts), async read(scope: string, receipt: Parameters<typeof f.artifacts.read>[1]) {
     if (corrupt) throw new Error('ARTIFACT_CORRUPT'); return f.artifacts.read(scope, receipt);
@@ -145,7 +147,7 @@ it('refuses cleanup if retained output is unreadable or partial despite terminal
 });
 it('retains partial output honestly and blocks destructive cleanup', async () => {
   const f = await fixture(); let releases = 0;
-  const supervisor: ExecutionSupervisor = { async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 137 }, stdout: 'partial', stderr: '', interrupted: true, outputCompleteness: 'partial' }; },
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; }, async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 137 }, stdout: 'partial', stderr: '', interrupted: true, outputCompleteness: 'partial' }; },
     async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
   const app = new DispatchApplication(f.store, supervisor, verifier, { async authorize() {} }, 'p', f.artifacts);
   const result = await app.execute(f.request); expect(result.kind).toBe('terminal');
@@ -158,7 +160,7 @@ it.skipIf(!imageId)('recovers daemon-retained output after capture loss but neve
   const request = { ...f.request, argv: ['node', '-e', "console.log('retained-out');console.error('retained-err')"] };
   const docker = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 });
-  await f.store.claimDispatch({ request, owner: 'lost' });
+  const lostClaim = { request, owner: 'lost' }; await f.store.claimDispatch(dispatchAdmission(lostClaim)); await grantTestLaunch(f.store, lostClaim);
   try {
     // Actual execution occurred, but simulate the host losing the returned attach output before retaining it.
     expect((await docker.execute(request)).result.kind).toBe('exited');
@@ -181,7 +183,7 @@ it.skipIf(!imageId)('persists authorized cancellation before another controller 
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
-  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(otherStore);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
   const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
   const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new Error('DENIED'); } }, 'operator', f.artifacts);
   const execution = running.execute(request);
@@ -205,8 +207,9 @@ it.skipIf(!imageId)('persists authorized cancellation before another controller 
 }, 20000);
 
 it('does not signal a worker if the durable cancellation transaction fails', async () => {
-  const f = await fixture(); await f.store.claimDispatch({ request: f.request, owner: 'runner' }); let signals = 0;
-  const supervisor: ExecutionSupervisor = {
+  const f = await fixture(); await f.store.claimDispatch(dispatchAdmission({ request: f.request, owner: 'runner' })); let signals = 0;
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = {
+    async captureProfile() { return custodyProfile; },
     async cancel() { signals++; throw new Error('must not signal'); }, async execute() { throw new Error('unused'); },
     async observe() { throw new Error('unused'); }, async recoverOutput() { throw new Error('unused'); }, async release() {},
   };
@@ -226,7 +229,7 @@ it.skipIf(!imageId)('delivers a durable Run cancellation through a separate cont
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
-  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(otherStore);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
   const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
   const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new PolicyAuthorizationError('POLICY_DENIED'); } }, 'operator', f.artifacts);
   const runApp = new RunApplication(otherStore, verifier, { async authorize() {} });
@@ -256,7 +259,8 @@ it('keeps malformed supervisor terminal evidence unresolved without retaining ou
   const f = await fixture(); let launches = 0;
   const malformed = { handle: 'worker', result: { kind: 'exited', exitCode: 0, signal: 'SIGTERM' },
     stdout: 'untrusted output', stderr: '', outputCompleteness: 'complete', interrupted: false };
-  const supervisor: ExecutionSupervisor = {
+  const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = {
+    async captureProfile() { return custodyProfile; },
     async execute() { launches++; return malformed as Awaited<ReturnType<ExecutionSupervisor['execute']>>; },
     async observe() { return malformed as Awaited<ReturnType<ExecutionSupervisor['observe']>>; },
     async cancel() { return malformed as Awaited<ReturnType<ExecutionSupervisor['cancel']>>; },

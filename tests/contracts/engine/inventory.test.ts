@@ -6,19 +6,20 @@ import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { createAttempt, requestAttemptCancellation } from '#domain/index.js';
 import { DispatchInventoryApplication, DispatchInventoryPolicyAuthorization } from '#engine/index.js';
+import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-inventory-')); roots.push(root);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
   for (const scopeId of ['s', 'other']) {
     const identities = ['a', 'b', 'c'].map(attemptId => ({ runId: 'r', taskId: attemptId, attemptId, scopeId, layoutRevision: 'l', generation: 1 }));
     await admitRunAttempts(store, identities);
     for (const identity of identities) {
     const { attemptId } = identity;
     const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: '/private/path', argv: ['tool', 'private-token'] } };
-    await store.claimDispatch(claim);
-    if (attemptId === 'b') await store.finishDispatch(claim, { handle: 'container', exitCode: 0, interrupted: false });
+    await store.claimDispatch(dispatchAdmission(claim));
+    if (attemptId === 'b') { await grantTestLaunch(store, claim); await store.finishDispatch(claim, { handle: 'container', exitCode: 0, interrupted: false }); }
     if (attemptId === 'c') await store.commit({ commandId: 'cancel-c', command: 'cancel', expectedRevision: 0, snapshot: requestAttemptCancellation(createAttempt(identity), 0) });
   }
   }

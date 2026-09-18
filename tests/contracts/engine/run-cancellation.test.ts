@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const identity = (id: string) => ({ runId: 'r', scopeId: 's', taskId: id, attemptId: id, layoutRevision: 'l', generation: 1 });
@@ -14,11 +15,11 @@ const actor = { id: 'user', issuer: 'host', subject: '1' };
 const cancel = { commandId: 'cancel', actor, scopeId: 's', runId: 'r', expectedRevision: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-cancel-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, ['a', 'b'].map(identity)); return { store, path };
 }
 it('atomically propagates intent to reserved and dispatched work, preserves active state and exact replay', async () => {
-  const { store } = await fixture(); await store.claimDispatch(claim('a'));
+  const { store } = await fixture(); await store.claimDispatch(dispatchAdmission(claim('a')));
   const receipt = await store.cancelRun(cancel);
   for (const id of ['a', 'b']) { expect((await store.load('s', id))!.cancelRequested).toBe(true); expect((await store.load('s', id))!.lastObservation).toBeNull(); }
   expect((await store.readDispatch(claim('a').request))!.cancellation).toEqual(actor);
@@ -26,7 +27,7 @@ it('atomically propagates intent to reserved and dispatched work, preserves acti
   expect(await store.cancelRun(cancel)).toEqual(receipt); expect((await store.load('s', 'a'))!.revision).toBe(1);
 });
 it('rolls the entire Run/Attempt/dispatch fanout back when a later binding is corrupt', async () => {
-  const { store, path } = await fixture(); await store.claimDispatch(claim('a'));
+  const { store, path } = await fixture(); await store.claimDispatch(dispatchAdmission(claim('a')));
   const db = new DatabaseSync(path);
   try {
     db.exec("UPDATE attempts SET revision=99 WHERE attempt_id='b'");
@@ -37,7 +38,8 @@ it('rolls the entire Run/Attempt/dispatch fanout back when a later binding is co
   } finally { db.close(); }
 });
 it('preserves completed evidence and original per-attempt cancellation attribution', async () => {
-  const { store } = await fixture(); await store.claimDispatch(claim('a')); await store.claimDispatch(claim('b'));
+  const { store } = await fixture(); await store.claimDispatch(dispatchAdmission(claim('a'))); await grantTestLaunch(store, claim('a'));
+  await store.claimDispatch(dispatchAdmission(claim('b'))); await grantTestLaunch(store, claim('b'));
   await store.finishDispatch(claim('a'), { handle: 'h', exitCode: 0, interrupted: false }); const before = await store.load('s', 'a');
   const first = { id: 'first', issuer: 'host', subject: '2', assurance: 'os-user' as const, scopeIds: ['s'] };
   await store.requestDispatchCancellation(claim('b').request, first);
@@ -48,7 +50,7 @@ it('preserves completed evidence and original per-attempt cancellation attributi
 });
 
 it('does not reattribute an already observed cancelled attempt', async () => {
-  const { store } = await fixture(); await store.claimDispatch(claim('a'));
+  const { store } = await fixture(); await store.claimDispatch(dispatchAdmission(claim('a')));
   const current = (await store.load('s', 'a'))!;
   const snapshot = applyAttemptObservation(current, { protocolVersion: 1, identity: identity('a'), sequence: 1, eventId: 'stopped', result: { kind: 'cancelled' } }, current.revision);
   await store.commit({ commandId: 'stopped', command: 'observed-stop', expectedRevision: current.revision, snapshot });

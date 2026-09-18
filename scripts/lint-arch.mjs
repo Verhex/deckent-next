@@ -37,6 +37,18 @@ const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
 const srcFiles = walk(join(ROOT, 'src'), isTs);
 const appFiles = walk(join(ROOT, 'apps'), isTs);
 const packageNames = Object.keys(arch.packages);
+// Current domain/runtime contracts have one active shape. A second source module
+// or public V2 name creates two authorities; migration history is the explicit
+// boundary where old shapes may remain for forward-only conversion.
+const VERSIONED_SHAPE_PACKAGES = new Set(['domain', 'capabilities', 'engine', 'adapters', 'composition']);
+const VERSION_HISTORY_SEGMENTS = new Set(['migration', 'migrations']);
+const versioningScope = (file) => {
+  const path = rel(file).split('/');
+  const migrationHistory = path[1] === 'adapters'
+    && path.some(segment => VERSION_HISTORY_SEGMENTS.has(segment.toLowerCase()))
+    && path.some(segment => /(?:attempt|persistence|store)/i.test(segment));
+  return path[0] === 'src' && VERSIONED_SHAPE_PACKAGES.has(path[1]) && !migrationHistory;
+};
 const tiers = arch.tiers ?? { order: [], enforce: false, unitLines: Infinity };
 const tierRank = new Map(tiers.order.map((name, index) => [name, index]));
 if (arch.imports?.enforce) {
@@ -88,6 +100,38 @@ function importsOf(file) {
     out.push({ spec, target, aliased: spec.startsWith(aliasPrefix), line: src.slice(0, m.index).split('\n').length });
   }
   return out;
+}
+
+// ---- 0: one active contract shape (migration history is exempt)
+for (const file of srcFiles) {
+  if (!versioningScope(file)) continue;
+  const path = rel(file);
+  if (/(^|\/)(?:version-(?:\d+|[a-z]+)|v\d+)\.ts$/.test(path)) {
+    fail('versioning', path, 'parallel versioned module; evolve the current contract in place or keep the old shape under adapter persistence migrations');
+  }
+  const source = readFileSync(file, 'utf8');
+  // AST declarations/export lists avoid comments and strings. Provider-native
+  // names such as ProviderV2 remain valid unless the name is contract-shaped.
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const contractWord = /(?:schema|contract|record|graph|claim|protocol|snapshot|request|response|event|envelope|receipt|command|attempt|run|task|policy|config|manifest)/i;
+  const versionMarker = /V\d+/i;
+  const checkName = (name, node) => {
+    if (!versionMarker.test(name) || !contractWord.test(name)) return;
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    fail('versioning', `${path}:${line}`, `parallel versioned contract API "${name}"; keep one current contract shape (adapter persistence migrations are exempt)`);
+  };
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isTypeParameterDeclaration(node)) {
+      if (ts.isIdentifier(node.name)) checkName(node.name.text, node.name);
+    } else if (ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isInterfaceDeclaration(node)
+      || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)) {
+      if (node.name) checkName(node.name.text, node.name);
+    } else if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
+      for (const element of node.exportClause.elements) checkName(element.name.text, element.name);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
 }
 
 // Pure domain packages cannot acquire host capabilities through external modules or ambient globals.

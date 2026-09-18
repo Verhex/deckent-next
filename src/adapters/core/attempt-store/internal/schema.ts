@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError } from '#engine/index.js';
+import { requireLedgerV5Custody } from './migration-v5.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
-export const DISPATCH_LEDGER_VERSION = 2;
-export const RUN_LEDGER_VERSION = 3;
-export const CURRENT_LEDGER_VERSION = 4;
+export const DISPATCH_LEDGER_VERSION = 5;
+export const RUN_LEDGER_VERSION = 5;
+export const CURRENT_LEDGER_VERSION = 5;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -24,6 +25,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid'): void 
   const version = requireLedgerVersion(db, 0);
   if (mode === 'forbid' && version !== CURRENT_LEDGER_VERSION) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
+    if (next === 5) {
+      requireLedgerV5Custody(db);
+      db.exec('PRAGMA user_version=5;');
+      continue;
+    }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
     db.exec(sql);

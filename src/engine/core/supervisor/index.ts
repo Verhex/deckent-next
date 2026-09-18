@@ -3,4 +3,4 @@ export type { SandboxRequest, SandboxResult, ExecutionSupervisor } from './inter
 export { supervisorCommandSchema, supervisorReplySchema, validateSupervisorReply } from './internal/protocol.js';
 export type { SupervisorCommand, SupervisorReply } from './internal/protocol.js';
 export { supervisorProfileSchema } from './internal/profile.js';
-export type { SupervisorProfile } from './internal/profile.js';
+export type { SupervisorProfile, SupervisorProfileSource } from './internal/profile.js';

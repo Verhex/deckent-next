@@ -220,3 +220,5 @@ GRAPH2-C: Bounded descriptions and complete versioned criterion encoding with go
 CUSTODY-B: Profile-bearing dispatch contract separates prevention from observed process exit; atomic grant and durable delivery remain pending.
 
 GRAPH2/D: consolidate task graph schema 2; remove parallel version APIs; validate criterion references with typed errors and golden encoding fixtures.
+
+CUSTODY/C: persist validated full supervisor profiles, migrate current ledger forward without fabricated data, and require atomic launch grants before execution.

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -51,17 +51,19 @@ it('enforces persisted ordering, scope binding, revision and conflict-safe comma
   await expect(store.reserveRunTasks({ ...reservation(['a']), identities: [{ ...attempt('a'), scopeId: 'foreign' }] })).rejects.toThrow('RUN_ATTEMPT_CONFLICT');
   expect((await store.loadRun('s', 'r'))!.revision).toBe(0);
 });
-it('migrates a schema-2 ledger atomically without altering prior attempt data; inventory reads both versions', async () => {
+it('rejects opening a schema-2 reader, then migrates prior attempt data for a current-only reader', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-migrate-')); roots.push(root); const path = join(root, 'ledger.db');
   const db = new DatabaseSync(path);
   db.exec('CREATE TABLE attempts(scope_id TEXT,attempt_id TEXT,revision INTEGER,snapshot TEXT,PRIMARY KEY(scope_id,attempt_id)); CREATE TABLE attempt_receipts(scope_id TEXT,command_id TEXT,command TEXT,snapshot TEXT,PRIMARY KEY(scope_id,command_id)); CREATE TABLE dispatches(scope_id TEXT,attempt_id TEXT,record TEXT,PRIMARY KEY(scope_id,attempt_id)); PRAGMA user_version=2;');
   const snapshot = createAttempt(attempt('old')); db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run('s', 'attempt-old', 0, JSON.stringify(snapshot)); db.close();
-  const oldReader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 }); oldReader.close();
+  const before = await readFile(path);
+  await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+  expect(await readFile(path)).toEqual(before);
   const store = await openSqliteAttemptStore(path, options); stores.push(store);
   expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); await store.createRun(create);
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]); } finally { reader.close(); }
-  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(4); } finally { check.close(); }
+  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(5); } finally { check.close(); }
 });
 
 it('returns bounded busy under a separate process transaction, without partial reservation', async () => {
