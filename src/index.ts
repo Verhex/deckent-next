@@ -11,3 +11,5 @@ export type { RunAdmission } from '#engine/index.js';
 export { requestConfiguredRunCancellation as requestRunCancellation } from '#composition/index.js';
 export type { RunCommand } from '#engine/index.js';
 export { deliverConfiguredRunCancellation as deliverRunCancellation } from '#composition/index.js';
+export { reconcileConfiguredAttempt as reconcileAttempt } from '#composition/index.js';
+export type { AttemptIdentity } from '#domain/index.js';

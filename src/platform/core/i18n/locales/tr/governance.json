@@ -762,5 +762,6 @@
   "error.RUN_POOL_FULL": "Yürütme havuzunda kullanılabilir kapasite yok.",
   "error.RUN_CAPACITY_OR_ORDER": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor.",
   "error.CANCELLATION_NOT_CONFIGURED": "İptal teslimi için yapılandırılmış profiller gerekir. Eksik: {missing}.",
-  "remedy.RUN_STORE_CONFLICT": "Durumu run inspect --scope <id> --id <run> ile okuyun. Değiştirilmiş iptal komutu için yeni --command-id ve güncel --expected-revision kullanın. Önceki yanıt belirsizse önce aynı komut kimliği ve girdiyi tekrar deneyin."
+  "remedy.RUN_STORE_CONFLICT": "Durumu run inspect --scope <id> --id <run> ile okuyun. Değiştirilmiş iptal komutu için yeni --command-id ve güncel --expected-revision kullanın. Önceki yanıt belirsizse önce aynı komut kimliği ve girdiyi tekrar deneyin.",
+  "error.EXECUTION_NOT_CONFIGURED": "Kayıtlı worker yönetimi için açık bir yürütme profili gerekir."
 }

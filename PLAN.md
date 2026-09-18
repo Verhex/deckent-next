@@ -418,3 +418,5 @@ RUN/P DONE — CLI cancel now performs configured delivery; SDK/CLI/MCP real wor
 CANCEL/F DONE — names missing cancellation/execution profiles before intent or runtime directory creation; Fable1676 PASS, 342 tests / 18 Docker.
 
 STORE/F DONE — trusted full-identity dispatch lookup shared with cancellation, six identity axes and corruption negatives; Fable1689 PASS, 345 tests / 18 Docker. Generic adapter port follow-up recorded.
+
+RECONCILE/A DONE — configured SDK observes recorded workers and settles proven exits under original custody; fresh reconcile policy, no caller argv/path. Fable1697 PASS, 346 tests / 19 Docker. Port ownership follow-up and profile snapshot limitation tracked.
