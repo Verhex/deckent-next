@@ -16,7 +16,7 @@ export interface WorkspaceBroker {
 }
 export class WorkspaceError extends Error {
   constructor(readonly code: 'WORKSPACE_REQUEST_INVALID' | 'WORKSPACE_OPTIONS_INVALID' | 'WORKSPACE_UNSAFE'
-    | 'WORKSPACE_IDENTITY_CONFLICT' | 'WORKSPACE_ALLOCATION_INCOMPLETE' | 'WORKSPACE_GIT_FAILED') {
+    | 'WORKSPACE_IDENTITY_CONFLICT' | 'WORKSPACE_ALLOCATION_INCOMPLETE' | 'WORKSPACE_CUSTODY_UNCONVERTIBLE' | 'WORKSPACE_GIT_FAILED') {
     super(code); this.name = 'WorkspaceError';
   }
 }

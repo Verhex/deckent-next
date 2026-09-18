@@ -5,7 +5,9 @@ export { DockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskPr
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LocalOsPrincipalVerifier, readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 export { GitWorkspaceBroker } from '#adapters/core/git-workspace/index.js';
-export type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
+export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-workspace/index.js';
+export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
+export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
 export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
 export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';
