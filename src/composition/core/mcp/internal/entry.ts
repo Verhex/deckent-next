@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { loadConfig, resolveLocale } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
@@ -17,5 +19,9 @@ export async function main(root = process.cwd()) {
   });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().catch(() => { process.stderr.write('MCP_START_FAILED\n'); process.exitCode = 1; });
+  void (async () => {
+    const { values } = parseArgs({ options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
+    if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
+    await main(resolve(values.project ?? process.cwd()));
+  })().catch(() => { process.stderr.write('MCP_START_FAILED\n'); process.exitCode = 1; });
 }

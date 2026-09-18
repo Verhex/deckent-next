@@ -146,3 +146,5 @@ RUN/K DONE — SDK admission requires positive capacity and current ledger schem
 MCP/B DONE — real-process oversized input regression closes MCP/A transport proof gap. PASS1548,252 tests/13 Docker.
 
 SUPERVISOR/C DONE — strict runtime result validation before dispatch effects; invalid evidence remains unresolved without relaunch. PASS1549,252 tests/13 Docker. Content size stays adapter bounded.
+
+MCP/C DONE — --project selects bootstrap root from any cwd, invalid args redact errors. PASS1550,255 tests/13 Docker. Relative root remains cwd-dependent; absolute-path guidance follow-up.

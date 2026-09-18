@@ -26,7 +26,7 @@ it('advertises real schemas and bounds concurrent calls, response size and error
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r', principal: 'admin' } }))).toContain('MCP_INPUT_INVALID');
   } finally { release(); await client.close(); await server.close(); }
 });
-it.skipIf(process.platform === 'win32')('serves the same configured Run as SDK over a real stdio MCP connection and observes policy revocation', async () => {
+it.skipIf(process.platform === 'win32')('serves an explicitly selected project from a different cwd with SDK parity and fresh policy', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-')); const project = join(root, 'project'); const data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
@@ -36,7 +36,7 @@ it.skipIf(process.platform === 'win32')('serves the same configured Run as SDK o
     { id: 'read', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: ['r'] } },
   ] : [] }), { mode: 0o600 });
   await writePolicy(true);
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js')], cwd: project, env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], cwd: root, env, stderr: 'pipe' });
   const client = new Client({ name: 'deckent-proof', version: '1' });
   try {
     await client.connect(transport); const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
@@ -69,3 +69,13 @@ it('rejects oversized unterminated stdio input with a sanitized transport error'
     expect(stderr).toBe('MCP_TRANSPORT_FAILED\n');
   } finally { clearTimeout(timer); child.kill(); await rm(root, { recursive: true, force: true }); }
 }, 10000);
+
+it.each([['--project', ''], ['--unknown', 'private'], ['unexpected']])('rejects invalid MCP launch arguments %j without protocol output', async (...args) => {
+  const child = spawn(process.execPath, [resolve('dist/composition/core/mcp/internal/entry.js'), ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
+  let stdout = ''; let stderr = '';
+  child.stdout.on('data', chunk => { stdout += String(chunk); });
+  child.stderr.on('data', chunk => { stderr += String(chunk); });
+  const closed = once(child, 'close'); child.stdin.end();
+  const [code] = await closed;
+  expect(code).toBe(1); expect(stdout).toBe(''); expect(stderr).toBe('MCP_START_FAILED\n');
+});
