@@ -138,3 +138,5 @@ RUN/H-text DONE: Fable1514 design-critic N1–N6 closed by PASS1525; recorded ca
 RUN/I DONE: authenticated create service with strict task-graph input, trusted clock/layout/policy and actor-bound replay;246 tests/13 Docker; Fable1526 PASS. Configured resolver and public pending-vs-launch semantics remain next wiring steps.
 
 RUN/J DONE: configured local SDK admission with explicit pool-use authority, trusted layout/clock, declared input-order and dedicated Run errors.249 tests/13 Docker; Fable1529 PASS. Zero-capacity profile semantics and admission-triggered schema migration need followup; no launch implied.
+
+MCP/A: added versioned read-only stdio MCP tools with shared schemas, policy checks, bounded concurrency/output and redacted errors; official SDK pinned. Independently reviewed 1534.

@@ -577,5 +577,9 @@
   "config.field.artifacts": "Maximum retained artifact size in bytes",
   "config.field.execution": "Explicit pinned Docker and Git execution capability settings; null disables execution",
   "config.field.inspection": "Read-only inspection page and policy document limits",
-  "config.field.admission": "Run admission pool, capacity and scheduling order"
+  "config.field.admission": "Run admission pool, capacity and scheduling order",
+  "config.field.mcp": "Local MCP input, response and concurrency limits",
+  "mcp.tool.inspectRun": "Read a recorded Run and its tasks. This is not live worker status or proof of acceptance. Requires current Run inspection policy.",
+  "mcp.tool.inspectInventory": "Read a bounded page of recorded execution attempts in one authorized scope. Does not start or stop workers.",
+  "mcp.tool.policyVocabulary": "List built-in policy resource and action identifiers. This metadata grants no permissions."
 }

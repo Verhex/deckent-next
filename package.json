@@ -8,7 +8,8 @@
     "node": ">=24.0.0"
   },
   "bin": {
-    "deckent": "./dist/composition/core/cli/internal/entry.js"
+    "deckent": "./dist/composition/core/cli/internal/entry.js",
+    "deckent-mcp": "./dist/composition/core/mcp/internal/entry.js"
   },
   "exports": {
     ".": {
@@ -43,10 +44,13 @@
     "verify": "npm run lint && npm run build && npm run test && npm run smoke"
   },
   "dependencies": {
-    "zod": "3.25.76"
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "^25.5.0",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",

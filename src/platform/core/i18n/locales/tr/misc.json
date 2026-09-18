@@ -577,5 +577,9 @@
   "config.field.artifacts": "Saklanan artifact için bayt cinsinden azami boyut",
   "config.field.execution": "Açıkça tanımlanmış sabit Docker imajı ve Git yürütme ayarları; null yürütmeyi kapatır",
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
-  "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası"
+  "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",
+  "config.field.mcp": "Yerel MCP girdi, yanıt ve eşzamanlılık sınırları",
+  "mcp.tool.inspectRun": "Kayıtlı Run ve işlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
+  "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme girişimlerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
+  "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez."
 }
