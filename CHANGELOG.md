@@ -214,3 +214,5 @@ GRAPH2/B: pure graph v2 validates criterion references and DAG without convertin
 STORE/G: composition consumes engine-owned dispatch lookup and authorization contracts; concrete adapter selection remains in composition.
 
 CUSTODY-A: Versioned adapter-owned profile capture/restore; point-in-time host and daemon origin checks; persistence wiring remains pending.
+
+GRAPH2-C: Bounded descriptions and complete versioned criterion encoding with golden vectors; description changes require a new definition version.

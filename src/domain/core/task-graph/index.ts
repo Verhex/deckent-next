@@ -8,3 +8,5 @@ export { criterionDefinitionSchema } from './internal/criteria.js';
 export type { CriterionDefinition } from './internal/criteria.js';
 export { TASK_GRAPH_V2_SCHEMA_VERSION, taskGraphV2Schema, validateTaskGraphV2 } from './internal/version-two.js';
 export type { TaskGraphV2 } from './internal/version-two.js';
+export { CRITERION_TEXT_LIMITS } from './internal/criteria.js';
+export { CRITERION_ENCODING_VERSION, encodeCriterionDefinition } from './internal/criterion-encoding.js';
