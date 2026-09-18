@@ -464,3 +464,5 @@ EVAL/E-STORE DONE: Fable1775 PASS,461 tests/28 Docker. Pure custody/revision dec
 EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evaluation derives verdict from pinned criteria after output proof, rechecks policy before atomic acceptance. Actual Docker/surface wiring is separately under review.
 
 - EXECUTION/SELECTED PASS 1783: pinned profile → recorded Git base → Docker → artifact → evaluator proved; 488 tests. Per-attempt base and new-path race evidence remain M1 follow-ups.
+
+- TASK/SURFACES PASS1787: typed SDK/MCP execution/evaluation and EN/TR errors; 496 tests with actual Docker. Public reservation residual tracked separately in requests1785/1786; CLI and autonomous cancellation remain open.

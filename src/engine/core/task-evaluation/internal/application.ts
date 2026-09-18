@@ -13,6 +13,7 @@ import { proposeTaskEvaluationCommit } from './transition.js';
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
+export type TaskEvaluationCommand = z.infer<typeof taskEvaluationCommandSchema>;
 export interface TaskEvaluationAuthorization {
   authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void>;
 }

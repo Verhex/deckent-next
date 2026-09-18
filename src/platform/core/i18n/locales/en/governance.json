@@ -769,5 +769,18 @@
   "error.TASK_EVALUATOR_INVALID": "The selected evaluator is not supported or has invalid parameters.",
   "error.TASK_KIND_NOT_REGISTERED": "The task kind has no registered execution profile.",
   "error.TASK_EVALUATOR_NOT_REGISTERED": "The requested evaluator version is not registered.",
-  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "The installed registry validator violates its synchronous contract."
+  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "The installed registry validator violates its synchronous contract.",
+  "error.TASK_EVALUATION_INVALID": "The evaluation record is invalid.",
+  "error.TASK_EVALUATION_STALE": "The Run or attempt changed. Inspect its current state before evaluating again.",
+  "error.TASK_EVALUATION_NOT_READY": "This task has no complete, uncancelled execution ready for evaluation.",
+  "error.TASK_EVALUATION_CRITERIA": "Evaluation criteria do not match the recorded task.",
+  "error.TASK_EVIDENCE_INVALID": "The task evidence request is invalid.",
+  "error.TASK_EVIDENCE_UNAVAILABLE": "Recorded task evidence cannot currently be read.",
+  "error.TASK_EVIDENCE_UNLINKED": "Complete output bound to this exact attempt is required.",
+  "error.EVALUATION_EVIDENCE_INVALID": "The evaluation evidence manifest is invalid.",
+  "error.EVALUATION_EVIDENCE_INCOMPLETE": "The evidence manifest does not match the required references.",
+  "error.EVALUATION_EVIDENCE_SCOPE": "Evidence belongs to a different access scope.",
+  "error.EVALUATION_EVIDENCE_LIMIT": "Evidence exceeds the configured verification budget.",
+  "error.EVALUATION_EVIDENCE_CORRUPT": "Evidence integrity could not be verified. Task acceptance was not recorded.",
+  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Evaluation evidence is unavailable. Task acceptance was not recorded."
 }

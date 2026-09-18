@@ -2,13 +2,13 @@ import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { evaluateProcessExit, validateProcessExitCriterion } from '#capabilities/index.js';
-import { authenticate, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, projectRunView } from '#engine/index.js';
+import { authenticate, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, projectRunView, type TaskEvaluationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredRunContext } from './context.js';
 
 /** Installed process-exit evaluator. The current registry cannot replace a Run's pinned definitions. */
-export async function evaluateConfiguredTask(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}) {
+export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = taskEvaluationCommandSchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, command.identity.scopeId, options);

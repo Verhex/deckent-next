@@ -246,3 +246,5 @@ EVAL/E-STORE: atomic Task acceptance with exact custody/revision fences, normali
 EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selection, policy checks and replay integrity. Fable1779 PASS.
 
 - Execute reserved tasks using pinned Docker profiles and recorded Git workspaces; prove artifact-backed acceptance and replay without relaunch (Fable PASS 1783).
+
+- Expose task execution/evaluation through SDK and MCP with strict shared schemas and localized typed errors (Fable PASS1787).

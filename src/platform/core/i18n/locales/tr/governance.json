@@ -769,5 +769,18 @@
   "error.TASK_EVALUATOR_INVALID": "Seçilen değerlendirici desteklenmiyor veya parametreleri geçersiz.",
   "error.TASK_KIND_NOT_REGISTERED": "İş türü için kayıtlı yürütme profili yok.",
   "error.TASK_EVALUATOR_NOT_REGISTERED": "İstenen değerlendirici sürümü kayıtlı değil.",
-  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "Kurulu registry doğrulayıcısı eşzamanlı doğrulama sözleşmesini ihlal ediyor."
+  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "Kurulu registry doğrulayıcısı eşzamanlı doğrulama sözleşmesini ihlal ediyor.",
+  "error.TASK_EVALUATION_INVALID": "Değerlendirme kaydı geçersiz.",
+  "error.TASK_EVALUATION_STALE": "Run veya deneme değişti. Yeniden değerlendirmeden önce güncel durumunu inceleyin.",
+  "error.TASK_EVALUATION_NOT_READY": "Bu işin değerlendirmeye hazır, tamamlanmış ve iptal edilmemiş bir yürütmesi yok.",
+  "error.TASK_EVALUATION_CRITERIA": "Değerlendirme kriterleri kayıtlı işle eşleşmiyor.",
+  "error.TASK_EVIDENCE_INVALID": "İş kanıtı isteği geçersiz.",
+  "error.TASK_EVIDENCE_UNAVAILABLE": "Kayıtlı iş kanıtı şu anda okunamıyor.",
+  "error.TASK_EVIDENCE_UNLINKED": "Bu denemeye bağlı eksiksiz çıktı gerekiyor.",
+  "error.EVALUATION_EVIDENCE_INVALID": "Değerlendirme kanıtı listesi geçersiz.",
+  "error.EVALUATION_EVIDENCE_INCOMPLETE": "Kanıt listesi gereken referanslarla eşleşmiyor.",
+  "error.EVALUATION_EVIDENCE_SCOPE": "Kanıt farklı bir erişim kapsamına ait.",
+  "error.EVALUATION_EVIDENCE_LIMIT": "Kanıt, yapılandırılmış doğrulama bütçesini aşıyor.",
+  "error.EVALUATION_EVIDENCE_CORRUPT": "Kanıt bütünlüğü doğrulanamadı. İş kabulü kaydedilmedi.",
+  "error.EVALUATION_EVIDENCE_UNAVAILABLE": "Değerlendirme kanıtı kullanılamıyor. İş kabulü kaydedilmedi."
 }

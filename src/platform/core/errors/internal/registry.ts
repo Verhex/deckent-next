@@ -4,6 +4,19 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  TASK_EVALUATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_INVALID', p, l) }) },
+  TASK_EVALUATION_STALE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_STALE', p, l) }) },
+  TASK_EVALUATION_NOT_READY: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_NOT_READY', p, l) }) },
+  TASK_EVALUATION_CRITERIA: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_CRITERIA', p, l) }) },
+  TASK_EVIDENCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVIDENCE_INVALID', p, l) }) },
+  TASK_EVIDENCE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVIDENCE_UNAVAILABLE', p, l) }) },
+  TASK_EVIDENCE_UNLINKED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVIDENCE_UNLINKED', p, l) }) },
+  EVALUATION_EVIDENCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_INVALID', p, l) }) },
+  EVALUATION_EVIDENCE_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_INCOMPLETE', p, l) }) },
+  EVALUATION_EVIDENCE_SCOPE: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_SCOPE', p, l) }) },
+  EVALUATION_EVIDENCE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_LIMIT', p, l) }) },
+  EVALUATION_EVIDENCE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_CORRUPT', p, l) }) },
+  EVALUATION_EVIDENCE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EVALUATION_EVIDENCE_UNAVAILABLE', p, l) }) },
   EXECUTION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_NOT_CONFIGURED', p, l) }) },
   CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
   EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },

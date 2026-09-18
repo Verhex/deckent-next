@@ -2,10 +2,13 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openConfiguredExecution, executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
-import { createConfiguredRun, evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
+import { executeTask, evaluateTask } from '../../../src/index.js';
+import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
+import { createConfiguredRun } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -48,46 +51,85 @@ async function fixture(execute = true) {
 }
 
 describe.skipIf(!dockerEnabled)('selected task execution', () => {
-  it('executes the pinned profile in a detached Git base, evaluates it, and replays without current execution settings', async () => {
+  it.each(['sdk', 'mcp'] as const)('executes the pinned profile in a detached Git base through %s, evaluates it, and replays without current execution settings', async mode => {
     const f = await fixture(); const runtime = await openConfiguredExecution(f.project, f.project, f.options); let record: Awaited<ReturnType<typeof runtime.store.loadBoundDispatch>> = null;
     let lease: Awaited<ReturnType<typeof runtime.workspaces.openRecorded>> = null;
+    const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
+      args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' }) : null;
+    const client = transport ? new Client({ name: 'selected-task-execution', version: '1' }) : null;
+    const execute = async () => {
+      if (!client) return executeTask(f.project, f.identity, f.options);
+      const result = await client.callTool({ name: 'execute_task', arguments: f.identity });
+      if (result.isError) {
+        const text = (result.content as { type: string; text?: string }[]).find(value => value.type === 'text')!.text!;
+        const code = JSON.parse(text).code; throw Object.assign(new Error(code), { code });
+      }
+      return result.structuredContent as Awaited<ReturnType<typeof executeTask>>;
+    };
+    const evaluate = async (command: { schemaVersion: 1; commandId: string; identity: typeof f.identity; expectedRevision: number }) => {
+      if (!client) return evaluateTask(f.project, command, f.options);
+      const result = await client.callTool({ name: 'evaluate_task', arguments: command });
+      if (result.isError) {
+        const text = (result.content as { type: string; text?: string }[]).find(value => value.type === 'text')!.text!;
+        const code = JSON.parse(text).code; throw Object.assign(new Error(code), { code });
+      }
+      return result.structuredContent as Awaited<ReturnType<typeof evaluateTask>>;
+    };
     try {
+      if (client) {
+        await client.connect(transport!);
+        expect(JSON.stringify(await client.callTool({ name: 'execute_task', arguments: Object.assign({}, f.identity, { argv: ['caller'] }) }))).toContain('MCP_INPUT_INVALID');
+        expect(JSON.stringify(await client.callTool({ name: 'evaluate_task', arguments: { schemaVersion: 1, commandId: 'evaluate', identity: f.identity, expectedRevision: 2, verdict: 'accepted' } }))).toContain('MCP_INPUT_INVALID');
+      }
       const changed = JSON.parse(await readFile(f.configPath, 'utf8'));
       changed.admission.registry.profiles[0].parameters.argv = ['node', '-e', "process.stdout.write('current-config')"];
       changed.admission.registry.profiles[0].parameters.imageId = 'sha256:' + 'b'.repeat(64);
       changed.execution.docker = { ...changed.execution.docker, imageId: 'sha256:' + 'c'.repeat(64), memoryBytes: 536870912 };
       await writeFile(f.configPath, JSON.stringify(changed)); clearConfigCache();
-      const first = await executeConfiguredTask(f.project, f.identity, f.options);
+      const first = await execute();
       expect(first.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, outputRecorded: true });
-      const evaluated = await evaluateConfiguredTask(f.project, { schemaVersion: 1, commandId: 'evaluate', identity: f.identity, expectedRevision: 2 }, f.options);
+      expect(await executeTask(f.project, f.identity, f.options)).toEqual(first);
+      const command = { schemaVersion: 1 as const, commandId: 'evaluate', identity: f.identity, expectedRevision: 2 };
+      const evaluated = await evaluate(command);
       expect(evaluated.evaluation.run.tasks[0]!.phase).toBe('accepted');
+      expect(await evaluateTask(f.project, command, f.options)).toEqual(evaluated);
+      expect(JSON.stringify({ first, evaluated })).not.toContain('argv');
+      expect(JSON.stringify({ first, evaluated })).not.toContain('/workspace');
+      expect(JSON.stringify({ first, evaluated })).not.toContain('base\\n');
       const store = await openConfiguredAttemptStore(f.project, f.options);
       try { record = (await store.store.loadBoundDispatch(f.identity))!; } finally { store.store.close(); }
       const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record.output!)));
       expect(output.stdout).toBe('base\n'); expect(output.stdout).not.toContain('owner-wip');
       lease = await runtime.workspaces.openRecorded(f.identity);
       const replayConfig = JSON.parse(await readFile(f.configPath, 'utf8')); delete replayConfig.execution; await writeFile(f.configPath, JSON.stringify(replayConfig)); clearConfigCache();
-      expect(await executeConfiguredTask(f.project, f.identity, f.options)).toEqual(first);
+      expect(await execute()).toEqual(first);
+      await f.policy(false);
+      await expect(execute()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     } finally {
       try {
+        record ??= await runtime.store.loadBoundDispatch(f.identity);
         if (record) {
           const supervisor = await DockerSupervisor.restoreProfile(record.profile);
           await supervisor.release(record.request);
         }
       } finally {
         try {
+          lease ??= await runtime.workspaces.openRecorded(f.identity);
           if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
-        } finally { runtime.store.close(); }
+        } finally {
+          runtime.store.close();
+          await client?.close(); await transport?.close();
+        }
       }
     }
   }, 30000);
 
   it('checks execute policy before allocating a workspace or dispatching', async () => {
     const f = await fixture(false);
-    await expect(executeConfiguredTask(f.project, f.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(executeTask(f.project, f.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await expect(stat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
     const store = await openConfiguredAttemptStore(f.project, f.options);
     try { expect(await store.store.loadBoundDispatch(f.identity)).toBeNull(); } finally { store.store.close(); }
-    await expect(executeConfiguredTask(f.project, { ...f.identity, argv: ['caller'] })).rejects.toThrow();
+    await expect(executeTask(f.project, Object.assign({}, f.identity, { argv: ['caller'] }))).rejects.toThrow();
   });
 });

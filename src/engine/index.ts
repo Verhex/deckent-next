@@ -22,4 +22,4 @@ export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/su
 export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
 export { TaskEvaluationApplication, taskEvaluationCommandSchema } from '#engine/core/task-evaluation/index.js';
-export type { TaskEvaluationAuthorization, TaskTerminalEvaluator } from '#engine/core/task-evaluation/index.js';
+export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator } from '#engine/core/task-evaluation/index.js';

@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { attemptIdentitySchema } from '#domain/index.js';
+import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore,
   validateDockerSupervisorProfile, resolveDockerTaskProfile } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, selectReservedTaskProfile, RunStoreError } from '#engine/index.js';
@@ -12,7 +12,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
-export async function executeConfiguredTask(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}) {
+export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, identity.scopeId, options);

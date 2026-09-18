@@ -3,8 +3,11 @@ import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/se
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
-import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, type RunCommand, type RunQuery, type DispatchInventoryInput } from '#engine/index.js';
+import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
+  type RunCommand, type RunQuery, type DispatchInventoryInput, type TaskEvaluationCommand } from '#engine/index.js';
 export interface McpApplications {
+  executeTask?(identity: AttemptIdentity): Promise<unknown>;
+  evaluateTask?(command: TaskEvaluationCommand): Promise<unknown>;
   reconcileAttempt?(identity: AttemptIdentity): Promise<unknown>;
   deliverRunCancellation?(command: RunCommand): Promise<unknown>;
   requestRunCancellation?(command: RunCommand): Promise<unknown>;
@@ -16,7 +19,7 @@ export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: numbe
  * Mutators are advertised only when composition explicitly supplies their application handler. */
 export function createMcpServer(applications: McpApplications, limits: McpLimits, locale: Locale) {
   z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe() }).strict().parse(limits);
-  const definitions: { readOnly: boolean; destructive: boolean; name: string; description: string; schema: z.ZodTypeAny; invoke(input: unknown): Promise<unknown> }[] = [
+  const definitions: { readOnly: boolean; destructive: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; invoke(input: unknown): Promise<unknown> }[] = [
     { readOnly: true, destructive: false, name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
       invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
     { readOnly: true, destructive: false, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
@@ -33,11 +36,17 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const reconcile = applications.reconcileAttempt;
   if (reconcile) definitions.push({ readOnly: false, destructive: false, name: 'reconcile_attempt', description: t('mcp.tool.reconcileAttempt', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => reconcile.call(applications, attemptIdentitySchema.parse(input)) });
+  const executeTask = applications.executeTask;
+  if (executeTask) definitions.push({ readOnly: false, destructive: true, openWorld: true, name: 'execute_task', description: t('mcp.tool.executeTask', {}, locale),
+    schema: attemptIdentitySchema, invoke: (input: unknown) => executeTask.call(applications, attemptIdentitySchema.parse(input)) });
+  const evaluateTask = applications.evaluateTask;
+  if (evaluateTask) definitions.push({ readOnly: false, destructive: false, name: 'evaluate_task', description: t('mcp.tool.evaluateTask', {}, locale),
+    schema: taskEvaluationCommandSchema, invoke: (input: unknown) => evaluateTask.call(applications, taskEvaluationCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
     inputSchema: zodToJsonSchema(tool.schema, { $refStrategy: 'none' }) as Tool['inputSchema'],
-    annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: true, openWorldHint: tool.openWorld ?? false },
   })) }));
   server.setRequestHandler('tools/call', async request => {
     const tool = definitions.find(value => value.name === request.params.name);

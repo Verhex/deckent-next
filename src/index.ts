@@ -13,3 +13,5 @@ export type { RunCommand } from '#engine/index.js';
 export { deliverConfiguredRunCancellation as deliverRunCancellation } from '#composition/index.js';
 export { reconcileConfiguredAttempt as reconcileAttempt } from '#composition/index.js';
 export type { AttemptIdentity } from '#domain/index.js';
+export { executeConfiguredTask as executeTask, evaluateConfiguredTask as evaluateTask } from '#composition/index.js';
+export type { TaskEvaluationCommand } from '#engine/index.js';
