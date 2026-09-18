@@ -504,3 +504,5 @@ CLI-POLISH-revised PASS1853: fix(cli): complete localized help and actionable di
 EXEC-EVIDENCE-OFFLINE-rebased PASS1853: test(recovery): prove explicit reconciliation after offline worker exit. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
 
 SERVICE-SHUTDOWN-rebased PASS1853: fix(runtime): include socket finalization in shutdown grace. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
+
+RUNTIME-DESCRIPTION-rebased PASS1853: fix(config): describe automatic cancellation recovery accurately. New output-recovery capacity investigation1852 remains open; no M1 closure claim.

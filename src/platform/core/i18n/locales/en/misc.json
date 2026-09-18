@@ -613,5 +613,6 @@
   "cli.runtime.stopped": "Runtime service shutdown: {state}.",
   "cli.runtime.clean": "complete",
   "cli.runtime.incomplete": "incomplete; durable work remains",
-  "cli.value.none": "none"
+  "cli.value.none": "none",
+  "config.field.cancellationRuntime": "Automatic cancellation recovery scopes, polling interval and failure backoff"
 }

@@ -613,5 +613,6 @@
   "cli.runtime.stopped": "Runtime servisi kapanışı: {state}.",
   "cli.runtime.clean": "tamamlandı",
   "cli.runtime.incomplete": "tamamlanmadı; kalıcı kayıtlarda işler var",
-  "cli.value.none": "yok"
+  "cli.value.none": "yok",
+  "config.field.cancellationRuntime": "Otomatik iptal kurtarma kapsamları, tarama aralığı ve hata sonrası bekleme süresi"
 }
