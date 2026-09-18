@@ -1,8 +1,10 @@
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, lstat, rm } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, expect, it } from 'vitest';
@@ -35,8 +37,19 @@ async function fixture(configured: boolean) {
   }
   return { project, options, store, layout, identity, policy, command: { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 1 } };
 }
-it.skipIf(!imageId || process.platform !== 'linux')('delivers to a real running worker only after Run and per-Attempt cancellation authority, preserving terminal custody', async () => {
+it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('delivers via %s to a real worker only after Run and Attempt cancellation authority, preserving terminal custody', async mode => {
   const f = await fixture(true); const workspaceRoot = await prepareProductDirectory(f.layout, 'workspaces'); const artifactRoot = await prepareProductDirectory(f.layout, 'artifacts');
+  const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' }) : null;
+  const client = transport ? new Client({ name: 'delivery-proof', version: '1' }) : null;
+  const deliver = async () => {
+    if (!client) return deliverRunCancellation(f.project, f.command, f.options);
+    const result = await client.callTool({ name: 'deliver_run_cancellation', arguments: f.command });
+    if (result.isError) {
+      const text = (result.content as { type: string; text?: string }[]).find(value => value.type === 'text')!.text!;
+      const code = JSON.parse(text).code; throw Object.assign(new Error(code), { code });
+    }
+    return result.structuredContent as Awaited<ReturnType<typeof deliverRunCancellation>>;
+  };
   const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const os = userInfo();
   const supervisor = new DockerSupervisor({ ...docker, workspaceRoot, uid: os.uid, gid: os.gid });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
@@ -45,22 +58,27 @@ it.skipIf(!imageId || process.platform !== 'linux')('delivers to a real running 
   let executionFailure: unknown;
   const pending = app.execute(request); const outcome = pending.then(value => ({ value, error: null }), error => { executionFailure = error; return { value: null, error }; });
   try {
+    if (client && transport) {
+      await client.connect(transport);
+      const tool = (await client.listTools()).tools.find(value => value.name === 'deliver_run_cancellation')!;
+      expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    }
     let ready = false;
     for (let i = 0; i < 500; i++) { if (executionFailure) throw executionFailure; try { ready = await readFile(join(workspace, 'ready'), 'utf8') === 'yes'; } catch { /* Worker startup. */ } if (ready) break; await sleep(10); }
     expect(ready).toBe(true); const observation = await supervisor.observe(request);
     const running = async () => (await exec('/usr/bin/docker', ['inspect', '--format', '{{.State.Running}}', observation.handle])).stdout.trim();
     await f.policy(false, true);
-    await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(deliver()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(false); expect(await running()).toBe('true');
-    await f.policy(true, false); const denied = await deliverRunCancellation(f.project, f.command, f.options);
+    await f.policy(true, false); const denied = await deliver();
     expect(denied.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'denied' }]);
     expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true); expect(await running()).toBe('true');
-    await f.policy(true, true); const delivered = await deliverRunCancellation(f.project, f.command, f.options);
+    await f.policy(true, true); const delivered = await deliver();
     expect(delivered.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'terminal' }]);
     expect((await outcome).error).toBe(null); expect(await running()).toBe('false');
     const record = (await f.store.readDispatch(request))!; expect(record.terminal!.exitCode).not.toBe(0); expect(record.output).toBeDefined();
     expect((await f.store.load('s', f.identity.attemptId))!.lastObservation!.result.kind).toBe('exited');
-  } finally { await supervisor.cancel(request).catch(() => {}); await outcome; await supervisor.release(request).catch(() => {}); }
+  } finally { await supervisor.cancel(request).catch(() => {}); await outcome; await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); }
 }, 30000);
 it.skipIf(process.platform === 'win32')('requires an explicit cancellation profile before recording intent or creating runtime directories', async () => {
   const f = await fixture(false); await f.policy(true, false);

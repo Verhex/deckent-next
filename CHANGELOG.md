@@ -188,3 +188,5 @@ SUPERVISOR/M: bounded process-group termination observation, ENOENT-only absence
 MCP/D: explicit cancellation-intent tool with native write/idempotency annotations and common SDK authority; real stdio parity, fresh policy denial. Fable PASS1639, 334 tests/15 Docker. Worker delivery not invoked by this tool; no alias for renamed internal server factory.
 
 CANCEL/D: SDK can deliver cancellation to configured workers with per-attempt outcomes; terminal observations retain output and do not imply task acceptance or effect rollback.
+
+MCP/E: deliver_run_cancellation reports per-attempt delivery with current cancellation policy; request-only tool retains its distinct meaning.

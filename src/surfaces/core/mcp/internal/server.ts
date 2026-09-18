@@ -4,6 +4,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, type RunCommand, type RunQuery, type DispatchInventoryInput } from '#engine/index.js';
 export interface McpApplications {
+  deliverRunCancellation?(command: RunCommand): Promise<unknown>;
   requestRunCancellation?(command: RunCommand): Promise<unknown>;
   inspectRun(query: RunQuery): Promise<unknown>;
   inspectInventory(query: DispatchInventoryInput): Promise<unknown>;
@@ -24,6 +25,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const requestCancellation = applications.requestRunCancellation;
   if (requestCancellation) definitions.push({ readOnly: false, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
     schema: runCommandSchema, invoke: (input: unknown) => requestCancellation.call(applications, runCommandSchema.parse(input)) });
+  const deliverCancellation = applications.deliverRunCancellation;
+  if (deliverCancellation) definitions.push({ readOnly: false, name: 'deliver_run_cancellation', description: t('mcp.tool.deliverRunCancellation', {}, locale),
+    schema: runCommandSchema, invoke: (input: unknown) => deliverCancellation.call(applications, runCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,

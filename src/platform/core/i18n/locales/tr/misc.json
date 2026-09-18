@@ -583,5 +583,6 @@
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme girişimlerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
   "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez.",
   "mcp.tool.requestRunCancellation": "Yalnız kalıcı Run iptal isteği kaydeder. İptali worker’lara iletmez, durmayı doğrulamaz ve etkileri geri almaz. Önce Run durumunu okuyup güncel revizyonunu kullanın. Belirsiz yanıtı tekrar denerken commandId değişmemeli; yanıt hatası kaydedilmiş bir isteğin ardından gelebileceğinden kayıtlı durumu inceleyin. Güncel Run iptal izni gerektirir.",
-  "config.field.cancellation": "Paralel worker iptal teslimi üst sınırı"
+  "config.field.cancellation": "Paralel worker iptal teslimi üst sınırı",
+  "mcp.tool.deliverRunCancellation": "Run iptal isteğini kaydet veya tekrarını kullan; yapılandırılmış sınırlı supervisor üzerinden kayıtlı worker Attempt’lerine ilet. Run ve her Attempt için iptal izni gerekir; yürütme izni gerekmez. Her sonucu inceleyin: denied, unavailable, unresolved ve not-dispatched sonlanmayı doğrulamaz. terminal, kayıtlı süreç çıkışıdır; iş kabulü veya etkilerin geri alınması değildir. Açık bir iptal teslimi ve yürütme profili gerekir. Belirsiz tekrarda aynı commandId ve girdiyi kullanın."
 }

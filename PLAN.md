@@ -406,3 +406,5 @@ SUPERVISOR/M: bounded process-group termination observation, ENOENT-only absence
 MCP/D: explicit cancellation-intent tool with native write/idempotency annotations and common SDK authority; real stdio parity, fresh policy denial. Fable PASS1639, 334 tests/15 Docker. Worker delivery not invoked by this tool; no alias for renamed internal server factory.
 
 CANCEL/D DONE — configured SDK cancellation delivery, fresh per-attempt cancel policy, bounded coordination; Fable 1642 PASS, 336 tests including 16 real Docker. Undispatched runtime-directory preflight refinement remains.
+
+MCP/E DONE — explicit delivery tool through configured SDK; official MCP stdio to real Docker, 337 tests / 17 Docker; Fable 1645 PASS.
