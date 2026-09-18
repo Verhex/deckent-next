@@ -378,3 +378,5 @@ SUPERVISOR/G DONE — single TS identity/options normalization and digest produc
 SUPERVISOR/H DONE — injectable internal command runner, default Node execFile behavior preserved; typed redacted failures. PASS1568,279 tests/14 Docker plus injected crossing. Explicit env, byte output and group custody remain next comparison prerequisites.
 
 SUPERVISOR/I DONE — opt-in Linux profile with explicit env/cwd, closed stdin, raw bounded output, started/reason evidence and process-group stop. PASS1576,285 tests/15 Docker. Production env registry selection, escaped-session custody and Go qualification remain open.
+
+SUPERVISOR/J DONE — readiness-driven cancellation replaces startup/deadline race in inherited-pipe test; rejected promises consumed. PASS1577 closes1570,280 tests/14 Docker.

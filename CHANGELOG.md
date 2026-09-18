@@ -160,3 +160,5 @@ SUPERVISOR/G DONE — single TS identity/options normalization and digest produc
 SUPERVISOR/H: extracted injectable Docker command execution without moving policy, identity or security argv; independent PASS1568.
 
 SUPERVISOR/I: added explicit Linux process profile and Docker bridge; default runner unchanged. Independent PASS1576.
+
+SUPERVISOR/J DONE — readiness-driven cancellation replaces startup/deadline race in inherited-pipe test; rejected promises consumed. PASS1577 closes1570,280 tests/14 Docker.

@@ -79,21 +79,23 @@ it('interrupts a confirmed live control process without reporting worker termina
     expect(pid).toBeGreaterThan(0); expect(() => process.kill(pid, 0)).not.toThrow();
     controller.abort(); await rejection;
     expect(() => process.kill(pid, 0)).toThrow();
-  } finally { controller.abort(); await pending.catch(() => {}); }
+  } finally { controller.abort(); await rejection.catch(() => {}); }
 });
 
-it('does not wait for inherited pipe writers after the control deadline', async () => {
-  const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setTimeout(()=>{},4000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(fs=>fs.writeFile('descendant',String(child.pid)));setInterval(()=>{},1000);");
+it('does not wait for inherited pipe writers after confirmed control cancellation', async () => {
+  const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(fs=>fs.writeFile('descendant',String(child.pid)));setInterval(()=>{},1000);");
   let descendant = 0;
-  const pending = new ProcessSupervisor({ ...f.options, timeoutMs: 1000 }).observe(f.request);
-  const rejection = expect(pending).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
+  const controller = new AbortController();
+  const pending = new ProcessSupervisor({ ...f.options, timeoutMs: 15000 }).execute(f.request, controller.signal);
+  const outcome = pending.then(value => ({ value, error: null }), error => ({ value: null, error }));
   try {
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 1000; i++) {
       try { descendant = Number(await readFile(join(f.root, 'descendant'), 'utf8')); break; } catch { await sleep(10); }
     }
-    expect(descendant).toBeGreaterThan(0); await rejection;
+    expect(descendant).toBeGreaterThan(0); controller.abort();
+    expect((await outcome).error).toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
     // The command returned before the descendant closed its inherited stdout/stderr.
     // This is intentionally not evidence that a worker or arbitrary descendant stopped.
     expect(() => process.kill(descendant, 0)).not.toThrow();
-  } finally { if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch { /* The bounded child may already have exited. */ } } await pending.catch(() => {}); }
-}, 7000);
+  } finally { controller.abort(); if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch { /* The bounded child may already have exited. */ } } await outcome; }
+}, 20000);
