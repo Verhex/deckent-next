@@ -3,13 +3,13 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { reconcileAttempt } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
-import { DockerSupervisor, openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
+import { DockerSupervisor, openSqliteAttemptStore, runNodeDockerCommand, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -78,5 +78,67 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
     await supervisor.cancel(request).catch(() => {}); await pending?.catch(() => {});
     // Test fixture owns the process; product reconcile never releases it or manufactures an artifact receipt.
     await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
+  }
+}, 30000);
+
+it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('rejects a simulated recorded daemon mismatch via %s without mutation or effects', async mode => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-reconcile-origin-')); const project = join(root, 'project'); const data = join(root, 'data');
+  await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
+  const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
+    logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, execution: { docker,
+    git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
+  const options = { env: { HOME: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', { validate: validateDockerSupervisorProfile });
+  const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: randomUUID(), generation: 1, layoutRevision: opened.layout.revision };
+  const workspaceRoot = await prepareProductDirectory(opened.layout, 'workspaces'); await prepareProductDirectory(opened.layout, 'artifacts');
+  const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const effect = join(workspace, 'effect'); const os = userInfo();
+  const supervisor = new DockerSupervisor({ ...docker, workspaceRoot, uid: os.uid, gid: os.gid });
+  const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/effect','unexpected')"] };
+  const canonicalIdentity = { runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId,
+    scopeId: identity.scopeId, layoutRevision: identity.layoutRevision, generation: identity.generation };
+  const handle = 'deckent-' + createHash('sha256').update(JSON.stringify(canonicalIdentity)).digest('hex');
+  const captured = await supervisor.captureProfile();
+  const parameters = captured.parameters as { endpoint: string; origin: Record<string, unknown> };
+  const foreignDaemonId = `foreign-${randomUUID()}`;
+  const profile = { ...captured, parameters: { ...parameters, origin: { ...parameters.origin, daemonId: foreignDaemonId } } };
+  const principal = { issuer: hostname(), subject: String(os.uid) };
+  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [
+    { id: 'reconcile', effect: 'allow', actions: ['reconcile'], scopes: ['s'], principals: [principal], resource: { kind: 'attempt', ids: [identity.attemptId] } },
+  ] }), { mode: 0o600 });
+  const listContainers = async () => (await runNodeDockerCommand({ executable: docker.executable,
+    args: ['--host', parameters.endpoint, 'ps', '-aq', '--filter', `name=^/${handle}$`], timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes })).stdout.trim().split('\n').filter(Boolean).sort();
+  const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
+    args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], env: options.env, stderr: 'pipe' }) : null;
+  const client = transport ? new Client({ name: 'reconcile-origin-proof', version: '1' }) : null;
+  const reconcile = async () => {
+    if (!client) return reconcileAttempt(project, identity, options);
+    const result = await client.callTool({ name: 'reconcile_attempt', arguments: identity });
+    if (result.isError) {
+      const text = (result.content as { type: string; text?: string }[]).find(item => item.type === 'text')!.text!;
+      const code = JSON.parse(text).code; throw Object.assign(new Error(code), { code, text });
+    }
+    return result.structuredContent;
+  };
+  try {
+    const claim = { owner: 'original-controller', request };
+    await admitRunAttempts(store, [identity]); await store.claimDispatch({ ...claim, profile });
+    await store.grantLaunch({ claim, principal: custodyPrincipal, now: 1 });
+    const before = { dispatch: await store.readDispatch(request), attempt: await store.load('s', identity.attemptId), run: await store.loadRun('s', 'r') };
+    const containers = await listContainers();
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } })); clearConfigCache();
+    if (client && transport) await client.connect(transport);
+    const failure = await reconcile().then(() => null, error => error as { code?: string; text?: string; message?: string });
+    expect(failure).toMatchObject({ code: 'INVENTORY_UNAVAILABLE' });
+    expect(JSON.stringify(failure)).not.toContain('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
+    expect(JSON.stringify(failure)).not.toContain(foreignDaemonId);
+    expect(JSON.stringify(failure)).not.toContain('writeFileSync');
+    expect({ dispatch: await store.readDispatch(request), attempt: await store.load('s', identity.attemptId), run: await store.loadRun('s', 'r') }).toEqual(before);
+    expect(await listContainers()).toEqual(containers);
+    await expect(readFile(effect, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally {
+    await runNodeDockerCommand({ executable: docker.executable, args: ['--host', parameters.endpoint, 'rm', '-f', handle],
+      timeoutMs: docker.controlTimeoutMs, outputBytes: docker.outputBytes }).catch(() => {});
+    await client?.close(); await transport?.close(); store.close(); clearConfigCache(); await rm(root, { recursive: true, force: true });
   }
 }, 30000);

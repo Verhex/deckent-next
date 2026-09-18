@@ -452,3 +452,5 @@ LAUNCH/L1 DONE — Pure engine launch decision; SQLite transactional persistence
 LAUNCH/N3 DONE — all three cancellation entry paths persist actor and Attempt intent atomically; real controller exit after grant remains unresolved without relaunch. Fable PASS1757;397 tests/26 Docker. Cancellation attribution rule extraction is a follow-up note.
 
 CANCEL/G3 DONE — durable cancellation journal, bounded retries and token CAS;407 tests/26 Docker, Fable PASS1759. M1 prerequisite OPEN: configured bounded runtime loop must drive queued deliveries through this journal; current command replay is not autonomous delivery.
+
+EXEC-EVIDENCE PASS (Fable 1762): six-case Docker evidence matrix verified; 409 tests, 28 real Docker. Automatic cancellation runtime loop remains an M1 prerequisite; second daemon and physical power loss not qualified.

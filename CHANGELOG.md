@@ -234,3 +234,5 @@ LAUNCH/L1: Pure engine launch decision; SQLite transactional persistence; inject
 LAUNCH/N3: atomically retain cancellation actor with Attempt state and receipt; prove recovery after a controller exits following a launch grant.
 
 CANCEL/G3: persist cancellation delivery attempts across controller restarts; enforce current permission before retry budget, expose pending/exhausted delivery in CLI/MCP/SDK.
+
+EXEC-EVIDENCE: SDK/MCP reject mismatched recorded Docker custody without mutation or internal detail disclosure; Fable 1762 PASS.
