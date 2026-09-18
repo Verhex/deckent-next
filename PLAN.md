@@ -376,3 +376,5 @@ SUPERVISOR/F DONE — stop closes local stdio after killing control PID; inherit
 SUPERVISOR/G DONE — single TS identity/options normalization and digest producer preserves existing bytes; golden Unicode cases plus old/new real Docker crossing. PASS1564,276 tests/14 Docker plus crossing proof. Not exported through product SDK.
 
 SUPERVISOR/H DONE — injectable internal command runner, default Node execFile behavior preserved; typed redacted failures. PASS1568,279 tests/14 Docker plus injected crossing. Explicit env, byte output and group custody remain next comparison prerequisites.
+
+SUPERVISOR/I DONE — opt-in Linux profile with explicit env/cwd, closed stdin, raw bounded output, started/reason evidence and process-group stop. PASS1576,285 tests/15 Docker. Production env registry selection, escaped-session custody and Go qualification remain open.

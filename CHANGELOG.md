@@ -158,3 +158,5 @@ SUPERVISOR/F DONE — stop closes local stdio after killing control PID; inherit
 SUPERVISOR/G DONE — single TS identity/options normalization and digest producer preserves existing bytes; golden Unicode cases plus old/new real Docker crossing. PASS1564,276 tests/14 Docker plus crossing proof. Not exported through product SDK.
 
 SUPERVISOR/H: extracted injectable Docker command execution without moving policy, identity or security argv; independent PASS1568.
+
+SUPERVISOR/I: added explicit Linux process profile and Docker bridge; default runner unchanged. Independent PASS1576.
