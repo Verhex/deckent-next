@@ -450,3 +450,5 @@ CANCEL/G2 DONE — Docker endpoint bound in adapter profile2; ledger6 forward va
 LAUNCH/L1 DONE — Pure engine launch decision; SQLite transactional persistence; injected clock; 390 tests/24 Docker; Fable PASS1754. N3 and durable retry tracked separately.
 
 LAUNCH/N3 DONE — all three cancellation entry paths persist actor and Attempt intent atomically; real controller exit after grant remains unresolved without relaunch. Fable PASS1757;397 tests/26 Docker. Cancellation attribution rule extraction is a follow-up note.
+
+CANCEL/G3 DONE — durable cancellation journal, bounded retries and token CAS;407 tests/26 Docker, Fable PASS1759. M1 prerequisite OPEN: configured bounded runtime loop must drive queued deliveries through this journal; current command replay is not autonomous delivery.

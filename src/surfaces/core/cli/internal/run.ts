@@ -2,7 +2,7 @@ import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Pro
 import type { RunCommand, RunQuery, RunView, RunCancellationOutcome } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
-export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 1; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
+export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
   if (action !== 'inspect' && action !== 'cancel') throw ErrorRegistry.createError('CLI_USAGE');
@@ -30,10 +30,13 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         prevented: t('cli.run.cancel.prevented', {}, locale),
         'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
       };
+      const deliveryLabels = { queued: t('cli.run.cancel.deliveryQueued', {}, locale), claimed: t('cli.run.cancel.deliveryClaimed', {}, locale), exhausted: t('cli.run.cancel.deliveryExhausted', {}, locale), terminal: labels.terminal, prevented: labels.prevented };
       const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
       return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
         ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
-        ...data.delivery.outcomes.map(item => t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale)),
+        ...data.delivery.outcomes.flatMap(item => [t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale),
+          ...(item.delivery && ['queued', 'claimed', 'exhausted'].includes(item.delivery.state)
+            ? [t('cli.run.cancel.delivery', { count: item.delivery.attempts, state: deliveryLabels[item.delivery.state] }, locale)] : [])]),
         ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
         t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),
       ].join('\n');

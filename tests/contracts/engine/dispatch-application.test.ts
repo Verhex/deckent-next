@@ -233,7 +233,7 @@ it.skipIf(!imageId)('delivers a durable Run cancellation through a separate cont
   const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
   const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new PolicyAuthorizationError('POLICY_DENIED'); } }, 'operator', f.artifacts);
   const runApp = new RunApplication(otherStore, verifier, { async authorize() {} });
-  const coordinator = new RunCancellationCoordinator(runApp, otherStore, cancellation, 2);
+  const coordinator = new RunCancellationCoordinator(runApp, otherStore, cancellation, { maxConcurrentDeliveries: 2, maxAttempts: 3, retryDelayMs: 10, claimTtlMs: 1000 }, { now: Date.now, token: randomUUID });
   const command = { schemaVersion: 1, action: 'cancel', commandId: 'cancel-run', scopeId: 's', runId: request.identity.runId, expectedRevision: 1 };
   const execution = running.execute(request);
   try {

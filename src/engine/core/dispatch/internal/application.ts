@@ -61,6 +61,7 @@ export class DispatchApplication {
       { handle: observed.handle, exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
     return Object.freeze({ kind: 'terminal', record });
   }
+  async authorizeCancellation(input: unknown, credential?: unknown): Promise<void> { await this.admit('cancel', input, credential); }
   async cancel(input: unknown, credential?: unknown): Promise<DispatchOutcome> {
     const { request, principal } = await this.admit('cancel', input, credential);
     const current = await this.store.requestDispatchCancellation(request, principal);

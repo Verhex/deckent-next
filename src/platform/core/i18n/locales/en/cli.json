@@ -542,5 +542,9 @@
   "cli.run.cancel.notDispatched": "not dispatched; no worker delivery needed",
   "cli.run.cancel.empty": "  No recorded attempts to deliver to.",
   "cli.run.cancel.notice": "  Delivery is not proof of Task acceptance or reversed effects. Read recorded state: run inspect --scope {scope} --id {run}.",
-  "cli.run.cancel.unconfirmed": "  Attention: termination not confirmed for {count} of {total} attempts."
+  "cli.run.cancel.unconfirmed": "  Attention: termination not confirmed for {count} of {total} attempts.",
+  "cli.run.cancel.delivery": "    Delivery attempts: {count}; {state}",
+  "cli.run.cancel.deliveryQueued": "retry pending",
+  "cli.run.cancel.deliveryClaimed": "delivery in progress",
+  "cli.run.cancel.deliveryExhausted": "retry limit reached; inspect unresolved effects"
 }

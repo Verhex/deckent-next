@@ -35,13 +35,13 @@ it('rolls all earlier migration steps back when a later DDL step fails', async (
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it('advances an empty schema-four ledger to six', async () => {
+it('advances an empty schema-four ledger to the current version', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-schema-v5-')); const path = join(root, 'ledger.db');
   try {
     const setup = new DatabaseSync(path); createSchemaFour(setup); setup.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(6); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -51,10 +51,10 @@ it('advances a populated current Run ledger after its version is marked four', a
     const store = await openSqliteAttemptStore(path, options);
     await admitRunAttempts(store, [{ scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]);
     store.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('PRAGMA user_version=4'); downgrade.close();
+    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE cancellation_deliveries; PRAGMA user_version=4'); downgrade.close();
     const migrated = await openSqliteAttemptStore(path, options); expect((await migrated.loadRun('s', 'r'))!.revision).toBe(1); migrated.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(6); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -128,7 +128,7 @@ it('requires an installed synchronous profile validator before migrating dispatc
     const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
     const seed = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles);
     await admitRunAttempts(seed, [identity]); await seed.claimDispatch({ owner: 'fixture', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['task'] }, profile }); seed.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('PRAGMA user_version=5'); downgrade.close();
+    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE cancellation_deliveries; PRAGMA user_version=5'); downgrade.close();
     await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     await expect(openSqliteAttemptStore(path, options, 'allow', incompatibleProfiles)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     const malformed: readonly SupervisorProfileValidator[] = [
@@ -142,7 +142,7 @@ it('requires an installed synchronous profile validator before migrating dispatc
     }
     const before = new DatabaseSync(path, { readOnly: true }); try { expect(before.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { before.close(); }
     const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles); migrated.close();
-    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(6); } finally { after.close(); }
+    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { after.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -153,7 +153,7 @@ it('rejects an old Docker profile at v5-to-v6 without changing its ledger bytes'
     const oldDockerProfile = { schemaVersion: 1 as const, adapterId: 'docker', adapterVersion: 1, parameters: {} };
     const seed = await openSqliteAttemptStore(path, options, 'allow', { validate() { return undefined; } });
     await admitRunAttempts(seed, [identity]); await seed.claimDispatch({ owner: 'fixture', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['task'] }, profile: oldDockerProfile }); seed.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('PRAGMA user_version=5'); downgrade.close();
+    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE cancellation_deliveries; PRAGMA user_version=5'); downgrade.close();
     const before = await readFile(path);
     await expect(openSqliteAttemptStore(path, options, 'allow', { validate: validateDockerSupervisorProfile })).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     expect(await readFile(path)).toEqual(before);

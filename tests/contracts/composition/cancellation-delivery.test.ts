@@ -84,7 +84,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
     expect(denied.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'denied' }]);
     expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true); expect(await running()).toBe('true');
     await f.policy(true, true); const delivered = await deliver();
-    expect(delivered.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'terminal' }]);
+    expect(delivered.delivery.outcomes).toMatchObject([{ attemptId: f.identity.attemptId, taskId: 't', status: 'terminal', delivery: { state: 'terminal', attempts: 1 } }]);
     expect((await outcome).error).toBe(null); expect(await running()).toBe('false');
     const record = (await f.store.readDispatch(request))!; expect(record.terminal!.exitCode).not.toBe(0); expect(record.output).toBeDefined();
     expect((await f.store.load('s', f.identity.attemptId))!.lastObservation!.result.kind).toBe('exited');

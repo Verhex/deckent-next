@@ -8,3 +8,6 @@ export { RunCancellationCoordinator } from './internal/cancellation.js';
 export type { RunCancellationDispatchStore, RunCancellationOutcome } from './internal/cancellation.js';
 export { RunAdmissionApplication, runAdmissionSchema } from './internal/admission.js';
 export type { RunAdmission, RunAdmissionContext } from './internal/admission.js';
+export { cancellationDeliverySchema, cancellationDeliveryLimitsSchema, CancellationDeliveryError } from './internal/delivery-port.js';
+export type { CancellationDelivery, CancellationDeliveryLimits, CancellationDeliveryOutcome, CancellationDeliveryClaim, CancellationDeliveryClaimResult, CancellationDeliveryStore } from './internal/delivery-port.js';
+export { decideCancellationDeliveryClaim, decideCancellationDeliveryFinish } from './internal/delivery-transition.js';

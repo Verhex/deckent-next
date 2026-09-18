@@ -232,3 +232,5 @@ CANCEL/G2: Docker endpoint bound in adapter profile2; ledger6 forward validation
 LAUNCH/L1: Pure engine launch decision; SQLite transactional persistence; injected clock; 390 tests/24 Docker; Fable PASS1754. N3 and durable retry tracked separately.
 
 LAUNCH/N3: atomically retain cancellation actor with Attempt state and receipt; prove recovery after a controller exits following a launch grant.
+
+CANCEL/G3: persist cancellation delivery attempts across controller restarts; enforce current permission before retry budget, expose pending/exhausted delivery in CLI/MCP/SDK.

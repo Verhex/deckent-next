@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { recordedSupervisor } from './recorded-supervisor.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
@@ -35,10 +36,11 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
       };
       // No runtime dependency is touched for an attempt that has never been dispatched.
       // Each attempt has its own immutable profile; never share one mutable configuration across workers.
-      const delivery: Pick<DispatchApplication, 'cancel'> = {
+      const delivery: Pick<DispatchApplication, 'cancel' | 'authorizeCancellation'> = {
+        async authorizeCancellation(request, credential) { const parsed = sandboxRequestSchema.parse(request); await (await createDispatch(parsed)).authorizeCancellation(parsed, credential); },
         async cancel(request, credential) { const parsed = sandboxRequestSchema.parse(request); return (await createDispatch(parsed)).cancel(parsed, credential); },
       };
-      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation.maxConcurrentDeliveries);
+      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation, { now: Date.now, token: randomUUID });
       return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.cancel(command) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

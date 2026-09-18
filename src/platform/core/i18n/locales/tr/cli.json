@@ -542,5 +542,9 @@
   "cli.run.cancel.notDispatched": "çalıştırılmamış; worker teslimi gerekmiyor",
   "cli.run.cancel.empty": "  Teslim yapılacak kayıtlı girişim yok.",
   "cli.run.cancel.notice": "  Teslim, işin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}.",
-  "cli.run.cancel.unconfirmed": "  Dikkat: {total} girişimin {count} tanesinde sonlanma doğrulanmadı."
+  "cli.run.cancel.unconfirmed": "  Dikkat: {total} girişimin {count} tanesinde sonlanma doğrulanmadı.",
+  "cli.run.cancel.delivery": "    Teslim denemesi: {count}; {state}",
+  "cli.run.cancel.deliveryQueued": "yeniden teslim bekliyor",
+  "cli.run.cancel.deliveryClaimed": "teslim sürüyor",
+  "cli.run.cancel.deliveryExhausted": "deneme sınırına ulaşıldı; belirsiz etkileri inceleyin"
 }

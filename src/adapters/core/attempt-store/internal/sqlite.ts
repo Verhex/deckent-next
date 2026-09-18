@@ -1,19 +1,20 @@
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { migrateLedger } from './schema.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
+import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
-import type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
+import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -40,6 +41,10 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   }
   async loadCancellationDispatch(identity: AttemptIdentity) {
     try { return loadCancellationDispatch(this.db, identity); } catch (error) { throw sqliteFailure(error); }
+  }
+  async claimCancellationDelivery(input: CancellationDeliveryClaim) { return new SqliteCancellationDeliveryJournal(this.db).claimCancellationDelivery(input); }
+  async finishCancellationDelivery(input: CancellationDeliveryClaim & { readonly outcome: CancellationDeliveryOutcome }) {
+    return new SqliteCancellationDeliveryJournal(this.db).finishCancellationDelivery(input);
   }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
