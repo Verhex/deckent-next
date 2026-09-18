@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { validateDockerTaskProfile } from '#adapters/index.js';
+import { resolveDockerTaskProfile, validateDockerTaskProfile } from '#adapters/index.js';
 
 const parameters = () => ({
   argv: ['node', 'task.js'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
@@ -10,6 +10,21 @@ const profile = () => ({ id: 'bounded-node', version: 1, adapter: { id: 'docker'
 
 it('accepts an installed Docker task template without reading runtime configuration or contacting Docker', () => {
   expect(validateDockerTaskProfile(profile())).toBeUndefined();
+});
+
+it('resolves only pinned argv and Docker options, independent of later source mutation', () => {
+  const source = profile(); const resolved = resolveDockerTaskProfile(source);
+  const { argv, ...options } = parameters();
+  expect(resolved).toEqual({ argv, options });
+  source.parameters.argv[0] = 'changed'; source.parameters.memoryBytes = 1;
+  expect(resolved).toEqual({ argv, options });
+  expect(resolved).not.toHaveProperty('executable'); expect(resolved).not.toHaveProperty('workspaceRoot');
+  expect(resolved.options).not.toHaveProperty('uid'); expect(resolved.options).not.toHaveProperty('gid');
+});
+
+it('rejects a non-Docker adapter during resolution', () => {
+  const value = profile(); value.adapter.id = 'process';
+  expect(() => resolveDockerTaskProfile(value)).toThrow('DOCKER_TASK_PROFILE_INVALID');
 });
 
 it.each([

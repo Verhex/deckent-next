@@ -1,10 +1,11 @@
 import { GIT_EXECUTION_SETTINGS } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
+import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { workspaceRequestSchema, WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
 import format from './format.json' with { type: 'json' };
 const exec = promisify(execFile);
@@ -24,14 +25,20 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     if (!parsed.success || ![parsed.data.sourceRoot, parsed.data.workspaceRoot, parsed.data.gitExecutable].every(isAbsolute)) throw new WorkspaceError('WORKSPACE_OPTIONS_INVALID');
     this.options = parsed.data;
   }
+  private identityTarget(input: unknown) {
+    const identity = attemptIdentitySchema.safeParse(input);
+    if (!identity.success) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
+    const id = createHash('sha256').update(JSON.stringify(identity.data)).digest('hex');
+    const directory = join(this.options.workspaceRoot, id);
+    return { identity: identity.data, id, directory, workspace: join(directory, format.checkout), lease: join(directory, format.lease) };
+  }
   private identify(input: WorkspaceRequest) {
     const parsed = workspaceRequestSchema.safeParse(input);
     if (!parsed.success) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
     const request = parsed.data;
-    const id = createHash('sha256').update(JSON.stringify(request.identity)).digest('hex');
+    const { id, directory, workspace, lease } = this.identityTarget(request.identity);
     const fingerprint = createHash('sha256').update(JSON.stringify({ request, options: this.options })).digest('hex');
-    const directory = join(this.options.workspaceRoot, id);
-    return { request, id, fingerprint, directory, workspace: join(directory, format.checkout), lease: join(directory, format.lease) };
+    return { request, id, fingerprint, directory, workspace, lease };
   }
   private async checkedDirectory(path: string) {
     const stat = await lstat(path);
@@ -47,16 +54,47 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
           signal: AbortSignal.timeout(this.options.timeoutMs), maxBuffer: this.options.outputBytes, encoding: 'utf8' })).stdout.trim();
     } catch { throw new WorkspaceError('WORKSPACE_GIT_FAILED'); }
   }
-  private async record(lease: string, fingerprint: string) {
+  private async readRecord(lease: string) {
     let parsed;
     try {
       const stat = await lstat(lease);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('unsafe');
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0
+        || (process.getuid && stat.uid !== process.getuid())) throw new Error('unsafe');
       parsed = recordSchema.parse(JSON.parse(await readFile(lease, 'utf8')));
     } catch { throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE'); }
-    if (parsed.fingerprint !== fingerprint || this.identify(parsed.request).fingerprint !== parsed.fingerprint) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     if (parsed.status !== 'ready') throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE');
     return parsed;
+  }
+  private async record(lease: string, fingerprint: string) {
+    const parsed = await this.readRecord(lease);
+    if (parsed.fingerprint !== fingerprint || this.identify(parsed.request).fingerprint !== parsed.fingerprint) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    return parsed;
+  }
+  async openRecorded(identityInput: AttemptIdentity): Promise<WorkspaceLease | null> {
+    const target = this.identityTarget(identityInput);
+    await this.checkedDirectory(this.options.workspaceRoot);
+    try { await lstat(target.directory); }
+    catch (error) { if (code(error) === 'ENOENT') return null; throw error; }
+    await this.checkedDirectory(target.directory);
+    const candidate = await this.readRecord(target.lease); const recordedTarget = this.identify(candidate.request);
+    if (recordedTarget.id !== target.id || candidate.fingerprint !== recordedTarget.fingerprint
+      || JSON.stringify(candidate.request.identity) !== JSON.stringify(target.identity)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    try { await this.checkedDirectory(target.workspace); }
+    catch { throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE'); }
+    return Object.freeze({ schemaVersion: 1, id: target.id, workspace: target.workspace,
+      baseCommit: candidate.request.baseCommit, identity: candidate.request.identity });
+  }
+  async captureBaseCommit(): Promise<string> {
+    await this.checkedDirectory(this.options.sourceRoot); await this.checkedDirectory(this.options.workspaceRoot);
+    const temporary = join(this.options.workspaceRoot, `.base-${randomUUID()}`);
+    await mkdir(temporary, { mode: 0o700 });
+    try {
+      await writeFile(join(temporary, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
+      await mkdir(join(temporary, format.hooks), { mode: 0o700 });
+      const commit = await this.git(temporary, ['-C', this.options.sourceRoot, 'rev-parse', '--verify', 'HEAD^{commit}']);
+      if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
+      return commit;
+    } finally { await rm(temporary, { recursive: true, force: true }); }
   }
   async allocate(input: WorkspaceRequest): Promise<WorkspaceLease> {
     const target = this.identify(input); const o = this.options;

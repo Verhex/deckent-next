@@ -244,3 +244,5 @@ EVAL/E-OUTPUT: reject foreign/partial/malformed retained execution output before
 EVAL/E-STORE: atomic Task acceptance with exact custody/revision fences, normalized idempotent receipts and rollback. Fable1775 PASS.
 
 EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selection, policy checks and replay integrity. Fable1779 PASS.
+
+- Execute reserved tasks using pinned Docker profiles and recorded Git workspaces; prove artifact-backed acceptance and replay without relaunch (Fable PASS 1783).

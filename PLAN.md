@@ -462,3 +462,5 @@ EVAL/E-OUTPUT DONE: Fable1773 PASS,446 tests/28 Docker. Canonical output envelop
 EVAL/E-STORE DONE: Fable1775 PASS,461 tests/28 Docker. Pure custody/revision decision and atomic Run CAS+receipt reuse existing ledger. Authenticated evaluator application is separately under review.
 
 EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evaluation derives verdict from pinned criteria after output proof, rechecks policy before atomic acceptance. Actual Docker/surface wiring is separately under review.
+
+- EXECUTION/SELECTED PASS 1783: pinned profile → recorded Git base → Docker → artifact → evaluator proved; 488 tests. Per-attempt base and new-path race evidence remain M1 follow-ups.

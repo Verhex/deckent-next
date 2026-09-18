@@ -13,3 +13,4 @@ export type { CancellationDelivery, CancellationDeliveryLimits, CancellationDeli
 export { decideCancellationDeliveryClaim, decideCancellationDeliveryFinish } from './internal/delivery-transition.js';
 export { resolveExecutionRegistry, assertRunExecution, ExecutionRegistryError } from './internal/registry.js';
 export type { ExecutionRegistryValidation } from './internal/registry.js';
+export { selectReservedTaskProfile } from './internal/execution.js';

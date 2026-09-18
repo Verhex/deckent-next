@@ -14,10 +14,18 @@ export class DockerTaskProfileError extends Error {
 /** Installed registry validator for task templates. Host executable, workspace and OS identity are
  * supplied later by trusted runtime composition and are never accepted as registry parameters. */
 export function validateDockerTaskProfile(input: ExecutionProfileDefinition): undefined {
+  resolveDockerTaskProfile(input);
+  return undefined;
+}
+
+/** Materialize only pinned task data. Host executable and OS/workspace custody stay in composition. */
+export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   const profile = executionProfileDefinitionSchema.safeParse(input);
-  if (!profile.success || profile.data.adapter.id !== 'docker' || profile.data.adapter.version !== 2
-    || !dockerTaskProfileParametersSchema.safeParse(profile.data.parameters).success) {
+  if (!profile.success || profile.data.adapter.id !== 'docker' || profile.data.adapter.version !== 2) {
     throw new DockerTaskProfileError();
   }
-  return undefined;
+  const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
+  if (!parsed.success) throw new DockerTaskProfileError();
+  const { argv, ...options } = parsed.data;
+  return Object.freeze({ argv, options: Object.freeze(options) });
 }
