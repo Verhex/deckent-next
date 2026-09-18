@@ -2,7 +2,7 @@ import { chmod, link, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { inspectProductFile, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { inspectProductFile, prepareProductFile, prepareProductSocket, resolveProductLayout } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -30,4 +30,16 @@ describe.skipIf(process.platform === 'win32')('existing managed file inspection'
     await rm(file + '-wal'); await rm(file); await symlink(join(root, 'absent'), file);
     await expect(inspectProductFile(layout, 'ledger')).rejects.toThrow('MANAGED_FILE_UNSAFE');
   });
+});
+
+it.skipIf(process.platform === 'win32')('prepares a configured socket location without creating or replacing its endpoint', async () => {
+  const { root } = await fixture();
+  const layout = resolveProductLayout({ projectRoot: root, root: join(root, 'data'), resources: { runtimeSocket: 'custom/service.sock' } });
+  await expect(prepareProductSocket(layout, 'runtimeSocket', false)).rejects.toThrow('MANAGED_FILE_MISSING');
+  const endpoint = await prepareProductSocket(layout, 'runtimeSocket');
+  expect(endpoint).toBe(join(root, 'data/custom/service.sock'));
+  await expect(stat(endpoint)).rejects.toMatchObject({ code: 'ENOENT' });
+  await writeFile(endpoint, 'owner-data', { mode: 0o600 });
+  await expect(prepareProductSocket(layout, 'runtimeSocket')).rejects.toThrow('MANAGED_FILE_UNSAFE');
+  expect(await readFile(endpoint, 'utf8')).toBe('owner-data');
 });

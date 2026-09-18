@@ -605,5 +605,12 @@
   "cli.usage.help": "deckent --help komutuyla yardımı açın.",
   "cli.usage.arguments": "argümanlar",
   "cli.graph.expected": "geçerli UTF-8 JSON gerekli",
-  "cli.graph.configuredLimit": "yapılandırılmış sınır"
+  "cli.graph.configuredLimit": "yapılandırılmış sınır",
+  "config.field.service": "Ortak yerel runtime servisi sınırları ve kontrollü kapanış",
+  "cli.runtime.ready": "Runtime servisi hazır: {endpoint}.",
+  "cli.runtime.recovery": "İptal kurtarma {count} kaydı inceledi.",
+  "cli.runtime.recoveryFailed": "İptal kurtarma devam edemedi: {code}.",
+  "cli.runtime.stopped": "Runtime servisi kapanışı: {state}.",
+  "cli.runtime.clean": "tamamlandı",
+  "cli.runtime.incomplete": "tamamlanmadı; kalıcı kayıtlarda işler var"
 }

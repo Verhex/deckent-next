@@ -16,7 +16,8 @@
     "tenants": "tenants",
     "ledger": "state/ledger.db",
     "workspaces": "workspaces",
-    "policy": "policy.json"
+    "policy": "policy.json",
+    "runtimeSocket": "state/runtime.sock"
   },
   "bootstrapResource": "config",
   "rootEnvironmentKey": "DECKENT_HOME"

@@ -605,5 +605,12 @@
   "cli.usage.help": "Run deckent --help.",
   "cli.usage.arguments": "arguments",
   "cli.graph.expected": "valid UTF-8 JSON required",
-  "cli.graph.configuredLimit": "configured limit"
+  "cli.graph.configuredLimit": "configured limit",
+  "config.field.service": "Common local runtime service limits and graceful shutdown",
+  "cli.runtime.ready": "Runtime service ready: {endpoint}.",
+  "cli.runtime.recovery": "Cancellation recovery examined {count} records.",
+  "cli.runtime.recoveryFailed": "Cancellation recovery could not proceed: {code}.",
+  "cli.runtime.stopped": "Runtime service shutdown: {state}.",
+  "cli.runtime.clean": "complete",
+  "cli.runtime.incomplete": "incomplete; durable work remains"
 }

@@ -494,3 +494,5 @@ RUNTIME/HOST PASS1834: feat(runtime): host bounded cancellation recovery loop. R
 ADMISSION/POOL PASS1834: refactor(admission): enforce pool authorization in engine.
 
 SERVICE/PROTOCOL PASS1834: feat(runtime): define strict correlated service protocol.
+
+SERVICE-CORE PASS1839:452692b22bdc: feat(runtime): host authenticated local service and client. Shutdown finalization correction follows reviewed SERVICE/SHUTDOWN; no DOGFOOD claim.

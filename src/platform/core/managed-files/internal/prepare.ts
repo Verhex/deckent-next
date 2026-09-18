@@ -100,3 +100,13 @@ export async function inspectProductFile(layout: ProductLayout, resource: Produc
   } finally { await handle.close(); }
   return path;
 }
+
+/** Resolve a managed local socket location; never create or replace the socket itself. */
+export async function prepareProductSocket(layout: ProductLayout, resource: ProductResource, createParents = true): Promise<string> {
+  const path = await prepareLocation(layout, resource, false, createParents);
+  const stat = await inspect(path);
+  if (stat && (!stat.isSocket() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o600)) {
+    throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  }
+  return path;
+}

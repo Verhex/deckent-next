@@ -18,8 +18,8 @@ function abortableWait(milliseconds: number, signal: AbortSignal): Promise<void>
   });
 }
 /** Runs recovery only for trusted configured scopes. It owns no detached timer or transport lifecycle. */
-export async function runConfiguredCancellationRuntime(projectRoot: string, input: ConfiguredCancellationRuntimeInput,
-  options: ConfigLoadOptions = {}): Promise<void> {
+export async function prepareConfiguredCancellationRuntime(projectRoot: string, observer: ConfiguredCancellationRuntimeObserver,
+  options: ConfigLoadOptions = {}) {
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   const runtime = config.cancellationRuntime;
   if (!runtime) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellationRuntime' } });
@@ -27,8 +27,14 @@ export async function runConfiguredCancellationRuntime(projectRoot: string, inpu
     try { return (await recoverConfiguredCancellations(projectRoot, command, options)).recovery; }
     catch (error) { throw queryFailure(error); }
   }, abortableWait, { now: Date.now }, {
-    onPage: input.observer.onPage,
-    async onError(command, error) { await input.observer.onError(command, queryFailure(error)); },
+    onPage: observer.onPage,
+    async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, runtime);
-  await loop.run(input.signal);
+  return Object.freeze({ run: (signal: AbortSignal) => loop.run(signal) });
+}
+
+export async function runConfiguredCancellationRuntime(projectRoot: string, input: ConfiguredCancellationRuntimeInput,
+  options: ConfigLoadOptions = {}): Promise<void> {
+  const prepared = await prepareConfiguredCancellationRuntime(projectRoot, input.observer, options);
+  await prepared.run(input.signal);
 }

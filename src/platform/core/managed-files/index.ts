@@ -1,1 +1,1 @@
-export { prepareProductFile, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError } from './internal/prepare.js';
+export { prepareProductFile, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError } from './internal/prepare.js';

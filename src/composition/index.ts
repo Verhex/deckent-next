@@ -10,3 +10,5 @@ export { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 export { recoverConfiguredCancellations } from '#composition/core/runs/index.js';
 export { runConfiguredCancellationRuntime } from '#composition/core/runtime/index.js';
 export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
+
+export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';

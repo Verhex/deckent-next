@@ -18,3 +18,5 @@ export type { ProcessSupervisorOptions } from '#adapters/core/process-supervisor
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 export { processCommandSchema, processEvidenceSchema, validateProcessEvidence, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
 export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-runner/index.js';
+
+export * from '#adapters/core/local-runtime-socket/index.js';

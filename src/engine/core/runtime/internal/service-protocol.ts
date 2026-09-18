@@ -25,5 +25,6 @@ export function parseRuntimeServiceResponse(requestId: string, value: unknown): 
   return response;
 }
 export type RuntimeServiceOperation = z.infer<typeof runtimeServiceOperationSchema>;
+export function classifyRuntimeServiceOperation(operation: RuntimeServiceOperation): 'execution' | 'control' { return operation === 'executeTask' ? 'execution' : 'control'; }
 export type RuntimeServiceRequest = z.infer<typeof runtimeServiceRequestSchema>;
 export type RuntimeServiceResponse = z.infer<typeof runtimeServiceResponseSchema>;
