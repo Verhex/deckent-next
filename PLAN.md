@@ -488,3 +488,5 @@ RUN/CUSTODY PASS1834: feat(workspace): persist immutable Run source custody.
 GIT/CUSTODY PASS1834: feat(git): validate recorded workspace source and base.
 
 RUN/BASE PASS1834: feat(workspace): share one immutable Git base across a Run.
+
+RUNTIME/HOST PASS1834: feat(runtime): host bounded cancellation recovery loop. Required distinct config description key R1 follows separately.

@@ -13,7 +13,7 @@ export class CancellationDeliveryWorker {
     limits: CancellationDeliveryLimits, private readonly runtime: { now(): number; token(): string }) {
     this.limits = cancellationDeliveryLimitsSchema.parse(limits);
   }
-  async deliver(identity: AttemptIdentity, credential?: unknown): Promise<RunCancellationOutcome> {
+  async deliver(identity: AttemptIdentity, credential?: unknown, onFailure?: (error: unknown) => void): Promise<RunCancellationOutcome> {
     let status: RunCancellationOutcome['status']; let delivery: RunCancellationOutcome['delivery'];
     try {
       const record = await this.store.loadCancellationDispatch(identity);
@@ -26,13 +26,14 @@ export class CancellationDeliveryWorker {
         if (claimed.acquired) {
           let outcome: 'terminal' | 'prevented' | 'unresolved' | 'denied' | 'unavailable';
           try { outcome = (await this.dispatch.cancel(record.request, credential)).kind; }
-          catch (error) { outcome = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable'; }
+          catch (error) { onFailure?.(error); outcome = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable'; }
           persisted = await this.store.finishCancellationDelivery({ ...input, now: this.runtime.now(), outcome });
         }
         status = persisted.state === 'terminal' || persisted.state === 'prevented' ? persisted.state : persisted.lastOutcome ?? 'unresolved';
         delivery = Object.freeze({ state: persisted.state, attempts: persisted.attempts, nextEligibleAt: persisted.state === 'claimed' ? persisted.claimUntil : persisted.nextEligibleAt });
       }
     } catch (error) {
+      onFailure?.(error);
       status = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable';
     }
     return Object.freeze({ attemptId: identity.attemptId, taskId: identity.taskId, status, ...(delivery ? { delivery } : {}) });

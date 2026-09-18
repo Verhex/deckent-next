@@ -19,3 +19,5 @@ export { reserveConfiguredRunTasks as reserveRunTasks } from '#composition/index
 export type { RunReservationCommand } from '#engine/index.js';
 export { recoverConfiguredCancellations as recoverCancellations } from '#composition/index.js';
 export type { CancellationRecoveryCommand } from '#engine/index.js';
+export { runConfiguredCancellationRuntime } from '#composition/index.js';
+export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/index.js';

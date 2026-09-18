@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "6b1da2c40a352a3ba2c4dd5692621d2e698cb0897dca5aaf29e0f51f79f68846",
-    "src/platform/core/config-fields/internal/fields.ts": "33c665458d20a72e36fb23b4788ae58ec84964cc400f1e1cdb1004596acc1f2f",
+    "src/platform/core/config-fields/internal/fields.ts": "4f3bb1160a8fdc1b35b3ecf05b3e6f040c758c16622257c79ad232a618a1e9ca",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -32,6 +32,7 @@
     "cli": [],
     "mcp": [],
     "cancellation": [],
+    "cancellationRuntime": [],
     "admission": [
       "input-order"
     ],

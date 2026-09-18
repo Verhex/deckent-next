@@ -12,7 +12,17 @@ import { cancellationRecoveryPageSchema, type CancellationRecoveryQueryStore } f
 export const cancellationRecoveryCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   afterAttemptId: identitySchema.nullable() }).strict();
 export type CancellationRecoveryCommand = z.infer<typeof cancellationRecoveryCommandSchema>;
-export type CancellationRecoveryOutcome = Readonly<{ identity: AttemptIdentity; outcome: RunCancellationOutcome }>;
+export const cancellationRecoveryFailureReasonSchema = z.enum(['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED',
+  'POLICY_DENIED', 'POLICY_UNAVAILABLE', 'CANCELLATION_DELIVERY_CONFLICT', 'CANCELLATION_DELIVERY_CORRUPT', 'UNKNOWN']);
+export type CancellationRecoveryFailureReason = z.infer<typeof cancellationRecoveryFailureReasonSchema>;
+export type CancellationRecoveryOutcome = Readonly<{ identity: AttemptIdentity; outcome: RunCancellationOutcome; reason?: CancellationRecoveryFailureReason }>;
+
+function failureReason(error: unknown): CancellationRecoveryFailureReason {
+  if (error instanceof AuthenticationError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
+  if (error instanceof PolicyAuthorizationError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
+  if (error instanceof CancellationDeliveryError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
+  return 'UNKNOWN';
+}
 
 /** A bounded recovery page consumes durable intent, never creates a new cancellation command.
  * Lifecycle hosting is separate. Stopping a host must await its in-flight page.
@@ -49,17 +59,19 @@ export class CancellationRecoveryApplication {
     const work = async () => {
       while (cursor < page.identities.length) {
         const index = cursor++; const identity = page.identities[index]!;
-        let outcome: RunCancellationOutcome;
+        let outcome: RunCancellationOutcome; let reason: CancellationRecoveryFailureReason | undefined;
         try {
           const current = await authenticate(this.verifier, credential, command.scopeId);
           await this.scopeAuthorization.authorize(command.scopeId, current);
           await this.runAuthorization.authorize('cancel', { schemaVersion: 1, scopeId: identity.scopeId, runId: identity.runId }, current);
-          outcome = await this.worker.deliver(identity, credential);
+          outcome = await this.worker.deliver(identity, credential, error => { reason = failureReason(error); });
         } catch (error) {
           outcome = { attemptId: identity.attemptId, taskId: identity.taskId,
             status: error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable' };
+          outcomes[index] = Object.freeze({ identity, outcome, reason: failureReason(error) });
+          continue;
         }
-        outcomes[index] = Object.freeze({ identity, outcome });
+        outcomes[index] = Object.freeze({ identity, outcome, ...(reason ? { reason } : {}) });
       }
     };
     await Promise.all(Array.from({ length: Math.min(this.concurrency, page.identities.length) }, work));

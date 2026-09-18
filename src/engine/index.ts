@@ -15,6 +15,7 @@ export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventory
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 export { planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
+export * from '#engine/core/runtime/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
 export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
