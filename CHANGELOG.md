@@ -140,3 +140,5 @@ RUN/I DONE: authenticated create service with strict task-graph input, trusted c
 RUN/J DONE: configured local SDK admission with explicit pool-use authority, trusted layout/clock, declared input-order and dedicated Run errors.249 tests/13 Docker; Fable1529 PASS. Zero-capacity profile semantics and admission-triggered schema migration need followup; no launch implied.
 
 MCP/A: added versioned read-only stdio MCP tools with shared schemas, policy checks, bounded concurrency/output and redacted errors; official SDK pinned. Independently reviewed 1534.
+
+RUN/K DONE — SDK admission requires positive capacity and current ledger schema inside writer transaction; no implicit migration. PASS1547,253 tests/13 Docker. Follow-up: shared schema-version constant.

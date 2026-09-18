@@ -27,7 +27,7 @@ export const CONFIG_FIELDS = Object.freeze({
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   admission: field('config.field.admission', z.object({ poolId: z.string().min(1),
-    executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe(),
+    executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   inspection: field('config.field.inspection', z.object({

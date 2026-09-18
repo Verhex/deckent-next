@@ -21,7 +21,7 @@ export async function createConfiguredRun(projectRoot: string, input: RunAdmissi
         try { return await reader.loadRunReceipt(scopeId, commandId); } finally { reader.close(); }
       },
       async createRun(request: RunCreate) {
-        const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite);
+        const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
         try { return await writer.createRun(request); } finally { writer.close(); }
       },
     };

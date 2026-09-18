@@ -13,7 +13,8 @@ import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type Attemp
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, DispatchInventoryStore, RunStore {
   private readonly db: DatabaseSync;
-  constructor(path: string, options: SqliteAttemptOptions) {
+  constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow') {
+    if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
     const parsed = sqliteAttemptOptionsSchema.safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
     try { this.db = new DatabaseSync(path, { timeout: parsed.data.busyTimeoutMs }); }
@@ -21,6 +22,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
     try {
       this.db.exec('BEGIN IMMEDIATE');
       const version = this.db.prepare('PRAGMA user_version').get()?.user_version;
+      if (migration === 'forbid' && version !== 4) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
       if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
       if (version === 0) this.db.exec(`
         CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,

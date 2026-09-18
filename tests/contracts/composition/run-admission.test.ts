@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
@@ -52,4 +53,21 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission = null; await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
     await expect(createRun(f.project, { ...command, commandId: 'second', runId: 'r2' }, f.options)).rejects.toMatchObject({ code: 'RUN_ADMISSION_NOT_CONFIGURED' });
   });
+  it('rejects zero-capacity profiles instead of creating permanently pending work', async () => {
+    const f = await fixture(); await f.policy(true, true);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission.executionSlots = 0;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await expect(createRun(f.project, command, f.options)).rejects.toThrow();
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try { expect(db.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); } finally { db.close(); }
+  });
+  it('refuses schema upgrade during SDK admission and leaves the older ledger unchanged', async () => {
+    const f = await fixture(); await f.policy(true, true); const db = new DatabaseSync(f.path);
+    db.exec('DROP TABLE execution_pools; PRAGMA user_version=3'); db.close(); const before = await readFile(f.path);
+    await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    expect(await readFile(f.path)).toEqual(before);
+    const reader = new DatabaseSync(f.path, { readOnly: true });
+    try { expect(reader.prepare('PRAGMA user_version').get()!.user_version).toBe(3); expect(reader.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); } finally { reader.close(); }
+  });
+
 });
