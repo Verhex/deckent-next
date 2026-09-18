@@ -760,5 +760,6 @@
   "error.RUN_POOL_REQUIRED": "A valid assigned execution pool is required.",
   "error.RUN_POOL_CONFLICT": "The execution pool already has different capacity settings.",
   "error.RUN_POOL_FULL": "The execution pool has no available capacity.",
-  "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order."
+  "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order.",
+  "error.CANCELLATION_NOT_CONFIGURED": "Cancellation delivery requires an explicit delivery limit and execution profile."
 }

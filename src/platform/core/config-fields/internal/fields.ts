@@ -26,6 +26,7 @@ export const CONFIG_FIELDS = Object.freeze({
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  cancellation: field('config.field.cancellation', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe() }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   admission: field('config.field.admission', z.object({ poolId: z.string().min(1),
     executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),

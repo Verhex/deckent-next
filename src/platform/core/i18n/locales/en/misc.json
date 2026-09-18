@@ -582,5 +582,6 @@
   "mcp.tool.inspectRun": "Read a recorded Run and its tasks. This is not live worker status or proof of acceptance. Requires current Run inspection policy.",
   "mcp.tool.inspectInventory": "Read a bounded page of recorded execution attempts in one authorized scope. Does not start or stop workers.",
   "mcp.tool.policyVocabulary": "List built-in policy resource and action identifiers. This metadata grants no permissions.",
-  "mcp.tool.requestRunCancellation": "Record a durable Run cancellation request only. This tool does not deliver cancellation to workers, confirm termination or reverse effects. Inspect the Run first and use its current revision. Keep commandId unchanged when retrying an uncertain response; inspect recorded state because a response failure may follow a committed request. Requires current Run cancellation policy."
+  "mcp.tool.requestRunCancellation": "Record a durable Run cancellation request only. This tool does not deliver cancellation to workers, confirm termination or reverse effects. Inspect the Run first and use its current revision. Keep commandId unchanged when retrying an uncertain response; inspect recorded state because a response failure may follow a committed request. Requires current Run cancellation policy.",
+  "config.field.cancellation": "Maximum parallel worker cancellation deliveries"
 }

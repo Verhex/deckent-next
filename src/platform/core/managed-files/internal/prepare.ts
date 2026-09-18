@@ -70,6 +70,11 @@ async function prepareLocation(layout: ProductLayout, resource: ProductResource,
   return path;
 }
 
+/** Validate an existing managed directory without creating or repairing it. */
+export async function inspectProductDirectory(layout: ProductLayout, resource: ProductResource): Promise<string> {
+  return prepareLocation(layout, resource, true, false);
+}
+
 export async function prepareProductDirectory(layout: ProductLayout, resource: ProductResource): Promise<string> {
   return prepareLocation(layout, resource, true);
 }

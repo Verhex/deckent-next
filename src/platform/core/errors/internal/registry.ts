@@ -4,6 +4,7 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
   RUN_ADMISSION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_ADMISSION_NOT_CONFIGURED', p, l) }) },
   RUN_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CORRUPT', p, l) }) },
   RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l) }) },

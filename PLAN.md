@@ -404,3 +404,5 @@ RUN/N: shared config/OS identity/fresh policy/membership/deferred ledger path fo
 SUPERVISOR/M: bounded process-group termination observation, ENOENT-only absence; no runner changes. Fable PASS1638, 331 tests/15 Docker plus ten target repetitions. No OS reaping or escaped-session assurance.
 
 MCP/D: explicit cancellation-intent tool with native write/idempotency annotations and common SDK authority; real stdio parity, fresh policy denial. Fable PASS1639, 334 tests/15 Docker. Worker delivery not invoked by this tool; no alias for renamed internal server factory.
+
+CANCEL/D DONE — configured SDK cancellation delivery, fresh per-attempt cancel policy, bounded coordination; Fable 1642 PASS, 336 tests including 16 real Docker. Undispatched runtime-directory preflight refinement remains.

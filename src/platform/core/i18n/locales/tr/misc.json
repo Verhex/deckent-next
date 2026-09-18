@@ -582,5 +582,6 @@
   "mcp.tool.inspectRun": "Kayıtlı Run ve işlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme girişimlerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
   "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez.",
-  "mcp.tool.requestRunCancellation": "Yalnız kalıcı Run iptal isteği kaydeder. İptali worker’lara iletmez, durmayı doğrulamaz ve etkileri geri almaz. Önce Run durumunu okuyup güncel revizyonunu kullanın. Belirsiz yanıtı tekrar denerken commandId değişmemeli; yanıt hatası kaydedilmiş bir isteğin ardından gelebileceğinden kayıtlı durumu inceleyin. Güncel Run iptal izni gerektirir."
+  "mcp.tool.requestRunCancellation": "Yalnız kalıcı Run iptal isteği kaydeder. İptali worker’lara iletmez, durmayı doğrulamaz ve etkileri geri almaz. Önce Run durumunu okuyup güncel revizyonunu kullanın. Belirsiz yanıtı tekrar denerken commandId değişmemeli; yanıt hatası kaydedilmiş bir isteğin ardından gelebileceğinden kayıtlı durumu inceleyin. Güncel Run iptal izni gerektirir.",
+  "config.field.cancellation": "Paralel worker iptal teslimi üst sınırı"
 }

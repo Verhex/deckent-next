@@ -760,5 +760,6 @@
   "error.RUN_POOL_REQUIRED": "Geçerli, atanmış bir yürütme havuzu gerekli.",
   "error.RUN_POOL_CONFLICT": "Yürütme havuzunun farklı kapasite ayarları mevcut.",
   "error.RUN_POOL_FULL": "Yürütme havuzunda kullanılabilir kapasite yok.",
-  "error.RUN_CAPACITY_OR_ORDER": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor."
+  "error.RUN_CAPACITY_OR_ORDER": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor.",
+  "error.CANCELLATION_NOT_CONFIGURED": "İptal teslimi için açık bir teslim sınırı ve yürütme profili gerekir."
 }
