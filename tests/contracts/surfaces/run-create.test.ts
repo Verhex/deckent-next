@@ -43,6 +43,23 @@ it('rejects unknown or duplicate flags, invalid graphs, and oversized input befo
   expect(f.calls).toEqual([]);
 });
 
+it('reports contextual usage parameters without leaking supplied values', async () => {
+  const f = await fixture(); let text = '';
+  expect(await (await import('#surfaces/index.js')).main(['run', 'reserve', '--scope', 'secret-scope'], {
+    env: f.context.env, stderr: { write(value: string) { text += value; } }, async reserveRunTasks() { throw new Error('handler called'); },
+  })).toBe(2);
+  expect(text).toContain('deckent run reserve'); expect(text).toContain('--command-id'); expect(text).toContain('Usage:'); expect(text).not.toContain('secret-scope');
+});
+
+it('reports missing criterion definitions with a safe graph path and reason before admission', async () => {
+  const f = await fixture(); const file = join(f.root, 'missing-criterion.json');
+  await writeFile(file, JSON.stringify({ ...graph, tasks: [{ ...graph.tasks[0], id: 'private-secret-task' }], criterionDefinitions: [] }));
+  await expect(runCommand([...command, file], f.context)).rejects.toMatchObject({ code: 'CLI_GRAPH_INPUT_INVALID', params: {
+    path: 'graph.tasks.0.acceptanceCriteria.0', reason: 'TASK_CRITERION_DEFINITION_MISSING',
+  } });
+  expect(f.calls).toEqual([]); expect(JSON.stringify(f.output)).not.toContain('private-secret-task');
+});
+
 it('uses the configured graph limit and reports admission without claiming execution in English or Turkish', async () => {
   const f = await fixture({ graphInputMaxBytes: Buffer.byteLength(JSON.stringify(graph)) }); const file = join(f.root, 'graph.json'); await writeFile(file, JSON.stringify(graph));
   await runCommand([...command, file, '--lang', 'en'], f.context);

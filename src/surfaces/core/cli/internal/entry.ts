@@ -18,6 +18,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
+    if ((argv[0] === 'run' || argv[0] === 'task') && (argv[1] === '--help' || argv[1] === '-h') && argv.length === 2) {
+      emit(argv[0] === 'run' ? t('cli.help.run', {}, locale) : t('cli.help.task', {}, locale),
+        { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
+      return 0;
+    }
     context.initialize?.();
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });

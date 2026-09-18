@@ -11,7 +11,7 @@ export async function readGraphInput(source: string, maxBytes: number, stdin: Re
     for await (const chunk of stream) {
       const buffer = Buffer.from(chunk);
       bytes += buffer.byteLength;
-      if (bytes > maxBytes) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_LIMIT');
+      if (bytes > maxBytes) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_LIMIT', { params: { limit: maxBytes } });
       chunks.push(buffer);
     }
     try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); }
@@ -26,7 +26,7 @@ export async function readGraphInput(source: string, maxBytes: number, stdin: Re
     try {
       const info = await file.stat();
       if (!info.isFile()) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID');
-      if (info.size > maxBytes) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_LIMIT');
+      if (info.size > maxBytes) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_LIMIT', { params: { limit: maxBytes } });
       return await consume(file.createReadStream({ autoClose: false }));
     } finally { await file.close(); }
   } catch (error) {

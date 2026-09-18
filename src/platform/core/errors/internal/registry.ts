@@ -154,11 +154,11 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CONFIG_SECTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECTION_INVALID', p, l) }) },
   CONFIG_KEY_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.CONFIG_KEY_UNKNOWN', p, l) }) },
   CONFIG_VALIDATION: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_VALIDATION', p, l) }) },
-  CLI_GRAPH_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_LIMIT', p, l) }) },
-  CLI_GRAPH_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_INVALID', p, l) }) },
+  CLI_GRAPH_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_LIMIT', { ...p, limit: p.limit ?? t('cli.graph.configuredLimit', {}, l) }, l) }) },
+  CLI_GRAPH_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_INVALID', { ...p, path: p.path ?? 'graph', reason: p.reason ?? t('cli.graph.expected', {}, l) }, l) }) },
   CLI_GRAPH_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_TTY', p, l) }) },
   CLI_GRAPH_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_GRAPH_INPUT_UNAVAILABLE', p, l) }) },
-  CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', p, l) }) },
+  CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 for (const definition of Object.values(definitions)) Object.freeze(definition);
 export const ERROR_CODES: readonly string[] = Object.freeze(Object.keys(definitions));

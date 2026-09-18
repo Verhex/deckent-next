@@ -1,38 +1,50 @@
+import { cliUsage, shellIdentity } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
-import type { AttemptIdentity } from '#domain/index.js';
+import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
-  const action = argv[1];
-  if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw ErrorRegistry.createError('CLI_USAGE');
+  const action = argv[1]; const usage = (flag?: string) => cliUsage('run', action, resolveLocale(undefined, context.env), flag);
+  if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
     ? ['--scope', '--id', '--lang', '--command-id', '--graph'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--json') { if (json) throw ErrorRegistry.createError('CLI_USAGE'); json = true; continue; }
+    if (arg === '--json') { if (json) throw usage(); json = true; continue; }
     if (arg === '--no-color') continue;
-    if (!allowed.includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
-    const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(arg, value);
+    if (!allowed.includes(arg)) throw usage();
+    if (values.has(arg)) throw usage(arg);
+    const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
   }
   const scopeId = values.get('--scope'); const runId = values.get('--id');
-  if (!scopeId || !runId) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!scopeId || !runId) throw usage(!scopeId ? '--scope' : '--id');
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   if (action === 'create') {
     const commandId = values.get('--command-id'); const source = values.get('--graph');
-    if (!commandId || !source) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!commandId || !source) throw usage(!commandId ? '--command-id' : '--graph');
     if (!context.createRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const root = context.root ?? process.cwd(); const options = { env: context.env ?? process.env };
     const config = await loadConfig(root, options);
     const graph = await readGraphInput(source === '-' ? source : resolve(root, source), config.cli.graphInputMaxBytes, context.stdin);
+    try { validateTaskGraph(graph); }
+    catch (error) {
+      if (!(error instanceof TaskGraphError)) throw error;
+      throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID', { params: {
+        path: ['graph', ...(error.issues[0]?.path ?? [])].join('.'), reason: error.code,
+      } });
+    }
     const parsed = runAdmissionSchema.safeParse({ schemaVersion: 1, commandId, scopeId, runId, graph });
-    if (!parsed.success) throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID');
+    if (!parsed.success) {
+      const issue = sanitizeIssues(parsed.error.issues)[0];
+      throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID', { params: { path: issue?.path.join('.') ?? 'graph', reason: issue?.code ?? 'invalid' } });
+    }
     const result = await context.createRun(root, parsed.data, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
       run: data.admission.run.runId, revision: data.admission.run.revision,
@@ -40,19 +52,19 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   }
   if (action === 'reserve') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
-    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
     if (!context.reserveRunTasks) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const command = runReservationCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: Number(revision) });
     const result = await context.reserveRunTasks(context.root ?? process.cwd(), command, { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.run.reserve.heading', { run: runId, command: commandId, count: data.reservation.identities.length }, locale),
-      ...data.reservation.identities.map(identity => t('cli.run.reserve.identity', identity, locale)),
+      ...data.reservation.identities.map(identity => t('cli.run.reserve.identity', Object.fromEntries(Object.entries(identity).map(([key, value]) => [key, shellIdentity(value)])), locale)),
     ].join('\n') });
     return;
   }
   if (action === 'cancel') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
-    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
     if (!context.deliverRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {

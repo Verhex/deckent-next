@@ -1,0 +1,198 @@
+{
+  "en": {
+    "cli.help": {
+      "before": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  Cancellation records the request and attempts worker delivery. Reuse the same --command-id and input after an uncertain response. Inspect recorded state before issuing a changed command; use a new command ID and its current --expected-revision.\n  run create --scope <id> --id <run> --command-id <id> --graph <file|-> [--json] [--lang en|tr]\n  run reserve --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  task execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> [--json]\n  task evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> --command-id <id> --expected-revision <n> [--json]",
+      "after": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  run create --scope <id> --id <run> --command-id <id> --graph <file|-> [--json] [--lang en|tr] [--no-color]\n  run reserve --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  task execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> [--json] [--lang en|tr] [--no-color]\n  task evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr] [--no-color]\n  --graph - reads graph JSON from piped stdin. --json writes one result to stdout; errors use stderr.\n  Exit codes: 0 success, 1 operation error, 2 usage, 78 configuration."
+    },
+    "cli.run.desc": {
+      "before": "Execute admitted tasks from directives",
+      "after": "Manage admitted Runs and Tasks"
+    },
+    "cli.run.reserve.heading": {
+      "before": "Reserved {count} Attempt(s) for Run {run} (command {command})",
+      "after": "Reserved {count} Attempts for Run {run} (command {command})"
+    },
+    "cli.run.reserve.identity": {
+      "before": "scope={scopeId} run={runId} task={taskId} attempt={attemptId} generation={generation} layout={layoutRevision}",
+      "after": "Next step: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}"
+    },
+    "cli.task.execute.terminal": {
+      "before": "The worker has a recorded terminal process result.",
+      "after": "Process exit recorded: exitCode={exitCode}, signal={signal}."
+    },
+    "cli.task.execute.prevented": {
+      "before": "Launch was prevented before execution permission was granted.",
+      "after": "Execution was prevented before launch permission was granted."
+    },
+    "cli.task.execute.unresolved": {
+      "before": "Execution custody is recorded, but no terminal process result is available.",
+      "after": "No process exit has been recorded; the outcome is unknown."
+    },
+    "cli.task.execute.notice": {
+      "before": "A terminal process result is not Task acceptance.",
+      "after": "Process exit is not task acceptance. Evaluate the recorded evidence to determine acceptance."
+    },
+    "cli.task.evaluate.result": {
+      "before": "Task {task} evaluation command {command}: phase={phase}, Run revision={revision}",
+      "after": "Recorded Task evaluation command {command}: Task {task} phase={phase}, recorded Run revision={revision}."
+    },
+    "error.CLI_USAGE": {
+      "before": "Invalid arguments. Run deckent --help.",
+      "after": "Invalid {flag} for {command}.\n{usage}"
+    },
+    "error.CLI_GRAPH_INPUT_LIMIT": {
+      "before": "Graph input exceeds cli.graphInputMaxBytes.",
+      "after": "Graph input exceeds cli.graphInputMaxBytes: {limit} bytes."
+    },
+    "error.CLI_GRAPH_INPUT_INVALID": {
+      "before": "Graph input must be a regular file or pipe containing valid UTF-8 JSON.",
+      "after": "Invalid Graph input at {path}: {reason}."
+    }
+  },
+  "tr": {
+    "cli.help": {
+      "before": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  İptal isteği kaydedilir ve worker teslimi denenir. Yanıt belirsizse aynı --command-id ve girdiyi kullanın. Değiştirilmiş komuttan önce kayıtlı durumu inceleyin; yeni komut kimliği ve güncel --expected-revision kullanın.\n  run create --scope <id> --id <run> --command-id <id> --graph <file|-> [--json] [--lang en|tr]\n  run reserve --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  task execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> [--json]\n  task evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> --command-id <id> --expected-revision <n> [--json]",
+      "after": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  run create --scope <id> --id <run> --command-id <id> --graph <dosya|-> [--json] [--lang en|tr] [--no-color]\n  run reserve --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  task execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> [--json] [--lang en|tr] [--no-color]\n  task evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n> --layout-revision <id> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr] [--no-color]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr] [--no-color]\n  --graph - grafik JSON'unu stdin pipe üzerinden okur. --json tek sonucu stdout'a yazar; hatalar stderr'e gider.\n  Çıkış kodları: 0 başarılı, 1 işlem hatası, 2 kullanım, 78 yapılandırma."
+    },
+    "cli.run.desc": {
+      "before": "Directives üzerinden kabul edilen işleri yürüt",
+      "after": "Kabul edilmiş Run ve görevleri yönet"
+    },
+    "inventory.heading": {
+      "before": "Saklanan yürütme kaydı: {count}. Bunlar kayıtlı gözlemlerdir; canlı durum veya kabul edilmiş iş sonucu değildir.",
+      "after": "Saklanan yürütme kaydı: {count}. Bunlar kayıtlı gözlemlerdir; canlı durum veya kabul edilmiş görev sonuçları değildir."
+    },
+    "inventory.row": {
+      "before": "Run {run} / iş {task} / girişim {attempt} | sahip {owner} | {state} | iptal: {cancel} | çıktı referansı: {output}",
+      "after": "Run {run} / görev {task} / Attempt {attempt} | sahip {owner} | {state} | iptal: {cancel} | çıktı referansı: {output}"
+    },
+    "cli.run.inspect.task": {
+      "before": "İş {task} ({kind})",
+      "after": "Görev {task} ({kind})"
+    },
+    "cli.run.cancel.outcome": {
+      "before": "  İş {task} / girişim {attempt}: {status}",
+      "after": "  Görev {task} / Attempt {attempt}: {status}"
+    },
+    "cli.run.cancel.empty": {
+      "before": "  Teslim yapılacak kayıtlı girişim yok.",
+      "after": "  Teslim yapılacak kayıtlı Attempt yok."
+    },
+    "cli.run.cancel.notice": {
+      "before": "  Teslim, işin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}.",
+      "after": "  Teslim, görevin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}."
+    },
+    "cli.run.cancel.unconfirmed": {
+      "before": "  Dikkat: {total} girişimin {count} tanesinde sonlanma doğrulanmadı.",
+      "after": "  Dikkat: {total} Attempt içinden {count} tanesinde sonlanma doğrulanmadı."
+    },
+    "cli.run.cancel.delivery": {
+      "before": "    Teslim denemesi: {count}; {state}",
+      "after": "    Teslim tekrarı: {count}; {state}"
+    },
+    "cli.run.cancel.deliveryExhausted": {
+      "before": "deneme sınırına ulaşıldı; belirsiz etkileri inceleyin",
+      "after": "tekrar sınırına ulaşıldı; belirsiz etkileri inceleyin"
+    },
+    "cli.run.reserve.heading": {
+      "before": "Run {run} için {count} deneme ayrıldı (komut {command})",
+      "after": "Run {run} için {count} Attempt ayrıldı (komut {command})"
+    },
+    "cli.run.reserve.identity": {
+      "before": "kapsam={scopeId} run={runId} görev={taskId} attempt={attemptId} nesil={generation} yerleşim={layoutRevision}",
+      "after": "Sonraki adım: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}"
+    },
+    "cli.task.execute.heading": {
+      "before": "Run {runId} içindeki görev {taskId} için deneme {attemptId}",
+      "after": "Run {runId} içindeki görev {taskId} için Attempt {attemptId}"
+    },
+    "cli.task.execute.terminal": {
+      "before": "Worker için kayıtlı bir terminal süreç sonucu var.",
+      "after": "Süreç çıkışı kaydedildi: exitCode={exitCode}, signal={signal}."
+    },
+    "cli.task.execute.prevented": {
+      "before": "Yürütme izni verilmeden başlatma engellendi.",
+      "after": "Başlatma izni verilmeden yürütme engellendi."
+    },
+    "cli.task.execute.unresolved": {
+      "before": "Yürütme sahipliği kayıtlı, ancak terminal süreç sonucu yok.",
+      "after": "Süreç çıkışı henüz kaydedilmemiş; sonuç bilinmiyor."
+    },
+    "cli.task.execute.notice": {
+      "before": "Terminal süreç sonucu, görev kabulü değildir.",
+      "after": "Süreç çıkışı görev kabulü değildir. Kabul için kayıtlı kanıtlar değerlendirilmelidir."
+    },
+    "cli.task.evaluate.result": {
+      "before": "Görev {task} değerlendirme komutu {command}: aşama={phase}, Run revizyonu={revision}",
+      "after": "Kayıtlı görev değerlendirme komutu {command}: görev {task} aşaması={phase}, kayıtlı Run revizyonu={revision}."
+    },
+    "mcp.tool.inspectRun": {
+      "before": "Kayıtlı Run ve işlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
+      "after": "Kayıtlı Run ve görevlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir."
+    },
+    "mcp.tool.inspectInventory": {
+      "before": "Yetkili kapsamda kayıtlı yürütme girişimlerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
+      "after": "Yetkili kapsamda kayıtlı yürütme Attempt’lerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz."
+    },
+    "mcp.tool.deliverRunCancellation": {
+      "before": "Run iptal isteğini kaydet veya tekrarını kullan; her girişimin kayıtlı supervisor profili ve yapılandırılmış teslim sınırlarıyla kayıtlı worker Attempt’lerine ilet. Run ve her Attempt için iptal izni gerekir; yürütme izni gerekmez. Her sonucu inceleyin: denied, unavailable, unresolved ve not-dispatched sonlanmayı doğrulamaz. terminal, kayıtlı süreç çıkışıdır; iş kabulü veya etkilerin geri alınması değildir. İptal teslim sınırları yapılandırılmış olmalıdır. prevented, yürütme öncesi başlatma izninin engellendiğini gösterir; süreç çıkışı değildir. Belirsiz tekrarda aynı commandId ve girdiyi kullanın. Kullanıcının iptal isteğini yerine getirmek için bu aracı kullanın; request_run_cancellation yalnızca niyet kaydı isteyen entegrasyonlar içindir. Teslim şeması 2 kalıcı deneme sayısı, durum ve nextEligibleAt içerir; tekrar çağrı yalnız zamanı gelen kayıtları yapılandırılmış sınırlar içinde yeniden teslim eder. Bu komut arka plan daemon kurmaz.",
+      "after": "Run iptal isteğini kaydet veya tekrarını kullan; her Attempt’in kayıtlı supervisor profili ve yapılandırılmış teslim sınırlarıyla kayıtlı worker Attempt’lerine ilet. Run ve her Attempt için iptal izni gerekir; yürütme izni gerekmez. Her sonucu inceleyin: denied, unavailable, unresolved ve not-dispatched sonlanmayı doğrulamaz. terminal, kayıtlı süreç çıkışıdır; görev kabulü veya etkilerin geri alınması değildir. İptal teslim sınırları yapılandırılmış olmalıdır. prevented, yürütme öncesi başlatma izninin engellendiğini gösterir; süreç çıkışı değildir. Belirsiz tekrarda aynı commandId ve girdiyi kullanın. Kullanıcının iptal isteğini yerine getirmek için bu aracı kullanın; request_run_cancellation yalnızca niyet kaydı isteyen entegrasyonlar içindir. Teslim şeması 2 kalıcı deneme sayısı, durum ve nextEligibleAt içerir; tekrar çağrı yalnız zamanı gelen kayıtları yapılandırılmış sınırlar içinde yeniden teslim eder. Bu komut arka plan daemon kurmaz."
+    },
+    "mcp.tool.reconcileAttempt": {
+      "before": "Kayıtlı worker durumunu gözlemleyip doğrulanmış süreç çıkışını kalıcı kayda işler. inspect_inventory tarafından verilen tam kimliği kullanın; çalışma yolu, komut veya nesil uydurmayın. Girişim için güncel reconcile izni gerekir. Worker başlatmaz, tekrar çalıştırmaz, iptal etmez veya silmez. Bulunamayan ya da çalışan worker belirsiz kalır; terminal süreç çıkışıdır, iş kabulü, çıktı kurtarma veya etkilerin geri alınması değildir. Güncel yürütme ayarları değişse de kalıcı kayıttaki profili kullanır. Envanterde sonlanma kanıtı yoksa kullanın; engellenmiş girişim engellenmiş kalır. Daemon veya host kimliği uyuşmazsa geri kurma engellenir. Tekrar güvenlidir, politika yeniden denetlenir.",
+      "after": "Kayıtlı worker durumunu gözlemleyip doğrulanmış süreç çıkışını kalıcı kayda işler. inspect_inventory tarafından verilen tam kimliği kullanın; çalışma yolu, komut veya nesil uydurmayın. Attempt için güncel reconcile izni gerekir. Worker başlatmaz, tekrar çalıştırmaz, iptal etmez veya silmez. Bulunamayan ya da çalışan worker belirsiz kalır; terminal süreç çıkışıdır, iş kabulü, çıktı kurtarma veya etkilerin geri alınması değildir. Güncel yürütme ayarları değişse de kalıcı kayıttaki profili kullanır. Envanterde sonlanma kanıtı yoksa kullanın; engellenmiş Attempt engellenmiş kalır. Daemon veya host kimliği uyuşmazsa geri kurma engellenir. Tekrar güvenlidir, politika yeniden denetlenir."
+    },
+    "error.CLI_USAGE": {
+      "before": "Argümanlar geçersiz. deckent --help çalıştırın.",
+      "after": "{command} için {flag} geçersiz.\n{usage}"
+    },
+    "error.RUN_CAPACITY_OR_ORDER": {
+      "before": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor.",
+      "after": "İstenen görevler kullanılabilir kapasiteye veya görev sırasına uymuyor."
+    },
+    "error.TASK_KIND_NOT_REGISTERED": {
+      "before": "İş türü için kayıtlı yürütme profili yok.",
+      "after": "Görev türü için kayıtlı yürütme profili yok."
+    },
+    "error.TASK_EVALUATION_STALE": {
+      "before": "Run veya deneme değişti. Yeniden değerlendirmeden önce güncel durumunu inceleyin.",
+      "after": "Run veya Attempt değişti. Yeniden değerlendirmeden önce güncel durumunu inceleyin."
+    },
+    "error.TASK_EVALUATION_NOT_READY": {
+      "before": "Bu işin değerlendirmeye hazır, tamamlanmış ve iptal edilmemiş bir yürütmesi yok.",
+      "after": "Bu görevin değerlendirmeye hazır, tamamlanmış ve iptal edilmemiş bir yürütmesi yok."
+    },
+    "error.TASK_EVALUATION_CRITERIA": {
+      "before": "Değerlendirme kriterleri kayıtlı işle eşleşmiyor.",
+      "after": "Değerlendirme kriterleri kayıtlı görevle eşleşmiyor."
+    },
+    "error.TASK_EVIDENCE_INVALID": {
+      "before": "İş kanıtı isteği geçersiz.",
+      "after": "Görev kanıtı isteği geçersiz."
+    },
+    "error.TASK_EVIDENCE_UNAVAILABLE": {
+      "before": "Kayıtlı iş kanıtı şu anda okunamıyor.",
+      "after": "Kayıtlı görev kanıtı şu anda okunamıyor."
+    },
+    "error.TASK_EVIDENCE_UNLINKED": {
+      "before": "Bu denemeye bağlı eksiksiz çıktı gerekiyor.",
+      "after": "Bu Attempt'e bağlı eksiksiz çıktı gerekiyor."
+    },
+    "error.EVALUATION_EVIDENCE_CORRUPT": {
+      "before": "Kanıt bütünlüğü doğrulanamadı. İş kabulü kaydedilmedi.",
+      "after": "Kanıt bütünlüğü doğrulanamadı. Görev kabulü kaydedilmedi."
+    },
+    "error.EVALUATION_EVIDENCE_UNAVAILABLE": {
+      "before": "Değerlendirme kanıtı kullanılamıyor. İş kabulü kaydedilmedi.",
+      "after": "Değerlendirme kanıtı kullanılamıyor. Görev kabulü kaydedilmedi."
+    },
+    "error.CLI_GRAPH_INPUT_LIMIT": {
+      "before": "Grafik girdisi cli.graphInputMaxBytes sınırını aşıyor.",
+      "after": "Graph girdisi cli.graphInputMaxBytes sınırını aşıyor: {limit} bayt."
+    },
+    "error.CLI_GRAPH_INPUT_INVALID": {
+      "before": "Grafik girdisi geçerli UTF-8 JSON içeren normal bir dosya veya pipe olmalı.",
+      "after": "Graph girdisinde {path} geçersiz: {reason}."
+    }
+  }
+}

@@ -38,7 +38,7 @@ describe.skipIf(process.platform === 'win32')('real CLI cancellation-delivery su
   it('prints truthful EN/TR text on dumb redirected terminals and denies replay after authority removal', async () => {
     const f = await fixture(); const en = await f.run(['--lang', 'en']); const tr = await f.run(['--lang', 'tr']);
     expect(en.stdout).toContain('cancellation request recorded'); expect(en.stdout).toContain('not dispatched; no worker delivery needed'); expect(en.stdout).toContain('not proof of Task acceptance');
-    expect(tr.stdout).toContain('iptal isteği'); expect(tr.stdout).toContain('çalıştırılmamış'); expect(tr.stdout).toContain('işin kabul edildiği'); expect(tr.stdout).not.toContain('\u001b');
+    expect(tr.stdout).toContain('iptal isteği'); expect(tr.stdout).toContain('çalıştırılmamış'); expect(tr.stdout).toContain('görevin kabul edildiği'); expect(tr.stdout).not.toContain('\u001b');
     await f.policy(false); await expect(f.run(['--json'])).rejects.toMatchObject({ code: 1 });
   });
   it('rejects duplicate and ambiguous revision flags before issuing intent', async () => {

@@ -480,3 +480,5 @@ POOL/AUTHORITY PASS1809: reservation pool authorization belongs to engine. Admis
 RECOVERY/COMPOSITION PASS1814: shared recorded-profile factory and bounded SDK recovery landed. Service hosting/provisioning remain open; no M1 claim.
 
 RECOVERY/PROCESS PASS1819: actual controller SIGKILL followed by fresh-process recorded-profile recovery verified. Continuous service remains next.
+
+CLI/TEXT PASS1834: fix(cli): clarify localized task lifecycle and usage.

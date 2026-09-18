@@ -8,12 +8,22 @@ const layout = resolveProductPaths('/fixture/project', { env: { HOME: '/fixture/
 
 it('executes only the exact reserved identity and never presents process exit as acceptance', async () => {
   let received: unknown, text = '';
-  const response = { schemaVersion: 1 as const, layout, execution: { identity, status: 'terminal' as const, terminal: { exitCode: 0 }, outputRecorded: true } };
+  const response = { schemaVersion: 1 as const, layout, execution: { identity, status: 'terminal' as const, terminal: { exitCode: 0, signal: null }, outputRecorded: true } };
   const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
     async executeTask(_root: string, value: unknown) { received = value; return response; } };
   expect(await main(['task', 'execute', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
-  expect(text).toContain('terminal process result'); expect(text).toContain('not Task acceptance');
+  expect(text).toContain('exitCode=0'); expect(text).toContain('signal=none'); expect(text).toMatch(/not task acceptance/i);
   text = ''; expect(await main(['task', 'execute', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text)).toEqual(response);
+});
+
+it.each([
+  ['prevented', null, 'Execution was prevented before launch permission was granted.'],
+  ['unresolved', null, 'the outcome is unknown'],
+] as const)('renders %s without inventing terminal evidence', async (status, terminal, phrase) => {
+  let text = '';
+  const context = { stdout: { write(value: string) { text += value; } },
+    async executeTask() { return { schemaVersion: 1 as const, layout, execution: { identity, status, terminal, outputRecorded: false } }; } };
+  expect(await main(['task', 'execute', ...identityArgs], context)).toBe(0); expect(text).toContain(phrase); expect(text).toMatch(/not task acceptance/i);
 });
 
 it('evaluates with a strict command and emits the composition response unchanged as JSON', async () => {

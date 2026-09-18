@@ -1,28 +1,30 @@
+import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { taskEvaluationCommandSchema, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
+import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
-  execution: Readonly<{ identity: AttemptIdentity; status: 'claimed' | 'terminal' | 'prevented' | 'unresolved'; terminal: unknown; outputRecorded: boolean }> }>>;
+  execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
-  const action = argv[1]; if (action !== 'execute' && action !== 'evaluate') throw ErrorRegistry.createError('CLI_USAGE');
+  const action = argv[1]; const usage = (flag?: string) => cliUsage('task', action, resolveLocale(undefined, context.env), flag); if (action !== 'execute' && action !== 'evaluate') throw usage();
   const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (arg === '--json') { if (json) throw ErrorRegistry.createError('CLI_USAGE'); json = true; continue; }
+    if (arg === '--json') { if (json) throw usage(); json = true; continue; }
     if (arg === '--no-color') continue;
-    if (!allowed.includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
-    const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(arg, value);
+    if (!allowed.includes(arg)) throw usage();
+    if (values.has(arg)) throw usage(arg);
+    const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
   }
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
   const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
   if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
-    || !Number.isSafeInteger(Number(generation))) throw ErrorRegistry.createError('CLI_USAGE');
+    || !Number.isSafeInteger(Number(generation))) throw usage();
   const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
@@ -31,13 +33,14 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const result = await context.executeTask(context.root ?? process.cwd(), identity, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
       t('cli.task.execute.heading', data.execution.identity, locale),
-      ({ claimed: t('cli.task.execute.claimed', {}, locale), terminal: t('cli.task.execute.terminal', {}, locale),
-        prevented: t('cli.task.execute.prevented', {}, locale), unresolved: t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
+      data.execution.status === 'terminal'
+        ? t('cli.task.execute.terminal', { exitCode: data.execution.terminal?.exitCode ?? 'none', signal: data.execution.terminal?.signal ?? 'none' }, locale)
+        : ({ prevented: t('cli.task.execute.prevented', {}, locale), unresolved: t('cli.task.execute.unresolved', {}, locale) })[data.execution.status],
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }
   const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
-  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage();
   if (!context.evaluateTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const command = taskEvaluationCommandSchema.parse({ schemaVersion: 1, commandId, identity, expectedRevision: Number(revision) });
   const result = await context.evaluateTask(context.root ?? process.cwd(), command, options);
