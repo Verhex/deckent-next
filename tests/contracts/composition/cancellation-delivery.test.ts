@@ -37,11 +37,18 @@ async function fixture(configured: boolean) {
   }
   return { project, options, store, layout, identity, policy, command: { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 1 } };
 }
-it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('delivers via %s to a real worker only after Run and Attempt cancellation authority, preserving terminal custody', async mode => {
+it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])('delivers via %s to a real worker only after Run and Attempt cancellation authority, preserving terminal custody', async mode => {
   const f = await fixture(true); const workspaceRoot = await prepareProductDirectory(f.layout, 'workspaces'); const artifactRoot = await prepareProductDirectory(f.layout, 'artifacts');
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath, args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', f.project], env: f.options.env, stderr: 'pipe' }) : null;
   const client = transport ? new Client({ name: 'delivery-proof', version: '1' }) : null;
   const deliver = async () => {
+    if (mode === 'cli') {
+      const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'),
+        'run', 'cancel', '--scope', f.command.scopeId, '--id', f.command.runId, '--command-id', f.command.commandId,
+        '--expected-revision', String(f.command.expectedRevision), '--json'], { cwd: f.project, env: f.options.env })
+        .catch(error => { const typed = JSON.parse(error.stderr); throw Object.assign(new Error(typed.code), { code: typed.code }); });
+      return JSON.parse(result.stdout) as Awaited<ReturnType<typeof deliverRunCancellation>>;
+    }
     if (!client) return deliverRunCancellation(f.project, f.command, f.options);
     const result = await client.callTool({ name: 'deliver_run_cancellation', arguments: f.command });
     if (result.isError) {

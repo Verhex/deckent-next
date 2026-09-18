@@ -412,3 +412,5 @@ MCP/E DONE — explicit delivery tool through configured SDK; official MCP stdio
 RUN/O DONE — shared context denies authenticated identities without scope membership before ledger/runtime access; Fable1664 PASS, 338 tests / 17 Docker.
 
 CANCEL/E DONE — no runtime directory or Docker dependency for undispatched attempts; shared lazy dispatch initialization. Fable1667 PASS, 339 tests / 17 Docker.
+
+RUN/P DONE — CLI cancel now performs configured delivery; SDK/CLI/MCP real worker parity, EN/TR stale/replay captures, Fable1671 PASS and ACCEPTABLE_FOR_PIPE_V1, 340 tests / 18 Docker. Partial-outcome summary and terminology refinements follow.

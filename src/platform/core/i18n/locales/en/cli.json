@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "TCP port the dashboard server listens on.",
   "cli.governance.xverify.arg.claim": "Claim or result statement the independent provider should verify.",
   "cli.heartbeat.desc": "Run proactive heartbeat tasks from .deckent/HEARTBEAT.md",
-  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]",
+  "cli.help": "Usage: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  Cancellation records the request and attempts worker delivery. Reuse the same --command-id and input after an uncertain response. Inspect recorded state before issuing a changed command; use a new command ID and its current --expected-revision.",
   "cli.help.builtin.help_command": "display help for command",
   "cli.help.builtin.help_option": "display help for command",
   "cli.help.heading.arguments": "Arguments:",
@@ -533,5 +533,13 @@
   "cli.run.inspect.states.failed": "Failed",
   "cli.run.inspect.states.cancelled": "Cancelled",
   "cli.run.inspect.states.reconciling": "Reconciling",
-  "cli.run.cancel.requested": "Run {run} | cancellation request recorded at revision {revision} | command {command}\nThis command does not deliver cancellation to workers. It does not confirm worker termination or reverse completed effects. Use run inspect to read recorded state."
+  "cli.run.cancel.heading": "Run {run} | cancellation request recorded | command {command}",
+  "cli.run.cancel.outcome": "  Task {task} / attempt {attempt}: {status}",
+  "cli.run.cancel.terminal": "process exit recorded",
+  "cli.run.cancel.unresolved": "unresolved; termination not confirmed",
+  "cli.run.cancel.denied": "delivery denied by policy; termination not confirmed",
+  "cli.run.cancel.unavailable": "delivery unavailable; termination not confirmed",
+  "cli.run.cancel.notDispatched": "not dispatched; no worker delivery needed",
+  "cli.run.cancel.empty": "  No recorded attempts to deliver to.",
+  "cli.run.cancel.notice": "  Delivery is not proof of Task acceptance or reversed effects. Read recorded state: run inspect --scope {scope} --id {run}."
 }

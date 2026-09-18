@@ -1,4 +1,4 @@
-import type { RunCancellationHandler, RunQueryHandler } from './run.js';
+import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import {
@@ -11,7 +11,7 @@ import {
 
 export interface CommandContext {
   inspectRun?: RunQueryHandler;
-  requestRunCancellation?: RunCancellationHandler;
+  deliverRunCancellation?: RunCancellationDeliveryHandler;
   inspectInventory?: InventoryQueryHandler;
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;

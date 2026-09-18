@@ -194,3 +194,5 @@ MCP/E: deliver_run_cancellation reports per-attempt delivery with current cancel
 RUN/O: create, inspect, request cancellation and delivery consistently return POLICY_DENIED for absent scope membership.
 
 CANCEL/E: cancellation of reserved work returns not-dispatched without creating or requiring worker directories.
+
+RUN/P: run cancel delivers to workers and reports per-attempt outcomes; help explains idempotent retries, stale revisions and recorded process exit versus Task acceptance.

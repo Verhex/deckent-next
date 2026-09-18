@@ -1,8 +1,8 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import type { RunCommand, RunQuery, RunView } from '#engine/index.js';
+import type { RunCommand, RunQuery, RunView, RunCancellationOutcome } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
-export type RunCancellationHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; cancellation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 1; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
   if (action !== 'inspect' && action !== 'cancel') throw ErrorRegistry.createError('CLI_USAGE');
@@ -21,10 +21,20 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   if (action === 'cancel') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
-    if (!context.requestRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-    const result = await context.requestRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
-    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
-      t('cli.run.cancel.requested', { run: data.cancellation.run.runId, revision: data.cancellation.run.revision, command: data.cancellation.commandId }, locale) });
+    if (!context.deliverRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.deliverRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+      const labels = {
+        terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
+        denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
+        'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
+      };
+      return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
+        ...data.delivery.outcomes.map(item => t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale)),
+        ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
+        t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),
+      ].join('\n');
+    } });
     return;
   }
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

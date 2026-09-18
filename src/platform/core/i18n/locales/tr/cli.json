@@ -202,7 +202,7 @@
   "cli.governance.serve.opt.port": "Kontrol paneli sunucusunun dinlediği TCP portu.",
   "cli.governance.xverify.arg.claim": "Bağımsız provider’ın doğrulaması gereken claim veya result ifadesi.",
   "cli.heartbeat.desc": ".deckent/HEARTBEAT.md içindeki proaktif heartbeat görevlerini çalıştırın",
-  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]",
+  "cli.help": "Kullanım: {name} [--version|-v] [--help|-h]\n  config get [key] [--json] [--global]\n  policy vocabulary [--json]\n  doctor [--json]\n  paths [--global] [--json]\n  inventory --scope <id> [--after <id>] [--limit <n>] [--json] [--lang en|tr]\n  run inspect --scope <id> --id <run> [--json] [--lang en|tr]\n  run cancel --scope <id> --id <run> --command-id <id> --expected-revision <n> [--json] [--lang en|tr]\n  İptal isteği kaydedilir ve worker teslimi denenir. Yanıt belirsizse aynı --command-id ve girdiyi kullanın. Değiştirilmiş komuttan önce kayıtlı durumu inceleyin; yeni komut kimliği ve güncel --expected-revision kullanın.",
   "cli.help.builtin.help_command": "komut için yardımı göster",
   "cli.help.builtin.help_option": "komut için yardımı göster",
   "cli.help.heading.arguments": "Argümanlar:",
@@ -533,5 +533,13 @@
   "cli.run.inspect.states.failed": "Başarısız",
   "cli.run.inspect.states.cancelled": "İptal edildi",
   "cli.run.inspect.states.reconciling": "Uzlaştırılıyor",
-  "cli.run.cancel.requested": "Run {run} | iptal isteği revizyon {revision} ile kaydedildi | komut {command}\nBu komut iptali worker’lara iletmez. Worker’ın durduğunu doğrulamaz ve gerçekleşen etkileri geri almaz. Kayıtlı durumu run inspect ile okuyabilirsiniz."
+  "cli.run.cancel.heading": "Run {run} | iptal isteği kaydedildi | komut {command}",
+  "cli.run.cancel.outcome": "  Görev {task} / deneme {attempt}: {status}",
+  "cli.run.cancel.terminal": "süreç çıkışı kaydedildi",
+  "cli.run.cancel.unresolved": "belirsiz; sonlanma doğrulanmadı",
+  "cli.run.cancel.denied": "politika teslimi reddetti; sonlanma doğrulanmadı",
+  "cli.run.cancel.unavailable": "teslim yapılamadı; sonlanma doğrulanmadı",
+  "cli.run.cancel.notDispatched": "henüz çalıştırılmadı; worker teslimi gerekmiyor",
+  "cli.run.cancel.empty": "  Teslim yapılacak kayıtlı deneme yok.",
+  "cli.run.cancel.notice": "  Teslim, işin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}."
 }
