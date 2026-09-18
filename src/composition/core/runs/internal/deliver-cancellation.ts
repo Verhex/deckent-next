@@ -1,8 +1,9 @@
+import { recordedSupervisor } from './recorded-supervisor.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { DockerSupervisor, FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, RunApplication, runCommandSchema, RunPolicyAuthorization, DispatchApplication, DispatchPolicyAuthorization,
-  RunCancellationCoordinator, type RunCommand } from '#engine/index.js';
+  RunCancellationCoordinator, DispatchError, sandboxRequestSchema, type SandboxRequest, type RunCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredRunContext } from './context.js';
@@ -16,26 +17,26 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
     const verifier = { async verify() { return principal; } }; const authorization = new RunPolicyAuthorization({ async load() { return document; } });
     const actor = await authenticate(verifier, undefined, command.scopeId);
     await authorization.authorize('cancel', command, actor);
-    if (!config.cancellation || !config.execution) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
-      params: { missing: [!config.cancellation ? 'cancellation' : null, !config.execution ? 'execution' : null].filter(Boolean).join(', ') },
+    if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
+      params: { missing: 'cancellation' },
     });
-    const os = userInfo(); const execution = config.execution;
+    const os = userInfo();
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
       const runs = new RunApplication(store, verifier, authorization);
-      const createDispatch = async () => {
-        const workspaceRoot = await inspectProductDirectory(layout, 'workspaces');
+      const createDispatch = async (request: SandboxRequest) => {
+        const recorded = await store.loadCancellationDispatch(request.identity);
+        if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
         const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
-        const supervisor = new DockerSupervisor({ ...execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
+        const supervisor = recordedSupervisor(recorded.profile);
         const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
         const dispatchPolicy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
         return new DispatchApplication(store, supervisor, verifier, dispatchPolicy, principal.id, artifacts);
       };
       // No runtime dependency is touched for an attempt that has never been dispatched.
-      // Share initialization (including failure) across bounded concurrent deliveries.
-      let dispatch: Promise<DispatchApplication> | undefined;
+      // Each attempt has its own immutable profile; never share one mutable configuration across workers.
       const delivery: Pick<DispatchApplication, 'cancel'> = {
-        async cancel(request, credential) { return (await (dispatch ??= createDispatch())).cancel(request, credential); },
+        async cancel(request, credential) { const parsed = sandboxRequestSchema.parse(request); return (await createDispatch(parsed)).cancel(parsed, credential); },
       };
       const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation.maxConcurrentDeliveries);
       return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.cancel(command) });

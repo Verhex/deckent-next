@@ -43,12 +43,15 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
   };
   let pending: Promise<unknown> | undefined;
   try {
+    const claim = { owner: 'original-controller', request };
+    await admitRunAttempts(store, [identity]); await store.claimDispatch({ ...claim, profile: await supervisor.captureProfile() });
+    const changedExecution = mode === 'sdk' ? {} : { execution: { docker: { ...docker, executable: '/unavailable/docker', imageId: 'sha256:' + 'a'.repeat(64) },
+      git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } } };
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, ...changedExecution })); clearConfigCache();
     if (client && transport) {
       await client.connect(transport);
       expect((await client.listTools()).tools.find(tool => tool.name === 'reconcile_attempt')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     }
-    const claim = { owner: 'original-controller', request };
-    await admitRunAttempts(store, [identity]); await store.claimDispatch({ ...claim, profile: await supervisor.captureProfile() });
     await policy(false); await expect(reconcile(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await policy(true);
     await expect(reconcile({ ...identity, workspace: '/caller/path' } as typeof identity)).rejects.toMatchObject({ code: mode === 'mcp' ? 'MCP_INPUT_INVALID' : 'INVENTORY_QUERY_INVALID' });

@@ -35,7 +35,7 @@ async function fixture(configured: boolean) {
       ...(attempt ? [{ id: 'attempt', effect: 'allow', actions: ['cancel'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: [identity.attemptId] } }] : []),
     ] }), { mode: 0o600 });
   }
-  return { project, options, store, layout, identity, policy, command: { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 1 } };
+  return { project, data, options, store, layout, identity, policy, command: { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 1 } };
 }
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])('delivers via %s to a real worker only after Run and Attempt cancellation authority, preserving terminal custody', async mode => {
   const f = await fixture(true); const workspaceRoot = await prepareProductDirectory(f.layout, 'workspaces'); const artifactRoot = await prepareProductDirectory(f.layout, 'artifacts');
@@ -65,14 +65,17 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
   let executionFailure: unknown;
   const pending = app.execute(request); const outcome = pending.then(value => ({ value, error: null }), error => { executionFailure = error; return { value: null, error }; });
   try {
+    let ready = false;
+    for (let i = 0; i < 500; i++) { if (executionFailure) throw executionFailure; try { ready = await readFile(join(workspace, 'ready'), 'utf8') === 'yes'; } catch { /* Worker startup. */ } if (ready) break; await sleep(10); }
+    expect(ready).toBe(true); const observation = await supervisor.observe(request);
+    const changedExecution = mode === 'sdk' ? {} : { execution: { docker: { ...docker, executable: '/unavailable/docker', imageId: 'sha256:' + 'a'.repeat(64) },
+      git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } } };
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ layout: { root: f.data }, cancellation: { maxConcurrentDeliveries: 2 }, ...changedExecution })); clearConfigCache();
     if (client && transport) {
       await client.connect(transport);
       const tool = (await client.listTools()).tools.find(value => value.name === 'deliver_run_cancellation')!;
       expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     }
-    let ready = false;
-    for (let i = 0; i < 500; i++) { if (executionFailure) throw executionFailure; try { ready = await readFile(join(workspace, 'ready'), 'utf8') === 'yes'; } catch { /* Worker startup. */ } if (ready) break; await sleep(10); }
-    expect(ready).toBe(true); const observation = await supervisor.observe(request);
     const running = async () => (await exec('/usr/bin/docker', ['inspect', '--format', '{{.State.Running}}', observation.handle])).stdout.trim();
     await f.policy(false, true);
     await expect(deliver()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -87,16 +90,21 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
     expect((await f.store.load('s', f.identity.attemptId))!.lastObservation!.result.kind).toBe('exited');
   } finally { await supervisor.cancel(request).catch(() => {}); await outcome; await supervisor.release(request).catch(() => {}); await client?.close(); await transport?.close(); }
 }, 30000);
-it.skipIf(process.platform === 'win32').each(['both', 'cancellation', 'execution'])('identifies missing %s profiles before recording intent or creating runtime directories', async missing => {
+it.skipIf(process.platform === 'win32').each(['both', 'cancellation', 'execution'])('requires cancellation limits when %s configuration is missing', async missing => {
   const f = await fixture(false); await f.policy(true, false);
   const bootstrap = join(f.project, '.deckent/config.json'); const config = JSON.parse(await readFile(bootstrap, 'utf8'));
   if (missing === 'execution') config.cancellation = { maxConcurrentDeliveries: 2 };
   if (missing === 'cancellation') config.execution = { docker: { ...docker, imageId: 'sha256:' + 'a'.repeat(64) },
     git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } };
   await writeFile(bootstrap, JSON.stringify(config)); clearConfigCache();
-  const expected = missing === 'both' ? 'cancellation, execution' : missing;
-  await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing: expected } });
-  expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(false);
+  if (missing === 'execution') {
+    const result = await deliverRunCancellation(f.project, f.command, f.options);
+    expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched' }]);
+    expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true);
+  } else {
+    await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing: 'cancellation' } });
+    expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(false);
+  }
   await expect(lstat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
   await expect(lstat(productResourcePath(f.layout, 'artifacts'))).rejects.toMatchObject({ code: 'ENOENT' });
 });

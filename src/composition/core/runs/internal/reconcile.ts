@@ -1,7 +1,8 @@
+import { recordedSupervisor } from './recorded-supervisor.js';
 import { userInfo } from 'node:os';
-import { inspectProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { DockerSupervisor, FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -22,10 +23,8 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
       const dispatchStore: DispatchStore & RunBoundDispatchStore = store;
       const recorded = await dispatchStore.loadBoundDispatch(identity);
       if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
-      if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      const workspaceRoot = await inspectProductDirectory(layout, 'workspaces');
       const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
-      const supervisor = new DockerSupervisor({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
+      const supervisor = recordedSupervisor(recorded.profile);
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
       const result = await app.reconcile(recorded.request);
