@@ -6,3 +6,5 @@ export { inspectConfiguredRun as inspectRun } from '#composition/index.js';
 export type { RunQuery } from '#engine/index.js';
 export type { RunView } from '#engine/index.js';
 export { getPolicyVocabulary } from '#engine/index.js';
+export { createConfiguredRun as createRun } from '#composition/index.js';
+export type { RunAdmission } from '#engine/index.js';

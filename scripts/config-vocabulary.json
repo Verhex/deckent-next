@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "6b1da2c40a352a3ba2c4dd5692621d2e698cb0897dca5aaf29e0f51f79f68846",
-    "src/platform/core/config-fields/internal/fields.ts": "41192c95d6af0e084dd3a91b798a4dcde20e05d9f07d61e4897333b67b8a7b90",
+    "src/platform/core/config-fields/internal/fields.ts": "c1e7bd8ac11728a734e6b4c25a30dd1347c79123865fbef5a2368d62de1adfb9",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -29,6 +29,9 @@
     ],
     "artifacts": [],
     "execution": [],
+    "admission": [
+      "input-order"
+    ],
     "inspection": [],
     "projectName": [
       "deckent-project"

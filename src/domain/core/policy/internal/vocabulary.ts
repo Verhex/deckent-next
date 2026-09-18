@@ -4,6 +4,7 @@
 export const policyResources = Object.freeze({
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel'] as const) }),
   scope: Object.freeze({ kind: 'scope' as const, actions: Object.freeze(['inspect'] as const) }),
+  pool: Object.freeze({ kind: 'pool' as const, actions: Object.freeze(['use'] as const) }),
   run: Object.freeze({ kind: 'run' as const, actions: Object.freeze(['create', 'inspect', 'cancel'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;

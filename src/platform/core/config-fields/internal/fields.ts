@@ -21,6 +21,10 @@ export const CONFIG_FIELDS = Object.freeze({
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  admission: field('config.field.admission', z.object({ poolId: z.string().min(1),
+    executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe(),
+    ordering: z.literal('input-order'),
+  }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   inspection: field('config.field.inspection', z.object({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),
     policyMaxBytes: z.number().int().positive().safe().default(1048576),

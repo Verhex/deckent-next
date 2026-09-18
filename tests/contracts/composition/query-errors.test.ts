@@ -7,5 +7,5 @@ it('preserves registered errors and redacts unknown native/storage details throu
   expect(queryFailure(new PolicyAuthorizationError('POLICY_DENIED')).code).toBe('POLICY_DENIED');
   const raw = new Error('SQL /private/customer/ledger secret=credential');
   const safe = queryFailure(raw); expect(safe.code).toBe('INVENTORY_UNAVAILABLE'); expect(String(safe)).not.toContain('credential'); expect(String(safe)).not.toContain('/private');
-  expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('INVENTORY_UNAVAILABLE');
+  expect(queryFailure(new RunStoreError('RUN_STORE_CORRUPT')).code).toBe('RUN_STORE_CORRUPT');
 });

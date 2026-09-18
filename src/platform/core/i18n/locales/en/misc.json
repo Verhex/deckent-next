@@ -576,5 +576,6 @@
   "config.field.storage": "Storage driver and bounded SQLite options",
   "config.field.artifacts": "Maximum retained artifact size in bytes",
   "config.field.execution": "Explicit pinned Docker and Git execution capability settings; null disables execution",
-  "config.field.inspection": "Read-only inspection page and policy document limits"
+  "config.field.inspection": "Read-only inspection page and policy document limits",
+  "config.field.admission": "Run admission pool, capacity and scheduling order"
 }

@@ -24,6 +24,12 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     try { return await new SqliteDispatchJournal(this.db).listDispatches(query); }
     catch (error) { throw readFailure(error); }
   }
+  async loadRunReceipt(scopeId: string, commandId: string) {
+    try {
+      if (Number(this.db.prepare('PRAGMA user_version').get()?.user_version) < 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      return await new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId);
+    } catch (error) { throw readFailure(error); }
+  }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {

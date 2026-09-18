@@ -4,6 +4,14 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  RUN_ADMISSION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_ADMISSION_NOT_CONFIGURED', p, l) }) },
+  RUN_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CORRUPT', p, l) }) },
+  RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l) }) },
+  RUN_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_COMMAND_CONFLICT', p, l) }) },
+  RUN_POOL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_REQUIRED', p, l) }) },
+  RUN_POOL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_CONFLICT', p, l) }) },
+  RUN_POOL_FULL: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_FULL', p, l) }) },
+  RUN_CAPACITY_OR_ORDER: { category: 'error', render: (p, l) => ({ message: t('error.RUN_CAPACITY_OR_ORDER', p, l) }) },
   INVENTORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.INVENTORY_QUERY_INVALID', p, l) }) },
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },

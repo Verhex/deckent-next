@@ -752,5 +752,13 @@
   "error.ATTEMPT_STORE_OPTIONS": "The configured storage options are invalid.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite cannot read the ledger in this environment. WAL inspection may require shared-memory sidecar access.",
   "error.ATTEMPT_STORE_CORRUPT": "Stored execution data failed validation.",
-  "error.DISPATCH_CORRUPT": "Stored dispatch data is inconsistent or invalid."
+  "error.DISPATCH_CORRUPT": "Stored dispatch data is inconsistent or invalid.",
+  "error.RUN_ADMISSION_NOT_CONFIGURED": "Run admission requires an explicit pool and capacity profile.",
+  "error.RUN_STORE_CORRUPT": "Run records are inconsistent; no successful update is claimed.",
+  "error.RUN_STORE_CONFLICT": "The Run changed or is unavailable. Reload its recorded state.",
+  "error.RUN_COMMAND_CONFLICT": "This command identity is already bound to different Run input.",
+  "error.RUN_POOL_REQUIRED": "A valid assigned execution pool is required.",
+  "error.RUN_POOL_CONFLICT": "The execution pool already has different capacity settings.",
+  "error.RUN_POOL_FULL": "The execution pool has no available capacity.",
+  "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order."
 }

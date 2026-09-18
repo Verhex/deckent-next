@@ -752,5 +752,13 @@
   "error.ATTEMPT_STORE_OPTIONS": "Yapılandırılmış depolama seçenekleri geçersiz.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite bu ortamda ledger kaydını okuyamıyor. WAL incelemesi paylaşımlı bellek yan dosyasına erişim gerektirebilir.",
   "error.ATTEMPT_STORE_CORRUPT": "Saklanan yürütme verisi doğrulanamadı.",
-  "error.DISPATCH_CORRUPT": "Saklanan yürütme ataması tutarsız veya geçersiz."
+  "error.DISPATCH_CORRUPT": "Saklanan yürütme ataması tutarsız veya geçersiz.",
+  "error.RUN_ADMISSION_NOT_CONFIGURED": "Run kabulü açık bir havuz ve kapasite profili gerektirir.",
+  "error.RUN_STORE_CORRUPT": "Run kayıtları tutarsız; başarılı güncelleme iddia edilmiyor.",
+  "error.RUN_STORE_CONFLICT": "Run değişti veya mevcut değil. Kayıtlı durumunu yeniden okuyun.",
+  "error.RUN_COMMAND_CONFLICT": "Bu komut kimliği farklı Run girdisine bağlı.",
+  "error.RUN_POOL_REQUIRED": "Geçerli, atanmış bir yürütme havuzu gerekli.",
+  "error.RUN_POOL_CONFLICT": "Yürütme havuzunun farklı kapasite ayarları mevcut.",
+  "error.RUN_POOL_FULL": "Yürütme havuzunda kullanılabilir kapasite yok.",
+  "error.RUN_CAPACITY_OR_ORDER": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor."
 }
