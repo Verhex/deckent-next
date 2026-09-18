@@ -534,12 +534,13 @@
   "cli.run.inspect.states.cancelled": "İptal edildi",
   "cli.run.inspect.states.reconciling": "Uzlaştırılıyor",
   "cli.run.cancel.heading": "Run {run} | iptal isteği kaydedildi | komut {command}",
-  "cli.run.cancel.outcome": "  Görev {task} / deneme {attempt}: {status}",
+  "cli.run.cancel.outcome": "  İş {task} / girişim {attempt}: {status}",
   "cli.run.cancel.terminal": "süreç çıkışı kaydedildi",
   "cli.run.cancel.unresolved": "belirsiz; sonlanma doğrulanmadı",
   "cli.run.cancel.denied": "politika teslimi reddetti; sonlanma doğrulanmadı",
   "cli.run.cancel.unavailable": "teslim yapılamadı; sonlanma doğrulanmadı",
-  "cli.run.cancel.notDispatched": "henüz çalıştırılmadı; worker teslimi gerekmiyor",
-  "cli.run.cancel.empty": "  Teslim yapılacak kayıtlı deneme yok.",
-  "cli.run.cancel.notice": "  Teslim, işin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}."
+  "cli.run.cancel.notDispatched": "çalıştırılmamış; worker teslimi gerekmiyor",
+  "cli.run.cancel.empty": "  Teslim yapılacak kayıtlı girişim yok.",
+  "cli.run.cancel.notice": "  Teslim, işin kabul edildiği veya etkilerin geri alındığı anlamına gelmez. Kayıtlı durum: run inspect --scope {scope} --id {run}.",
+  "cli.run.cancel.unconfirmed": "  Dikkat: {total} girişimin {count} tanesinde sonlanma doğrulanmadı."
 }

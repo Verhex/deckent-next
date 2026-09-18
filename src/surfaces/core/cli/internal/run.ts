@@ -29,7 +29,9 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
         'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
       };
+      const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched').length;
       return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
+        ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
         ...data.delivery.outcomes.map(item => t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale)),
         ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
         t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),

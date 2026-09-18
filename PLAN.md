@@ -420,3 +420,5 @@ CANCEL/F DONE — names missing cancellation/execution profiles before intent or
 STORE/F DONE — trusted full-identity dispatch lookup shared with cancellation, six identity axes and corruption negatives; Fable1689 PASS, 345 tests / 18 Docker. Generic adapter port follow-up recorded.
 
 RECONCILE/A DONE — configured SDK observes recorded workers and settles proven exits under original custody; fresh reconcile policy, no caller argv/path. Fable1697 PASS, 346 tests / 19 Docker. Port ownership follow-up and profile snapshot limitation tracked.
+
+RUN/Q DONE — visible partial-delivery count, consistent TR task/attempt terms; unchanged JSON and command success. Fable1701 PASS + ACCEPTABLE_FOR_PIPE_V1, 348 tests / 19 Docker.

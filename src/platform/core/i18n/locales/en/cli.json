@@ -541,5 +541,6 @@
   "cli.run.cancel.unavailable": "delivery unavailable; termination not confirmed",
   "cli.run.cancel.notDispatched": "not dispatched; no worker delivery needed",
   "cli.run.cancel.empty": "  No recorded attempts to deliver to.",
-  "cli.run.cancel.notice": "  Delivery is not proof of Task acceptance or reversed effects. Read recorded state: run inspect --scope {scope} --id {run}."
+  "cli.run.cancel.notice": "  Delivery is not proof of Task acceptance or reversed effects. Read recorded state: run inspect --scope {scope} --id {run}.",
+  "cli.run.cancel.unconfirmed": "  Attention: termination not confirmed for {count} of {total} attempts."
 }

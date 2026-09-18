@@ -202,3 +202,5 @@ CANCEL/F: cancellation configuration errors identify the missing profile in type
 STORE/F: internal dispatch lookup binds stored execution requests to their exact Run/Task/Attempt without caller-provided paths or commands.
 
 RECONCILE/A: SDK reconcileAttempt persists observed process exit without launching, cancelling, releasing, fabricating output or accepting Task results.
+
+RUN/Q: CLI cancellation highlights unconfirmed attempts before detail rows and clarifies undispatched work.
