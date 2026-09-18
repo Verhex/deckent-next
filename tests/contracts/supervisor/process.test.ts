@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { ProcessSupervisor } from '#adapters/index.js';
@@ -29,6 +30,7 @@ it.each([
   "reply.protocolVersion=2;process.stdout.write(JSON.stringify(reply));",
   "process.stdout.write(JSON.stringify(reply)+'\\n'+JSON.stringify(reply));",
   "process.stdout.write('private invalid response');",
+  "process.stdout.write(Buffer.from([0xc3,0x28]));",
   "process.stderr.write('secret'.repeat(1000));",
   "process.exitCode=3;process.stdout.write(JSON.stringify(reply));",
 ])('rejects mismatched or invalid control-process evidence %s', async body => {
@@ -55,3 +57,27 @@ it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('executes, observes and releas
   } finally { await supervisor.release(f.request); }
   expect((await supervisor.observe(f.request)).result.kind).toBe('unknown');
 }, 25000);
+
+it('redacts missing executable failures and rejects NUL process configuration before launch', async () => {
+  const f = await fixture('');
+  await expect(new ProcessSupervisor({ ...f.options, executable: join(f.root, 'private-missing') }).observe(f.request))
+    .rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED', message: 'SUPERVISOR_CONTROL_FAILED' });
+  for (const override of [{ executable: '/private\0' }, { cwd: '/private\0' }, { args: ['private\0'] }]) {
+    expect(() => new ProcessSupervisor({ ...f.options, ...override })).toThrow('SUPERVISOR_OPTIONS_INVALID');
+  }
+});
+it('interrupts a confirmed live control process without reporting worker termination', async () => {
+  const f = await fixture("await import('node:fs/promises').then(fs=>fs.writeFile('ready',String(process.pid)));setInterval(()=>{},1000);");
+  const controller = new AbortController();
+  const pending = f.supervisor.execute(f.request, controller.signal);
+  const rejection = expect(pending).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
+  try {
+    let pid = 0;
+    for (let i = 0; i < 200; i++) {
+      try { pid = Number(await readFile(join(f.root, 'ready'), 'utf8')); break; } catch { await sleep(10); }
+    }
+    expect(pid).toBeGreaterThan(0); expect(() => process.kill(pid, 0)).not.toThrow();
+    controller.abort(); await rejection;
+    expect(() => process.kill(pid, 0)).toThrow();
+  } finally { controller.abort(); await pending.catch(() => {}); }
+});

@@ -4,8 +4,9 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { supervisorCommandSchema, validateSupervisorReply, SupervisorError,
   type SupervisorCommand, type SupervisorReply, type SandboxRequest, type ExecutionSupervisor } from '#engine/index.js';
-const optionsSchema = z.object({ executable: z.string().min(1), args: z.array(z.string()).readonly(),
-  cwd: z.string().min(1), timeoutMs: z.number().int().positive().max(2_147_483_647),
+const processString = z.string().refine(value => !value.includes('\0'));
+const optionsSchema = z.object({ executable: processString.pipe(z.string().min(1)), args: z.array(processString).readonly(),
+  cwd: processString.pipe(z.string().min(1)), timeoutMs: z.number().int().positive().max(2_147_483_647),
   maxInputBytes: z.number().int().positive().safe(), maxOutputBytes: z.number().int().positive().safe(),
 }).strict().readonly();
 export type ProcessSupervisorOptions = z.infer<typeof optionsSchema>;
