@@ -1,3 +1,4 @@
+import { requireLedgerVersion, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION } from './schema.js';
 import { SqliteRunJournal } from './runs.js';
 import { identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,7 +18,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
     catch (error) { throw readFailure(error); }
     try {
-      if (![2, 3, 4].includes(Number(this.db.prepare('PRAGMA user_version').get()?.user_version))) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      requireLedgerVersion(this.db, DISPATCH_LEDGER_VERSION);
     } catch (error) { this.db.close(); throw readFailure(error); }
   }
   async listDispatches(query: DispatchInventoryQuery) {
@@ -26,14 +27,14 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   }
   async loadRunReceipt(scopeId: string, commandId: string) {
     try {
-      if (Number(this.db.prepare('PRAGMA user_version').get()?.user_version) < 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
       return await new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId);
     } catch (error) { throw readFailure(error); }
   }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {
-      if (Number(this.db.prepare('PRAGMA user_version').get()?.user_version) < 3) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+      requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
       return await new SqliteRunJournal(this.db).loadRun(scope, run);
     } catch (error) { throw readFailure(error); }
   }
