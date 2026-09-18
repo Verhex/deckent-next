@@ -17,17 +17,25 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
     const actor = await authenticate(verifier, undefined, command.scopeId);
     await authorization.authorize('cancel', command, actor);
     if (!config.cancellation || !config.execution) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
-    const os = userInfo();
-    const workspaceRoot = await inspectProductDirectory(layout, 'workspaces');
-    const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
-    const supervisor = new DockerSupervisor({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
-    const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
+    const os = userInfo(); const execution = config.execution;
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
       const runs = new RunApplication(store, verifier, authorization);
-      const dispatchPolicy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
-      const dispatch = new DispatchApplication(store, supervisor, verifier, dispatchPolicy, principal.id, artifacts);
-      const coordinator = new RunCancellationCoordinator(runs, store, dispatch, config.cancellation.maxConcurrentDeliveries);
+      const createDispatch = async () => {
+        const workspaceRoot = await inspectProductDirectory(layout, 'workspaces');
+        const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
+        const supervisor = new DockerSupervisor({ ...execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
+        const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
+        const dispatchPolicy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
+        return new DispatchApplication(store, supervisor, verifier, dispatchPolicy, principal.id, artifacts);
+      };
+      // No runtime dependency is touched for an attempt that has never been dispatched.
+      // Share initialization (including failure) across bounded concurrent deliveries.
+      let dispatch: Promise<DispatchApplication> | undefined;
+      const delivery: Pick<DispatchApplication, 'cancel'> = {
+        async cancel(request, credential) { return (await (dispatch ??= createDispatch())).cancel(request, credential); },
+      };
+      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation.maxConcurrentDeliveries);
       return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.cancel(command) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

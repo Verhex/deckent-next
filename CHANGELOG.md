@@ -192,3 +192,5 @@ CANCEL/D: SDK can deliver cancellation to configured workers with per-attempt ou
 MCP/E: deliver_run_cancellation reports per-attempt delivery with current cancellation policy; request-only tool retains its distinct meaning.
 
 RUN/O: create, inspect, request cancellation and delivery consistently return POLICY_DENIED for absent scope membership.
+
+CANCEL/E: cancellation of reserved work returns not-dispatched without creating or requiring worker directories.

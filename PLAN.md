@@ -410,3 +410,5 @@ CANCEL/D DONE — configured SDK cancellation delivery, fresh per-attempt cancel
 MCP/E DONE — explicit delivery tool through configured SDK; official MCP stdio to real Docker, 337 tests / 17 Docker; Fable 1645 PASS.
 
 RUN/O DONE — shared context denies authenticated identities without scope membership before ledger/runtime access; Fable1664 PASS, 338 tests / 17 Docker.
+
+CANCEL/E DONE — no runtime directory or Docker dependency for undispatched attempts; shared lazy dispatch initialization. Fable1667 PASS, 339 tests / 17 Docker.

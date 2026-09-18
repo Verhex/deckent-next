@@ -87,3 +87,19 @@ it.skipIf(process.platform === 'win32')('requires an explicit cancellation profi
   await expect(lstat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
   await expect(lstat(productResourcePath(f.layout, 'artifacts'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+it.skipIf(process.platform === 'win32')('records cancellation for an undispatched attempt without runtime directories or Docker access', async () => {
+  const f = await fixture(false); await f.policy(true, false);
+  const bootstrap = join(f.project, '.deckent/config.json');
+  const config = JSON.parse(await readFile(bootstrap, 'utf8'));
+  config.cancellation = { maxConcurrentDeliveries: 2 };
+  config.execution = { docker: { ...docker, executable: '/unavailable/docker', imageId: 'sha256:' + 'a'.repeat(64) },
+    git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } };
+  await writeFile(bootstrap, JSON.stringify(config)); clearConfigCache();
+  const result = await deliverRunCancellation(f.project, f.command, f.options);
+  expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched' }]);
+  expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true);
+  expect((await deliverRunCancellation(f.project, f.command, f.options)).delivery).toEqual(result.delivery);
+  await expect(lstat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(lstat(productResourcePath(f.layout, 'artifacts'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
