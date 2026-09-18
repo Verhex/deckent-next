@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
-import { CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
+import { RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
@@ -20,6 +20,10 @@ it('preserves the registered unsupported execution-host failure with localized g
   expect(failure.localize?.('tr').message).toContain('root olmayan');
 });
 it.each([
+  new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT'),
+  new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT'),
+  new WorkspaceError('WORKSPACE_CUSTODY_UNCONVERTIBLE'),
+  new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT'),
   new CancellationDeliveryError('CANCELLATION_DELIVERY_CONFLICT'),
   new CancellationDeliveryError('CANCELLATION_DELIVERY_CORRUPT'),
   new TaskEvaluationError('TASK_EVALUATION_STALE'),

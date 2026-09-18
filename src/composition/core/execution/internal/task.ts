@@ -2,9 +2,9 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { DockerSupervisor, GitWorkspaceBroker, FileArtifactStore, openSqliteAttemptStore,
+import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
   validateDockerSupervisorProfile, resolveDockerTaskProfile } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, selectReservedTaskProfile, RunStoreError } from '#engine/index.js';
+import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredRunContext } from '#composition/core/runs/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -33,7 +33,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       const broker = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot });
-      const lease = await broker.openRecorded(identity) ?? await broker.allocate({ schemaVersion: 1, identity, baseCommit: await broker.captureBaseCommit() });
+      const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid });
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
       const result = await app.execute({ protocolVersion: 1, identity, workspace: lease.workspace, argv: profile.argv });

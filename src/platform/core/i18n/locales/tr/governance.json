@@ -789,5 +789,14 @@
   "error.CLI_GRAPH_INPUT_TTY": "Grafik JSON verisini stdin üzerinden pipe ile gönderin veya bir grafik dosyası belirtin. Etkileşimli stdin desteklenmiyor.",
   "error.CLI_GRAPH_INPUT_UNAVAILABLE": "Grafik girdisi okunamadı.",
   "error.CANCELLATION_DELIVERY_CONFLICT": "İptal teslimi değişti veya artık kayıtlı iptal isteğiyle eşleşmiyor.",
-  "error.CANCELLATION_DELIVERY_CORRUPT": "Kalıcı kayıtlar tutarsız olduğu için iptal kurtarma işlemi durdu."
+  "error.CANCELLATION_DELIVERY_CORRUPT": "Kalıcı kayıtlar tutarsız olduğu için iptal kurtarma işlemi durdu.",
+  "error.RUN_WORKSPACE_CUSTODY_CONFLICT": "Çalışma alanının kaynağı veya başlangıç commit’i değişmez Run kaydıyla çelişiyor.",
+  "error.WORKSPACE_OPTIONS_INVALID": "Çalışma alanı yapılandırması geçersiz.",
+  "error.WORKSPACE_CUSTODY_UNCONVERTIBLE": "Bu çalışma alanı kaydı güncel biçime güvenle dönüştürülemiyor.",
+  "error.WORKSPACE_ALLOCATION_INCOMPLETE": "Çalışma alanı tahsisi tamamlanmamış; yürütme devam edemez.",
+  "error.WORKSPACE_IDENTITY_CONFLICT": "Çalışma alanı kimliği veya kayıtlı kaynak eşleşmiyor.",
+  "error.RUN_WORKSPACE_CUSTODY_CORRUPT": "Run çalışma alanı sahiplik kaydı tutarsız; yürütme durdu.",
+  "error.WORKSPACE_REQUEST_INVALID": "Çalışma alanı isteği geçersiz.",
+  "error.WORKSPACE_GIT_FAILED": "Git çalışma alanı işlemi başarısız oldu.",
+  "error.WORKSPACE_UNSAFE": "Çalışma alanı sahiplik veya dosya sistemi güvenlik denetimini geçemedi."
 }

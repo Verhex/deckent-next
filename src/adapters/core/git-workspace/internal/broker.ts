@@ -121,7 +121,6 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     } finally { await rm(temporary, { recursive: true, force: true }); }
   }
   async captureSourceBase(explicitCommit?: string): Promise<GitSourceBase> { return this.currentSource(explicitCommit); }
-  async captureBaseCommit(): Promise<string> { return (await this.captureSourceBase()).baseCommit; }
   async assertSourceBase(input: GitSourceBase): Promise<GitSourceBase> {
     const recorded = gitSourceBaseSchema.parse(input); const current = await this.currentSource(recorded.baseCommit);
     if (JSON.stringify(current) !== JSON.stringify(recorded)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');

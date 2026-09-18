@@ -46,13 +46,13 @@ it('validates an explicit immutable commit without sampling an advanced HEAD', a
 
 it('returns null for an identity without a recorded directory and rejects changed adapter configuration', async () => {
   const f = await fixture(); expect(await f.broker.openRecorded(f.identity)).toBeNull();
-  const baseCommit = await f.broker.captureBaseCommit(); await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
+  const baseCommit = (await f.broker.captureSourceBase()).baseCommit; await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
   const changed = new GitWorkspaceBroker({ ...f.options, outputBytes: f.options.outputBytes + 1 });
   await expect(changed.openRecorded(f.identity)).rejects.toThrow('WORKSPACE_IDENTITY_CONFLICT');
 });
 
 it.each(['malformed', 'incomplete', 'unsafe', 'symlink'] as const)('fails closed for a %s recorded lease', async kind => {
-  const f = await fixture(); const baseCommit = await f.broker.captureBaseCommit();
+  const f = await fixture(); const baseCommit = (await f.broker.captureSourceBase()).baseCommit;
   const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
   const directory = join(f.workspaceRoot, lease.id); const recordPath = join(directory, 'lease.json');
   if (kind === 'malformed') await writeFile(recordPath, '{not-json', { mode: 0o600 });
@@ -63,14 +63,14 @@ it.each(['malformed', 'incomplete', 'unsafe', 'symlink'] as const)('fails closed
 });
 
 it('rejects an old schema-one lease as unconvertible instead of inventing source custody', async () => {
-  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: await f.broker.captureBaseCommit() });
+  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   delete record.sourceBase; record.schemaVersion = 1; await writeFile(recordPath, JSON.stringify(record), { mode: 0o600 });
   await expect(f.broker.openRecorded(f.identity)).rejects.toMatchObject({ code: 'WORKSPACE_CUSTODY_UNCONVERTIBLE' });
 });
 
 it('rejects tampered typed source custody even when its inner source hash is recomputed', async () => {
-  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: await f.broker.captureBaseCommit() });
+  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   record.sourceBase.source.repositoryRoot = f.workspaceRoot;
   record.sourceBase.sourceFingerprint = fingerprintGitSource(record.sourceBase.source);
@@ -79,7 +79,7 @@ it('rejects tampered typed source custody even when its inner source hash is rec
 });
 
 it.each(['inner-hash', 'base-binding', 'noncanonical-path'] as const)('rejects %s even when the outer allocation fingerprint is recomputed', async kind => {
-  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: await f.broker.captureBaseCommit() });
+  const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   if (kind === 'inner-hash') record.sourceBase.sourceFingerprint = 'b'.repeat(64);
   if (kind === 'base-binding') record.sourceBase.baseCommit = 'b'.repeat(40);

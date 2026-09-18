@@ -789,5 +789,14 @@
   "error.CLI_GRAPH_INPUT_TTY": "Pipe graph JSON to stdin or provide a graph file. Interactive stdin is not supported.",
   "error.CLI_GRAPH_INPUT_UNAVAILABLE": "The graph input could not be read.",
   "error.CANCELLATION_DELIVERY_CONFLICT": "Cancellation delivery changed or no longer matches the recorded intent.",
-  "error.CANCELLATION_DELIVERY_CORRUPT": "Cancellation recovery stopped because its durable records are inconsistent."
+  "error.CANCELLATION_DELIVERY_CORRUPT": "Cancellation recovery stopped because its durable records are inconsistent.",
+  "error.RUN_WORKSPACE_CUSTODY_CONFLICT": "The workspace source or base conflicts with the immutable Run record.",
+  "error.WORKSPACE_OPTIONS_INVALID": "The workspace configuration is invalid.",
+  "error.WORKSPACE_CUSTODY_UNCONVERTIBLE": "This workspace record cannot be safely converted to the current format.",
+  "error.WORKSPACE_ALLOCATION_INCOMPLETE": "Workspace allocation is incomplete; execution cannot continue.",
+  "error.WORKSPACE_IDENTITY_CONFLICT": "The workspace identity or recorded source does not match.",
+  "error.RUN_WORKSPACE_CUSTODY_CORRUPT": "The Run workspace custody record is inconsistent; execution stopped.",
+  "error.WORKSPACE_REQUEST_INVALID": "The workspace request is invalid.",
+  "error.WORKSPACE_GIT_FAILED": "The Git workspace operation failed.",
+  "error.WORKSPACE_UNSAFE": "The workspace failed its ownership or filesystem safety checks."
 }
