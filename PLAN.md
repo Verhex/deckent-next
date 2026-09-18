@@ -448,3 +448,5 @@ CANCEL/G1 DONE — Recorded-profile cancellation/reconciliation survives executi
 CANCEL/G2 DONE — Docker endpoint bound in adapter profile2; ledger6 forward validation and strict migration gate; 381 tests/24 Docker; Fable PASS1751. Cross-host rebind/backup relocation remain unsupported; no automatic reset.
 
 LAUNCH/L1 DONE — Pure engine launch decision; SQLite transactional persistence; injected clock; 390 tests/24 Docker; Fable PASS1754. N3 and durable retry tracked separately.
+
+LAUNCH/N3 DONE — all three cancellation entry paths persist actor and Attempt intent atomically; real controller exit after grant remains unresolved without relaunch. Fable PASS1757;397 tests/26 Docker. Cancellation attribution rule extraction is a follow-up note.

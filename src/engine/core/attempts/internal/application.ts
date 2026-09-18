@@ -41,6 +41,7 @@ export class AttemptApplication {
     if (!current) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
     const next = action.kind === 'observe' ? applyAttemptObservation(current, action.observation, current.revision)
       : requestAttemptCancellation(current, current.revision);
-    return this.store.commit({ commandId, command: canonical, expectedRevision: current.revision, snapshot: next });
+    return this.store.commit({ commandId, command: canonical, expectedRevision: current.revision, snapshot: next,
+      ...(action.kind === 'cancel' ? { cancellationActor: principal } : {}) });
   }
 }

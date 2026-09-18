@@ -1,4 +1,4 @@
-import type { AttemptSnapshot } from '#domain/index.js';
+import type { AttemptSnapshot, VerifiedPrincipal } from '#domain/index.js';
 
 export interface AttemptReceipt {
   readonly commandId: string;
@@ -7,6 +7,9 @@ export interface AttemptReceipt {
 }
 export interface AttemptCommit extends AttemptReceipt {
   readonly expectedRevision: number | null;
+  /** Present only for an authenticated cancellation command. Persistence uses it to attribute an
+   * existing exact dispatch in the same transaction as the Attempt and receipt writes. */
+  readonly cancellationActor?: VerifiedPrincipal;
 }
 /** Each commit atomically compares the revision, writes the snapshot and records the command receipt.
  * Receipt identity is scope + commandId; a conflicting payload is never an idempotent success.

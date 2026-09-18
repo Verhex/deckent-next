@@ -9,8 +9,8 @@ import { SqliteDispatchJournal } from './dispatch.js';
 import type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema, sameAttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
-import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
+import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
+import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore {
@@ -82,6 +82,10 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async commit(input: AttemptCommit): Promise<AttemptReceipt> {
     const snapshot = attemptSnapshotSchema.parse(input.snapshot);
     const { scopeId, attemptId } = snapshot.identity;
+    const cancellationActor = input.cancellationActor === undefined ? undefined : verifiedPrincipalSchema.parse(input.cancellationActor);
+    if (cancellationActor && (!cancellationActor.scopeIds.includes(scopeId) || !snapshot.cancelRequested || input.expectedRevision === null)) {
+      throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
+    }
     let transaction = false;
     try {
       this.db.exec('BEGIN IMMEDIATE');
@@ -111,6 +115,22 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
         const written = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
           .run(snapshot.revision, encoded, scopeId, attemptId, input.expectedRevision);
         if (written.changes !== 1) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
+      }
+      if (cancellationActor) {
+        const dispatchRow = this.db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
+        if (dispatchRow) {
+          let dispatch;
+          try { dispatch = dispatchRecordSchema.parse(JSON.parse(String(dispatchRow.record))); }
+          catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
+          if (!sameAttemptIdentity(dispatch.request.identity, snapshot.identity)) throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+          const actor = { id: cancellationActor.id, issuer: cancellationActor.issuer, subject: cancellationActor.subject };
+          if (dispatch.cancellation && JSON.stringify(dispatch.cancellation) !== JSON.stringify(actor)) {
+            throw new AttemptStoreError('ATTEMPT_COMMAND_CONFLICT');
+          }
+          const attributed = dispatchRecordSchema.parse({ ...dispatch, cancellation: actor });
+          this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
+            .run(JSON.stringify(attributed), scopeId, attemptId);
+        }
       }
       this.db.prepare('INSERT INTO attempt_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
         .run(scopeId, input.commandId, input.command, encoded);
