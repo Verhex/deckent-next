@@ -204,3 +204,5 @@ STORE/F: internal dispatch lookup binds stored execution requests to their exact
 RECONCILE/A: SDK reconcileAttempt persists observed process exit without launching, cancelling, releasing, fabricating output or accepting Task results.
 
 RUN/Q: CLI cancellation highlights unconfirmed attempts before detail rows and clarifies undispatched work.
+
+MCP/F: reconcile_attempt observes recorded workers and persists proven exits without starting, cancelling, releasing or accepting Task results.

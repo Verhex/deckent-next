@@ -422,3 +422,5 @@ STORE/F DONE — trusted full-identity dispatch lookup shared with cancellation,
 RECONCILE/A DONE — configured SDK observes recorded workers and settles proven exits under original custody; fresh reconcile policy, no caller argv/path. Fable1697 PASS, 346 tests / 19 Docker. Port ownership follow-up and profile snapshot limitation tracked.
 
 RUN/Q DONE — visible partial-delivery count, consistent TR task/attempt terms; unchanged JSON and command success. Fable1701 PASS + ACCEPTABLE_FOR_PIPE_V1, 348 tests / 19 Docker.
+
+MCP/F DONE — reconcile_attempt through configured SDK, explicit non-destructive ledger mutation annotation, strict identity and fresh policy; Fable1705 PASS, 349 tests / 20 Docker. Model tool-selection hint follow-up noted.
