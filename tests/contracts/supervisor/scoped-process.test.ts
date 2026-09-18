@@ -43,7 +43,7 @@ describe.skipIf(process.platform !== 'linux')('explicit Linux process profile', 
     }
   });
   it('kills the owned process group when aborting a confirmed live child and descendant', async () => {
-    const input = await fixture('const fs=require("node:fs");const c=require("node:child_process").spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"inherit"});fs.writeFileSync("pids",JSON.stringify([process.pid,c.pid]));setInterval(()=>{},1000)');
+    const input = await fixture('const fs=require("node:fs");const c=require("node:child_process").spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"inherit"});fs.writeFileSync("pids.tmp",JSON.stringify([process.pid,c.pid]));fs.renameSync("pids.tmp","pids");setInterval(()=>{},1000)');
     const controller = new AbortController(); const pending = runNodeProcess(input, controller.signal); let pids: number[] = [];
     try {
       for (let i = 0; i < 200; i++) { try { pids = JSON.parse(await readFile(join(input.cwd, 'pids'), 'utf8')); break; } catch { await sleep(10); } }

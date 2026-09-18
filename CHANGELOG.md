@@ -174,3 +174,5 @@ EVALUATION/C: trusted dispatch record binds exact attempt/request/output receipt
 EVALUATION/D: pure pass/fail/HOLD Run transitions; HOLD consumes revision, accepted Task cannot reopen. 327 tests/15 Docker, Fable PASS1603. Actual admission, immutable criteria and atomic acceptance remain pending.
 
 STORE/E: shared writer/reader ledger version authority; schema4 unchanged, atomic migration rollback proof. 316 tests/15 Docker, Fable PASS1608.
+
+SUPERVISOR/L: remove PID readiness test race with atomic publication and validated positive identifiers.

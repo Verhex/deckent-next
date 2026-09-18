@@ -67,14 +67,15 @@ it('redacts missing executable failures and rejects NUL process configuration be
   }
 });
 it('interrupts a confirmed live control process without reporting worker termination', async () => {
-  const f = await fixture("await import('node:fs/promises').then(fs=>fs.writeFile('ready',String(process.pid)));setInterval(()=>{},1000);");
+  const f = await fixture("await import('node:fs/promises').then(async fs=>{await fs.writeFile('ready.tmp',String(process.pid));await fs.rename('ready.tmp','ready')});setInterval(()=>{},1000);");
   const controller = new AbortController();
   const pending = f.supervisor.execute(f.request, controller.signal);
   const rejection = expect(pending).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
   try {
     let pid = 0;
     for (let i = 0; i < 200; i++) {
-      try { pid = Number(await readFile(join(f.root, 'ready'), 'utf8')); break; } catch { await sleep(10); }
+      try { pid = Number(await readFile(join(f.root, 'ready'), 'utf8')); if (Number.isSafeInteger(pid) && pid > 0) break; } catch { /* Readiness not published yet. */ }
+      await sleep(10);
     }
     expect(pid).toBeGreaterThan(0); expect(() => process.kill(pid, 0)).not.toThrow();
     controller.abort(); await rejection;
@@ -83,14 +84,15 @@ it('interrupts a confirmed live control process without reporting worker termina
 });
 
 it('does not wait for inherited pipe writers after confirmed control cancellation', async () => {
-  const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(fs=>fs.writeFile('descendant',String(child.pid)));setInterval(()=>{},1000);");
+  const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(async fs=>{await fs.writeFile('descendant.tmp',String(child.pid));await fs.rename('descendant.tmp','descendant')});setInterval(()=>{},1000);");
   let descendant = 0;
   const controller = new AbortController();
   const pending = new ProcessSupervisor({ ...f.options, timeoutMs: 15000 }).execute(f.request, controller.signal);
   const outcome = pending.then(value => ({ value, error: null }), error => ({ value: null, error }));
   try {
     for (let i = 0; i < 1000; i++) {
-      try { descendant = Number(await readFile(join(f.root, 'descendant'), 'utf8')); break; } catch { await sleep(10); }
+      try { descendant = Number(await readFile(join(f.root, 'descendant'), 'utf8')); if (Number.isSafeInteger(descendant) && descendant > 0) break; } catch { /* Readiness not published yet. */ }
+      await sleep(10);
     }
     expect(descendant).toBeGreaterThan(0); controller.abort();
     expect((await outcome).error).toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
