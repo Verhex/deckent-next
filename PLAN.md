@@ -492,3 +492,5 @@ RUN/BASE PASS1834: feat(workspace): share one immutable Git base across a Run.
 RUNTIME/HOST PASS1834: feat(runtime): host bounded cancellation recovery loop. Required distinct config description key R1 follows separately.
 
 ADMISSION/POOL PASS1834: refactor(admission): enforce pool authorization in engine.
+
+SERVICE/PROTOCOL PASS1834: feat(runtime): define strict correlated service protocol.
