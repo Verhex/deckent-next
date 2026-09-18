@@ -428,3 +428,5 @@ MCP/F DONE — reconcile_attempt through configured SDK, explicit non-destructiv
 GRAPH2/A DONE — versioned criterion definitions and bounded immutable JSON parameters; Fable1709 PASS, 353 tests / 20 Docker. Runtime graph admission pending; description bounds and definition fingerprints precede persistence. Proxy traps are outside plain-JSON input guarantee.
 
 GRAPH2/B DONE: Fable 1713 PASS; graph v2 carries versioned criterion definitions and exact references. v1 remains distinct; runtime admission wiring pending.
+
+STORE/G DONE: Fable 1716 PASS; Run-bound dispatch lookup and identity authorization are engine-owned ports. Runtime and wire semantics unchanged; 356 tests passed.

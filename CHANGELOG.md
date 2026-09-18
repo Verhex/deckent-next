@@ -210,3 +210,5 @@ MCP/F: reconcile_attempt observes recorded workers and persists proven exits wit
 GRAPH2/A: criteria carry definition/evaluator versions and immutable validated parameters; no evaluator-specific business thresholds in domain.
 
 GRAPH2/B: pure graph v2 validates criterion references and DAG without converting v1 records; 356 tests with Docker opt-in passed.
+
+STORE/G: composition consumes engine-owned dispatch lookup and authorization contracts; concrete adapter selection remains in composition.

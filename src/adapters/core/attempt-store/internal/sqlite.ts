@@ -6,14 +6,14 @@ import { SqliteRunJournal } from './runs.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
-import type { DispatchClaim, DispatchTerminal, DispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
+import type { DispatchClaim, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
 import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, DispatchInventoryStore, RunStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow') {
     if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');

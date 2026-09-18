@@ -1,12 +1,12 @@
 import { evaluatePolicy, policyResources, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
-import type { DispatchAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
+import type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<unknown> }
 export class PolicyAuthorizationError extends Error {
   constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED') { super(code); this.name = 'PolicyAuthorizationError'; }
 }
-export class DispatchPolicyAuthorization implements DispatchAuthorization {
+export class DispatchPolicyAuthorization implements DispatchAuthorization, DispatchIdentityAuthorization {
   constructor(private readonly source: PolicySource) {}
   async authorize(action: Parameters<DispatchAuthorization['authorize']>[0], request: SandboxRequest, principal: VerifiedPrincipal): Promise<void> {
     return this.authorizeIdentity(action, request.identity, principal);

@@ -1,6 +1,6 @@
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { z } from 'zod';
-import { identitySchema, processExitCauseShape, isValidExitCause, type VerifiedPrincipal } from '#domain/index.js';
+import { identitySchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
 import { sandboxRequestSchema } from '#engine/core/supervisor/index.js';
 const claimObject = z.object({ request: sandboxRequestSchema, owner: identitySchema }).strict();
 export const dispatchClaimSchema = claimObject.readonly();
@@ -12,6 +12,8 @@ export type DispatchRecord = z.infer<typeof dispatchRecordSchema>;
 /** Internal execution custody. Only a fresh atomic claim permits launch; replay never grants launch,
  * even to the same owner. An unresolved claim requires reconciliation, never expiry-based stealing.
  */
+/** Trusted lookup after authorization; full identity must match the Run binding. */
+export interface RunBoundDispatchStore { loadBoundDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
 export interface DispatchStore {
   requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal): Promise<DispatchRecord>;
   retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord>;
