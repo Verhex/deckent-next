@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { planSchedulingWave } from '#engine/core/scheduling/index.js';
 import { runQuerySchema, type RunAuthorization } from './application.js';
 import { runExecutionPolicySchema, runReservationSchema, RunStoreError, type RunStore, type RunReceipt, type RunReservation } from './store.js';
@@ -24,7 +25,7 @@ function checkedSnapshot(input: unknown) {
  */
 export class RunReservationApplication {
   constructor(private readonly store: RunReservationStore, private readonly verifier: PrincipalVerifier,
-    private readonly authorization: RunAuthorization, private readonly runtime: ReservationRuntime) {}
+    private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly runtime: ReservationRuntime) {}
   private project(receipt: RunReceipt, command: RunReservationCommand, actor: RunReservation['actor']) {
     let recorded;
     try { recorded = recordedReservation.parse(JSON.parse(receipt.command)); }
@@ -66,6 +67,7 @@ export class RunReservationApplication {
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
         attemptId: identitySchema.parse(this.runtime.attemptId()), generation: 1 }));
       await this.authorization.authorize('reserve', command, principal);
+      await this.poolAuthorization.authorize(policy.poolId, command.scopeId, principal);
       return this.project(await this.store.reserveRunTasks({ commandId: command.commandId, actor,
         scopeId: command.scopeId, runId: command.runId, expectedRevision: command.expectedRevision, now, identities }), command, actor);
     } catch (error) {

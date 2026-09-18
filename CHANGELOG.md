@@ -256,3 +256,5 @@ EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selectio
 - Wire CLI run creation/reservation and task execution/evaluation with bounded file/pipe graph input and actual Docker parity (functional Fable PASS1798; text acceptance follow-up open).
 
 CANCEL/RECOVERY: bounded persisted cancellation discovery with current authorization and shared delivery worker (PASS1804).
+
+POOL/AUTHORITY: reservation uses the shared engine pool authorization port (PASS1809).

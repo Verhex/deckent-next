@@ -22,9 +22,10 @@ async function fixture() {
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 0,
     policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['b', 'a'] } });
-  const state = { allow: true, subject: actor.subject, reads: 0, generated: 0, authorizations: 0 };
+  const state = { allow: true, poolAllow: true, subject: actor.subject, reads: 0, generated: 0, authorizations: 0, poolAuthorizations: 0 };
   const verifier = { async verify() { return { ...actor, subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
   const authorization = { async authorize() { state.authorizations++; if (!state.allow) throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); } };
+  const poolAuthorization = { async authorize() { state.poolAuthorizations++; if (!state.poolAllow) throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); } };
   const runtime: ReservationRuntime = { now: () => 0, attemptId: () => `system-attempt-${++state.generated}` };
   const tracked = {
     async loadRun(...args: Parameters<typeof store.loadRun>) { state.reads++; return store.loadRun(...args); },
@@ -32,7 +33,7 @@ async function fixture() {
     async loadRunExecutionPolicy(...args: Parameters<typeof store.loadRunExecutionPolicy>) { state.reads++; return store.loadRunExecutionPolicy(...args); },
     async reserveRunTasks(...args: Parameters<typeof store.reserveRunTasks>) { state.reads++; return store.reserveRunTasks(...args); },
   };
-  return { path, store, state, app: new RunReservationApplication(tracked, verifier, authorization, runtime), verifier, authorization };
+  return { path, store, state, app: new RunReservationApplication(tracked, verifier, authorization, poolAuthorization, runtime), verifier, authorization, poolAuthorization };
 }
 
 it('selects only dependency-ready work within persisted capacity, using system-generated identities', async () => {
@@ -57,7 +58,7 @@ it('fails closed when a replay receipt carries a corrupt Run snapshot', async ()
     loadRunReceipt: async () => ({ ...receipt, snapshot: { schemaVersion: 2 } }),
     loadRunExecutionPolicy: (...args) => f.store.loadRunExecutionPolicy(...args),
     reserveRunTasks: (...args) => f.store.reserveRunTasks(...args),
-  }, f.verifier, f.authorization, { now: () => 0, attemptId: () => 'must-not-generate' });
+  }, f.verifier, f.authorization, f.poolAuthorization, { now: () => 0, attemptId: () => 'must-not-generate' });
   await expect(corrupt.reserve(command)).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
 });
 
@@ -78,10 +79,18 @@ it('enforces fresh authorization before both reservation and replay', async () =
   expect(f.state.reads).toBe(reads); expect(f.state.generated).toBe(1); expect(receipt.identities[0]!.attemptId).toBe('system-attempt-1');
 });
 
+it('requires current pool authority only for a fresh capacity mutation', async () => {
+  const f = await fixture(); f.state.poolAllow = false;
+  await expect(f.app.reserve(command)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect((await f.store.loadRun('s', 'r'))!.revision).toBe(0); expect(f.state.poolAuthorizations).toBe(1);
+  f.state.poolAllow = true; const receipt = await f.app.reserve(command); expect(f.state.poolAuthorizations).toBe(2);
+  f.state.poolAllow = false; expect(await f.app.reserve(command)).toEqual(receipt); expect(f.state.poolAuthorizations).toBe(2);
+});
+
 it('returns the winning generated identity to concurrent identical commands', async () => {
   const f = await fixture(); const second = await openSqliteAttemptStore(f.path, options); stores.push(second);
   let generated = 0;
-  const app = new RunReservationApplication(second, f.verifier, f.authorization, { now: () => 0, attemptId: () => `other-attempt-${++generated}` });
+  const app = new RunReservationApplication(second, f.verifier, f.authorization, f.poolAuthorization, { now: () => 0, attemptId: () => `other-attempt-${++generated}` });
   const results = await Promise.all([f.app.reserve(command), app.reserve(command)]);
   expect(results[0].identities).toEqual(results[1].identities);
   expect(results[0].identities).toHaveLength(1); expect((await second.loadRun('s', 'r'))!.revision).toBe(1);

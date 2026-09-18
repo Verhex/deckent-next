@@ -9,8 +9,8 @@ export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core
 export { DispatchApplication } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
-export { RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError } from '#engine/core/policy/index.js';
-export type { PolicySource } from '#engine/core/policy/index.js';
+export { PoolPolicyAuthorization, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError } from '#engine/core/policy/index.js';
+export type { PoolAuthorization, PolicySource } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 export { planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
