@@ -154,3 +154,5 @@ SUPERVISOR/D DONE — internal versioned process transport and real Docker throu
 SUPERVISOR/E DONE — NUL options rejected, missing binary and invalid UTF8 redacted, live control abort verified. PASS1552,267 tests/14 Docker. Inherited-pipe deadline follow-up under SUPERVISOR/F.
 
 SUPERVISOR/F DONE — stop closes local stdio after killing control PID; inherited pipe writers cannot extend deadline. PASS1563,268 tests/14 Docker. Descendant termination remains unproven, explicitly outside this fix.
+
+SUPERVISOR/G DONE — single TS identity/options normalization and digest producer preserves existing bytes; golden Unicode cases plus old/new real Docker crossing. PASS1564,276 tests/14 Docker plus crossing proof. Not exported through product SDK.

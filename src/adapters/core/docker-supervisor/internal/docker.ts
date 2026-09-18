@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { sandboxRequestSchema, SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
+import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
+import { identifyDockerRequest } from './identity.js';
 const exec = promisify(execFile);
 type Inspection = { Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
@@ -22,13 +22,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     return exec(this.options.executable, args, { maxBuffer: this.options.outputBytes, encoding: 'utf8',
       signal: signal ? AbortSignal.any([signal, deadline]) : deadline });
   }
-  private identity(request: SandboxRequest) {
-    const parsed = sandboxRequestSchema.safeParse(request);
-    if (!parsed.success || parsed.data.argv.some(value => value.includes('\0'))) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
-    const digest = createHash('sha256').update(JSON.stringify({ request: parsed.data, options: this.options })).digest('hex');
-    const handle = 'deckent-' + createHash('sha256').update(JSON.stringify(parsed.data.identity)).digest('hex');
-    return { request: parsed.data, digest, handle };
-  }
+  private identity(request: SandboxRequest) { return identifyDockerRequest(request, this.options); }
   private async inspect(handle: string, digest: string): Promise<Inspection | null> {
     let stdout: string;
     try { stdout = (await this.command(['inspect', handle], this.options.controlTimeoutMs)).stdout; }
