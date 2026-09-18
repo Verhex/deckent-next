@@ -398,3 +398,5 @@ SUPERVISOR/L landed after Fable PASS1616: atomic readiness publication closes em
 RUN/L landed after Fable PASS1618: SDK requestRunCancellation uses current policy and existing versioned command, persists intent only. 331 tests/15 Docker; no worker delivery or termination claim. CLI text and shared composition context follow.
 
 RUN/M landed after Fable PASS1633 + independent design critic ACCEPTABLE_FOR_PIPE_V1: CLI intent-only run cancel, shared SDK JSON, EN/TR real-binary captures and policy/revision negatives. 334 tests/15 Docker; no worker delivery. Next safe-action/help/replay capture refinements tracked in1633; configured delivery follows CANCEL/D.
+
+RUN/N: shared config/OS identity/fresh policy/membership/deferred ledger path for Run surfaces; no behavior change. Fable PASS1637, 331 tests/15 Docker. Empty-membership error consistency remains a follow-up.

@@ -1,20 +1,14 @@
-import { userInfo } from 'node:os';
-import { loadConfig, inspectProductFile, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, readLocalOsIdentity, openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
-import { policySchema, policyScopeMembership, evaluatePolicy, policyResources } from '#domain/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
+import { evaluatePolicy, policyResources } from '#domain/index.js';
 import { RunAdmissionApplication, runAdmissionSchema, RunPolicyAuthorization, PolicyAuthorizationError, type RunAdmission, type RunCreate } from '#engine/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { loadConfiguredRunContext } from './context.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Local OS ingress. Existing pool provisioning is required; no implicit pool creation or config-derived grants. */
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try {
-    registerProviderConfig(); const command = runAdmissionSchema.parse(input);
-    const config = await loadConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
-    const identity = readLocalOsIdentity(); let document;
-    try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
-    catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-    const principal = Object.freeze({ ...identity, scopeIds: policyScopeMembership(document, identity, [command.scopeId]) });
-    const path = () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
+    const command = runAdmissionSchema.parse(input);
+    const { config, layout, document, principal, path } = await loadConfiguredRunContext(projectRoot, command.scopeId, options);
     const store = {
       async loadRunReceipt(scopeId: string, commandId: string) {
         const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
