@@ -12,13 +12,15 @@ const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layout
 const request = { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['task'] };
 const evaluation = { schemaVersion: 1, evaluationId: 'e', identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'pass', evidenceIds: ['proof'] }] };
 const limits = { maxEvidenceItems: 2, maxTotalBytes: 1024 };
-async function fixture() {
+const envelope = (changes: Record<string, unknown> = {}) => Buffer.from(JSON.stringify({ schemaVersion: 1, identity,
+  completeness: 'complete', stdout: 'observed output', stderr: '', ...changes }));
+async function fixture(bytes = envelope()) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-task-evidence-')); roots.push(root);
   const db = join(root, 'ledger.db'); const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
   const store = await openSqliteAttemptStore(db, options, 'allow', custodyProfiles); stores.push(store); await admitRunAttempts(store, [identity]);
   await mkdir(join(root, 'artifacts'), { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 1024 });
-  const receipt = await artifacts.put('s', Buffer.from('observed output')); const claim = { request, owner: 'supervisor' };
+  const receipt = await artifacts.put('s', bytes); const claim = { request, owner: 'supervisor' };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim); await store.retainDispatchOutput(claim, receipt);
   return { store, artifacts, receipt, claim, db, options };
 }
@@ -30,6 +32,38 @@ it.skipIf(process.platform === 'win32')('binds real reopened ledger output and a
   expect(await verifyDispatchEvaluationEvidence(evaluation, request, manifest, reopened, f.artifacts, limits)).toEqual(manifest);
   expect(await reopened.readDispatch(request)).toEqual(before);
   expect(await reopened.loadRun('s', 'r')).toEqual(runBefore); expect(await reopened.load('s', 'a')).toEqual(attemptBefore);
+});
+it.skipIf(process.platform === 'win32').each([
+  ['foreign identity', () => envelope({ identity: { ...identity, generation: 2 } })],
+  ['partial output', () => envelope({ completeness: 'partial' })],
+  ['unavailable output', () => envelope({ completeness: 'unavailable' })],
+  ['malformed UTF-8', () => Buffer.from([0xc3, 0x28])],
+  ['malformed JSON', () => Buffer.from('{"schemaVersion":1')],
+] as const)('rejects retained %s after one bounded artifact read', async (_name, content) => {
+  const f = await fixture(content()); await f.store.finishDispatch(f.claim, { handle: 'h', exitCode: 0, interrupted: false });
+  const manifest = [{ evidenceId: 'proof', receipt: f.receipt }]; let reads = 0;
+  await expect(verifyDispatchEvaluationEvidence(evaluation, request, manifest, f.store, {
+    async read(scopeId, receipt) { reads++; return f.artifacts.read(scopeId, receipt); },
+  }, limits)).rejects.toThrow('TASK_EVIDENCE_UNLINKED');
+  expect(reads).toBe(1);
+});
+it.skipIf(process.platform === 'win32').each([
+  ['oversized bytes', () => Buffer.alloc(2048, 1)],
+  ['malformed tampered bytes', () => Buffer.from('{not-json')],
+] as const)('preserves artifact corruption precedence for %s returned against a valid receipt', async (_name, content) => {
+  const f = await fixture(); await f.store.finishDispatch(f.claim, { handle: 'h', exitCode: 0, interrupted: false });
+  const manifest = [{ evidenceId: 'proof', receipt: f.receipt }]; let reads = 0;
+  await expect(verifyDispatchEvaluationEvidence(evaluation, request, manifest, f.store, {
+    async read() { reads++; return content(); },
+  }, limits)).rejects.toMatchObject({ code: 'EVALUATION_EVIDENCE_CORRUPT' });
+  expect(reads).toBe(1);
+});
+it.skipIf(process.platform === 'win32')('rejects manifest byte budget before reading retained output', async () => {
+  const f = await fixture(); await f.store.finishDispatch(f.claim, { handle: 'h', exitCode: 0, interrupted: false }); let reads = 0;
+  await expect(verifyDispatchEvaluationEvidence(evaluation, request, [{ evidenceId: 'proof', receipt: f.receipt }], f.store, {
+    async read() { reads++; return envelope(); },
+  }, { ...limits, maxTotalBytes: 1 })).rejects.toMatchObject({ code: 'EVALUATION_EVIDENCE_LIMIT' });
+  expect(reads).toBe(0);
 });
 it.skipIf(process.platform === 'win32')('rejects unresolved execution and an existing same-scope artifact not retained by this attempt', async () => {
   const f = await fixture(); const manifest = [{ evidenceId: 'proof', receipt: f.receipt }];

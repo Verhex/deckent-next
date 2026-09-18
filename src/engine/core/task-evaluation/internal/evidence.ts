@@ -1,6 +1,6 @@
 import { taskEvaluationSchema, sameAttemptIdentity } from '#domain/index.js';
 import { verifyEvaluationEvidence, type EvaluationEvidenceLimits, type ArtifactStore } from '#capabilities/index.js';
-import { dispatchRecordSchema, type DispatchStore } from '#engine/core/dispatch/index.js';
+import { dispatchRecordSchema, verifyRetainedOutputEnvelope, type DispatchStore } from '#engine/core/dispatch/index.js';
 import { sandboxRequestSchema, sameSandboxRequest } from '#engine/core/supervisor/index.js';
 export class TaskEvidenceError extends Error {
   constructor(readonly code: 'TASK_EVIDENCE_INVALID' | 'TASK_EVIDENCE_UNAVAILABLE' | 'TASK_EVIDENCE_UNLINKED') { super(code); this.name = 'TaskEvidenceError'; }
@@ -22,17 +22,22 @@ export async function verifyDispatchEvaluationEvidence(evaluationInput: unknown,
   const receipt = record.data.output;
   // The capability verifier checks exact reference coverage and all scope/budget limits first.
   // Guard every content read against the immutable receipt loaded from the execution ledger.
-  let unlinked = false;
+  let unlinked = false; let retainedBytes: Uint8Array | undefined;
   try {
-    return await verifyEvaluationEvidence(evaluation.data, manifest, {
+    const verified = await verifyEvaluationEvidence(evaluation.data, manifest, {
       async read(scopeId, supplied) {
         if (!receipt || receipt.schemaVersion !== supplied.schemaVersion || receipt.scopeId !== supplied.scopeId
           || receipt.digest !== supplied.digest || receipt.byteLength !== supplied.byteLength) {
           unlinked = true; throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
         }
-        return artifacts.read(scopeId, supplied);
+        return retainedBytes ??= await artifacts.read(scopeId, supplied);
       },
     }, limits);
+    if (retainedBytes) {
+      try { verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity); }
+      catch { unlinked = true; throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED'); }
+    }
+    return verified;
   } catch (error) {
     if (unlinked) throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED');
     throw error;

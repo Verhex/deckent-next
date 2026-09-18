@@ -7,3 +7,4 @@ export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutc
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from './internal/settle.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from './internal/inventory.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from './internal/inventory.js';
+export { verifyRetainedOutputEnvelope } from './internal/output.js';
