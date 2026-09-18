@@ -478,3 +478,5 @@ CANCEL/RECOVERY PASS1804: bounded durable discovery and shared delivery applicat
 POOL/AUTHORITY PASS1809: reservation pool authorization belongs to engine. Admission pool reuse remains follow-up.
 
 RECOVERY/COMPOSITION PASS1814: shared recorded-profile factory and bounded SDK recovery landed. Service hosting/provisioning remain open; no M1 claim.
+
+RECOVERY/PROCESS PASS1819: actual controller SIGKILL followed by fresh-process recorded-profile recovery verified. Continuous service remains next.

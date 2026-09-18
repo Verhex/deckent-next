@@ -260,3 +260,5 @@ CANCEL/RECOVERY: bounded persisted cancellation discovery with current authoriza
 POOL/AUTHORITY: reservation uses the shared engine pool authorization port (PASS1809).
 
 RECOVERY/COMPOSITION: authorized bounded recovery from recorded supervisor profiles (PASS1814).
+
+RECOVERY/PROCESS: real Docker recovery proven after execution controller death (PASS1819).
