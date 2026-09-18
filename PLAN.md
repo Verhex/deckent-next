@@ -416,3 +416,5 @@ CANCEL/E DONE — no runtime directory or Docker dependency for undispatched att
 RUN/P DONE — CLI cancel now performs configured delivery; SDK/CLI/MCP real worker parity, EN/TR stale/replay captures, Fable1671 PASS and ACCEPTABLE_FOR_PIPE_V1, 340 tests / 18 Docker. Partial-outcome summary and terminology refinements follow.
 
 CANCEL/F DONE — names missing cancellation/execution profiles before intent or runtime directory creation; Fable1676 PASS, 342 tests / 18 Docker.
+
+STORE/F DONE — trusted full-identity dispatch lookup shared with cancellation, six identity axes and corruption negatives; Fable1689 PASS, 345 tests / 18 Docker. Generic adapter port follow-up recorded.

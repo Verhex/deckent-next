@@ -1,3 +1,4 @@
+import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { migrateLedger } from './schema.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import type { AttemptIdentity } from '#domain/index.js';
@@ -33,6 +34,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, Dispatch
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
       this.db.close(); throw sqliteFailure(error);
     }
+  }
+  async loadBoundDispatch(identity: AttemptIdentity) {
+    try { return readRunBoundDispatch(this.db, identity).dispatch; } catch (error) { throw sqliteFailure(error); }
   }
   async loadCancellationDispatch(identity: AttemptIdentity) {
     try { return loadCancellationDispatch(this.db, identity); } catch (error) { throw sqliteFailure(error); }

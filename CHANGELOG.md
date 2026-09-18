@@ -198,3 +198,5 @@ CANCEL/E: cancellation of reserved work returns not-dispatched without creating 
 RUN/P: run cancel delivers to workers and reports per-attempt outcomes; help explains idempotent retries, stale revisions and recorded process exit versus Task acceptance.
 
 CANCEL/F: cancellation configuration errors identify the missing profile in typed parameters and EN/TR text.
+
+STORE/F: internal dispatch lookup binds stored execution requests to their exact Run/Task/Attempt without caller-provided paths or commands.
