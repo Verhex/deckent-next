@@ -446,3 +446,5 @@ LAUNCH/B DONE — Real SQLite/Docker cancellation barriers; 379 tests/24 Docker.
 CANCEL/G1 DONE — Recorded-profile cancellation/reconciliation survives execution configuration change/removal; 379 tests/24 Docker; Fable PASS1748.
 
 CANCEL/G2 DONE — Docker endpoint bound in adapter profile2; ledger6 forward validation and strict migration gate; 381 tests/24 Docker; Fable PASS1751. Cross-host rebind/backup relocation remain unsupported; no automatic reset.
+
+LAUNCH/L1 DONE — Pure engine launch decision; SQLite transactional persistence; injected clock; 390 tests/24 Docker; Fable PASS1754. N3 and durable retry tracked separately.

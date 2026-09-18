@@ -1,5 +1,7 @@
 export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError } from './internal/port.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from './internal/port.js';
+export { decideDispatchLaunch, validateLaunchRequest } from './internal/launch.js';
+export type { DispatchLaunchState, DispatchLaunchTransition } from './internal/launch.js';
 export { DispatchApplication } from './internal/application.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from './internal/application.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from './internal/settle.js';

@@ -4,6 +4,8 @@ export * from '#engine/core/authentication/index.js';
 export * from '#engine/core/workspaces/index.js';
 export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError } from '#engine/core/dispatch/index.js';
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from '#engine/core/dispatch/index.js';
+export { decideDispatchLaunch, validateLaunchRequest } from '#engine/core/dispatch/index.js';
+export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core/dispatch/index.js';
 export { DispatchApplication } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';

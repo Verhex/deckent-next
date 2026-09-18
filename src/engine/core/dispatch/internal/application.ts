@@ -18,7 +18,8 @@ export type DispatchOutcome = Readonly<{ kind: 'terminal'; record: DispatchRecor
 export class DispatchApplication {
   private readonly owner: string;
   constructor(private readonly store: DispatchStore, private readonly supervisor: ExecutionSupervisor & SupervisorProfileSource,
-    private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore) {
+    private readonly verifier: PrincipalVerifier, private readonly authorization: DispatchAuthorization, owner: string, private readonly artifacts: ArtifactStore,
+    private readonly now: () => number = Date.now) {
     this.owner = identitySchema.parse(owner);
   }
   private async admit(action: CorePolicyAction<'attempt'>, input: unknown, credential: unknown) {
@@ -35,7 +36,7 @@ export class DispatchApplication {
     if (existing) return Object.freeze({ kind: existing.launch === 'prevented-before-launch' ? 'prevented' : existing.terminal ? 'terminal' : 'unresolved', record: existing });
     const claimed = await this.store.claimDispatch({ ...claim, profile: await this.supervisor.captureProfile() });
     if (!claimed.acquired) return Object.freeze({ kind: claimed.record.launch === 'prevented-before-launch' ? 'prevented' : claimed.record.terminal ? 'terminal' : 'unresolved', record: claimed.record });
-    const grant = await this.store.grantLaunch({ claim, principal, now: Date.now() });
+    const grant = await this.store.grantLaunch({ claim, principal, now: this.now() });
     if (grant.kind === 'prevented') return Object.freeze({ kind: 'prevented', record: grant.record });
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
     const result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal));
@@ -66,7 +67,7 @@ export class DispatchApplication {
     if (current.launch === 'prevented-before-launch') return Object.freeze({ kind: 'prevented', record: current });
     if (current.terminal) return Object.freeze({ kind: 'terminal', record: current });
     if (current.launch === 'pending') {
-      const decision = await this.store.grantLaunch({ claim: { request, owner: current.owner }, principal, now: Date.now() });
+      const decision = await this.store.grantLaunch({ claim: { request, owner: current.owner }, principal, now: this.now() });
       return Object.freeze({ kind: decision.kind === 'prevented' ? 'prevented' : 'unresolved', record: decision.record });
     }
     const observed = sandboxObservationSchema.parse(await this.supervisor.cancel(request));
