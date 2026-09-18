@@ -168,3 +168,5 @@ SUPERVISOR/K DONE — strict correlated process evidence, canonical base64 and p
 EVALUATION/A: validate task evaluation against exact run/attempt and criteria; process exit is not acceptance. No public acceptance API yet.
 
 EVALUATION/B: bounded scoped artifact content verification; 319 tests/15 Docker, Fable PASS1607. Attempt provenance follows C; no acceptance API.
+
+EVALUATION/C: trusted dispatch record binds exact attempt/request/output receipt before artifact read; 322 tests/15 Docker, Fable PASS1602. Only retained output, no workspace artifact linkage yet.

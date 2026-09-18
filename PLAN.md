@@ -386,3 +386,5 @@ SUPERVISOR/K DONE — strict correlated process evidence, canonical base64 and p
 EVALUATION/A landed: versioned pure evaluation binding/classification, exact criteria and attempt revisions; no acceptance mutation. 315 tests / 15 real Docker; Fable PASS 1590. Artifact provenance and atomic acceptance follow.
 
 EVALUATION/B: bounded scoped artifact content verification; 319 tests/15 Docker, Fable PASS1607. Attempt provenance follows C; no acceptance API.
+
+EVALUATION/C: trusted dispatch record binds exact attempt/request/output receipt before artifact read; 322 tests/15 Docker, Fable PASS1602. Only retained output, no workspace artifact linkage yet.

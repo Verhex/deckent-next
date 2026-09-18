@@ -14,3 +14,4 @@ export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryE
 export { planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
+export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
