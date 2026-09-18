@@ -1,4 +1,4 @@
-import { runInspectionCommand } from './run.js';
+import { runCommand } from './run.js';
 import { runInventoryCommand } from './inventory.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -19,7 +19,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     assertErrorRegistry();
     context.initialize?.();
     if (argv[0] === 'run') {
-      await runInspectionCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
     if (argv[0] === 'inventory') {

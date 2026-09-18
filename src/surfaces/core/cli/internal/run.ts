@@ -1,20 +1,32 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import type { RunQuery, RunView } from '#engine/index.js';
+import type { RunCommand, RunQuery, RunView } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
-export async function runInspectionCommand(argv: readonly string[], context: CommandContext): Promise<void> {
-  if (argv[1] !== 'inspect') throw ErrorRegistry.createError('CLI_USAGE');
+export type RunCancellationHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; cancellation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  const action = argv[1];
+  if (action !== 'inspect' && action !== 'cancel') throw ErrorRegistry.createError('CLI_USAGE');
+  const allowed = action === 'cancel' ? ['--scope', '--id', '--lang', '--command-id', '--expected-revision'] : ['--scope', '--id', '--lang'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') { if (json) throw ErrorRegistry.createError('CLI_USAGE'); json = true; continue; }
     if (arg === '--no-color') continue;
-    if (!['--scope', '--id', '--lang'].includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!allowed.includes(arg) || values.has(arg)) throw ErrorRegistry.createError('CLI_USAGE');
     const value = argv[++i]; if (!value || value.startsWith('--')) throw ErrorRegistry.createError('CLI_USAGE'); values.set(arg, value);
   }
   const scopeId = values.get('--scope'); const runId = values.get('--id');
   if (!scopeId || !runId) throw ErrorRegistry.createError('CLI_USAGE');
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
+  if (action === 'cancel') {
+    const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw ErrorRegistry.createError('CLI_USAGE');
+    if (!context.requestRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.requestRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
+      t('cli.run.cancel.requested', { run: data.cancellation.run.runId, revision: data.cancellation.run.revision, command: data.cancellation.commandId }, locale) });
+    return;
+  }
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, runId }, { env: context.env ?? process.env });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {

@@ -396,3 +396,5 @@ STORE/E: shared writer/reader ledger version authority; schema4 unchanged, atomi
 SUPERVISOR/L landed after Fable PASS1616: atomic readiness publication closes empty-PID race1605; 328 tests/15 Docker and 5 repeated targeted cancellation suites. Production behavior unchanged.
 
 RUN/L landed after Fable PASS1618: SDK requestRunCancellation uses current policy and existing versioned command, persists intent only. 331 tests/15 Docker; no worker delivery or termination claim. CLI text and shared composition context follow.
+
+RUN/M landed after Fable PASS1633 + independent design critic ACCEPTABLE_FOR_PIPE_V1: CLI intent-only run cancel, shared SDK JSON, EN/TR real-binary captures and policy/revision negatives. 334 tests/15 Docker; no worker delivery. Next safe-action/help/replay capture refinements tracked in1633; configured delivery follows CANCEL/D.
