@@ -440,3 +440,5 @@ CUSTODY-B DONE: Fable 1725:5dcf4ffbed2a PASS. Profile-bearing dispatch contract 
 GRAPH2/D DONE — single current graph schema 2, typed criterion references and language-neutral golden fixtures. Fable PASS 1735; 363 tests including 21 Docker tests.
 
 CUSTODY/C + LAUNCH/A foundation DONE — canonical dispatch schema 2 and ledger 5, required adapter validation, transactional single-use grant and cancellation prevention. Fable PASS 1737; 376 tests /21 Docker. LAUNCH/B must move pure launch decisions into engine; durable delivery remains open.
+
+LAUNCH/B DONE — Real SQLite/Docker cancellation barriers; 379 tests/24 Docker. Behavior PASS1742; layer prerequisite PASS1754, applied in following L1 commit.
