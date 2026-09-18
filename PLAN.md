@@ -388,3 +388,5 @@ EVALUATION/A landed: versioned pure evaluation binding/classification, exact cri
 EVALUATION/B: bounded scoped artifact content verification; 319 tests/15 Docker, Fable PASS1607. Attempt provenance follows C; no acceptance API.
 
 EVALUATION/C: trusted dispatch record binds exact attempt/request/output receipt before artifact read; 322 tests/15 Docker, Fable PASS1602. Only retained output, no workspace artifact linkage yet.
+
+EVALUATION/D: pure pass/fail/HOLD Run transitions; HOLD consumes revision, accepted Task cannot reopen. 327 tests/15 Docker, Fable PASS1603. Actual admission, immutable criteria and atomic acceptance remain pending.
