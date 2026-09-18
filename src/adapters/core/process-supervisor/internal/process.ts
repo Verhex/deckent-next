@@ -30,7 +30,11 @@ export class ProcessSupervisor implements ExecutionSupervisor {
       const child = spawn(options.executable, [...options.args], { cwd: options.cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
       const chunks: Buffer[] = []; let bytes = 0; let failed = false;
       // Kill the control process only. The durable application must reconcile its worker separately.
-      const stop = () => { failed = true; child.kill('SIGKILL'); };
+      const stop = () => {
+        failed = true; child.kill('SIGKILL');
+        // Inherited pipe writers must not extend this command's deadline after its control PID exits.
+        child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+      };
       const timeout = setTimeout(stop, options.timeoutMs);
       signal?.addEventListener('abort', stop, { once: true });
       if (signal?.aborted) stop();

@@ -81,3 +81,19 @@ it('interrupts a confirmed live control process without reporting worker termina
     expect(() => process.kill(pid, 0)).toThrow();
   } finally { controller.abort(); await pending.catch(() => {}); }
 });
+
+it('does not wait for inherited pipe writers after the control deadline', async () => {
+  const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setTimeout(()=>{},4000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(fs=>fs.writeFile('descendant',String(child.pid)));setInterval(()=>{},1000);");
+  let descendant = 0;
+  const pending = new ProcessSupervisor({ ...f.options, timeoutMs: 1000 }).observe(f.request);
+  const rejection = expect(pending).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
+  try {
+    for (let i = 0; i < 200; i++) {
+      try { descendant = Number(await readFile(join(f.root, 'descendant'), 'utf8')); break; } catch { await sleep(10); }
+    }
+    expect(descendant).toBeGreaterThan(0); await rejection;
+    // The command returned before the descendant closed its inherited stdout/stderr.
+    // This is intentionally not evidence that a worker or arbitrary descendant stopped.
+    expect(() => process.kill(descendant, 0)).not.toThrow();
+  } finally { if (descendant) { try { process.kill(descendant, 'SIGKILL'); } catch { /* The bounded child may already have exited. */ } } await pending.catch(() => {}); }
+}, 7000);
