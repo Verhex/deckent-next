@@ -240,3 +240,5 @@ EXEC-EVIDENCE: SDK/MCP reject mismatched recorded Docker custody without mutatio
 REGISTRY/A: versioned kind/profile/evaluator data pinned at Run admission; RunView2 exposes criterion/profile references without parameters. Fable1768 PASS.
 
 EVAL/E-OUTPUT: reject foreign/partial/malformed retained execution output before evaluation; single bounded read and hash-before-parse validation. Fable1773 PASS.
+
+EVAL/E-STORE: atomic Task acceptance with exact custody/revision fences, normalized idempotent receipts and rollback. Fable1775 PASS.

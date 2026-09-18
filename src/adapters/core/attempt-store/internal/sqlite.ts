@@ -4,7 +4,7 @@ import { loadCancellationDispatch } from './run-cancellation.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
-import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection } from '#engine/index.js';
+import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, TaskEvaluationCommit, TaskEvaluationStore } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -14,7 +14,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, ty
 import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, TaskEvaluationStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -50,6 +50,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
+  async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db).commitTaskEvaluation(input); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
   async createRun(input: RunCreate) { return new SqliteRunJournal(this.db).createRun(input); }
   async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db).reserveRunTasks(input); }

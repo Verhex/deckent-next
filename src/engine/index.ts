@@ -19,3 +19,5 @@ export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
 export { supervisorProfileSchema } from '#engine/core/supervisor/index.js';
 export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/supervisor/index.js';
+export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody } from '#engine/core/task-evaluation/index.js';
+export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';

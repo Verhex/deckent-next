@@ -3,7 +3,9 @@ import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
-  assertRunExecution, type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
+  assertRunExecution, assertTaskEvaluationCustody, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
+  type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
+import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { sqliteFailure } from './options.js';
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync) {}
@@ -73,6 +75,30 @@ export class SqliteRunJournal {
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
       return this.record({ commandId: parsed.commandId, command, snapshot });
+    });
+  }
+  async commitTaskEvaluation(input: TaskEvaluationCommit): Promise<RunReceipt> {
+    const parsed = taskEvaluationCommitSchema.parse(input);
+    const command = JSON.stringify({ action: 'apply-task-evaluation', ...parsed });
+    const { scopeId, runId, attemptId } = parsed.evaluation.identity;
+    return this.transaction(() => {
+      const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
+      const { run, dispatch } = readRunBoundDispatch(this.db, parsed.evaluation.identity);
+      if (!dispatch) throw new RunStoreError('RUN_STORE_CONFLICT');
+      assertTaskEvaluationCustody(parsed.dispatch, dispatch);
+      const row = this.db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
+      if (!row) throw new RunStoreError('RUN_STORE_CONFLICT');
+      let attempt;
+      try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); }
+      catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+      if (attempt.revision !== row.revision || attempt.identity.scopeId !== scopeId || attempt.identity.attemptId !== attemptId) {
+        throw new RunStoreError('RUN_STORE_CORRUPT');
+      }
+      const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, parsed.evaluation);
+      const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
+        .run(proposed.snapshot.revision, JSON.stringify(proposed.snapshot), scopeId, runId, parsed.expectedRevision);
+      if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
+      return this.record({ commandId: parsed.commandId, command, snapshot: proposed.snapshot });
     });
   }
   async cancelRun(input: RunCancellation): Promise<RunReceipt> {
