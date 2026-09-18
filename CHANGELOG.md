@@ -166,3 +166,5 @@ SUPERVISOR/J DONE — readiness-driven cancellation replaces startup/deadline ra
 SUPERVISOR/K DONE — strict correlated process evidence, canonical base64 and pre-decode bounds; producer uses same validator. PASS1578,304 tests/15 Docker. Shared Go conformance vectors and signal-name vocabulary follow-up.
 
 EVALUATION/A: validate task evaluation against exact run/attempt and criteria; process exit is not acceptance. No public acceptance API yet.
+
+EVALUATION/B: bounded scoped artifact content verification; 319 tests/15 Docker, Fable PASS1607. Attempt provenance follows C; no acceptance API.
