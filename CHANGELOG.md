@@ -142,3 +142,5 @@ RUN/J DONE: configured local SDK admission with explicit pool-use authority, tru
 MCP/A: added versioned read-only stdio MCP tools with shared schemas, policy checks, bounded concurrency/output and redacted errors; official SDK pinned. Independently reviewed 1534.
 
 RUN/K DONE — SDK admission requires positive capacity and current ledger schema inside writer transaction; no implicit migration. PASS1547,253 tests/13 Docker. Follow-up: shared schema-version constant.
+
+MCP/B DONE — real-process oversized input regression closes MCP/A transport proof gap. PASS1548,252 tests/13 Docker.

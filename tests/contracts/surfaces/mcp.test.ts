@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -45,3 +47,25 @@ it.skipIf(process.platform === 'win32')('serves the same configured Run as SDK o
     expect((await client.listTools()).tools.every(t => t.annotations?.readOnlyHint === true)).toBe(true);
   } finally { await client.close(); await transport.close(); await rm(root, { recursive: true, force: true }); }
 }, 15000);
+
+it('rejects oversized unterminated stdio input with a sanitized transport error', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-input-'));
+  await mkdir(join(root, '.deckent'), { mode: 0o700 });
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ mcp: { inputMaxBytes: 256 } }));
+  const child = spawn(process.execPath, [resolve('dist/composition/core/mcp/internal/entry.js')], {
+    cwd: root, env: { ...process.env, HOME: join(root, 'home') }, stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  let stdout = ''; let stderr = ''; let timedOut = false;
+  child.stdout.on('data', chunk => { stdout += String(chunk); });
+  child.stderr.on('data', chunk => { stderr += String(chunk); });
+  child.stdin.on('error', () => {});
+  const closed = once(child, 'close');
+  const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 5000);
+  try {
+    child.stdin.end('{"private":"' + 'secret'.repeat(100));
+    await closed;
+    expect(timedOut).toBe(false);
+    expect(stdout).toBe('');
+    expect(stderr).toBe('MCP_TRANSPORT_FAILED\n');
+  } finally { clearTimeout(timer); child.kill(); await rm(root, { recursive: true, force: true }); }
+}, 10000);

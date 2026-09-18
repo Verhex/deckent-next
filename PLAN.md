@@ -360,3 +360,5 @@ RUN/J DONE: configured local SDK admission with explicit pool-use authority, tru
 MCP/A DONE — local stdio inspect_run / inspect_inventory / policy_vocabulary share configured SDK services; Fable PASS 1534, 251 tests including 13 real Docker. Remote auth and mutating tools remain pending. Follow-ups: explicit project selection, safe explanatory errors, dependency consolidation.
 
 RUN/K DONE — SDK admission requires positive capacity and current ledger schema inside writer transaction; no implicit migration. PASS1547,253 tests/13 Docker. Follow-up: shared schema-version constant.
+
+MCP/B DONE — real-process oversized input regression closes MCP/A transport proof gap. PASS1548,252 tests/13 Docker.
