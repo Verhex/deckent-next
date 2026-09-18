@@ -148,3 +148,5 @@ MCP/B DONE — real-process oversized input regression closes MCP/A transport pr
 SUPERVISOR/C DONE — strict runtime result validation before dispatch effects; invalid evidence remains unresolved without relaunch. PASS1549,252 tests/13 Docker. Content size stays adapter bounded.
 
 MCP/C DONE — --project selects bootstrap root from any cwd, invalid args redact errors. PASS1550,255 tests/13 Docker. Relative root remains cwd-dependent; absolute-path guidance follow-up.
+
+SUPERVISOR/D DONE — internal versioned process transport and real Docker through control child. PASS1551,264 tests/14 Docker. No Go/configured selection/streaming claim; transport termination does not prove worker termination.

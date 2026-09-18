@@ -10,3 +10,5 @@ export { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 export type { FileArtifactOptions } from '#adapters/core/file-artifacts/index.js';
 export { FilePolicySource, PolicyFileError } from '#adapters/core/file-policy/index.js';
 export type { FilePolicyOptions } from '#adapters/core/file-policy/index.js';
+export { ProcessSupervisor } from '#adapters/core/process-supervisor/index.js';
+export type { ProcessSupervisorOptions } from '#adapters/core/process-supervisor/index.js';
