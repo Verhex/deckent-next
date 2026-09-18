@@ -5,8 +5,8 @@ import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
 import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
-export const RUN_LEDGER_VERSION = 8;
-export const CURRENT_LEDGER_VERSION = 8;
+export const RUN_LEDGER_VERSION = 9;
+export const CURRENT_LEDGER_VERSION = 9;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -17,6 +17,7 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
     CREATE TABLE run_receipts(scope_id TEXT NOT NULL, command_id TEXT NOT NULL, command TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(scope_id,command_id)); PRAGMA user_version=3;`,
   4: 'CREATE TABLE execution_pools(pool_id TEXT PRIMARY KEY NOT NULL, policy TEXT NOT NULL); PRAGMA user_version=4;',
   7: 'CREATE TABLE cancellation_deliveries(scope_id TEXT NOT NULL,attempt_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,attempt_id)); PRAGMA user_version=7;',
+  9: 'CREATE TABLE run_workspace_custody(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,run_id)); PRAGMA user_version=9;',
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;

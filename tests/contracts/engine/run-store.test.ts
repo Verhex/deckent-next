@@ -64,7 +64,7 @@ it('rejects opening a schema-2 reader, then migrates prior attempt data for a cu
   expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); await store.createRun(create);
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]); } finally { reader.close(); }
-  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(8); } finally { check.close(); }
+  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(9); } finally { check.close(); }
 });
 
 it('returns bounded busy under a separate process transaction, without partial reservation', async () => {

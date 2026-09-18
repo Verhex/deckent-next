@@ -31,7 +31,7 @@ it('rejects column/snapshot revision divergence in both read-only and writable r
   } finally { reader.close(); writer.close(); }
 });
 it('refuses opening a schema2 reader, then reads only after the writer migrates to current schema', async () => {
-  const path = await fixture(); const db = new DatabaseSync(path); db.exec('DROP TABLE cancellation_deliveries; DROP TABLE runs; DROP TABLE run_receipts; DROP TABLE execution_pools; PRAGMA user_version=2'); db.close();
+  const path = await fixture(); const db = new DatabaseSync(path); db.exec('DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; DROP TABLE runs; DROP TABLE run_receipts; DROP TABLE execution_pools; PRAGMA user_version=2'); db.close();
   const before = await readFile(path);
   await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(before);
@@ -40,5 +40,5 @@ it('refuses opening a schema2 reader, then reads only after the writer migrates 
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
   const migrated = new DatabaseSync(path, { readOnly: true });
-  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(8); } finally { migrated.close(); }
+  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(9); } finally { migrated.close(); }
 });

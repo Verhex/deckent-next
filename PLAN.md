@@ -482,3 +482,5 @@ RECOVERY/COMPOSITION PASS1814: shared recorded-profile factory and bounded SDK r
 RECOVERY/PROCESS PASS1819: actual controller SIGKILL followed by fresh-process recorded-profile recovery verified. Continuous service remains next.
 
 CLI/TEXT PASS1834: fix(cli): clarify localized task lifecycle and usage.
+
+RUN/CUSTODY PASS1834: feat(workspace): persist immutable Run source custody.

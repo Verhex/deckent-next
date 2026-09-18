@@ -3,6 +3,7 @@ import { migrateLedger } from './schema.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
+import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, TaskEvaluationCommit, TaskEvaluationStore } from '#engine/index.js';
@@ -50,6 +51,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async discoverCancellationRecovery(input: import('#engine/index.js').CancellationRecoveryQuery) {
     return new SqliteCancellationRecoveryQuery(this.db).discoverCancellationRecovery(input);
   }
+  async loadRunWorkspaceCustody(scopeId: string, runId: string) { return new SqliteRunWorkspaceCustody(this.db).loadRunWorkspaceCustody(scopeId, runId); }
+  async resolveRunWorkspaceCustody(input: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunWorkspaceCustody(this.db).resolveRunWorkspaceCustody(input); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }

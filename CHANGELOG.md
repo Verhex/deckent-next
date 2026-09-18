@@ -264,3 +264,5 @@ RECOVERY/COMPOSITION: authorized bounded recovery from recorded supervisor profi
 RECOVERY/PROCESS: real Docker recovery proven after execution controller death (PASS1819).
 
 CLI/TEXT PASS1834: fix(cli): clarify localized task lifecycle and usage.
+
+RUN/CUSTODY PASS1834: feat(workspace): persist immutable Run source custody.
