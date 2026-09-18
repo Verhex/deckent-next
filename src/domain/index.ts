@@ -4,3 +4,4 @@ export * from '#domain/core/primitives/index.js';
 export * from '#domain/core/principal/index.js';
 export * from '#domain/core/policy/index.js';
 export * from '#domain/core/run/index.js';
+export * from '#domain/core/task-evaluation/index.js';

@@ -164,3 +164,5 @@ SUPERVISOR/I: added explicit Linux process profile and Docker bridge; default ru
 SUPERVISOR/J DONE — readiness-driven cancellation replaces startup/deadline race in inherited-pipe test; rejected promises consumed. PASS1577 closes1570,280 tests/14 Docker.
 
 SUPERVISOR/K DONE — strict correlated process evidence, canonical base64 and pre-decode bounds; producer uses same validator. PASS1578,304 tests/15 Docker. Shared Go conformance vectors and signal-name vocabulary follow-up.
+
+EVALUATION/A: validate task evaluation against exact run/attempt and criteria; process exit is not acceptance. No public acceptance API yet.
