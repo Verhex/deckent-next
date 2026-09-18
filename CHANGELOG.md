@@ -206,3 +206,5 @@ RECONCILE/A: SDK reconcileAttempt persists observed process exit without launchi
 RUN/Q: CLI cancellation highlights unconfirmed attempts before detail rows and clarifies undispatched work.
 
 MCP/F: reconcile_attempt observes recorded workers and persists proven exits without starting, cancelling, releasing or accepting Task results.
+
+GRAPH2/A: criteria carry definition/evaluator versions and immutable validated parameters; no evaluator-specific business thresholds in domain.

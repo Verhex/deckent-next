@@ -4,3 +4,5 @@ export type { TaskDefinition, TaskGraph, TaskProgress, ReadinessInput, TaskGraph
 export { validateTaskGraph } from './internal/graph.js';
 export { inspectTaskReadiness } from './internal/readiness.js';
 export type { TaskReadiness } from './internal/readiness.js';
+export { criterionDefinitionSchema } from './internal/criteria.js';
+export type { CriterionDefinition } from './internal/criteria.js';

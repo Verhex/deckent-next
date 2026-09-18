@@ -424,3 +424,5 @@ RECONCILE/A DONE — configured SDK observes recorded workers and settles proven
 RUN/Q DONE — visible partial-delivery count, consistent TR task/attempt terms; unchanged JSON and command success. Fable1701 PASS + ACCEPTABLE_FOR_PIPE_V1, 348 tests / 19 Docker.
 
 MCP/F DONE — reconcile_attempt through configured SDK, explicit non-destructive ledger mutation annotation, strict identity and fresh policy; Fable1705 PASS, 349 tests / 20 Docker. Model tool-selection hint follow-up noted.
+
+GRAPH2/A DONE — versioned criterion definitions and bounded immutable JSON parameters; Fable1709 PASS, 353 tests / 20 Docker. Runtime graph admission pending; description bounds and definition fingerprints precede persistence. Proxy traps are outside plain-JSON input guarantee.
