@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { processCommandSchema, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
+import { processCommandSchema, validateProcessEvidence, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
 /** Linux comparison profile: explicit environment, closed stdin, owned process group, raw bounded output.
  * This reports the command process, never the Docker container or a Task's success.
  */
@@ -11,8 +11,8 @@ export async function runNodeProcess(input: ProcessCommand, signal?: AbortSignal
   const evidence = (values: Partial<ProcessEvidence>): ProcessEvidence => Object.freeze({ schemaVersion: 1, requestId: command.requestId,
     started: false, reason: 'start-failed', exitCode: null, signal: null, stdoutBase64: '', stderrBase64: '',
     stdoutTruncated: false, stderrTruncated: false, ...values, durationMs: performance.now() - start });
-  if (signal?.aborted) return evidence({ reason: 'cancelled' });
-  return new Promise(resolve => {
+  if (signal?.aborted) return validateProcessEvidence(command, evidence({ reason: 'cancelled' }));
+  const result = await new Promise<ProcessEvidence>(resolve => {
     let child;
     try { child = spawn(command.executable, [...command.args], { cwd: command.cwd, env: { ...command.env }, detached: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch { resolve(evidence({})); return; }
@@ -42,4 +42,5 @@ export async function runNodeProcess(input: ProcessCommand, signal?: AbortSignal
         stdoutBase64: Buffer.concat(stdout).toString('base64'), stderrBase64: Buffer.concat(stderr).toString('base64'), stdoutTruncated, stderrTruncated }));
     });
   });
+  return validateProcessEvidence(command, result);
 }

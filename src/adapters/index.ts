@@ -13,5 +13,5 @@ export type { FilePolicyOptions } from '#adapters/core/file-policy/index.js';
 export { ProcessSupervisor } from '#adapters/core/process-supervisor/index.js';
 export type { ProcessSupervisorOptions } from '#adapters/core/process-supervisor/index.js';
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
-export { processCommandSchema, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
+export { processCommandSchema, processEvidenceSchema, validateProcessEvidence, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
 export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-runner/index.js';
