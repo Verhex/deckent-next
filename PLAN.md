@@ -476,3 +476,5 @@ EVAL/E-APPLICATION DONE: Fable1779 PASS,472 tests/28 Docker. Authenticated evalu
 CANCEL/RECOVERY PASS1804: bounded durable discovery and shared delivery application landed. Runtime hosting and typed failure observability remain follow-up; no M1 claim.
 
 POOL/AUTHORITY PASS1809: reservation pool authorization belongs to engine. Admission pool reuse remains follow-up.
+
+RECOVERY/COMPOSITION PASS1814: shared recorded-profile factory and bounded SDK recovery landed. Service hosting/provisioning remain open; no M1 claim.

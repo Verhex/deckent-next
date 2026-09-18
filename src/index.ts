@@ -17,3 +17,5 @@ export { executeConfiguredTask as executeTask, evaluateConfiguredTask as evaluat
 export type { TaskEvaluationCommand } from '#engine/index.js';
 export { reserveConfiguredRunTasks as reserveRunTasks } from '#composition/index.js';
 export type { RunReservationCommand } from '#engine/index.js';
+export { recoverConfiguredCancellations as recoverCancellations } from '#composition/index.js';
+export type { CancellationRecoveryCommand } from '#engine/index.js';

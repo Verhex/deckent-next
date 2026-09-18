@@ -28,6 +28,7 @@ export const CONFIG_FIELDS = Object.freeze({
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellation: field('config.field.cancellation', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
+    recoveryPageSize: z.number().int().positive().safe().default(64),
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),

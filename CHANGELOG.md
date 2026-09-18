@@ -258,3 +258,5 @@ EVAL/E-APPLICATION: installed process-exit evaluation, pinned criterion selectio
 CANCEL/RECOVERY: bounded persisted cancellation discovery with current authorization and shared delivery worker (PASS1804).
 
 POOL/AUTHORITY: reservation uses the shared engine pool authorization port (PASS1809).
+
+RECOVERY/COMPOSITION: authorized bounded recovery from recorded supervisor profiles (PASS1814).

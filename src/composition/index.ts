@@ -7,3 +7,4 @@ export { reconcileConfiguredAttempt } from '#composition/core/runs/index.js';
 export { evaluateConfiguredTask } from '#composition/core/runs/index.js';
 export { executeConfiguredTask } from '#composition/core/execution/index.js';
 export { reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
+export { recoverConfiguredCancellations } from '#composition/core/runs/index.js';
