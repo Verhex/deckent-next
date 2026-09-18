@@ -190,3 +190,5 @@ MCP/D: explicit cancellation-intent tool with native write/idempotency annotatio
 CANCEL/D: SDK can deliver cancellation to configured workers with per-attempt outcomes; terminal observations retain output and do not imply task acceptance or effect rollback.
 
 MCP/E: deliver_run_cancellation reports per-attempt delivery with current cancellation policy; request-only tool retains its distinct meaning.
+
+RUN/O: create, inspect, request cancellation and delivery consistently return POLICY_DENIED for absent scope membership.

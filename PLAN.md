@@ -408,3 +408,5 @@ MCP/D: explicit cancellation-intent tool with native write/idempotency annotatio
 CANCEL/D DONE — configured SDK cancellation delivery, fresh per-attempt cancel policy, bounded coordination; Fable 1642 PASS, 336 tests including 16 real Docker. Undispatched runtime-directory preflight refinement remains.
 
 MCP/E DONE — explicit delivery tool through configured SDK; official MCP stdio to real Docker, 337 tests / 17 Docker; Fable 1645 PASS.
+
+RUN/O DONE — shared context denies authenticated identities without scope membership before ledger/runtime access; Fable1664 PASS, 338 tests / 17 Docker.

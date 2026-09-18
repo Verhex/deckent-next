@@ -13,7 +13,9 @@ export async function loadConfiguredRunContext(projectRoot: string, scopeId: str
   const identity = readLocalOsIdentity(); let document;
   try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-  const principal = Object.freeze({ ...identity, scopeIds: policyScopeMembership(document, identity, [scopeId]) });
+  const scopeIds = policyScopeMembership(document, identity, [scopeId]);
+  if (!scopeIds.length) throw new PolicyAuthorizationError('POLICY_DENIED');
+  const principal = Object.freeze({ ...identity, scopeIds });
   return Object.freeze({ config, layout, document, principal,
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
   });

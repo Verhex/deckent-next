@@ -55,7 +55,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     await writePolicy(true, false);
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     await writePolicy(false);
-    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('AUTHENTICATION_REQUIRED');
+    expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
     const tools = (await client.listTools()).tools;
     expect(tools.filter(t => !['request_run_cancellation', 'deliver_run_cancellation'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
