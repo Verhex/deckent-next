@@ -208,3 +208,5 @@ RUN/Q: CLI cancellation highlights unconfirmed attempts before detail rows and c
 MCP/F: reconcile_attempt observes recorded workers and persists proven exits without starting, cancelling, releasing or accepting Task results.
 
 GRAPH2/A: criteria carry definition/evaluator versions and immutable validated parameters; no evaluator-specific business thresholds in domain.
+
+GRAPH2/B: pure graph v2 validates criterion references and DAG without converting v1 records; 356 tests with Docker opt-in passed.

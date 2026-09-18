@@ -5,7 +5,11 @@ import { taskGraphSchema, TaskGraphError, type TaskGraph } from './contract.js';
 export function validateTaskGraph(input: unknown): TaskGraph {
   const parsed = taskGraphSchema.safeParse(input);
   if (!parsed.success) throw new TaskGraphError('TASK_GRAPH_INVALID', sanitizeIssues(parsed.error.issues));
-  const graph = parsed.data;
+  validateTaskGraphStructure(parsed.data);
+  return parsed.data;
+}
+/** Shared structural rules across explicit graph versions; no version conversion. */
+export function validateTaskGraphStructure(graph: Pick<TaskGraph, 'tasks'>): void {
   const tasks = new Map(graph.tasks.map(task => [task.id, task]));
   if (tasks.size !== graph.tasks.length) throw new TaskGraphError('TASK_DUPLICATE');
   const remaining = new Map<string, number>();
@@ -31,5 +35,4 @@ export function validateTaskGraph(input: unknown): TaskGraph {
     }
   }
   if (ready.length !== tasks.size) throw new TaskGraphError('TASK_GRAPH_CYCLE');
-  return graph;
 }
