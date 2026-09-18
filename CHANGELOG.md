@@ -182,3 +182,5 @@ RUN/L: SDK durable Run cancellation intent with current authorization, exact rep
 RUN/M: CLI run cancel records intent through common authorized application; explicitly reports no worker delivery or confirmed termination.
 
 RUN/N: shared config/OS identity/fresh policy/membership/deferred ledger path for Run surfaces; no behavior change. Fable PASS1637, 331 tests/15 Docker. Empty-membership error consistency remains a follow-up.
+
+SUPERVISOR/M: bounded process-group termination observation, ENOENT-only absence; no runner changes. Fable PASS1638, 331 tests/15 Docker plus ten target repetitions. No OS reaping or escaped-session assurance.

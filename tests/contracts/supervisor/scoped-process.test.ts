@@ -50,7 +50,15 @@ describe.skipIf(process.platform !== 'linux')('explicit Linux process profile', 
       expect(pids).toHaveLength(2); for (const pid of pids) expect(() => process.kill(pid, 0)).not.toThrow();
       controller.abort(); expect(await pending).toMatchObject({ started: true, reason: 'cancelled', signal: 'SIGKILL' });
       for (const pid of pids) {
-        let state = 'absent'; try { state = (await readFile(`/proc/${pid}/stat`, 'utf8')).split(') ')[1]!.split(' ')[0]!; } catch { /* Reaped by the OS. */ }
+        // Root close does not synchronize the kernel's scheduling of every descendant.
+        // Observe bounded eventual termination; a surviving process still fails this test.
+        let state = 'unknown'; const deadline = Date.now() + 2000;
+        do {
+          try { state = (await readFile(`/proc/${pid}/stat`, 'utf8')).split(') ')[1]!.split(' ')[0]!; }
+          catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') state = 'absent'; else throw error; }
+          if (['absent', 'Z', 'X'].includes(state)) break;
+          await sleep(10);
+        } while (Date.now() < deadline);
         expect(['absent', 'Z', 'X']).toContain(state);
       }
     } finally { controller.abort(); await pending; for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch { /* Already gone. */ } } }
