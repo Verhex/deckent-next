@@ -3,6 +3,7 @@ import {
   applyAttemptObservation, createAttempt, createRun, preventRunAttempt, requestAttemptCancellation, requestRunCancellation,
   reserveRunTasks, runSnapshotSchema, observeRunAttempt,
 } from '#domain/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'layout' };
 const graph = {
@@ -13,7 +14,7 @@ const graph = {
 const attemptIdentity = { ...identity, taskId: 'a', attemptId: 'attempt-a', generation: 1 };
 
 function cancelledUnobserved() {
-  const run = reserveRunTasks(createRun(identity, graph, 0), 0, [attemptIdentity], 0);
+  const run = reserveRunTasks(createRun(identity, graph, 0, fixtureExecution(graph)), 0, [attemptIdentity], 0);
   const attempt = requestAttemptCancellation(createAttempt(attemptIdentity), 0);
   return { run, attempt };
 }
@@ -38,7 +39,7 @@ it('rejects foreign identity, missing cancellation, observed attempts, and unres
   const { run, attempt } = cancelledUnobserved();
   expect(() => preventRunAttempt(run, 1, { ...attempt, identity: { ...attemptIdentity, scopeId: 'foreign' } }))
     .toThrow('RUN_ATTEMPT_CONFLICT');
-  const reserved = reserveRunTasks(createRun(identity, graph, 0), 0, [attemptIdentity], 0);
+  const reserved = reserveRunTasks(createRun(identity, graph, 0, fixtureExecution(graph)), 0, [attemptIdentity], 0);
   expect(() => preventRunAttempt(requestRunCancellation(reserved, 1), 2, createAttempt(attemptIdentity)))
     .toThrow('RUN_ATTEMPT_CONFLICT');
 

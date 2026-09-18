@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteInventoryReader, type SqliteAttemptStore } from '#adapters/index.js';
 import { createAttempt, applyAttemptObservation } from '#domain/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' } as const;
@@ -14,7 +15,7 @@ const actor = { id: 'user', issuer: 'host', subject: '1000' };
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'l' };
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] })),
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
-const create = { commandId: 'create', actor, identity, graph, now: 0, policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } };
+const create = { commandId: 'create', actor, identity, graph, execution: fixtureExecution(graph), now: 0, policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } };
 const attempt = (taskId: string) => ({ ...identity, taskId, attemptId: 'attempt-' + taskId, generation: 1 });
 const reservation = (ids: string[], commandId = 'claim') => ({ commandId, actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: ids.map(attempt) });
 async function fixture() {
@@ -63,7 +64,7 @@ it('rejects opening a schema-2 reader, then migrates prior attempt data for a cu
   expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); await store.createRun(create);
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]); } finally { reader.close(); }
-  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(7); } finally { check.close(); }
+  const check = new DatabaseSync(path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(8); } finally { check.close(); }
 });
 
 it('returns bounded busy under a separate process transaction, without partial reservation', async () => {

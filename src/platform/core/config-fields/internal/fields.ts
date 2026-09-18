@@ -30,7 +30,7 @@ export const CONFIG_FIELDS = Object.freeze({
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  admission: field('config.field.admission', z.object({ poolId: z.string().min(1),
+  admission: field('config.field.admission', z.object({ registry: z.record(z.unknown()), poolId: z.string().min(1),
     executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),

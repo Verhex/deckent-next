@@ -1,3 +1,4 @@
+import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
@@ -6,11 +7,20 @@ export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: iden
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown']).nullable(),
 }).strict().readonly();
-export const runSnapshotSchema = z.object({ schemaVersion: z.literal(1), identity: runIdentitySchema, revision: counterSchema,
-  graph: taskGraphSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
+export const runSnapshotSchema = z.object({ schemaVersion: z.literal(2), identity: runIdentitySchema, revision: counterSchema,
+  graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
   try { inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now: 0, progress: run.progress }); } catch { invalid(); return; }
+  if (run.execution.tasks.length !== run.graph.tasks.length || run.execution.criteria.length !== run.graph.criterionDefinitions.length) invalid();
+  const selectedTasks = new Set(run.execution.tasks.map(entry => entry.taskId));
+  const selectedCriteria = new Set(run.execution.criteria.map(entry => entry.criterionId));
+  if (selectedTasks.size !== run.execution.tasks.length || selectedCriteria.size !== run.execution.criteria.length) invalid();
+  for (const task of run.graph.tasks) if (!selectedTasks.has(task.id)) invalid();
+  for (const criterion of run.graph.criterionDefinitions) {
+    const selected = run.execution.criteria.find(entry => entry.criterionId === criterion.id);
+    if (!selected || selected.evaluator.id !== criterion.evaluator.id || selected.evaluator.version !== criterion.evaluator.version) invalid();
+  }
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.bindings) {
     const id = binding.identity;

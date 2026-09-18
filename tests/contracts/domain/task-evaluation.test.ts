@@ -1,10 +1,11 @@
 import { expect, it } from 'vitest';
 import { createRun, reserveRunTasks, observeRunAttempt, createAttempt, applyAttemptObservation, inspectTaskEvaluation, requestRunCancellation } from '#domain/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 const identity = { runId: 'r', scopeId: 's', layoutRevision: 'l', taskId: 'a', attemptId: 'attempt', generation: 1 };
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['content', 'behavior'] }, { id: 'b', kind: 'custom', dependencies: ['a'], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: ['content', 'behavior', 'verified'].map(id => ({ id, version: 1, description: `Verify ${id}`, evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} })) };
 function fixture(exitCode = 0) {
-  const reserved = reserveRunTasks(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0), 0, [identity], 0);
+  const reserved = reserveRunTasks(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0, fixtureExecution(graph)), 0, [identity], 0);
   const attempt = applyAttemptObservation(createAttempt(identity), { protocolVersion: 1, identity, sequence: 1, eventId: 'exit', result: { kind: 'exited', exitCode } }, 0);
   return observeRunAttempt(reserved, 1, attempt);
 }

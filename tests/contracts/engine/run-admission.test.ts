@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunAdmissionApplication, RunPolicyAuthorization } from '#engine/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r',
@@ -18,7 +19,7 @@ async function fixture() {
   const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'p', restrictions: [], grants: state.allow ? [
     { id: 'create', effect: 'allow', actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: ['r'] } },
   ] : [] }; } });
-  const context = { async resolve() { state.contexts++; return { layoutRevision: 'layout', now: state.now++, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 }, ordering: ['t'] } }; } };
+  const context = { async resolve() { state.contexts++; return { layoutRevision: 'layout', now: state.now++, execution: fixtureExecution(command.graph), policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 }, ordering: ['t'] } }; } };
   const app = new RunAdmissionApplication(store, verifier, authorization, context);
   return { store, app, state, context, verifier, authorization };
 }

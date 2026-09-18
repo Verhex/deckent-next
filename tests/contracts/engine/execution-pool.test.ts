@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { applyAttemptObservation } from '#domain/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { id: 'service', issuer: 'host', subject: '1000' };
@@ -13,7 +14,7 @@ const pool = { schemaVersion: 1 as const, poolId: 'shared', capacity: { executio
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'a', kind: 'custom', dependencies: [], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
 const id = (scopeId: string) => ({ scopeId, runId: 'run', layoutRevision: 'layout', taskId: 'a', attemptId: 'same-local-id', generation: 1 });
-const create = (scopeId: string) => ({ commandId: 'create', actor, identity: { scopeId, runId: 'run', layoutRevision: 'layout' }, graph, now: 0,
+const create = (scopeId: string) => ({ commandId: 'create', actor, identity: { scopeId, runId: 'run', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 0,
   policy: { schemaVersion: 2 as const, poolId: 'shared', capacity: { executionSlots: 10, inFlightSlots: 10 }, ordering: ['a'] } });
 const claim = (scopeId: string) => ({ commandId: 'claim', actor, scopeId, runId: 'run', now: 0, expectedRevision: 0, identities: [id(scopeId)] });
 async function fixture() {

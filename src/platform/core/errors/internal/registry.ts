@@ -6,6 +6,11 @@ interface Definition { readonly category: ErrorCategory; readonly render: (param
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EXECUTION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_NOT_CONFIGURED', p, l) }) },
   CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
+  EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
+  TASK_EVALUATOR_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATOR_INVALID', p, l) }) },
+  TASK_KIND_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_KIND_NOT_REGISTERED', p, l) }) },
+  TASK_EVALUATOR_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATOR_NOT_REGISTERED', p, l) }) },
+  EXECUTION_REGISTRY_VALIDATOR_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_REGISTRY_VALIDATOR_INVALID', p, l) }) },
   RUN_ADMISSION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_ADMISSION_NOT_CONFIGURED', p, l) }) },
   RUN_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CORRUPT', p, l) }) },
   RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l), suggestion: t('remedy.RUN_STORE_CONFLICT', p, l) }) },

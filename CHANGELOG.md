@@ -236,3 +236,5 @@ LAUNCH/N3: atomically retain cancellation actor with Attempt state and receipt; 
 CANCEL/G3: persist cancellation delivery attempts across controller restarts; enforce current permission before retry budget, expose pending/exhausted delivery in CLI/MCP/SDK.
 
 EXEC-EVIDENCE: SDK/MCP reject mismatched recorded Docker custody without mutation or internal detail disclosure; Fable 1762 PASS.
+
+REGISTRY/A: versioned kind/profile/evaluator data pinned at Run admission; RunView2 exposes criterion/profile references without parameters. Fable1768 PASS.

@@ -454,3 +454,5 @@ LAUNCH/N3 DONE — all three cancellation entry paths persist actor and Attempt 
 CANCEL/G3 DONE — durable cancellation journal, bounded retries and token CAS;407 tests/26 Docker, Fable PASS1759. M1 prerequisite OPEN: configured bounded runtime loop must drive queued deliveries through this journal; current command replay is not autonomous delivery.
 
 EXEC-EVIDENCE PASS (Fable 1762): six-case Docker evidence matrix verified; 409 tests, 28 real Docker. Automatic cancellation runtime loop remains an M1 prerequisite; second daemon and physical power loss not qualified.
+
+REGISTRY/A + GRAPH2/E admission DONE: Fable1768 PASS,438 tests/28 Docker. Run schema2 pins selected profiles/evaluators and criterion fingerprints; ledger8 refuses unsupported data without invention. Actual selected-profile execution and evaluation runtime remain open.

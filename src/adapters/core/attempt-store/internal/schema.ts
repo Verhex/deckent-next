@@ -2,10 +2,11 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { requireLedgerV5Custody } from './migration-v5.js';
 import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
+import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
-export const DISPATCH_LEDGER_VERSION = 7;
-export const RUN_LEDGER_VERSION = 7;
-export const CURRENT_LEDGER_VERSION = 7;
+export const DISPATCH_LEDGER_VERSION = 8;
+export const RUN_LEDGER_VERSION = 8;
+export const CURRENT_LEDGER_VERSION = 8;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -35,6 +36,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 6) {
       requireLedgerV6ProfileCompatibility(db, profiles);
       db.exec('PRAGMA user_version=6;');
+      continue;
+    }
+    if (next === 8) {
+      requireLedgerV8ExecutionRegistry(db);
+      db.exec('PRAGMA user_version=8;');
       continue;
     }
     const sql = migrations[next];

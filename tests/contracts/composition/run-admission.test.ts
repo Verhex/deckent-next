@@ -6,16 +6,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, inspectRun } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1 as const, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 2 as const, revision: 1,
   tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }],
-  criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } };
+  criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-admission-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const configPath = join(project, '.deckent/config.json');
-  await writeFile(configPath, JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order' } }));
+  await writeFile(configPath, JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2,
+    ordering: 'input-order', registry: fixtureDockerRegistry(['purchase']) } }));
   const options = { env: { HOME: join(root, 'home') } };
   const { store, path, layout } = await openConfiguredAttemptStore(project, options);
   try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); } finally { store.close(); }
@@ -69,6 +71,33 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     expect(await readFile(f.path)).toEqual(before);
     const reader = new DatabaseSync(f.path, { readOnly: true });
     try { expect(reader.prepare('PRAGMA user_version').get()!.user_version).toBe(3); expect(reader.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); } finally { reader.close(); }
+  });
+
+  it('pins selected profile parameters and evaluator identity across config changes and admission replay', async () => {
+    const f = await fixture(); await f.policy(true, true); const first = await createRun(f.project, command, f.options);
+    const initial = await openConfiguredAttemptStore(f.project, f.options);
+    const snapshot = await initial.store.loadRun('s', 'r'); initial.store.close();
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    config.admission.registry.revision = 'changed-registry';
+    config.admission.registry.profiles[0].parameters.argv = ['different-command'];
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    expect(await createRun(f.project, command, f.options)).toEqual(first);
+    const reopened = await openConfiguredAttemptStore(f.project, f.options);
+    try { expect(await reopened.store.loadRun('s', 'r')).toEqual(snapshot); } finally { reopened.store.close(); }
+    expect(JSON.stringify(first)).not.toContain('parameters');
+    expect(first.admission.run.criteria[0]?.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+  });
+  it.each(['kind', 'profile', 'evaluator'])('rejects unsupported %s before writing a Run', async invalid => {
+    const f = await fixture(); await f.policy(true, true);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    if (invalid === 'kind') config.admission.registry.kinds[0].kind = 'unknown-kind';
+    if (invalid === 'profile') config.admission.registry.profiles[0].parameters.argv = [];
+    if (invalid === 'evaluator') config.admission.registry.evaluators[0].implementation.id = 'uninstalled';
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code:
+      invalid === 'kind' ? 'TASK_KIND_NOT_REGISTERED' : invalid === 'profile' ? 'EXECUTION_PROFILE_INVALID' : 'TASK_EVALUATOR_INVALID' });
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try { expect(db.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); } finally { db.close(); }
   });
 
 });

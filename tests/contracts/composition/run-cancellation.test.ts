@@ -6,13 +6,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const command = { schemaVersion: 1 as const, commandId: 'cancel', action: 'cancel' as const, scopeId: 's', runId: 'r', expectedRevision: 0 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-sdk-cancel-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'relocated'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } }));
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1,
+    inFlightSlots: 1, ordering: 'input-order', registry: fixtureDockerRegistry(['purchase']) } }));
   const options = { env: { HOME: join(root, 'home') } };
   const { store, path } = await openConfiguredAttemptStore(project, options);
   try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); } finally { store.close(); }
@@ -26,7 +28,7 @@ async function fixture() {
   await policy(true);
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: { schemaVersion: 2, revision: 1,
     tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['verified'] }],
-    criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } }, options);
+    criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify purchase', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] } }, options);
   return { project, options, path, policy };
 }
 describe.skipIf(process.platform === 'win32')('configured SDK cancellation intent', () => {

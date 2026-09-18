@@ -41,7 +41,7 @@ it('advances an empty schema-four ledger to the current version', async () => {
     const setup = new DatabaseSync(path); createSchemaFour(setup); setup.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(8); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -54,7 +54,7 @@ it('advances a populated current Run ledger after its version is marked four', a
     const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE cancellation_deliveries; PRAGMA user_version=4'); downgrade.close();
     const migrated = await openSqliteAttemptStore(path, options); expect((await migrated.loadRun('s', 'r'))!.revision).toBe(1); migrated.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(8); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -142,7 +142,7 @@ it('requires an installed synchronous profile validator before migrating dispatc
     }
     const before = new DatabaseSync(path, { readOnly: true }); try { expect(before.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { before.close(); }
     const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles); migrated.close();
-    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { after.close(); }
+    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(8); } finally { after.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

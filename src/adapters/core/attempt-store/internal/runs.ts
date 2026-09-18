@@ -3,7 +3,7 @@ import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
-  type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
+  assertRunExecution, type ExecutionPool, runExecutionPolicySchema, type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync) {}
@@ -93,11 +93,11 @@ export class SqliteRunJournal {
     });
   }
   async createRun(input: RunCreate): Promise<RunReceipt> {
-    const parsed = runCreateSchema.parse(input); const command = JSON.stringify({ action: 'create-run', ...parsed });
+    const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
-      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now);
+      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution);
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
       planSchedulingWave(snapshot.graph, { schemaVersion: 1, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')

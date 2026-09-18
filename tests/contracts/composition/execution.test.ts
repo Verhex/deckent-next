@@ -10,6 +10,7 @@ import { afterEach, expect, it } from 'vitest';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { DispatchApplication, DispatchPolicyAuthorization } from '#engine/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 const exec = promisify(execFile); const roots: string[] = []; const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -57,9 +58,10 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
     await writeFile(f.configPath, JSON.stringify({ layout: { root: join(f.root, 'changed') } })); clearConfigCache();
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     await runtime.store.createExecutionPool({ schemaVersion: 1, poolId: 'execution-test', capacity: { executionSlots: 1, inFlightSlots: 1 } });
+    const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: identity.taskId, kind: 'code', dependencies: [], acceptanceCriteria: ['base-output'] }],
+      criterionDefinitions: [{ id: 'base-output', version: 1, description: 'Verify base output', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
     await runtime.store.createRun({ commandId: 'create-run', actor, identity: { runId: identity.runId, scopeId: identity.scopeId, layoutRevision: identity.layoutRevision },
-      graph: { schemaVersion: 2, revision: 1, tasks: [{ id: identity.taskId, kind: 'code', dependencies: [], acceptanceCriteria: ['base-output'] }],
-        criterionDefinitions: [{ id: 'base-output', version: 1, description: 'Verify base output', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] }, now: 0,
+      graph, execution: fixtureExecution(graph), now: 0,
       policy: { schemaVersion: 2, poolId: 'execution-test', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: [identity.taskId] } });
     await runtime.store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: identity.scopeId, runId: identity.runId, expectedRevision: 0, now: 0, identities: [identity] });
     const result = await app.execute(request); expect(result.record.terminal?.exitCode).toBe(0);

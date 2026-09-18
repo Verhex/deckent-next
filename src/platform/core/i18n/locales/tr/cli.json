@@ -546,5 +546,7 @@
   "cli.run.cancel.delivery": "    Teslim denemesi: {count}; {state}",
   "cli.run.cancel.deliveryQueued": "yeniden teslim bekliyor",
   "cli.run.cancel.deliveryClaimed": "teslim sürüyor",
-  "cli.run.cancel.deliveryExhausted": "deneme sınırına ulaşıldı; belirsiz etkileri inceleyin"
+  "cli.run.cancel.deliveryExhausted": "deneme sınırına ulaşıldı; belirsiz etkileri inceleyin",
+  "cli.run.inspect.profile": "  Profil: {profile} v{version}; kabul kriterleri: {criteria}",
+  "cli.run.inspect.criterion": "Kriter {criterion}: {description} ({evaluator} v{version})"
 }

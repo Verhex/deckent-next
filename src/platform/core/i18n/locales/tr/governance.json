@@ -764,5 +764,10 @@
   "error.RUN_CAPACITY_OR_ORDER": "İstenen işler kullanılabilir kapasiteye veya görev sırasına uymuyor.",
   "error.CANCELLATION_NOT_CONFIGURED": "İptal teslim sınırları yapılandırılmamış. Eksik: {missing}.",
   "remedy.RUN_STORE_CONFLICT": "Durumu run inspect --scope <id> --id <run> ile okuyun. Değiştirilmiş iptal komutu için yeni --command-id ve güncel --expected-revision kullanın. Önceki yanıt belirsizse önce aynı komut kimliği ve girdiyi tekrar deneyin.",
-  "error.EXECUTION_NOT_CONFIGURED": "Kayıtlı worker yönetimi için açık bir yürütme profili gerekir."
+  "error.EXECUTION_NOT_CONFIGURED": "Kayıtlı worker yönetimi için açık bir yürütme profili gerekir.",
+  "error.EXECUTION_PROFILE_INVALID": "Seçilen yürütme profili desteklenmiyor veya parametreleri geçersiz.",
+  "error.TASK_EVALUATOR_INVALID": "Seçilen değerlendirici desteklenmiyor veya parametreleri geçersiz.",
+  "error.TASK_KIND_NOT_REGISTERED": "İş türü için kayıtlı yürütme profili yok.",
+  "error.TASK_EVALUATOR_NOT_REGISTERED": "İstenen değerlendirici sürümü kayıtlı değil.",
+  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "Kurulu registry doğrulayıcısı eşzamanlı doğrulama sözleşmesini ihlal ediyor."
 }

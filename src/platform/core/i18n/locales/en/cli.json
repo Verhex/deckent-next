@@ -546,5 +546,7 @@
   "cli.run.cancel.delivery": "    Delivery attempts: {count}; {state}",
   "cli.run.cancel.deliveryQueued": "retry pending",
   "cli.run.cancel.deliveryClaimed": "delivery in progress",
-  "cli.run.cancel.deliveryExhausted": "retry limit reached; inspect unresolved effects"
+  "cli.run.cancel.deliveryExhausted": "retry limit reached; inspect unresolved effects",
+  "cli.run.inspect.profile": "  Profile: {profile} v{version}; acceptance criteria: {criteria}",
+  "cli.run.inspect.criterion": "Criterion {criterion}: {description} ({evaluator} v{version})"
 }

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { createAttempt, createRun, requestAttemptCancellation, requestRunCancellation, reserveRunTasks } from '#domain/index.js';
 import { decideDispatchLaunch } from '#engine/index.js';
 import { custodyPrincipal, custodyProfile } from '../support/custody.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 
 const identity = { runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
 const request = { protocolVersion: 1 as const, identity, workspace: '/workspace', argv: ['tool'] };
@@ -9,7 +10,7 @@ const claim = { request, owner: 'worker' };
 const graph = { schemaVersion: 2 as const, revision: 1,
   tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify result', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
-const active = reserveRunTasks(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0), 0, [identity], 0);
+const active = reserveRunTasks(createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0, fixtureExecution(graph)), 0, [identity], 0);
 const pending = { schemaVersion: 2 as const, request, owner: 'worker', profile: custodyProfile, launch: 'pending' as const, terminal: null };
 const cancellation = { id: 'canceller', issuer: 'test', subject: 'operator' };
 const input = { claim, principal: custodyPrincipal, now: 42 };

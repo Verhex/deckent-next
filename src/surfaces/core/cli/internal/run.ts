@@ -58,7 +58,9 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
         t('cli.run.inspect.stateLabel', { phase: phases[task.phase] }, locale),
+        t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
         ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
+      ...run.criteria.map(criterion => t('cli.run.inspect.criterion', { criterion: criterion.id, description: criterion.description, evaluator: criterion.evaluator.id, version: criterion.evaluator.version }, locale)),
     ].join('\n');
   } });
 }

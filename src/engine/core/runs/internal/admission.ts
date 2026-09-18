@@ -9,7 +9,7 @@ export const runAdmissionSchema = z.object({ schemaVersion: z.literal(1), comman
 export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 export interface RunAdmissionContext {
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
-  resolve(command: RunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy'> & { layoutRevision: string }>;
+  resolve(command: RunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
 }
 const persistedCreate = runCreateSchema.extend({ action: z.literal('create-run') }).strict();
 export class RunAdmissionApplication {
@@ -21,6 +21,7 @@ export class RunAdmissionApplication {
     if (previous.commandId !== command.commandId || previous.identity.runId !== command.runId || previous.identity.scopeId !== command.scopeId ||
       JSON.stringify(previous.actor) !== JSON.stringify(actor) || JSON.stringify(previous.graph) !== JSON.stringify(command.graph)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     const view = projectRunView(receipt.snapshot);
+    if (JSON.stringify(receipt.snapshot.execution) !== JSON.stringify(previous.execution)) throw new RunStoreError('RUN_STORE_CORRUPT');
     if (view.runId !== command.runId || view.scopeId !== command.scopeId || view.layoutRevision !== previous.identity.layoutRevision) throw new RunStoreError('RUN_STORE_CORRUPT');
     return Object.freeze({ schemaVersion: 1 as const, commandId: command.commandId, run: view });
   }
@@ -34,7 +35,7 @@ export class RunAdmissionApplication {
     const context = await this.context.resolve(command, principal);
     try {
       const receipt = await this.store.createRun({ commandId: command.commandId, actor, graph: command.graph,
-        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy });
+        identity: { runId: command.runId, scopeId: command.scopeId, layoutRevision: context.layoutRevision }, now: context.now, policy: context.policy, execution: context.execution });
       return this.replay(receipt, command, actor);
     } catch (error) {
       // A concurrent identical admission may have won using a different sampled clock/config snapshot.

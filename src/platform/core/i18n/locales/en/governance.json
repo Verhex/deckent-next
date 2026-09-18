@@ -764,5 +764,10 @@
   "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order.",
   "error.CANCELLATION_NOT_CONFIGURED": "Cancellation delivery limits are not configured. Missing: {missing}.",
   "remedy.RUN_STORE_CONFLICT": "Read state with run inspect --scope <id> --id <run>. For a changed cancellation command, use a new --command-id and the current --expected-revision. If the previous response was uncertain, retry the unchanged command ID and input first.",
-  "error.EXECUTION_NOT_CONFIGURED": "An explicit execution profile is required to manage the recorded worker."
+  "error.EXECUTION_NOT_CONFIGURED": "An explicit execution profile is required to manage the recorded worker.",
+  "error.EXECUTION_PROFILE_INVALID": "The selected execution profile is not supported or has invalid parameters.",
+  "error.TASK_EVALUATOR_INVALID": "The selected evaluator is not supported or has invalid parameters.",
+  "error.TASK_KIND_NOT_REGISTERED": "The task kind has no registered execution profile.",
+  "error.TASK_EVALUATOR_NOT_REGISTERED": "The requested evaluator version is not registered.",
+  "error.EXECUTION_REGISTRY_VALIDATOR_INVALID": "The installed registry validator violates its synchronous contract."
 }

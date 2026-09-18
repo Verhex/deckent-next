@@ -1,7 +1,8 @@
+import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
+import { validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
 import { evaluatePolicy, policyResources } from '#domain/index.js';
-import { RunAdmissionApplication, runAdmissionSchema, RunPolicyAuthorization, PolicyAuthorizationError, type RunAdmission, type RunCreate } from '#engine/index.js';
+import { resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, RunPolicyAuthorization, PolicyAuthorizationError, type RunAdmission, type RunCreate } from '#engine/index.js';
 import { loadConfiguredRunContext } from './context.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Local OS ingress. Existing pool provisioning is required; no implicit pool creation or config-derived grants. */
@@ -26,7 +27,11 @@ export async function createConfiguredRun(projectRoot: string, input: RunAdmissi
         const decision = evaluatePolicy(document, { principal: actor, action: policyResources.pool.actions[0], scopeId: admitted.scopeId,
           resource: { kind: policyResources.pool.kind, id: profile.poolId } });
         if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
-        return { layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
+        const execution = resolveExecutionRegistry(admitted.graph, profile.registry, {
+          profile(value) { try { return validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); } },
+          criterion(evaluator, criterion) { try { return validateProcessExitCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } },
+        });
+        return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
           capacity: { executionSlots: profile.executionSlots, inFlightSlots: profile.inFlightSlots }, ordering: admitted.graph.tasks.map(task => task.id) } };
       } });
     return Object.freeze({ schemaVersion: 1 as const, layout, admission: await app.create(command) });

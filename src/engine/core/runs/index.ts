@@ -11,3 +11,5 @@ export type { RunAdmission, RunAdmissionContext } from './internal/admission.js'
 export { cancellationDeliverySchema, cancellationDeliveryLimitsSchema, CancellationDeliveryError } from './internal/delivery-port.js';
 export type { CancellationDelivery, CancellationDeliveryLimits, CancellationDeliveryOutcome, CancellationDeliveryClaim, CancellationDeliveryClaimResult, CancellationDeliveryStore } from './internal/delivery-port.js';
 export { decideCancellationDeliveryClaim, decideCancellationDeliveryFinish } from './internal/delivery-transition.js';
+export { resolveExecutionRegistry, assertRunExecution, ExecutionRegistryError } from './internal/registry.js';
+export type { ExecutionRegistryValidation } from './internal/registry.js';
