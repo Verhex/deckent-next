@@ -7,7 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { loadConfig, configDisplayView, withConfigWriteLock, clearConfigCache, registerConfigSection,
-  resolveProductPaths, productResourcePath, type ConfigWarning } from '../../../src/platform/index.js';
+  resolveProductPaths, productResourcePath, ConfigValidationError, type ConfigWarning } from '../../../src/platform/index.js';
 import { registerProviderConfig } from '../../../src/adapters/index.js';
 
 registerProviderConfig();
@@ -78,14 +78,22 @@ describe('K1 review regression contracts', () => {
     await writeFile(f.lock, JSON.stringify({ pid: await deadPid(), hostname: `${hostname()}-other`, createdAt: old.toISOString() }));
     await expect(withConfigWriteLock(f.path, async () => {}, 30)).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
   });
-  it('excludes unrelated environment values from cache identity and revalidates credentials on cache hits', async () => {
-    const f = await fixture(); let layers = 0, effective = 0;
-    registerConfigSection('review_cache_probe', z.object({}).strict(), { optional: true, validateLayers: () => { layers++; }, validateEffective: () => { effective++; } });
-    const env = { ...f.env, DECKENT_MODE: 'api', ANTHROPIC_API_KEY: 'first' };
+  it('excludes unrelated environment values from cache identity and reruns effective validators on cache hits', async () => {
+    const f = await fixture(); let layers = 0, effective = 0, admitted = true;
+    registerConfigSection('review_cache_probe', z.object({}).strict(), { optional: true,
+      validateLayers: () => { layers++; }, validateEffective: () => {
+        effective++;
+        if (!admitted) throw new ConfigValidationError([{ path: 'review_cache_probe', reason: 'REQUIRED' }]);
+      } });
+    const env = { ...f.env, DECKENT_MODE: 'api', UNRELATED_VALUE: 'first' };
     await loadConfig(f.root, { env });
-    await loadConfig(f.root, { env: { ...env, ANTHROPIC_API_KEY: 'second', UNRELATED_SECRET: 'unrelated' } });
+    await loadConfig(f.root, { env: { ...env, UNRELATED_VALUE: 'second' } });
     expect(layers).toBe(1); expect(effective).toBe(2);
-    await expect(loadConfig(f.root, { env: { ...env, ANTHROPIC_API_KEY: '' } })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
+    admitted = false;
+    try {
+      await expect(loadConfig(f.root, { env })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
+      expect(layers).toBe(1); expect(effective).toBe(3);
+    } finally { admitted = true; }
   });
   it('keeps project bootstrap config separate from a relocated Windows data root', () => {
     const context = { platform: 'win32', env: { DECKENT_HOME: 'D:\\state', BRAIN_HOME: 'E:\\brain' } };

@@ -68,7 +68,7 @@ it('shares exact activation state across SDK, compiled CLI and stdio MCP without
   const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'provider', version: 1,
     models: [{ id: 'model', version: 1, nativeId: 'vendor/native:model', protocols: [{ family: 'responses', version: '1', capabilities: [] }] }] }] };
-  const configPath = join(project, '.deckent/config.json'), config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog };
+  const configPath = join(project, '.deckent/config.json'), config = { mode: 'api', layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog };
   await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   const seed = await openSqliteModelActivationStore(ledger, sqlite); seed.close();
@@ -92,7 +92,7 @@ it('shares exact activation state across SDK, compiled CLI and stdio MCP without
   expect(inspected.ok).toBe(true); expect(cliInspection).toEqual((inspected as { ok: true; value: ModelActivationInspection }).value);
   expect(cliInspection.activation).toEqual(activated.receipt.record);
 
-  await writeFile(configPath, JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite } }), { mode: 0o600 }); clearConfigCache();
+  await writeFile(configPath, JSON.stringify({ mode: 'api', layout: { root: data }, storage: { driver: 'sqlite', sqlite } }), { mode: 0o600 }); clearConfigCache();
   const deactivate = { schemaVersion: 1, action: 'deactivate', commandId: 'deactivate-a', scopeId: 'scope-a', reference,
     expectedRevision: 1, expectedBinding: observed.binding };
   const mcpResult = await callMcp(project, env, 'admit_model_activation', deactivate);

@@ -609,3 +609,7 @@ RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run sna
 | PROVIDERS/A2B | P5; A2A | Scoped readonly activation and shared SDK/CLI/MCP; no invocation | REVIEW |
 
 2026-09-20 PROVIDERS/A2B DONE — Fable2036 PASS exact52files, root and independent986product/24native/18host. Shared scoped activation across compiled SDK/CLI/MCP, readonly reader, neutral request context; current policy before store and historical replay without resurrection. Availability and invocation remain unobserved.
+
+| AUTH/NATIVE-CONFIG | P5; A2B | API metadata/config reads no longer require an unrelated provider credential; no invocation authority | REVIEW |
+
+2026-09-20 AUTH/NATIVE-CONFIG DONE — Fable2042 PASS exact9files, root and independent986product/24native/18host. Known defect removed: API-mode metadata and activation required an unrelated vendor credential. Generic cache revalidation, secret handling, policy and activation remain; native invocation requires its separate selected-profile/credential/budget admission, not a global config gate.

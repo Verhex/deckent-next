@@ -65,11 +65,11 @@ describe('config public contract', () => {
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');
     expect((await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: '', DECKENT_LANG: 'en', DECKENT_CONFIG_RELOAD: '1' } })).language).toBe('en');
   });
-  it('fails closed for API mode without auth, allowing the configured key without retaining it in config', async () => {
-    const f = await fixture();
-    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'api' } })).rejects.toBeInstanceOf(ConfigValidationError);
-    const config = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'api', ANTHROPIC_API_KEY: 'test-secret' } });
-    expect(config.mode).toBe('api'); expect(JSON.stringify(config)).not.toContain('test-secret');
+  it('loads API mode without a provider credential and preserves that result on a cache hit', async () => {
+    const f = await fixture(), env = { ...f.env, DECKENT_MODE: 'api' };
+    const first = await loadConfig(f.project, { env });
+    const cached = await loadConfig(f.project, { env });
+    expect(first.mode).toBe('api'); expect(cached.mode).toBe('api');
   });
   it('aggregates schema issues, rejects unregistered fields and permits resource-defined worker capacity', () => {
     const config = createDefaultConfig();

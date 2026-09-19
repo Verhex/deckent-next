@@ -348,3 +348,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 PROVIDERS/A2A — Added scoped durable model activation and revocation with pinned native definitions, authenticated replay and atomic audit. Ledger13 preserves existing Run records; real two-process race proof. Fable2032 PASS.
 
 - PROVIDERS/A2B: expose scoped activation and read-only inspection through SDK, CLI and MCP; share request context and retain exact revision/binding checks (Fable2036 PASS).
+
+- AUTH/NATIVE-CONFIG: remove the unrelated API-mode vendor credential prerequisite; preserve generic effective validation and secret/policy checks; strengthen the literal gate (Fable2042 PASS).

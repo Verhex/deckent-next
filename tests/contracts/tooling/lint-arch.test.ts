@@ -126,12 +126,14 @@ describe('lint-arch tier contract', () => {
     expect(result.out).toContain('tiers=off');
     expect(result.code).toBe(0);
   });
-  it('rejects provider credential environment literals outside the registry', async () => {
-    const allowed = await fixture({
+  it('rejects provider credential environment literals including the former registry exception', async () => {
+    const formerRegistry = await fixture({
       'src/adapters/core/registry/index.ts': "export { key } from './internal/auth.js';\n",
       'src/adapters/core/registry/internal/auth.ts': "export const key = 'ANTHROPIC_API_KEY';\n",
     });
-    expect((await lint(allowed)).code).toBe(0);
+    const registryResult = await lint(formerRegistry);
+    expect(registryResult.code).toBe(1);
+    expect(registryResult.out).toContain('[literal]');
     const rejected = await fixture({ 'src/platform/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
     expect((await lint(rejected)).out).toContain('[literal]');
   });

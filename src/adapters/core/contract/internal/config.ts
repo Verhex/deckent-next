@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { registerProviderCatalogConfig } from './catalog.js';
-import { validateApiMode } from '#adapters/core/registry/index.js';
 import { isDeepStrictEqual } from 'node:util';
 import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
 const units = z.enum(['percent', 'requests', 'tokens', 'credits', 'usd']);
@@ -49,7 +48,7 @@ let registered = false;
 /** Called by application ingress before config resolution; kernel never imports provider policy. */
 export function registerProviderConfig(): void {
   if (registered) return;
-  registerConfigSection('provider_limits', LIMIT_SCHEMA, { optional: true, metadata: { descriptionKey: 'config.field.provider_limits', tier: 'core', since: CONFIG_CONTRACT_SINCE }, validateEffective: validateApiMode, validateLayers: assertProviderLimitPolicyLayerPrecedence });
+  registerConfigSection('provider_limits', LIMIT_SCHEMA, { optional: true, metadata: { descriptionKey: 'config.field.provider_limits', tier: 'core', since: CONFIG_CONTRACT_SINCE }, validateLayers: assertProviderLimitPolicyLayerPrecedence });
   registerProviderCatalogConfig();
   registered = true;
 }

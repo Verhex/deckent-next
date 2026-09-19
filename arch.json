@@ -170,9 +170,7 @@
       "\\b(sonnet|opus|haiku)\\b",
       "\\b(ANTHROPIC|OPENAI|GOOGLE|GEMINI|XAI)_API_KEY\\b"
     ],
-    "allow": [
-      "src/adapters/core/registry/internal/auth.ts"
-    ]
+    "allow": []
   },
   "markdown": {
     "trackedAllow": [
@@ -212,7 +210,6 @@
     },
     "src/adapters/core/contract": {
       "dependencies": [
-        "src/adapters/core/registry",
         "src/domain/core/provider-catalog",
         "src/platform/core/common",
         "src/platform/core/config"
@@ -277,13 +274,6 @@
         "src/engine/core/supervisor"
       ],
       "plan": "SUPERVISOR/A"
-    },
-    "src/adapters/core/registry": {
-      "dependencies": [
-        "src/platform/core/config",
-        "src/platform/core/host"
-      ],
-      "plan": "P1"
     },
     "src/capabilities/core/artifacts": {
       "dependencies": [
