@@ -10,6 +10,11 @@ export function queryFailure(error: unknown): DeckentError {
   if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') {
     return ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
   }
+  if (error instanceof ManagedFileError && error.diagnostic) {
+    const d = error.diagnostic;
+    return ErrorRegistry.createError(error.code, { params: { resource: d.resource, companion: d.companion,
+      stage: d.stage, reason: d.reason, mode: d.mode, links: d.links } });
+  }
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {

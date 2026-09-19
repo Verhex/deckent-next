@@ -532,3 +532,5 @@ RESERVATION-READABLE-DIAGNOSTIC DONE — Fable PASS 1919; EN/TR bounded detail, 
 CANCELLATION-PAGE-FAIRNESS DONE — Fable PASS 1921; unavailable records no longer starve later pages. Transport backoff remains. SQLite companion race remains separate.
 
 CONFIG-LOCK-GENERATION DONE — Fable PASS1927; generation replacement yields contention before file-type rejection; exact historical1907 cause unproven.
+
+MANAGED-COMPANION-UNLINK DONE — Fable PASS 1933:c2794c4444dd; exact reviewed candidate landed; historical failures remain separately qualified.

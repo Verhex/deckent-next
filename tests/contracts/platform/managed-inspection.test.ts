@@ -43,3 +43,15 @@ it.skipIf(process.platform === 'win32')('prepares a configured socket location w
   await expect(prepareProductSocket(layout, 'runtimeSocket')).rejects.toThrow('MANAGED_FILE_UNSAFE');
   expect(await readFile(endpoint, 'utf8')).toBe('owner-data');
 });
+
+it.skipIf(process.platform === 'win32')('identifies an unsafe companion condition without repairing or exposing its absolute path', async () => {
+  const { layout } = await fixture(); const file = await prepareProductFile(layout, 'ledger');
+  await writeFile(file + '-wal', 'unchanged', { mode: 0o600 }); await chmod(file + '-wal', 0o644);
+  for (const operation of [prepareProductFile, inspectProductFile]) {
+    await expect(operation(layout, 'ledger', ['-wal'])).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSAFE', diagnostic: {
+      resource: 'ledger', companion: '-wal', stage: 'path', reason: 'mode', mode: 0o644, links: 1,
+    } });
+  }
+  expect(await readFile(file + '-wal', 'utf8')).toBe('unchanged');
+  expect((await stat(file + '-wal')).mode & 0o777).toBe(0o644);
+});

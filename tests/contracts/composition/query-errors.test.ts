@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
 import { RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { ErrorRegistry, ManagedFileError } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
@@ -46,4 +46,13 @@ it('exposes only the bounded adapter-version conflict reason', () => {
   expect(safe.params).toEqual({ reason: 'adapter-version-mismatch' });
   expect(JSON.stringify(safe)).not.toContain('/private');
   expect(JSON.stringify(safe)).not.toContain('secret');
+});
+
+it('exposes only bounded managed-file failure metadata, without path, UID or raw stat objects', () => {
+  const metadata = { resource: 'ledger' as const, companion: '-shm', stage: 'path' as const, reason: 'link-count' as const,
+    mode: 0o600, links: 0, path: '/private/customer/ledger.db-shm', uid: 1234, secret: 'private-key' };
+  const safe = queryFailure(new ManagedFileError('MANAGED_FILE_UNSAFE', metadata));
+  expect(safe.params).toEqual({ resource: 'ledger', companion: '-shm', stage: 'path', reason: 'link-count', mode: 0o600, links: 0 });
+  expect(JSON.stringify(safe)).not.toContain('/private'); expect(JSON.stringify(safe)).not.toContain('private-key');
+  expect(safe.params).not.toHaveProperty('uid');
 });

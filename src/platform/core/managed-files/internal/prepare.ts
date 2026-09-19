@@ -3,8 +3,13 @@ import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import { dirname, join, parse, relative, resolve, sep } from 'node:path';
 import { productResourcePath, type ProductLayout, type ProductResource } from '#platform/core/host/index.js';
 
+interface ManagedFileContext { readonly resource: ProductResource; readonly companion: string; readonly stage: 'path' | 'handle' }
+interface ManagedFileDiagnostic extends ManagedFileContext {
+  readonly reason: 'file-type' | 'link-count' | 'owner' | 'mode'; readonly mode: number; readonly links: number;
+}
 export class ManagedFileError extends Error {
-  constructor(readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT' | 'MANAGED_FILE_MISSING') {
+  constructor(readonly code: 'MANAGED_FILE_UNSUPPORTED' | 'MANAGED_FILE_UNSAFE' | 'MANAGED_FILE_OUTSIDE_ROOT' | 'MANAGED_FILE_MISSING',
+    readonly diagnostic?: Readonly<ManagedFileDiagnostic>) {
     super(code); this.name = 'ManagedFileError';
   }
 }
@@ -12,10 +17,21 @@ function missing(error: unknown): boolean { return !!error && typeof error === '
 async function inspect(path: string) {
   try { return await lstat(path); } catch (error) { if (missing(error)) return null; throw error; }
 }
-function privateFile(stat: Stats, uid: number): void {
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.uid !== uid || (stat.mode & 0o777) !== 0o600) {
-    throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+function privateFile(stat: Stats, uid: number, context: ManagedFileContext): void {
+  const reason = !stat.isFile() || stat.isSymbolicLink() ? 'file-type' : stat.nlink !== 1 ? 'link-count'
+    : stat.uid !== uid ? 'owner' : (stat.mode & 0o777) !== 0o600 ? 'mode' : null;
+  if (reason) throw new ManagedFileError('MANAGED_FILE_UNSAFE', Object.freeze({ ...context, reason,
+    mode: stat.mode & 0o777, links: stat.nlink }));
+}
+/** SQLite and other trusted writers may unlink a private companion during stat.
+ * Re-observe only that fully private zero-link generation once; a current unsafe file still fails closed.
+ */
+async function inspectCompanion(path: string, uid: number, context: ManagedFileContext): Promise<void> {
+  let stat = await inspect(path);
+  if (stat?.isFile() && !stat.isSymbolicLink() && stat.uid === uid && (stat.mode & 0o777) === 0o600 && stat.nlink === 0) {
+    stat = await inspect(path);
   }
+  if (stat) privateFile(stat, uid, context);
 }
 /** Trusted-host preflight. This is NOT openat custody or a sandbox against concurrent same-UID workers.
  * Composition must keep this tree outside the writable worker sandbox; no permissions are silently repaired.
@@ -25,9 +41,9 @@ export async function prepareProductFile(layout: ProductLayout, resource: Produc
   const uid = process.getuid!();
   for (const suffix of companions) {
     if (!/^-[a-z]+$/.test(suffix)) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-    const stat = await inspect(path + suffix); if (stat) privateFile(stat, uid);
+    await inspectCompanion(path + suffix, uid, { resource, companion: suffix, stage: 'path' });
   }
-  const existing = await inspect(path); if (existing) privateFile(existing, uid);
+  const existing = await inspect(path); if (existing) privateFile(existing, uid, { resource, companion: '', stage: 'path' });
   let handle;
   try { handle = await open(path, constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW, 0o600); }
   catch (error) {
@@ -35,7 +51,7 @@ export async function prepareProductFile(layout: ProductLayout, resource: Produc
     handle = await open(path, constants.O_RDWR | constants.O_NOFOLLOW);
   }
   try {
-    const opened = await handle.stat(); privateFile(opened, uid);
+    const opened = await handle.stat(); privateFile(opened, uid, { resource, companion: '', stage: 'handle' });
     const linked = await lstat(path);
     if (linked.ino !== opened.ino || linked.dev !== opened.dev || linked.isSymbolicLink()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
   } finally { await handle.close(); }
@@ -87,14 +103,14 @@ export async function inspectProductFile(layout: ProductLayout, resource: Produc
   const uid = process.getuid!();
   for (const suffix of companions) {
     if (!/^-[a-z]+$/.test(suffix)) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
-    const companion = await inspect(path + suffix); if (companion) privateFile(companion, uid);
+    await inspectCompanion(path + suffix, uid, { resource, companion: suffix, stage: 'path' });
   }
   const existing = await inspect(path);
   if (!existing) throw new ManagedFileError('MANAGED_FILE_MISSING');
-  privateFile(existing, uid);
+  privateFile(existing, uid, { resource, companion: '', stage: 'path' });
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    const opened = await handle.stat(); privateFile(opened, uid);
+    const opened = await handle.stat(); privateFile(opened, uid, { resource, companion: '', stage: 'handle' });
     const linked = await lstat(path);
     if (linked.ino !== opened.ino || linked.dev !== opened.dev || linked.isSymbolicLink()) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
   } finally { await handle.close(); }

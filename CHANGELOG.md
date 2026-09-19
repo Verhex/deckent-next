@@ -314,3 +314,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - Cancellation processing advances past unavailable records while preserving transport backoff (Fable PASS 1921; real Docker fairness evidence).
 
 - Config locking preserves a replacement owner when a legacy lock changes generation during observation (Fable PASS1927).
+
+- fix(storage): handle unlinked SQLite companions with bounded re-observation (Fable PASS 1933:c2794c4444dd).
