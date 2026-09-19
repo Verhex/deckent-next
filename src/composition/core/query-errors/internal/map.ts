@@ -7,6 +7,9 @@ import { ReconciliationRecoveryError, ReconciliationRuntimeLoopError, Cancellati
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
+  if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') {
+    return ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
+  }
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {

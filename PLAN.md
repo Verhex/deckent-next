@@ -522,3 +522,5 @@ RECONCILIATION-SERVICE-REVIEW2: DONE — Fable1878/1895 PASS; exact reviewed can
 RECONCILIATION-R1: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.
 
 RESERVATION-DIAGNOSTIC: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.
+
+WORKSPACE-VERSION-CONFLICT: DONE — Fable1902 PASS; adapter version stays pinned, bounded reason at shared error mapping; protocol params and localized detail remain follow-up.

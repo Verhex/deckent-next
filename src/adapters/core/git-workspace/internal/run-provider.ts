@@ -1,5 +1,5 @@
 import type { AttemptIdentity } from '#domain/index.js';
-import { RunWorkspaceCustodyError, type RunWorkspaceCustody, type RunWorkspaceProvider, type WorkspaceSource } from '#engine/index.js';
+import { workspaceCustodyConflict, type RunWorkspaceCustody, type RunWorkspaceProvider, type WorkspaceSource } from '#engine/index.js';
 import { GitWorkspaceBroker } from './broker.js';
 import type { GitSourceBase } from './source-base.js';
 
@@ -17,7 +17,7 @@ export class GitRunWorkspaceProvider implements RunWorkspaceProvider {
   }
   async allocate(identity: AttemptIdentity, custody: RunWorkspaceCustody) {
     const captured = await this.broker.captureSourceBase(custody.baseRevision);
-    if (JSON.stringify(source(captured)) !== JSON.stringify(custody.source)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+    if (JSON.stringify(source(captured)) !== JSON.stringify(custody.source)) throw workspaceCustodyConflict(custody.source, source(captured));
     return this.broker.allocate({ schemaVersion: 1, identity, baseCommit: custody.baseRevision });
   }
 }

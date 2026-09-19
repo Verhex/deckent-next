@@ -304,3 +304,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - RECONCILIATION-R1: advance reconciliation past unavailable records (Fable1878/1895; reviewed slice).
 
 - RESERVATION-DIAGNOSTIC: expose bounded reservation diagnostics (Fable1878/1895; reviewed slice).
+
+- WORKSPACE-VERSION-CONFLICT: preserve pinned Run adapter version and expose its bounded conflict reason (Fable1902 PASS).

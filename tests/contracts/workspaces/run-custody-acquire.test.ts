@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { GitRunWorkspaceProvider, GitWorkspaceBroker, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunWorkspaceAcquisitionApplication } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -46,4 +46,28 @@ it('adopts an existing typed lease into missing Run custody without sampling cur
   expect(acquired).toEqual(lease);
   expect(await f.store.loadRunWorkspaceCustody('s', 'r')).toMatchObject({ baseRevision: recorded.baseCommit,
     source: { sourceFingerprint: recorded.sourceFingerprint } });
+});
+
+it.each(['new-attempt', 'recorded-attempt'] as const)('rejects changed adapter version before allocation for %s', async mode => {
+  const f = await fixture(); const provider = new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions));
+  await new RunWorkspaceAcquisitionApplication(f.store, provider).acquire(f.identities[0]);
+  const custody = await f.store.loadRunWorkspaceCustody('s', 'r');
+  const allocate = vi.fn(provider.allocate.bind(provider));
+  const changed = {
+    openRecorded: async (identity: Parameters<typeof provider.openRecorded>[0]) => {
+      const recorded = await provider.openRecorded(identity);
+      return recorded ? { ...recorded, source: { ...recorded.source, adapter: { id: 'git', version: 2 } } } : null;
+    },
+    captureSource: async (base?: string) => {
+      const captured = await provider.captureSource(base);
+      return { ...captured, source: { ...captured.source, adapter: { id: 'git', version: 2 } } };
+    },
+    allocate,
+  };
+  await expect(new RunWorkspaceAcquisitionApplication(f.store, changed)
+    .acquire(f.identities[mode === 'recorded-attempt' ? 0 : 1])).rejects.toMatchObject({
+      code: 'RUN_WORKSPACE_CUSTODY_CONFLICT', reason: 'adapter-version-mismatch',
+    });
+  expect(allocate).not.toHaveBeenCalled();
+  expect(await f.store.loadRunWorkspaceCustody('s', 'r')).toEqual(custody);
 });

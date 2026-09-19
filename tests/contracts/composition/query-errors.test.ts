@@ -38,3 +38,12 @@ it.each([
   expect(String(safe)).not.toContain('/private'); expect(String(safe)).not.toContain('secret');
   expect(safe.localize?.('tr').message).not.toBe(safe.localize?.('en').message);
 });
+
+it('exposes only the bounded adapter-version conflict reason', () => {
+  const error = new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT', 'adapter-version-mismatch');
+  Object.assign(error, { sourceFingerprint: 'private', path: '/private/repository', credential: 'secret' });
+  const safe = queryFailure(error);
+  expect(safe.params).toEqual({ reason: 'adapter-version-mismatch' });
+  expect(JSON.stringify(safe)).not.toContain('/private');
+  expect(JSON.stringify(safe)).not.toContain('secret');
+});

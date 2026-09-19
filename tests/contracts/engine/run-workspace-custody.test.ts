@@ -93,3 +93,15 @@ it('migrates schema eight by adding an empty custody table without inventing rec
   try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(9); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
   finally { check.close(); }
 });
+
+it('rejects a new adapter version after reopening without replacing the pinned Run source', async () => {
+  const f = await fixture(); await f.store.resolveRunWorkspaceCustody(candidate());
+  f.store.close(); stores.splice(stores.indexOf(f.store), 1);
+  const reopened = await openSqliteAttemptStore(f.path, options, 'forbid'); stores.push(reopened);
+  const changed = candidate('1'.repeat(40), { source: { ...source, adapter: { id: 'git', version: 2 } } });
+  await expect(reopened.resolveRunWorkspaceCustody(changed)).rejects.toMatchObject({
+    code: 'RUN_WORKSPACE_CUSTODY_CONFLICT', reason: 'adapter-version-mismatch',
+  });
+  expect(await reopened.loadRunWorkspaceCustody('s', 'r')).toEqual(candidate());
+  expect(await reopened.resolveRunWorkspaceCustody(candidate())).toEqual(candidate());
+});

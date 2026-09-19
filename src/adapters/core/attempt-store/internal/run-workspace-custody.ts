@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, runSnapshotSchema } from '#domain/index.js';
-import { assertRunExecution, runWorkspaceCustodySchema, RunWorkspaceCustodyError,
+import { workspaceCustodyConflict, assertRunExecution, runWorkspaceCustodySchema, RunWorkspaceCustodyError,
   type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/index.js';
 import { sqliteFailure } from './options.js';
 
@@ -40,7 +40,8 @@ export class SqliteRunWorkspaceCustody implements RunWorkspaceCustodyStore {
         recorded = this.read(candidate.scopeId, candidate.runId);
       }
       if (!recorded || JSON.stringify(recorded.source) !== JSON.stringify(candidate.source)) {
-        throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+        throw recorded ? workspaceCustodyConflict(recorded.source, candidate.source)
+          : new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
       }
       this.db.exec('COMMIT'); return recorded;
     } catch (error) {

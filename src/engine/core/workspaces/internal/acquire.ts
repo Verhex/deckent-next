@@ -1,5 +1,5 @@
 import { attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
-import { RunWorkspaceCustodyError, type RunWorkspaceCustody, type RunWorkspaceCustodyStore, type WorkspaceSource } from './run-custody.js';
+import { workspaceCustodyConflict, RunWorkspaceCustodyError, type RunWorkspaceCustody, type RunWorkspaceCustodyStore, type WorkspaceSource } from './run-custody.js';
 import type { WorkspaceLease } from './port.js';
 
 export interface RunWorkspaceProvider {
@@ -21,19 +21,19 @@ export class RunWorkspaceAcquisitionApplication {
       const candidate = { schemaVersion: 1 as const, scopeId: identity.scopeId, runId: identity.runId,
         source: recorded.source, baseRevision: recorded.lease.baseCommit };
       custody ??= await this.store.resolveRunWorkspaceCustody(candidate);
-      if (!exact(custody, recorded.source, recorded.lease.baseCommit)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+      if (!exact(custody, recorded.source, recorded.lease.baseCommit)) throw workspaceCustodyConflict(custody.source, recorded.source);
       this.verify(recorded.lease, identity, custody); return recorded.lease;
     }
     if (custody) {
       const captured = await this.provider.captureSource(custody.baseRevision);
-      if (!exact(custody, captured.source, captured.baseRevision)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+      if (!exact(custody, captured.source, captured.baseRevision)) throw workspaceCustodyConflict(custody.source, captured.source);
     } else {
       const captured = await this.provider.captureSource();
       custody = await this.store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId: identity.scopeId, runId: identity.runId,
         source: captured.source, baseRevision: captured.baseRevision });
       if (!exact(custody, captured.source, captured.baseRevision)) {
         const winner = await this.provider.captureSource(custody.baseRevision);
-        if (!exact(custody, winner.source, winner.baseRevision)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+        if (!exact(custody, winner.source, winner.baseRevision)) throw workspaceCustodyConflict(custody.source, winner.source);
       }
     }
     const lease = await this.provider.allocate(identity, custody); this.verify(lease, identity, custody); return lease;

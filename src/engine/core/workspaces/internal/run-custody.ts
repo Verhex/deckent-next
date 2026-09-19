@@ -16,5 +16,13 @@ export interface RunWorkspaceCustodyStore {
   resolveRunWorkspaceCustody(candidate: RunWorkspaceCustody): Promise<RunWorkspaceCustody>;
 }
 export class RunWorkspaceCustodyError extends Error {
-  constructor(readonly code: 'RUN_WORKSPACE_CUSTODY_CONFLICT' | 'RUN_WORKSPACE_CUSTODY_CORRUPT') { super(code); this.name = 'RunWorkspaceCustodyError'; }
+  constructor(readonly code: 'RUN_WORKSPACE_CUSTODY_CONFLICT' | 'RUN_WORKSPACE_CUSTODY_CORRUPT',
+    readonly reason?: 'adapter-version-mismatch') { super(code); this.name = 'RunWorkspaceCustodyError'; }
+}
+
+/** Classify an already rejected identity; never expose source fingerprints or filesystem paths. */
+export function workspaceCustodyConflict(recorded: WorkspaceSource, candidate: WorkspaceSource): RunWorkspaceCustodyError {
+  return new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT',
+    recorded.adapter.id === candidate.adapter.id && recorded.adapter.version !== candidate.adapter.version
+      ? 'adapter-version-mismatch' : undefined);
 }
