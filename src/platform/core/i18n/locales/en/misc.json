@@ -614,5 +614,6 @@
   "cli.runtime.clean": "complete",
   "cli.runtime.incomplete": "incomplete; durable work remains",
   "cli.value.none": "none",
-  "config.field.cancellationRuntime": "Automatic cancellation recovery scopes, polling interval and failure backoff"
+  "config.field.cancellationRuntime": "Automatic cancellation recovery scopes, polling interval and failure backoff",
+  "config.field.reconciliationRuntime": "Automatic reconciliation scopes, page size, concurrency, polling and failure backoff"
 }

@@ -9,3 +9,4 @@ export { reserveConfiguredRunTasks } from './internal/reserve.js';
 export { recoverConfiguredCancellations } from './internal/recover-cancellation.js';
 
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
+export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';

@@ -296,3 +296,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - RECONCILIATION-PAGE-REVIEW2: recover bounded reconciliation pages (Fable1878/1895; reviewed slice).
 
 - RECONCILIATION-LOOP-REVIEW2: host scoped recovery loops (Fable1878/1895; reviewed slice).
+
+- RECONCILIATION-COMPOSITION-REVIEW2: configure authorized reconciliation recovery (Fable1878/1895; reviewed slice).

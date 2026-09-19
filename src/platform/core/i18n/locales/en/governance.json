@@ -813,5 +813,9 @@
   "error.RUNTIME_SERVICE_NOT_STOPPING": "Shutdown completion is unavailable before shutdown starts.",
   "error.RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE": "The shutdown grace period expired. Remaining work was not cancelled; inspect durable records after restart.",
   "error.CANCELLATION_RUNTIME_LOOP_OPTIONS": "Cancellation runtime scope or timing settings are invalid.",
-  "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "The cancellation runtime loop is already running."
+  "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "The cancellation runtime loop is already running.",
+  "error.RECONCILIATION_NOT_CONFIGURED": "Automatic reconciliation recovery is not configured.",
+  "error.RECONCILIATION_RECOVERY_INVALID": "The reconciliation recovery page or limits are invalid. No new work was launched.",
+  "error.RECONCILIATION_RUNTIME_LOOP_OPTIONS": "The reconciliation runtime scope or scheduling configuration is invalid.",
+  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "The reconciliation runtime loop is already running."
 }

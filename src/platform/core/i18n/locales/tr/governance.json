@@ -813,5 +813,9 @@
   "error.RUNTIME_SERVICE_NOT_STOPPING": "Kapanış başlamadan tamamlanma durumu beklenemez.",
   "error.RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE": "Kapanış bekleme süresi doldu. Kalan işler iptal edilmedi; yeniden başlatınca kalıcı kayıtları inceleyin.",
   "error.CANCELLATION_RUNTIME_LOOP_OPTIONS": "İptal runtime kapsam veya zamanlama ayarları geçersiz.",
-  "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "İptal runtime döngüsü zaten çalışıyor."
+  "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "İptal runtime döngüsü zaten çalışıyor.",
+  "error.RECONCILIATION_NOT_CONFIGURED": "Otomatik uzlaştırma kurtarması yapılandırılmamış.",
+  "error.RECONCILIATION_RECOVERY_INVALID": "Uzlaştırma kurtarma sayfası veya sınırları geçersiz. Yeni iş başlatılmadı.",
+  "error.RECONCILIATION_RUNTIME_LOOP_OPTIONS": "Uzlaştırma runtime kapsamı veya zamanlama yapılandırması geçersiz.",
+  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "Uzlaştırma runtime döngüsü zaten çalışıyor."
 }

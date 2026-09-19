@@ -44,6 +44,13 @@ export const CONFIG_FIELDS = Object.freeze({
   cancellationRuntime: field('config.field.cancellationRuntime', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
     pollIntervalMs: z.number().int().positive().safe().default(1000), failureBackoffMs: z.number().int().positive().safe().default(5000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  reconciliationRuntime: field('config.field.reconciliationRuntime', z.object({
+    scopeIds: z.array(z.string().min(1)).min(1),
+    pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
+    failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
+    pageSize: z.number().int().positive().max(2147483646).default(64),
+    maxConcurrentReconciliations: z.number().int().positive().safe().default(4),
+  }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   admission: field('config.field.admission', z.object({ registry: z.record(z.unknown()), poolId: z.string().min(1),
     executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),
