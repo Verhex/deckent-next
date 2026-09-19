@@ -2,8 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { executionPoolSchema, type ExecutionPool } from '#engine/index.js';
-import { migrateLedger, CURRENT_LEDGER_VERSION } from './schema.js';
-import { sqliteAttemptOptionsSchema, type SqliteAttemptOptions } from './options.js';
+import { migrateLedger, CURRENT_LEDGER_VERSION, sqliteLedgerOptionsSchema, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteExecutionPools } from './pools.js';
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
@@ -44,9 +43,9 @@ function exactReplay(db: DatabaseSync, expected: string, pool: ExecutionPool): v
 }
 
 /** Installer-only ledger initialization. Filesystem path custody and permissions remain composition's responsibility. */
-export async function initializeInstallationLedger(path: string, options: SqliteAttemptOptions, ownershipInput: unknown, poolInput: unknown) {
+export async function initializeInstallationLedger(path: string, options: SqliteLedgerOptions, ownershipInput: unknown, poolInput: unknown) {
   const copiedOptions = immutableJsonObjectSchema.safeParse(options);
-  const parsedOptions = copiedOptions.success ? sqliteAttemptOptionsSchema.safeParse(copiedOptions.data) : copiedOptions;
+  const parsedOptions = copiedOptions.success ? sqliteLedgerOptionsSchema.safeParse(copiedOptions.data) : copiedOptions;
   if (typeof path !== 'string' || !path || !parsedOptions.success) {
     throw new InstallationLedgerError('INSTALLATION_LEDGER_INVALID');
   }

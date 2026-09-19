@@ -193,12 +193,12 @@
   "units": {
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/sqlite-ledger",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
-        "src/domain/core/task-graph",
         "src/engine/core/attempts",
         "src/engine/core/dispatch",
         "src/engine/core/runs",
@@ -206,8 +206,7 @@
         "src/engine/core/scheduling",
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",
-        "src/engine/core/workspaces",
-        "src/platform/core/config-fields"
+        "src/engine/core/workspaces"
       ],
       "plan": "STORE/A"
     },
@@ -845,6 +844,17 @@
         "src/platform/core/config"
       ],
       "plan": "PROVIDERS/A0"
+    },
+    "src/adapters/core/sqlite-ledger": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/engine/core/attempts",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "STORE/LEDGER-OWNER"
     }
   },
   "composition": {

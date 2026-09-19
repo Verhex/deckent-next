@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { verifiedPrincipalSchema, type VerifiedPrincipal, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { dispatchInventoryQuerySchema, type DispatchInventoryQuery, dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, dispatchRecordSchema, DispatchError, AttemptStoreError,
   projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal, sandboxRequestSchema, sameSandboxRequest, type DispatchClaim, type DispatchAdmission, type SupervisorProfileValidator, type LaunchRequest, type DispatchTerminal, type DispatchRecord } from '#engine/index.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 export class SqliteDispatchJournal {
   constructor(private readonly db: DatabaseSync, private readonly profiles?: SupervisorProfileValidator) {}

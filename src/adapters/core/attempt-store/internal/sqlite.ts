@@ -1,5 +1,4 @@
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
-import { migrateLedger } from './schema.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
@@ -11,33 +10,16 @@ import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservatio
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
-import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
-import { DatabaseSync } from 'node:sqlite';
+import { openSqliteLedger, sqliteFailure, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
 import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore {
   private readonly db: DatabaseSync;
-  constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
-    if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-    const parsed = sqliteAttemptOptionsSchema.safeParse(options);
-    if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-    try { this.db = new DatabaseSync(path, { timeout: parsed.data.busyTimeoutMs }); }
-    catch (error) { throw sqliteFailure(error); }
-    try {
-      this.db.exec('BEGIN IMMEDIATE');
-      migrateLedger(this.db, migration, this.profiles);
-      this.db.exec('COMMIT');
-      const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
-      const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
-      const selected = this.db.prepare(journal[parsed.data.journalMode]).get()?.journal_mode;
-      if (selected !== parsed.data.journalMode) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
-      this.db.exec(durability[parsed.data.durability]);
-    } catch (error) {
-      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
-      this.db.close(); throw sqliteFailure(error);
-    }
+  constructor(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
+    this.db = openSqliteLedger(path, options, migration, this.profiles);
   }
   async loadBoundDispatch(identity: AttemptIdentity) {
     try { return readRunBoundDispatch(this.db, identity).dispatch; } catch (error) { throw sqliteFailure(error); }

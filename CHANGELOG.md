@@ -340,3 +340,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 PROVIDERS/A0 — Added native model declarations to SDK/CLI/MCP, explicit not-observed availability, registered section secret policy and pure writer validation. Fable2008 PASS; activation and provider invocation remain separate.
 
 2026-09-19 PROVIDERS/A1 — Added versioned native model content binding with shared strict references, deterministic semantic digest and SDK/CLI/MCP parity. Fable2018 PASS; activation and invocation remain separate.
+
+2026-09-19 STORE/LEDGER-OWNER — Extracted shared SQLite infrastructure ownership while preserving execution store authority, lazy imports and existing schema/path semantics. Fable2022 PASS.

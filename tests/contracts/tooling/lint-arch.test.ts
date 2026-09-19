@@ -78,6 +78,8 @@ describe('lint-arch tier contract', () => {
       'src/adapters/core/attempt-store/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
       'src/adapters/core/attempt-store/migrations/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
       'src/adapters/core/attempt-store/migrations/index.ts': "export { dispatchRecordV2Schema } from './version-two.js';\n",
+      'src/adapters/core/sqlite-ledger/index.ts': 'export {};\n',
+      'src/adapters/core/sqlite-ledger/internal/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
     });
     const historyResult = await lint(history);
     expect(historyResult.code).toBe(0);
@@ -85,10 +87,13 @@ describe('lint-arch tier contract', () => {
     const misplaced = await fixture({
       'src/engine/core/dispatch/index.ts': 'export {};\n',
       'src/engine/core/dispatch/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
+      'src/adapters/core/sqlite-ledger/index.ts': 'export {};\n',
+      'src/adapters/core/sqlite-ledger/internal/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
     });
     const misplacedResult = await lint(misplaced);
     expect(misplacedResult.code).toBe(1);
     expect(misplacedResult.out).toContain('migration-v5.ts');
+    expect(misplacedResult.out).toContain('[versioning] src/adapters/core/sqlite-ledger/internal/version-two.ts');
   });
 
   it('accepts lower-tier imports through unit indexes and package indexes across tiers', async () => {

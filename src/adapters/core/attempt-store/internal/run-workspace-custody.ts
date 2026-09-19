@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, runSnapshotSchema } from '#domain/index.js';
 import { workspaceCustodyConflict, assertRunExecution, runWorkspaceCustodySchema, RunWorkspaceCustodyError,
   type RunWorkspaceCustody, type RunWorkspaceCustodyStore } from '#engine/index.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 export class SqliteRunWorkspaceCustody implements RunWorkspaceCustodyStore {
   constructor(private readonly db: DatabaseSync) {}

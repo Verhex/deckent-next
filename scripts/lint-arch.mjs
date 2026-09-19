@@ -50,7 +50,7 @@ const versioningScope = (file) => {
   const migrationHistory = path[1] === 'adapters'
     && (path.some(segment => VERSION_HISTORY_SEGMENTS.has(segment.toLowerCase()))
       || /^migration-v\d+\.ts$/i.test(path.at(-1) ?? ''))
-    && path.some(segment => /(?:attempt|persistence|store)/i.test(segment));
+    && path.some(segment => /(?:attempt|persistence|store|ledger)/i.test(segment));
   return path[0] === 'src' && VERSIONED_SHAPE_PACKAGES.has(path[1]) && !migrationHistory;
 };
 const tiers = arch.tiers ?? { order: [], enforce: false, unitLines: Infinity };

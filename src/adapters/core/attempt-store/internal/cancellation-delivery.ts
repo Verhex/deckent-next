@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { CancellationDeliveryError, cancellationDeliverySchema, decideCancellationDeliveryClaim, decideCancellationDeliveryFinish,
   type CancellationDelivery, type CancellationDeliveryClaim, type CancellationDeliveryClaimResult, type CancellationDeliveryOutcome, type CancellationDeliveryStore } from '#engine/index.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
 /** Durable cancellation retry leases. This journal never grants launch authority. */

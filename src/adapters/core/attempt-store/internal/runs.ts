@@ -6,7 +6,7 @@ import { runCancellationSchema, type RunCancellation, runCreateSchema, runReserv
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync) {}
   private transaction<T>(work: () => T): T {

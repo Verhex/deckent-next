@@ -592,4 +592,8 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 
 | PROVIDERS/A1 | P5; A0 PASS | Exact native model semantic binding, domain encoding + engine SHA256 + SDK/CLI/MCP read-only inspection; no activation/store/invocation | WIP |
 
+| STORE/LEDGER-OWNER | P5 shared storage prerequisite | Separate physical SQLite connection/migration owner; schema11 and paths unchanged, no activation authority or alias | WIP |
+
 2026-09-19 PROVIDERS/A1 DONE — Fable2018 PASS exact21files; root and independent914product/24native/18host. Exact native semantic binding across SDK/CLI/MCP, no activation authority. A1-a validation placeholder and A1-b bounded repeated parsing remain nonblocking follow-ups.
+
+2026-09-19 STORE/LEDGER-OWNER DONE — Fable2022 PASS exact28files; root and independent915product/24native/18host. Single schema/options/open owner with lazy native import, unchanged schema11/paths and specialized installer/readonly behavior. Activation remains separate adapter/card.

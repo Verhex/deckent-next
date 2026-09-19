@@ -1,19 +1,19 @@
-import { requireLedgerVersion, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION } from './schema.js';
+import { requireLedgerVersion, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
+  type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
-import { sqliteAttemptOptionsSchema, sqliteFailure, type SqliteAttemptOptions } from './options.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 
-export type SqliteInventoryOptions = Pick<SqliteAttemptOptions, 'busyTimeoutMs'>;
+export type SqliteInventoryOptions = Pick<SqliteLedgerOptions, 'busyTimeoutMs'>;
 /** Existing ledger only: no creation, migrations, journal-mode changes or write methods.
  * WAL readers may use SQLite shared-memory bookkeeping. Path custody belongs to composition.
  */
 export class SqliteInventoryReader implements DispatchInventoryStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteInventoryOptions) {
-    const parsed = sqliteAttemptOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
+    const parsed = sqliteLedgerOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
     try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
     catch (error) { throw readFailure(error); }

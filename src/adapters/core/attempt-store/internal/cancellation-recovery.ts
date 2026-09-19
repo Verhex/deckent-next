@@ -3,7 +3,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { cancellationDeliverySchema, cancellationRecoveryPage, cancellationRecoveryQuerySchema, CancellationDeliveryError,
   type CancellationRecoveryQuery, type CancellationRecoveryQueryStore } from '#engine/index.js';
 import { dispatchRecordSchema } from '#engine/index.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
 export class SqliteCancellationRecoveryQuery implements CancellationRecoveryQueryStore {

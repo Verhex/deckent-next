@@ -11,7 +11,7 @@ import {
   type ShutdownAdmission,
   type ShutdownOutcome,
 } from '#engine/index.js';
-import { sqliteFailure } from './options.js';
+import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
 type StoredRow = Readonly<{ record: unknown }>;
 
