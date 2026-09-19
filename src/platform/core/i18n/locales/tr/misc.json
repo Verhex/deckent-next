@@ -615,5 +615,6 @@
   "cli.runtime.incomplete": "tamamlanmadı; kalıcı kayıtlarda işler var",
   "cli.value.none": "yok",
   "config.field.cancellationRuntime": "Otomatik iptal kurtarma kapsamları, tarama aralığı ve hata sonrası bekleme süresi",
-  "config.field.reconciliationRuntime": "Otomatik uzlaştırma kapsamları, sayfa boyutu, eşzamanlılık, tarama ve hata sonrası bekleme"
+  "config.field.reconciliationRuntime": "Otomatik uzlaştırma kapsamları, sayfa boyutu, eşzamanlılık, tarama ve hata sonrası bekleme",
+  "config.field.installation": "Kurulum girdi sınırları"
 }

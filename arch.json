@@ -313,8 +313,12 @@
     "src/composition/core/cli": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/adapters/core/installation-profile-file",
+        "src/composition/core/installation",
+        "src/composition/core/query-errors",
         "src/composition/core/runtime-service",
         "src/platform/core/config",
+        "src/platform/core/config-fields",
         "src/surfaces/core/cli"
       ],
       "plan": "S0"
@@ -374,12 +378,14 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
         "src/capabilities/core/evaluation-evidence",
         "src/domain/core/task-evaluation",
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
+        "src/engine/core/installation",
         "src/engine/core/policy",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -717,6 +723,7 @@
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
+        "src/engine/core/installation",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
@@ -745,6 +752,33 @@
         "src/platform/core/i18n"
       ],
       "plan": "S1"
+    },
+    "src/adapters/core/installation-profile-file": {
+      "dependencies": [],
+      "plan": "REAL-INIT/P3A"
+    },
+    "src/engine/core/installation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/policy",
+        "src/domain/core/run",
+        "src/engine/core/runs"
+      ],
+      "plan": "REAL-INIT/P3A"
+    },
+    "src/composition/core/installation": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/docker-supervisor",
+        "src/capabilities/core/evaluation-evidence",
+        "src/engine/core/installation",
+        "src/domain/core/primitives",
+        "src/platform/core/common",
+        "src/platform/core/host",
+        "src/platform/core/config"
+      ],
+      "plan": "REAL-INIT/P3A"
     }
   },
   "composition": {

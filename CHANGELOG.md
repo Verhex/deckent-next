@@ -326,3 +326,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 SERVICE-SHUTDOWN/P2A DONE — Fable1961 PASS; instance-bound command, fresh service policy, SQLite ledger10 canonical admission/audit and one-shot outcome. Full verify730 product/16native/18host; transport delivery remains P2B. Remote signed identity and per-replay attempt audit are explicit later assurance work.
 
 2026-09-19 SERVICE-SHUTDOWN/P2B + LOCAL-PEER-TRANSPORT/P1a DONE — Fable1965 PASS; actual kernel-peer admission and durable shutdown outcome through CLI/MCP/SDK, wire2, configurable bounded native accept retries. Full verify751 product/24native/18host; real fd-pressure and P4 worker-preservation/final repeated acceptance remain open.
+
+2026-09-19 REAL-INIT/P3A DONE — Fable1971 PASS; supplied profile integrity and normalized plan identity, actual OS-bound narrow policy checks, independent shutdown choice, immutable complete CLI/SDK preview. Full verify775 product/24native/18host. Package/image trust and availability remain unverified; no apply/readiness/builtin release profile claim. P3B journal/materialization and P4 acceptance remain open.

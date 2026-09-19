@@ -825,5 +825,22 @@
   "error.SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE": "The durable shutdown record could not be confirmed. Inspect its receipt before retrying.",
   "error.SERVICE_SHUTDOWN_CORRUPT": "The shutdown record failed integrity validation.",
   "error.SERVICE_SHUTDOWN_NOT_ADMITTED": "No matching shutdown admission was found.",
-  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "A different final shutdown outcome is already recorded."
+  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "A different final shutdown outcome is already recorded.",
+  "error.INSTALL_PROFILE_REQUIRED": "A supplied installation profile is required; no verified built-in release profile is available.",
+  "error.INSTALL_PREVIEW_UNAVAILABLE": "Installation preview is unavailable on this surface.",
+  "error.INSTALL_PROFILE_SOURCE_UNAVAILABLE": "The supplied installation profile could not be read.",
+  "error.INSTALL_PROFILE_SOURCE_UNSAFE": "The installation profile must be an ordinary file with one link.",
+  "error.INSTALL_PROFILE_SOURCE_TOO_LARGE": "The installation profile exceeds the configured input size limit.",
+  "error.INSTALL_PROFILE_SOURCE_CHANGED": "The installation profile changed while it was being read.",
+  "error.INSTALL_PROFILE_INVALID": "The installation profile is not valid UTF-8 JSON.",
+  "error.INSTALLATION_PROFILE_INVALID": "The installation profile does not match the current contract.",
+  "error.INSTALLATION_PROFILE_DIGEST": "The installation profile digest does not match its content.",
+  "error.INSTALLATION_PROFILE_CONFIG": "The installation configuration is invalid or incomplete.",
+  "error.INSTALLATION_PROFILE_REGISTRY": "The installation execution registry is invalid.",
+  "error.INSTALLATION_PROFILE_ADAPTER": "An execution profile is not supported by the installed adapters.",
+  "error.INSTALLATION_PROFILE_EVALUATOR": "An evaluator is not supported by the installed implementations.",
+  "error.INSTALLATION_PROFILE_POOL": "The installation pool cannot satisfy the configured Run limits.",
+  "error.INSTALLATION_PROFILE_POLICY": "The supplied policy does not grant the required narrow pool permission to this OS identity.",
+  "error.INSTALLATION_PROFILE_SHUTDOWN": "The shutdown selection, service identity and explicit policy grant do not agree.",
+  "error.INSTALLATION_PROFILE_PATHS": "The installation paths could not be validated."
 }

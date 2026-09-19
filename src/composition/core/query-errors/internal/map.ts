@@ -1,3 +1,5 @@
+import { InstallationProfileError } from '#engine/index.js';
+import { InstallationProfileFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
@@ -7,6 +9,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
+  if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError) return ErrorRegistry.createError(error.code);
   if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') {
     return ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
   }

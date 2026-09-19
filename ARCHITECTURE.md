@@ -305,3 +305,19 @@ ARCH-GATES/E1: unit dependencies are declared in arch.json with owning PLAN refe
 Local runtime service protocol is one current schema (2). Client shutdown binds an exact per-start instance and a separately authorized service resource; admission is durable before response/disconnect handoff, and accepted does not mean stopped. Missing final audit outcome remains unknown. SQLite ledger schema10 stores canonical service admission and final outcome separately.
 Linux native peer credentials identify the connecting OS principal, not separate applications or admin roles sharing that UID. A root client is rejected when the daemon has a different UID; a root daemon accepts same-UID root peers. Path ownership and policy do not provide isolation from a hostile process under the same UID.
 Operational service.identity (null by default), responseTimeoutMs, acceptRetryDelayMs and acceptRetryLimit are validated config. Native accept pressure pauses with the configured bounded retry policy; permanent errors/exhaustion still cause controlled shutdown. Native code/build stay adapter-owned; Linux x64 evidence is not Windows/remote/HA proof.
+
+Supplied installation preview (REAL-INIT/P3A): a versioned materialized profile binds authored configuration,
+policy and pool by a domain-separated canonical JSON SHA-256 digest. This proves content integrity only,
+not publisher identity. The normalized configuration, actual local OS principal, explicit shutdown choice
+and resolved paths bind a separate plan digest. CLI `init preview --profile` and SDK share one engine
+application; preview writes no files and never grants policy or reports ready. Input size is registry-owned;
+raw configuration and task argv are omitted from display. Full policy, task-kind/profile mappings, pool,
+image references, actual principal/scope and resolved paths remain visible. Heterogeneous task profiles and
+shared pool capacity above per-Run admission are valid. Shutdown is independently selected and must match
+a single explicit narrow current policy grant; policy deny/restriction still wins.
+
+The supplied profile is untrusted data; ordinary bounded UTF-8 JSON reading is not publisher verification.
+Package trust, image provenance and image availability are explicit unresolved preview blockers. There is
+no built-in release profile, default test image, installer apply, transaction recovery or readiness claim
+in P3A. P3B must place recovery discovery under the fixed bootstrap location before config cache admission;
+config-last alone cannot conceal partial state because missing config currently resolves defaults.

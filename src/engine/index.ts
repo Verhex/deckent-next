@@ -29,3 +29,5 @@ export { TaskEvaluationApplication, taskEvaluationCommandSchema } from '#engine/
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator } from '#engine/core/task-evaluation/index.js';
 
 export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
+
+export * from '#engine/core/installation/index.js';

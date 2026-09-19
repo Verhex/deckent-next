@@ -21,3 +21,5 @@ export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-run
 
 export { LocalPeerShutdownAuthentication } from '#adapters/core/local-runtime-socket/index.js';
 export * from '#adapters/core/local-runtime-socket/index.js';
+
+export { readInstallationProfileFile, InstallationProfileFileError } from '#adapters/core/installation-profile-file/index.js';

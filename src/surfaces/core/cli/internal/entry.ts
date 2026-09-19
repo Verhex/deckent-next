@@ -2,6 +2,7 @@ import { runCommand } from './run.js';
 import { runInventoryCommand } from './inventory.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
+import { initCommand } from './init.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
@@ -28,6 +29,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     context.initialize?.();
+    if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;

@@ -559,3 +559,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | LOCAL-PEER-TRANSPORT/P1a | Bounded accept resource-pressure pause/retry with poll/timer cleanup | Fable1955 followup; native failure/recovery proof before P4 | REVIEW |
 
 2026-09-19 SERVICE-SHUTDOWN/P2B + LOCAL-PEER-TRANSPORT/P1a DONE — Fable1965 PASS; actual kernel-peer admission and durable shutdown outcome through CLI/MCP/SDK, wire2, configurable bounded native accept retries. Full verify751 product/24native/18host; real fd-pressure and P4 worker-preservation/final repeated acceptance remain open.
+
+| REAL-INIT/P3A | Supplied versioned installation profile integrity, real OS identity/policy checks, read-only SDK and CLI preview; heterogeneous pinned task profiles and shared pool budgets | No writes, no credential/config echo, separate shutdown consent, exact paths and explicit unverified package/image blockers | REVIEW |
+
+2026-09-19 REAL-INIT/P3A DONE — Fable1971 PASS; supplied profile integrity and normalized plan identity, actual OS-bound narrow policy checks, independent shutdown choice, immutable complete CLI/SDK preview. Full verify775 product/24native/18host. Package/image trust and availability remain unverified; no apply/readiness/builtin release profile claim. P3B journal/materialization and P4 acceptance remain open.

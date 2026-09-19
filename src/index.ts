@@ -25,3 +25,7 @@ export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeO
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/index.js';
 
 export type { ShutdownCommand, RuntimeServiceDescriptor, ServiceShutdownAdmissionResult } from '#engine/index.js';
+
+export { previewSuppliedInstallation as previewInstallation } from '#composition/index.js';
+export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
+export type { InstallationProfile, InstallationPreview } from '#engine/index.js';

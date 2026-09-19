@@ -825,5 +825,22 @@
   "error.SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE": "Kalıcı kapatma kaydı doğrulanamadı. Yeniden denemeden önce kaydı inceleyin.",
   "error.SERVICE_SHUTDOWN_CORRUPT": "Kapatma kaydının bütünlük doğrulaması başarısız.",
   "error.SERVICE_SHUTDOWN_NOT_ADMITTED": "Eşleşen bir kapatma kabul kaydı bulunamadı.",
-  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "Farklı bir son kapatma sonucu zaten kaydedilmiş."
+  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "Farklı bir son kapatma sonucu zaten kaydedilmiş.",
+  "error.INSTALL_PROFILE_REQUIRED": "Sağlanan bir kurulum profili gerekli; doğrulanmış yerleşik dağıtım profili mevcut değil.",
+  "error.INSTALL_PREVIEW_UNAVAILABLE": "Bu yüzeyde kurulum önizlemesi kullanılamıyor.",
+  "error.INSTALL_PROFILE_SOURCE_UNAVAILABLE": "Sağlanan kurulum profili okunamadı.",
+  "error.INSTALL_PROFILE_SOURCE_UNSAFE": "Kurulum profili tek bağlantılı normal bir dosya olmalıdır.",
+  "error.INSTALL_PROFILE_SOURCE_TOO_LARGE": "Kurulum profili yapılandırılmış girdi boyutu sınırını aşıyor.",
+  "error.INSTALL_PROFILE_SOURCE_CHANGED": "Kurulum profili okunurken değişti.",
+  "error.INSTALL_PROFILE_INVALID": "Kurulum profili geçerli UTF-8 JSON değil.",
+  "error.INSTALLATION_PROFILE_INVALID": "Kurulum profili güncel sözleşmeyle uyuşmuyor.",
+  "error.INSTALLATION_PROFILE_DIGEST": "Kurulum profilinin özeti içeriğiyle eşleşmiyor.",
+  "error.INSTALLATION_PROFILE_CONFIG": "Kurulum yapılandırması geçersiz veya eksik.",
+  "error.INSTALLATION_PROFILE_REGISTRY": "Kurulum yürütme kayıt defteri geçersiz.",
+  "error.INSTALLATION_PROFILE_ADAPTER": "Bir yürütme profili kurulu adapterler tarafından desteklenmiyor.",
+  "error.INSTALLATION_PROFILE_EVALUATOR": "Bir değerlendirici kurulu uygulamalar tarafından desteklenmiyor.",
+  "error.INSTALLATION_PROFILE_POOL": "Kurulum havuzu yapılandırılmış Run sınırlarını karşılayamıyor.",
+  "error.INSTALLATION_PROFILE_POLICY": "Sağlanan policy bu işletim sistemi kimliğine gerekli dar havuz iznini vermiyor.",
+  "error.INSTALLATION_PROFILE_SHUTDOWN": "Shutdown seçimi, servis kimliği ve açık policy izni uyuşmuyor.",
+  "error.INSTALLATION_PROFILE_PATHS": "Kurulum yolları doğrulanamadı."
 }

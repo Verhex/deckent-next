@@ -3,6 +3,10 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { pathToFileURL } from 'node:url';
 import { main as runCli } from '#surfaces/index.js';
+import { previewSuppliedInstallation } from '#composition/core/installation/index.js';
+import { getConfigFieldDefault } from '#platform/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
+import { readInstallationProfileFile } from '#adapters/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
@@ -13,6 +17,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    previewInstallation: async (projectRoot, input) => {
+      try { return await previewSuppliedInstallation(projectRoot,
+        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
+        { allowShutdown: input.allowShutdown }); }
+      catch (error) { throw queryFailure(error); }
+    },
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input),

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "6b1da2c40a352a3ba2c4dd5692621d2e698cb0897dca5aaf29e0f51f79f68846",
-    "src/platform/core/config-fields/internal/fields.ts": "5794e6d0dd8ca35bdc6f8c756c9881144b592acef721b7fb42b94ba9f5589ec6",
+    "src/platform/core/config-fields/internal/fields.ts": "1a4c47385f2604cc39d8ff82c7c7f3d4c4aecb3dfcc736a2331dbccba171b572",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -29,6 +29,7 @@
     ],
     "artifacts": [],
     "execution": [],
+    "installation": [],
     "cli": [],
     "mcp": [],
     "service": [],
