@@ -32,7 +32,9 @@ export class ReconciliationRuntimeLoop {
     this.loop = new ScopedRuntimeLoop(drain, wait, clock, observer, loopOptions, {
       command: (scopeId, after) => ({ schemaVersion: 1, scopeId, after }),
       nextCursor: result => result.nextAfter,
-      unavailable: result => result.outcomes.some(value => value.status === 'failed' && value.reason === 'unavailable'),
+      // A validated page remains traversable when an individual recovery fails.
+      // Page/transport failures throw and are backed off by ScopedRuntimeLoop.
+      unavailable: () => false,
     }, () => new ReconciliationRuntimeLoopError('RECONCILIATION_RUNTIME_LOOP_RUNNING'));
   }
   run(signal: AbortSignal): Promise<void> { return this.loop.run(signal); }

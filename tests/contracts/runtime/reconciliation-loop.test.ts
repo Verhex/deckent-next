@@ -26,16 +26,20 @@ describe('reconciliation runtime loop', () => {
     expect(calls).toEqual(['s1:null', 's2:null', 's1:s1-a', 's2:s2-a']);
   });
 
-  it('resets unavailable cursors and backs off only the affected scope', async () => {
-    const controller = new AbortController(); const calls: string[] = []; let now = 0; let first = true;
+  it('advances past persistently unavailable records and revisits them only after the scan', async () => {
+    const controller = new AbortController(); const calls: string[] = []; let pages = 0;
+    const failures: ReconciliationRecoveryPage[] = [];
     const loop = new ReconciliationRuntimeLoop(async command => {
       calls.push(`${command.scopeId}:${command.after ?? 'null'}`);
-      if (command.scopeId === 's1' && first) { first = false; return page('s1-a', true); }
-      if (command.scopeId === 's1') controller.abort();
-      return page(command.scopeId === 's2' ? 's2-a' : null);
-    }, async () => { now += 5; }, { now: () => now }, { onPage() {}, onError() {} }, options);
+      return command.after === null ? page('s1-a', true) : page(null);
+    }, async () => {}, { now: () => 0 }, {
+      onPage(_command, result) { failures.push(result); if (++pages === 3) controller.abort(); },
+      onError() { throw new Error('unexpected page failure'); },
+    }, { ...options, scopeIds: ['s1'] });
     await loop.run(controller.signal);
-    expect(calls).toEqual(['s1:null', 's2:null', 's2:s2-a', 's1:null']);
+    expect(calls).toEqual(['s1:null', 's1:s1-a', 's1:null']);
+    expect(failures[0]?.outcomes[0]).toMatchObject({ status: 'failed', reason: 'unavailable' });
+    expect(failures[2]?.outcomes[0]).toMatchObject({ status: 'failed', reason: 'unavailable' });
   });
 
   it('backs off thrown page failures and reports the exact command', async () => {
