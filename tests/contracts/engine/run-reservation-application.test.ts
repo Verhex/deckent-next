@@ -16,11 +16,11 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [
 ], criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
 const command = { schemaVersion: 1 as const, commandId: 'reserve-wave', scopeId: 's', runId: 'r', expectedRevision: 0 };
 
-async function fixture() {
+async function fixture(admittedAt = 0) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-reservation-app-')); roots.push(root); const path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, options); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 } });
-  await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 0,
+  await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: admittedAt,
     policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['b', 'a'] } });
   const state = { allow: true, poolAllow: true, subject: actor.subject, reads: 0, generated: 0, authorizations: 0, poolAuthorizations: 0 };
   const verifier = { async verify() { return { ...actor, subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
@@ -94,4 +94,23 @@ it('returns the winning generated identity to concurrent identical commands', as
   const results = await Promise.all([f.app.reserve(command), app.reserve(command)]);
   expect(results[0].identities).toEqual(results[1].identities);
   expect(results[0].identities).toHaveLength(1); expect((await second.loadRun('s', 'r'))!.revision).toBe(1);
+});
+
+it('reports delayed work without a receipt when runtime time precedes persisted admission time', async () => {
+  const f = await fixture(1000); const before = await f.store.loadRun('s', 'r');
+  let now = 999; let generated = 0;
+  const app = new RunReservationApplication(f.store, f.verifier, f.authorization, f.poolAuthorization,
+    { now: () => now, attemptId: () => `clock-attempt-${++generated}` });
+  await expect(app.reserve(command)).rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER', diagnostic: {
+    site: 'application-empty', reason: 'delayed', now: 999, delayedCount: 1, waitingCount: 1,
+    executionOccupied: 0, inFlightOccupied: 0, selectedCount: 0,
+  } });
+  expect(generated).toBe(0);
+  expect(await f.store.loadRunReceipt('s', command.commandId)).toBeNull();
+  expect(await f.store.loadRun('s', 'r')).toEqual(before);
+  // Controlled clock change proves this condition only; it does not identify the historical 1852 cause.
+  now = 1000;
+  const reserved = await app.reserve(command);
+  expect(reserved.identities.map(identity => identity.taskId)).toEqual(['a']);
+  expect(generated).toBe(1);
 });

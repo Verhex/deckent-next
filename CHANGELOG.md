@@ -306,3 +306,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - RESERVATION-DIAGNOSTIC: expose bounded reservation diagnostics (Fable1878/1895; reviewed slice).
 
 - WORKSPACE-VERSION-CONFLICT: preserve pinned Run adapter version and expose its bounded conflict reason (Fable1902 PASS).
+
+- RESERVATION-CLOCK-CONDITION: verify delayed reservation preserves state and succeeds at eligibility time (Fable1915 PASS).

@@ -524,3 +524,5 @@ RECONCILIATION-R1: DONE — Fable1878/1895 PASS; exact reviewed candidate landed
 RESERVATION-DIAGNOSTIC: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.
 
 WORKSPACE-VERSION-CONFLICT: DONE — Fable1902 PASS; adapter version stays pinned, bounded reason at shared error mapping; protocol params and localized detail remain follow-up.
+
+RESERVATION-CLOCK-CONDITION: DONE — Fable1915 PASS; controlled SQLite time condition proven; historical1852 cause remains open. Independent test-only slice does not depend on pending cancellation F1 behavior.
