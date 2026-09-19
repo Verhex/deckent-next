@@ -506,3 +506,5 @@ EXEC-EVIDENCE-OFFLINE-rebased PASS1853: test(recovery): prove explicit reconcili
 SERVICE-SHUTDOWN-rebased PASS1853: fix(runtime): include socket finalization in shutdown grace. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
 
 RUNTIME-DESCRIPTION-rebased PASS1853: fix(config): describe automatic cancellation recovery accurately. New output-recovery capacity investigation1852 remains open; no M1 closure claim.
+
+JOURNAL-FINALIZATION-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668 tests. Reservation1852 remains open; reconciliation R1 separate.

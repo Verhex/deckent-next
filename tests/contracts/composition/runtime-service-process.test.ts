@@ -137,10 +137,18 @@ it.skipIf(!imageId || process.platform !== 'linux')('keeps execution across clie
     }, 'CANCELLATION_PERSISTENCE_TIMEOUT').then(attempt => {
       expect(attempt).toMatchObject({ cancelRequested: true, lastObservation: { result: { kind: 'exited' } } });
     });
-    const db = new DatabaseSync(ledgerPath, { readOnly: true });
-    try { expect(JSON.parse(String((db.prepare('SELECT record FROM cancellation_deliveries WHERE scope_id=? AND attempt_id=?')
-      .get('s', identity.attemptId) as { record: string }).record))).toMatchObject({ identity, state: 'terminal' }); }
-    finally { db.close(); }
+    // The attempt observation and delivery finalization commit separately. Wait for the journal's own evidence.
+    const delivery = await poll(async () => {
+      const db = new DatabaseSync(ledgerPath, { readOnly: true });
+      try {
+        const row = db.prepare('SELECT record FROM cancellation_deliveries WHERE scope_id=? AND attempt_id=?')
+          .get('s', identity.attemptId) as { record: string } | undefined;
+        if (!row) return undefined;
+        const record = JSON.parse(row.record) as { state?: string };
+        return record.state === 'terminal' ? record : undefined;
+      } finally { db.close(); }
+    }, 'CANCELLATION_DELIVERY_FINALIZATION_TIMEOUT');
+    expect(delivery).toMatchObject({ identity, state: 'terminal' });
     const restartedClosed = childClosed(service); service.kill('SIGTERM');
     expect(await bounded(restartedClosed, service, 'SERVICE_CLEAN_EXIT_TIMEOUT')).toBe(0);
   } finally {
