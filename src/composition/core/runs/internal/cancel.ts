@@ -1,7 +1,7 @@
 import { type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
 import { RunApplication, runCommandSchema, projectRunView, RunPolicyAuthorization, type RunCommand, type RunCancellation } from '#engine/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Durable cancellation intent only. Delivery to supervisors and proof of termination are separate;
  * a successful response must never be presented as stopped workers or reversed external effects.
@@ -9,7 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function requestConfiguredRunCancellation(projectRoot: string, input: RunCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = runCommandSchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredRunContext(projectRoot, command.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
     const store = {
       async loadRun(scopeId: string, runId: string) {
         const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });

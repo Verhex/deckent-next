@@ -5,3 +5,5 @@ export { MODEL_ACTIVATION_SCHEMA_VERSION, MODEL_ACTIVATION_TARGET_ENCODING_VERSI
 export type { ModelActivationActor, ModelActivationAuthorization, ModelActivationBinding, ModelActivationCommand,
   ModelActivationReceipt, ModelActivationRecord, ModelActivationErrorCode } from './internal/contract.js';
 export { transitionModelActivation } from './internal/transition.js';
+export { modelActivationQuerySchema, parseModelActivationQuery } from './internal/query.js';
+export type { ModelActivationQuery } from './internal/query.js';

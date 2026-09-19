@@ -7,14 +7,14 @@ import { authenticate, cancellationRecoveryCommandSchema, CancellationRecoveryAp
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createRecordedCancellationDelivery } from './cancellation-runtime.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 /** Manually drain one bounded page of durable cancellation intent. This does not host a daemon
  * or register an automatic startup loop. */
 export async function recoverConfiguredCancellations(projectRoot: string, input: CancellationRecoveryCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = cancellationRecoveryCommandSchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, command.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
     const verifier = { async verify() { return principal; } };
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const scope = new DispatchInventoryPolicyAuthorization(source);

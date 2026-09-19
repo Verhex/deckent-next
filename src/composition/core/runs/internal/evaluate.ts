@@ -5,13 +5,13 @@ import { evaluateProcessExit, validateProcessExitCriterion } from '#capabilities
 import { authenticate, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, projectRunView, type TaskEvaluationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 /** Installed process-exit evaluator. The current registry cannot replace a Run's pinned definitions. */
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = taskEvaluationCommandSchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, command.identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.identity.scopeId, options);
     const verifier = { async verify() { return principal; } };
     const policy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
     const authorization = { authorize: (identity: typeof command.identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', identity, actor) };

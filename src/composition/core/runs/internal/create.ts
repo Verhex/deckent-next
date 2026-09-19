@@ -2,13 +2,13 @@ import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore } from '#adapters/index.js';
 import { resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, RunPolicyAuthorization, PoolPolicyAuthorization, type RunAdmission, type RunCreate } from '#engine/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 /** Local OS ingress. Existing pool provisioning is required; no implicit pool creation or config-derived grants. */
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try {
     const command = runAdmissionSchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredRunContext(projectRoot, command.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
     const store = {
       async loadRunReceipt(scopeId: string, commandId: string) {
         const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });

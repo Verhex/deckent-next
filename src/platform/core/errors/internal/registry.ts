@@ -4,6 +4,16 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  MODEL_ACTIVATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_INVALID', p, l) }) },
+  MODEL_ACTIVATION_REVISION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_REVISION_CONFLICT', p, l) }) },
+  MODEL_ACTIVATION_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_NOT_FOUND', p, l) }) },
+  MODEL_ACTIVATION_NOT_ACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_NOT_ACTIVE', p, l) }) },
+  MODEL_ACTIVATION_BINDING_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_BINDING_CONFLICT', p, l) }) },
+  MODEL_ACTIVATION_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_COMMAND_CONFLICT', p, l) }) },
+  MODEL_ACTIVATION_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_CORRUPT', p, l) }) },
+  MODEL_ACTIVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_UNAVAILABLE', p, l) }) },
+  MODEL_ACTIVATION_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_OUTCOME_UNKNOWN', p, l) }) },
+  MODEL_ACTIVATION_CATALOG_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_CATALOG_CONFLICT', p, l) }) },
   TASK_EVALUATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_INVALID', p, l) }) },
   TASK_EVALUATION_STALE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_STALE', p, l) }) },
   TASK_EVALUATION_NOT_READY: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_NOT_READY', p, l) }) },

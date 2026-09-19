@@ -346,3 +346,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 RESERVATION/IMMEDIATE — Ordinary task admission no longer depends on wall-clock ordering. Added explicit eligibility, atomic evidence-checked history migration and migration-required readonly errors. Fable2028 PASS; no legacy alias or global clock clamp.
 
 2026-09-19 PROVIDERS/A2A — Added scoped durable model activation and revocation with pinned native definitions, authenticated replay and atomic audit. Ledger13 preserves existing Run records; real two-process race proof. Fable2032 PASS.
+
+- PROVIDERS/A2B: expose scoped activation and read-only inspection through SDK, CLI and MCP; share request context and retain exact revision/binding checks (Fable2036 PASS).

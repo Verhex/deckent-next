@@ -1,3 +1,5 @@
+import { ModelActivationError } from '#domain/index.js';
+import { ModelActivationStoreError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
@@ -10,6 +12,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
+  if (error instanceof ModelActivationError || error instanceof ModelActivationStoreError) return ErrorRegistry.createError(error.code);
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
     || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError

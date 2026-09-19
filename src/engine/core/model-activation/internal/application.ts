@@ -8,7 +8,7 @@ import { parseModelActivationAdmission, sameModelActivationRequest, verifyModelA
 import { ModelActivationStoreError, type ModelActivationResult, type ModelActivationStore } from './port.js';
 
 export interface ModelActivationAuthorizer {
-  authorize(action: 'activate' | 'deactivate', target: { readonly scopeId: string; readonly reference: ModelReference },
+  authorize(action: 'activate' | 'deactivate' | 'inspect', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelActivationAuthorization>;
 }
 export class ModelActivationApplication {

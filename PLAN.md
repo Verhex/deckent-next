@@ -605,3 +605,7 @@ RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run sna
 | PROVIDERS/A2A | P5; A1+STORE+IMMEDIATE prerequisites | Scoped activation domain/application, separate SQLite adapter and atomic audit; ledger13, no invocation or surface mutation yet | REVIEW |
 
 2026-09-19 PROVIDERS/A2A DONE — Fable2032 PASS exact41files, root and independent975product/24native/18host. Scoped activation CAS, fresh authorization and immutable historical replay, catalog-independent revocation, shared ledger13 atomic state+receipt. No public activation or invocation claim in this slice.
+
+| PROVIDERS/A2B | P5; A2A | Scoped readonly activation and shared SDK/CLI/MCP; no invocation | REVIEW |
+
+2026-09-20 PROVIDERS/A2B DONE — Fable2036 PASS exact52files, root and independent986product/24native/18host. Shared scoped activation across compiled SDK/CLI/MCP, readonly reader, neutral request context; current policy before store and historical replay without resurrection. Availability and invocation remain unobserved.

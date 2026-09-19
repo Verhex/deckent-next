@@ -1,6 +1,7 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseModelReference } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
+import { modelActivationCommand } from './model-activation.js';
 
 interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string;
   providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number }
@@ -57,6 +58,7 @@ function renderBinding(result: import('#engine/index.js').ModelBindingInspection
 }
 
 export async function modelsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = resolveLocale(parsed.language, env);
   context.onLocale?.(locale);
   if (parsed.help) {

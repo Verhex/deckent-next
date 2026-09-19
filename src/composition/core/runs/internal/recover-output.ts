@@ -6,7 +6,7 @@ import { authenticate, DispatchApplication, DispatchPolicyAuthorization, Dispatc
   type DispatchAuthorization, type DispatchIdentityAuthorization, type DispatchStore, type RunBoundDispatchStore } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { recordedSupervisor } from './recorded-supervisor.js';
 
 /** Recover bounded retained logs under recorded execution custody. Recovered evidence stays partial;
@@ -16,7 +16,7 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
   options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
     const verifier = { async verify() { return principal; } };
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(
       createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));

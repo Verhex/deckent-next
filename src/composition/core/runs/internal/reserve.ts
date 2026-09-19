@@ -5,13 +5,13 @@ import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, PoolPolicyAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
 /** Reserve the next scheduler-selected wave using the persisted Run policy and shared pool. */
 export async function reserveConfiguredRunTasks(projectRoot: string, input: RunReservationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = runReservationCommandSchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, command.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
     const verifier = { async verify() { return principal; } };
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const authorization = new RunPolicyAuthorization(source);

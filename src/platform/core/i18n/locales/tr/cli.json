@@ -574,5 +574,16 @@
   "models.bindingNotConfigured": "{reference}: provider kataloğu yapılandırılmamış.",
   "models.bindingNotDeclared": "{reference}: tam model sürümü {revision} kataloğunda beyan edilmemiş.",
   "models.bindingDeclared": "{reference} | katalog {revision} | native kimlik {nativeId} | SHA-256 {digest}\nYalnız beyanın içerik bağıdır; aktivasyon veya yürütme yetkisi vermez.",
-  "mcp.tool.inspectModelBinding": "Yapılandırılmış tam model tanımını ve içerik bağının özetini incele. Kullanılabilirlik, kimlik bilgileri, aktivasyon veya yürütmeye hazır olma durumu gözlemlenmez."
+  "mcp.tool.inspectModelBinding": "Yapılandırılmış tam model tanımını ve içerik bağının özetini incele. Kullanılabilirlik, kimlik bilgileri, aktivasyon veya yürütmeye hazır olma durumu gözlemlenmez.",
+  "mcp.tool.inspectModelActivation": "Kapsamdaki kayıtlı model aktivasyonunu inceleyin. Sağlayıcı kullanılabilirliğini veya çağrı yetkisini doğrulamaz.",
+  "mcp.tool.admitModelActivation": "Güncel policy kapsamında tam model sürümünü açıkça aktive veya pasif edin. Tekrar komut güncel durumu değil geçmiş kanıtı döndürür; sağlayıcı çağrılmaz.",
+  "cli.help.modelsActivation": "Kullanım: deckent models activation|activate|deactivate --scope ID --provider ID --provider-version SÜRÜM --model ID --model-version SÜRÜM [--json] [--lang LOCALE] [--no-color]\nactivate/deactivate için ayrıca --command-id ID --expected-revision N --binding-digest SHA256 gerekir. activate için ek olarak --catalog-revision REV gerekir.\nKayıtlı durumu inceleyin veya açık aktivasyon komutu verin. Sağlayıcı kullanılabilirliğini veya çağrı yetkisini doğrulamaz.",
+  "models.activation.absent": "{scope} kapsamındaki {reference}: kalıcı aktivasyon kaydı yok; aktive edilmemiş.",
+  "models.activation.persisted": "{scope} kapsamındaki {reference}: revizyon {revision} için kayıtlı {state} aktivasyonu.",
+  "models.activation.active": "aktif",
+  "models.activation.inactive": "pasif",
+  "models.activation.receipt": "{replay}: {command} komutu, {scope} kapsamındaki {reference} için revizyon {revision} ile {state} aktivasyonu kaydetti.",
+  "models.activation.replayed": "Geçmiş kayıt tekrarlandı",
+  "models.activation.admitted": "Kabul edildi",
+  "models.activation.notice": "Yalnız kayıtlı aktivasyon; sağlayıcı kullanılabilirliği ve çağrı yetkisi doğrulanmış değil."
 }

@@ -6,6 +6,7 @@ import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler } from './init.js';
 import type { ModelReference } from '#domain/index.js';
+import type { ModelActivationInspectionHandler, ModelActivationAdmissionHandler } from './model-activation.js';
 import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
@@ -18,6 +19,8 @@ import {
 export interface CommandContext {
   inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
   inspectModelBinding?: (root: string, reference: ModelReference, options: ConfigLoadOptions) => Promise<ModelBindingInspection>;
+  inspectModelActivation?: ModelActivationInspectionHandler;
+  admitModelActivation?: ModelActivationAdmissionHandler;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
   applyInstallation?: InstallationApplyHandler;

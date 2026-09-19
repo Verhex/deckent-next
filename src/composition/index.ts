@@ -17,3 +17,4 @@ export { previewSuppliedInstallation, inspectSuppliedInstallation, applySupplied
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 export { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+export { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';

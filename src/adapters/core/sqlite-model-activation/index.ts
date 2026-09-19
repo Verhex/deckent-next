@@ -8,3 +8,8 @@ export async function openSqliteModelActivationStore(path: string, options: Sqli
   const implementation = await import('./internal/open.js');
   return implementation.openSqliteModelActivationStore(path, options, migrationMode, profiles);
 }
+export type { ModelActivationReader } from '#engine/index.js';
+export async function openSqliteModelActivationReader(path: string, options: { readonly busyTimeoutMs: number }) {
+  const implementation = await import('./internal/reader.js');
+  return implementation.openSqliteModelActivationReader(path, options);
+}

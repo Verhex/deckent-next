@@ -574,5 +574,16 @@
   "models.bindingNotConfigured": "{reference}: no provider catalog is configured.",
   "models.bindingNotDeclared": "{reference}: exact model version is not declared in catalog {revision}.",
   "models.bindingDeclared": "{reference} | catalog {revision} | native ID {nativeId} | SHA-256 {digest}\nDeclaration content binding only; no activation or execution authority.",
-  "mcp.tool.inspectModelBinding": "Inspect one exact configured model declaration and its semantic binding digest. This does not observe availability, credentials, activation, or execution readiness."
+  "mcp.tool.inspectModelBinding": "Inspect one exact configured model declaration and its semantic binding digest. This does not observe availability, credentials, activation, or execution readiness.",
+  "mcp.tool.inspectModelActivation": "Inspect scoped recorded model activation. This does not establish provider availability or invocation permission.",
+  "mcp.tool.admitModelActivation": "Explicitly activate or deactivate an exact model under current policy. An idempotent replay returns historical evidence, not current state; no provider is invoked.",
+  "cli.help.modelsActivation": "Usage: deckent models activation|activate|deactivate --scope ID --provider ID --provider-version VERSION --model ID --model-version VERSION [--json] [--lang LOCALE] [--no-color]\nactivate/deactivate also require --command-id ID --expected-revision N --binding-digest SHA256. activate additionally requires --catalog-revision REV.\nInspect recorded state or submit an explicit activation command. This does not establish provider availability or invocation permission.",
+  "models.activation.absent": "{reference} in scope {scope}: no persisted activation record; not activated.",
+  "models.activation.persisted": "{reference} in scope {scope}: persisted {state} activation at revision {revision}.",
+  "models.activation.active": "active",
+  "models.activation.inactive": "inactive",
+  "models.activation.receipt": "{replay}: command {command} recorded {state} activation for {reference} in scope {scope} at revision {revision}.",
+  "models.activation.replayed": "Historical replay",
+  "models.activation.admitted": "Admitted",
+  "models.activation.notice": "Recorded activation only; provider availability and invocation permission are not established."
 }

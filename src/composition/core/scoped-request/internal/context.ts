@@ -7,7 +7,7 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 /** One fresh local config/identity/policy snapshot per request. No ledger access or grant here:
  * the caller's application authenticates/authorizes before invoking the deferred ledger locator.
  */
-export async function loadConfiguredRunContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
+export async function loadConfiguredScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
   const identity = readLocalOsIdentity(); let document;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
@@ -14,7 +15,9 @@ export async function main(root = process.cwd()) {
   const locale = resolveLocale(undefined, process.env, config.language);
   const runtime = createConfiguredRuntimeClient(root);
   return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
-    inspectModelBinding: reference => inspectModelBinding(root, reference) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
+    inspectModelBinding: reference => inspectModelBinding(root, reference),
+    inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
+    admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });

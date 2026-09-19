@@ -6,14 +6,14 @@ import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadConfiguredRunContext } from './context.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Reconcile a recorded attempt; callers cannot supply executable, workspace or supervisor options.
  * Observation may settle an exited process, never launch/retry it or accept a Task's business result.
  */
 export async function reconcileConfiguredAttempt(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     const actor = await authenticate(verifier, undefined, identity.scopeId);

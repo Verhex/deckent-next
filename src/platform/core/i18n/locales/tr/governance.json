@@ -888,5 +888,15 @@
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.",
   "error.INSTALLATION_PUBLICATION_CHANGED": "Kurulum kanıtı veya yayımlanan durum değişti; tamamlanma kabul edilmedi.",
   "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Veritabanı dönüşümü için eksiksiz ve tutarlı Run oluşturma kanıtı gerekiyor. Veritabanı değiştirilmedi.",
-  "error.RUN_CAPACITY_OR_ORDER.delayed": "Görev rezervasyonu reddedildi ({site}/{reason}): hazır {readyCount}, gecikmeli {delayedCount}, dolu yürütme kapasitesi {executionOccupied}/{executionSlots}, uygunluk bekleme süresi {eligibilityGapMs} ms."
+  "error.RUN_CAPACITY_OR_ORDER.delayed": "Görev rezervasyonu reddedildi ({site}/{reason}): hazır {readyCount}, gecikmeli {delayedCount}, dolu yürütme kapasitesi {executionOccupied}/{executionSlots}, uygunluk bekleme süresi {eligibilityGapMs} ms.",
+  "error.MODEL_ACTIVATION_INVALID": "Model aktivasyon girdisi geçersiz.",
+  "error.MODEL_ACTIVATION_REVISION_CONFLICT": "Aktivasyon revizyonu değişti. Yeni komut vermeden önce güncel durumu inceleyin.",
+  "error.MODEL_ACTIVATION_NOT_FOUND": "Bu kapsamda modelin tam sürümü için aktivasyon kaydı yok.",
+  "error.MODEL_ACTIVATION_NOT_ACTIVE": "Kayıtlı model aktivasyonu zaten pasif.",
+  "error.MODEL_ACTIVATION_BINDING_CONFLICT": "Model tanımı istenen aktivasyon bağlamasıyla eşleşmiyor.",
+  "error.MODEL_ACTIVATION_COMMAND_CONFLICT": "Bu komut kimliği farklı bir aktivasyon isteğine veya aktöre ait.",
+  "error.MODEL_ACTIVATION_CORRUPT": "Kayıtlı aktivasyon kanıtı tutarsız; işlem reddedildi.",
+  "error.MODEL_ACTIVATION_UNAVAILABLE": "Aktivasyon deposuna erişilemiyor. Başarılı bir değişiklik doğrulanmadı.",
+  "error.MODEL_ACTIVATION_OUTCOME_UNKNOWN": "Aktivasyon sonucu belirsiz. Aynı komut kimliğiyle tekrar denemeden önce kalıcı kaydı inceleyin.",
+  "error.MODEL_ACTIVATION_CATALOG_CONFLICT": "Güncel katalog istenen tam model tanımıyla artık eşleşmiyor."
 }

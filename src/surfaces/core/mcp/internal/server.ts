@@ -1,3 +1,5 @@
+import { modelActivationQuerySchema, modelActivationCommandSchema, type ModelActivationQuery, type ModelActivationCommand } from '#domain/index.js';
+import type { ModelActivationInspection, ModelActivationResult } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -9,6 +11,8 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
 export interface McpApplications {
+  inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
+  admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
   createRun?(command: RunAdmission): Promise<unknown>;
@@ -73,10 +77,19 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (shutdownService) definitions.push({ readOnly: false, destructive: true, name: 'shutdown_runtime_service',
     description: t('mcp.tool.shutdownRuntimeService', {}, locale), schema: shutdownCommandSchema,
     invoke: (input: unknown) => shutdownService.call(applications, shutdownCommandSchema.parse(input)) });
+  const inspectActivation = applications.inspectModelActivation;
+  if (inspectActivation) definitions.push({ readOnly: true, destructive: false, name: 'inspect_model_activation',
+    description: t('mcp.tool.inspectModelActivation', {}, locale), schema: modelActivationQuerySchema,
+    invoke: input => inspectActivation.call(applications, modelActivationQuerySchema.parse(input)) });
+  const admitActivation = applications.admitModelActivation;
+  if (admitActivation) definitions.push({ readOnly: false, destructive: true, name: 'admit_model_activation',
+    description: t('mcp.tool.admitModelActivation', {}, locale), schema: modelActivationCommandSchema,
+    invoke: input => admitActivation.call(applications, modelActivationCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
-    inputSchema: zodToJsonSchema(tool.schema, { $refStrategy: 'none' }) as Tool['inputSchema'],
+    // MCP requires an object root even when a native command is an object-only discriminated union.
+    inputSchema: { ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' } as Tool['inputSchema'],
     annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: true, openWorldHint: tool.openWorld ?? false },
   })) }));
   server.setRequestHandler('tools/call', async request => {

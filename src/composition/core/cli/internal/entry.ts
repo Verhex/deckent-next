@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { pathToFileURL } from 'node:url';
@@ -19,6 +20,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
     inspectDeclaredModels, inspectModelBinding,
+    admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation,
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,
         await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),

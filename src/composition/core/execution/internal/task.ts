@@ -6,7 +6,7 @@ import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArti
   validateDockerSupervisorProfile, resolveDockerTaskProfile } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { loadConfiguredRunContext } from '#composition/core/runs/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
@@ -15,7 +15,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredRunContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));

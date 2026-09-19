@@ -315,6 +315,7 @@
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
         "src/composition/core/installation",
+        "src/composition/core/model-activation",
         "src/composition/core/provider-catalog",
         "src/composition/core/query-errors",
         "src/composition/core/runtime-service",
@@ -332,7 +333,7 @@
         "src/adapters/core/git-workspace",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
-        "src/composition/core/runs",
+        "src/composition/core/scoped-request",
         "src/domain/core/attempt",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
@@ -363,6 +364,7 @@
     "src/composition/core/mcp": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/composition/core/model-activation",
         "src/composition/core/provider-catalog",
         "src/composition/core/runtime-service",
         "src/platform/core/config",
@@ -388,11 +390,13 @@
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
         "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/model-activation",
         "src/domain/core/task-evaluation",
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
         "src/engine/core/installation",
+        "src/engine/core/model-activation",
         "src/engine/core/policy",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -407,16 +411,14 @@
     "src/composition/core/runs": {
       "dependencies": [
         "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
-        "src/adapters/core/local-principal",
         "src/capabilities/core/evaluation-evidence",
         "src/composition/core/inventory",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
         "src/domain/core/attempt",
-        "src/domain/core/policy",
         "src/domain/core/principal",
         "src/engine/core/attempts",
         "src/engine/core/authentication",
@@ -729,12 +731,14 @@
     "src/surfaces/core/cli": {
       "dependencies": [
         "src/domain/core/attempt",
+        "src/domain/core/model-activation",
         "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
         "src/engine/core/installation",
+        "src/engine/core/model-activation",
         "src/engine/core/provider-catalog",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -754,9 +758,11 @@
     "src/surfaces/core/mcp": {
       "dependencies": [
         "src/domain/core/attempt",
+        "src/domain/core/model-activation",
         "src/domain/core/policy",
         "src/domain/core/provider-catalog",
         "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
         "src/engine/core/provider-catalog",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -888,6 +894,31 @@
         "src/engine/core/model-activation"
       ],
       "plan": "PROVIDERS/A2A"
+    },
+    "src/composition/core/scoped-request": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/composition/core/policy",
+        "src/domain/core/policy",
+        "src/engine/core/policy",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "PROVIDERS/A2B"
+    },
+    "src/composition/core/model-activation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/engine/core/policy",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS/A2B"
     }
   },
   "composition": {

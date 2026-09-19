@@ -888,5 +888,15 @@
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Installation conflicts with existing resources or another recorded transaction.",
   "error.INSTALLATION_PUBLICATION_CHANGED": "Installation evidence or published state changed; completion was not accepted.",
   "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Ledger migration requires complete, consistent Run creation evidence. The database was left unchanged.",
-  "error.RUN_CAPACITY_OR_ORDER.delayed": "Task reservation refused ({site}/{reason}): ready {readyCount}, delayed {delayedCount}, occupied execution slots {executionOccupied}/{executionSlots}, eligibility gap {eligibilityGapMs} ms."
+  "error.RUN_CAPACITY_OR_ORDER.delayed": "Task reservation refused ({site}/{reason}): ready {readyCount}, delayed {delayedCount}, occupied execution slots {executionOccupied}/{executionSlots}, eligibility gap {eligibilityGapMs} ms.",
+  "error.MODEL_ACTIVATION_INVALID": "Model activation input is invalid.",
+  "error.MODEL_ACTIVATION_REVISION_CONFLICT": "Activation revision changed. Inspect the current state before submitting a new command.",
+  "error.MODEL_ACTIVATION_NOT_FOUND": "No recorded activation exists for this exact model in this scope.",
+  "error.MODEL_ACTIVATION_NOT_ACTIVE": "The recorded model activation is already inactive.",
+  "error.MODEL_ACTIVATION_BINDING_CONFLICT": "The model definition does not match the requested activation binding.",
+  "error.MODEL_ACTIVATION_COMMAND_CONFLICT": "This command identity already belongs to a different activation request or actor.",
+  "error.MODEL_ACTIVATION_CORRUPT": "Recorded activation evidence is inconsistent; the operation was refused.",
+  "error.MODEL_ACTIVATION_UNAVAILABLE": "The activation store is unavailable. No successful change is confirmed.",
+  "error.MODEL_ACTIVATION_OUTCOME_UNKNOWN": "Activation outcome is uncertain. Inspect the durable record before retrying with the same command identity.",
+  "error.MODEL_ACTIVATION_CATALOG_CONFLICT": "The current catalog no longer matches the requested exact model definition."
 }
