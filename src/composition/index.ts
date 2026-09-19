@@ -15,3 +15,4 @@ export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#c
 
 export { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
+export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';

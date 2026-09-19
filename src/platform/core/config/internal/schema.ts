@@ -9,6 +9,10 @@ export type DeckentConfig = CoreConfig & Record<string, unknown>;
 export interface ConfigSectionOptions {
   /** Called on the authored global/project layers before they are merged. */
   readonly optional?: boolean;
+  /** Opaque public data sections can forbid secret interpolation before any resolver reads. */
+  readonly secretReferences?: 'allow' | 'forbid';
+  /** Pure section semantics, also enforced by config writers before any publication. */
+  readonly validateValue?: (value: unknown) => void;
   readonly metadata?: { readonly descriptionKey: string; readonly tier: string; readonly since: string };
   readonly validateEffective?: (config: DeckentConfig, env: Environment) => void;
   readonly validateLayers?: (global: unknown, project: unknown) => void;
@@ -22,7 +26,9 @@ export function registerConfigSection(name: string, schema: z.AnyZodObject, opti
     || ['__proto__', 'constructor', 'prototype'].includes(name)) {
     throw ErrorRegistry.createError('CONFIG_SECTION_DUPLICATE', { params: { section: name } });
   }
-  if (!(schema instanceof z.ZodObject) || schema._def.unknownKeys !== 'strict') {
+  if (!(schema instanceof z.ZodObject) || schema._def.unknownKeys !== 'strict'
+    || (options.secretReferences !== undefined && !['allow', 'forbid'].includes(options.secretReferences))
+    || (options.validateValue !== undefined && typeof options.validateValue !== 'function')) {
     throw ErrorRegistry.createError('CONFIG_SECTION_INVALID', { params: { section: name } });
   }
   sections.set(name, { schema, options: Object.freeze({ ...options }) });

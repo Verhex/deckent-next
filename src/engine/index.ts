@@ -31,3 +31,4 @@ export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEv
 export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 
 export * from '#engine/core/installation/index.js';
+export * from '#engine/core/provider-catalog/index.js';

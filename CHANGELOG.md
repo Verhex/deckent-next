@@ -336,3 +336,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 REAL-INIT/P3E-PUBLICATION DONE — Fable1992 PASS; explicit custom proposal consent, journal-before-effects no-replace publication, owned SQLite v11 ledger, CLI/SDK apply and profile-independent resume; isolated 860 product/24 native/18 host. Installation persistence proven; runtime-ready and P4 cross-surface execution remain open. Strict custody retained; slow-disk lock timing and separate upgrade path remain follow-up.
 
 2026-09-19 RUNTIME/P4 — Proved installed SDK/CLI/MCP execution, recovery and concurrent installer safety. Report setup contention distinctly and preserve the current corruption backup across clock rollback. Fable2001 PASS, three consecutive plus independent full verification.
+
+2026-09-19 PROVIDERS/A0 — Added native model declarations to SDK/CLI/MCP, explicit not-observed availability, registered section secret policy and pure writer validation. Fable2008 PASS; activation and provider invocation remain separate.

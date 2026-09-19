@@ -5,6 +5,7 @@ import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler } from './init.js';
+import type { DeclaredModelsInspection } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -14,6 +15,7 @@ import {
 } from '#platform/index.js';
 
 export interface CommandContext {
+  inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
   applyInstallation?: InstallationApplyHandler;

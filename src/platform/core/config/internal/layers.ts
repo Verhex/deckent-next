@@ -15,6 +15,7 @@ import { applyConfigEnvironment } from './validate/environment.js';
 import { resolveConfigSecrets, type SecretResolver } from './validate/interpolate.js';
 import { ConfigValidationError, type ConfigWarning } from './validate/issues.js';
 import { validateConfig } from './validate/sections.js';
+import { assertConfigSecretPolicies } from './validate/secret-policy.js';
 import { readProjectConfig } from './heal.js';
 import { inspectInstallationBootstrap, assertInstallationBootstrap } from './bootstrap.js';
 
@@ -84,6 +85,9 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   });
   if (!isRecord(project)) throw new ConfigValidationError([{ path: projectPath, reason: 'OBJECT_REQUIRED' }]);
   const normalizedProject = versionedConfig(project);
+  // Check each authored layer even if a clean later layer would hide its forbidden reference.
+  assertConfigSecretPolicies(global, resolveLocale(undefined, env));
+  assertConfigSecretPolicies(normalizedProject, resolveLocale(undefined, env));
   for (const [name, section] of configSections()) section.options.validateLayers?.(global[name], normalizedProject[name]);
   const layered = deepMerge(deepMerge(createDefaultConfig(), global), normalizedProject);
   const effective = applyConfigEnvironment(layered, env);

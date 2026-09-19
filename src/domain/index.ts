@@ -1,6 +1,7 @@
 export * from '#domain/core/task-graph/index.js';
 export * from '#domain/core/attempt/index.js';
 export * from '#domain/core/primitives/index.js';
+export * from '#domain/core/provider-catalog/index.js';
 export * from '#domain/core/principal/index.js';
 export * from '#domain/core/policy/index.js';
 export * from '#domain/core/run/index.js';

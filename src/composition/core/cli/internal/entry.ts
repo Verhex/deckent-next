@@ -8,6 +8,7 @@ import { getConfigFieldDefault } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { readInstallationProfileFile } from '#adapters/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
+import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -17,6 +18,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    inspectDeclaredModels,
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,
         await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),

@@ -562,5 +562,12 @@
   "cli.help.initPreview": "deckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol> [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet> --accept-custom [--allow-shutdown] [--json]",
   "cli.init.previewOnly": "Yalnız önizleme: paket/imaj güveni ve kullanılabilirliği doğrulanmadı; hiçbir şey kurulmadı.",
   "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı.",
-  "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):"
+  "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):",
+  "cli.help.models": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.",
+  "models.notConfigured": "Model kataloğu yapılandırılmamış; kullanılabilirlik gözlemlenmedi.",
+  "models.declaredHeader": "Beyan edilen model kataloğu {revision}:",
+  "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native kimlik {nativeId} · protokoller {protocols}",
+  "models.availabilityNotObserved": "Yalnızca beyanlar; kullanılabilirlik gözlemlenmedi.",
+  "mcp.tool.listDeclaredModels": "Yapılandırılmış model beyanlarını listeler. Provider kullanılabilirliğini, kimlik bilgilerini, aktivasyonu veya yürütmeye hazır olmayı doğrulamaz.",
+  "config.field.provider_catalog": "Sürümlü native provider ve model beyanları; aktivasyon veya kullanılabilirlik değildir."
 }

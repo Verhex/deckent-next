@@ -3,12 +3,16 @@ import { isRecord } from '#platform/core/utils/index.js';
 /** Composition supplies the authorized secret backend; no file-format or keyring policy lives here. */
 export type SecretResolver = (reference: string) => Promise<string | undefined>;
 export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[] }
+/** One exact grammar shared by interpolation and the pre-resolution section guard. */
+export function parseSecretReference(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.match(/^\$DECK:([A-Z_][A-Z0-9_]*)$/)?.[1] : undefined;
+}
 /** References are resolved once per load and never retained in the effective-config cache. */
 export async function resolveConfigSecrets<T>(config: T, resolver: SecretResolver, missing: (key: string) => void = () => {}): Promise<SecretResolution<T>> {
   const resolved = new Map<string, string | undefined>(), secretPaths: string[] = [];
   async function visit(value: unknown, path: string): Promise<unknown> {
     if (typeof value === 'string') {
-      const key = value.match(/^\$DECK:([A-Z_][A-Z0-9_]*)$/)?.[1];
+      const key = parseSecretReference(value);
       if (!key) return value;
       if (!resolved.has(key)) {
         let secret: string | undefined;

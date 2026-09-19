@@ -32,3 +32,5 @@ export { applySuppliedInstallation as applyInstallation, resumeInstallation } fr
 export type { InstallationApplyChoices } from '#composition/index.js';
 export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
 export type { InstallationProfile, InstallationPreview, InstallationEvidencePreview } from '#engine/index.js';
+export { inspectDeclaredModels } from '#composition/index.js';
+export type { DeclaredModelsInspection } from '#engine/index.js';

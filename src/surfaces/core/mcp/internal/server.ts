@@ -7,7 +7,9 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
+import type { DeclaredModelsInspection } from '#engine/index.js';
 export interface McpApplications {
+  inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   createRun?(command: RunAdmission): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
@@ -33,6 +35,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  const inspectDeclaredModels = applications.inspectDeclaredModels;
+  if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, name: 'list_declared_models',
+    description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),
+    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectDeclaredModels.call(applications); } });
   const createRun = applications.createRun;
   if (createRun) definitions.push({ readOnly: false, destructive: false, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });

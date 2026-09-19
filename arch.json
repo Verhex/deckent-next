@@ -214,6 +214,7 @@
     "src/adapters/core/contract": {
       "dependencies": [
         "src/adapters/core/registry",
+        "src/domain/core/provider-catalog",
         "src/platform/core/common",
         "src/platform/core/config"
       ],
@@ -315,6 +316,7 @@
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
         "src/composition/core/installation",
+        "src/composition/core/provider-catalog",
         "src/composition/core/query-errors",
         "src/composition/core/runtime-service",
         "src/platform/core/config",
@@ -362,6 +364,7 @@
     "src/composition/core/mcp": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/composition/core/provider-catalog",
         "src/composition/core/runtime-service",
         "src/platform/core/config",
         "src/platform/core/i18n",
@@ -731,6 +734,7 @@
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
         "src/engine/core/installation",
+        "src/engine/core/provider-catalog",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
@@ -751,6 +755,7 @@
         "src/domain/core/attempt",
         "src/domain/core/policy",
         "src/engine/core/dispatch",
+        "src/engine/core/provider-catalog",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
@@ -817,6 +822,26 @@
     "src/adapters/core/installation-files": {
       "dependencies": [],
       "plan": "REAL-INIT/P3E-PUBLICATION"
+    },
+    "src/domain/core/provider-catalog": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS/A0"
+    },
+    "src/engine/core/provider-catalog": {
+      "dependencies": [
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS/A0"
+    },
+    "src/composition/core/provider-catalog": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS/A0"
     }
   },
   "composition": {

@@ -562,5 +562,12 @@
   "cli.help.initPreview": "deckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path> [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path> --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest> --accept-custom [--allow-shutdown] [--json]",
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
-  "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):"
+  "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):",
+  "cli.help.models": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.",
+  "models.notConfigured": "Model catalog is not configured; availability was not observed.",
+  "models.declaredHeader": "Declared model catalog {revision}:",
+  "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native {nativeId} · protocols {protocols}",
+  "models.availabilityNotObserved": "Declarations only; availability was not observed.",
+  "mcp.tool.listDeclaredModels": "List configured model declarations. This does not observe provider availability, credentials, activation, or execution readiness.",
+  "config.field.provider_catalog": "Versioned native provider and model declarations; not activation or availability."
 }

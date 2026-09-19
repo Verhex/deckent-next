@@ -583,3 +583,9 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 2026-09-19 RUNTIME/P4 gate correction — third R5 full verify exposed existing config healing pruning its own returned backup. Retain the exact new receipt plus at most two eligible prior regular backups; preserve foreign/symlink entries. Clock-regression and protected-path tests close the defect; no global clock or backup/restore claim.
 
 2026-09-19 RUNTIME/P4 DONE — Fable2001 PASS; same exact R6 candidate three consecutive full verifies and independent fourth868 product/24native/18host. Actual installed SDK/CLI/MCP→Git/Docker acceptance, offline output/cancel restart, two-process installer replay/conflict. Typed journal contention and preserved config backup receipt. Linux/custom-profile boundary only; no Brain/provider/backup/HA/dogfood claim.
+
+| PROVIDERS/A0 | Declared native provider/model/protocol catalog; generic pre-resolution secret policy; shared readonly SDK/CLI/MCP inspection | Real config layers, forbidden-secret resolver0, typed schema/bounds and compiled surface parity; no activation/network or readiness | WIP |
+
+2026-09-19 PROVIDERS/A0 writer admission — same catalog semantic authority validates config before durable writes through generic validateValue; environment-dependent validators remain in loadConfig. Deterministic duplicate-write red retained; rejection preserves prior bytes and creates no lock/temp/backup.
+
+2026-09-19 PROVIDERS/A0 DONE — Fable2008 PASS exact34files. Root and independent897product/24native/18host; declared native catalog SDK/CLI/MCP, pre-resolution secret guard and semantic writer admission. Independent first run exposed unrelated reservation delayed observation retained in review; no clock-cause claim. No activation/network/readiness.
