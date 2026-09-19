@@ -2,21 +2,21 @@ import { chmod, link, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { assertBootstrapUnchanged, assertBootstrapUsable, hashBootstrapJournal,
+import { assertBootstrapUnchanged, assertBootstrapUsable, encodeBootstrapJournal, hashBootstrapJournal,
   observeBootstrapState } from '../../../src/platform/core/bootstrap-state/index.js';
 
 const roots: string[] = [], hex = (value: string) => value.repeat(64).slice(0, 64);
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project() { const root = await mkdtemp(join(tmpdir(), 'deckent-bootstrap-')); roots.push(root); return root; }
 function payload(root: string, phase: 'pending' | 'committed' = 'pending') {
-  return { schemaVersion: 1 as const, transactionId: 'transaction-1', planDigest: hex('a'), profileDigest: hex('b'), phase,
+  return { schemaVersion: 2 as const, transactionId: 'transaction-1', planDigest: hex('a'), profileDigest: hex('b'), phase,
     createdAtMs: 10, updatedAtMs: 11, resources: [{ resource: 'config', path: join(root, '.deckent/config.json'),
       preimageDigest: null, targetDigest: hex('c'), state: phase === 'committed' ? 'published' as const : 'pending' as const }],
-    blockers: phase === 'committed' ? [] : ['PACKAGE_TRUST_UNVERIFIED'] };
+    blockers: phase === 'committed' ? [] : ['PACKAGE_TRUST_UNVERIFIED'], recovery: {} };
 }
 async function publish(root: string, input = payload(root)) {
   const path = join(root, '.deckent/installation/journal.json'); await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, JSON.stringify({ ...input, checksum: hashBootstrapJournal(input) }), { mode: 0o600 }); return path;
+  await writeFile(path, encodeBootstrapJournal(input), { mode: 0o600 }); return path;
 }
 
 it('observes absence and a usable committed journal without creating state', async () => {
@@ -74,11 +74,11 @@ it('does not treat an absent journal reached through a parent symlink as ordinar
 
 it('detects content mutation and inode replacement between observations', async () => {
   const root = await project(), path = await publish(root); const first = await observeBootstrapState(root);
-  await writeFile(path, JSON.stringify({ ...payload(root), updatedAtMs: 12, checksum: hashBootstrapJournal({ ...payload(root), updatedAtMs: 12 }) }), { mode: 0o600 });
+  await writeFile(path, encodeBootstrapJournal({ ...payload(root), updatedAtMs: 12 }), { mode: 0o600 });
   const mutated = await observeBootstrapState(root);
   expect(() => assertBootstrapUnchanged(first, mutated)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_CHANGED' }));
   const replacement = `${path}.replacement`; const next = payload(root, 'committed');
-  await writeFile(replacement, JSON.stringify({ ...next, checksum: hashBootstrapJournal(next) }), { mode: 0o600 }); await rename(replacement, path);
+  await writeFile(replacement, encodeBootstrapJournal(next), { mode: 0o600 }); await rename(replacement, path);
   const replaced = await observeBootstrapState(root);
   expect(() => assertBootstrapUnchanged(mutated, replaced)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_CHANGED' }));
 });
@@ -87,4 +87,17 @@ it('hashes canonical bounded data without invoking accessors', () => {
   const root = '/project'; expect(hashBootstrapJournal(payload(root))).toBe(hashBootstrapJournal({ ...payload(root) }));
   let invoked = false; const hostile = Object.defineProperty({}, 'schemaVersion', { enumerable: true, get() { invoked = true; return 1; } });
   expect(() => hashBootstrapJournal(hostile)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' })); expect(invoked).toBe(false);
+});
+
+it('encodes bounded canonical schema-v2 bytes with immutable recovery and rejects legacy journals', async () => {
+  const root = await project(), input = { ...payload(root), recovery: { steps: [{ state: 'observed' }] } };
+  const encoded = encodeBootstrapJournal(input); expect(encoded.endsWith('\n')).toBe(true);
+  expect(encoded).toBe(encodeBootstrapJournal({ ...payload(root), recovery: { steps: [{ state: 'observed' }] } }));
+  await publish(root, input); const observed = await observeBootstrapState(root);
+  expect(Object.isFrozen(observed.record!.recovery)).toBe(true); expect(Object.isFrozen((observed.record!.recovery['steps'] as readonly unknown[])[0]!)).toBe(true);
+  expect(() => { (observed.record!.recovery as { steps: unknown[] }).steps = []; }).toThrow();
+  expect(() => encodeBootstrapJournal({ ...payload(root), schemaVersion: 1 })).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' }));
+  expect(() => encodeBootstrapJournal({ ...payload(root), recovery: { text: 'x'.repeat(131_073) } })).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' }));
+  let invoked = false; const hostile = Object.defineProperty(payload(root), 'recovery', { enumerable: true, get() { invoked = true; return {}; } });
+  expect(() => encodeBootstrapJournal(hostile)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' })); expect(invoked).toBe(false);
 });

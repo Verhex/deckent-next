@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { clearConfigCache, loadConfig, registerConfigSection, resolveProductLayout, productResourcePath, readJsonFile, healCorruptProjectConfig } from '#platform/index.js';
-import { hashBootstrapJournal, observeBootstrapState, assertBootstrapUsable, assertBootstrapUnchanged } from '#platform/core/bootstrap-state/index.js';
+import { encodeBootstrapJournal, observeBootstrapState, assertBootstrapUsable, assertBootstrapUnchanged } from '#platform/core/bootstrap-state/index.js';
 
 const roots: string[] = [];
 let onValidate: (() => void) | undefined;
@@ -18,10 +18,10 @@ async function fixture() {
   return { root, project, env: { HOME: join(root, 'home') }, journal: productResourcePath(layout, 'installationJournal'), config: productResourcePath(layout, 'config') };
 }
 function journal(f: Awaited<ReturnType<typeof fixture>>, phase: 'pending' | 'committed') {
-  const payload = { schemaVersion: 1 as const, transactionId: 'test-install', planDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
+  const payload = { schemaVersion: 2 as const, transactionId: 'test-install', planDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
     phase, createdAtMs: 0, updatedAtMs: 0, resources: [{ resource: 'config', path: f.config, preimageDigest: null,
-      targetDigest: 'c'.repeat(64), state: phase === 'pending' ? 'pending' as const : 'published' as const }], blockers: [] };
-  return JSON.stringify({ ...payload, checksum: hashBootstrapJournal(payload) });
+      targetDigest: 'c'.repeat(64), state: phase === 'pending' ? 'pending' as const : 'published' as const }], blockers: [], recovery: {} };
+  return encodeBootstrapJournal(payload);
 }
 function publishSync(f: Awaited<ReturnType<typeof fixture>>, phase: 'pending' | 'committed') {
   mkdirSync(dirname(f.journal), { recursive: true, mode: 0o700 });

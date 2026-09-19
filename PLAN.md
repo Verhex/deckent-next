@@ -569,3 +569,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | REAL-INIT/P3C-EVIDENCE | Read-only installed distribution measurement and exact local Docker image observations; shared CLI/SDK proposal identity | Explicit measurement coverage, no publisher/approval/readiness claim, no project writes | REVIEW |
 
 2026-09-19 TOOL/EXIT, REAL-INIT/P3B-GATE and REAL-INIT/P3C-EVIDENCE DONE — Fable1983 PASS. Separate exact commits; combined isolated verify814 product/24native/18host. Journal admission gate and CLI/SDK evidence proposal delivered; no apply, recorded consent, publisher authenticity or ready claim. P3D durable writer and P3E publication remain open.
+
+| REAL-INIT/P3D-JOURNAL | Single current journal v2 with bounded embedded recovery material; durable generation-checked owning adapter under shared config writer lock | Real filesystem CAS/concurrency/escaped calls/cached config gate and compiled producer SIGKILL; no installer apply/readiness | REVIEW |
+
+2026-09-19 REAL-INIT/P3D-JOURNAL DONE — Fable1988 PASS; journal2 complete recovery envelope and durable owning writer, shared config lock and drained IO; mandatory compiled producer SIGKILL proof; isolated828 product/24native/18host. D-CUSTODY remains strict no-group/other-write until direct owner decision; symlink project aliases unsupported. Actual apply and readiness remain P3E/P4 work.

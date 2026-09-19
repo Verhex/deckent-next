@@ -15,10 +15,16 @@ const resource = z.object({
   state: z.enum(['pending', 'published']),
 }).strict().readonly();
 const journalShape = {
-  schemaVersion: z.literal(1), transactionId: z.string().min(1).max(256), planDigest: hex, profileDigest: hex,
+  schemaVersion: z.literal(2), transactionId: z.string().min(1).max(256), planDigest: hex, profileDigest: hex,
   phase: z.enum(['pending', 'committed']), createdAtMs: z.number().int().nonnegative().safe(),
   updatedAtMs: z.number().int().nonnegative().safe(), resources: z.array(resource).min(1).max(1024).readonly(),
-  blockers: z.array(z.string().min(1).max(256)).max(1024).readonly(),
+  blockers: z.array(z.string().min(1).max(256)).max(1024).readonly(), recovery: z.unknown().transform((input, context) => {
+    try {
+      const parsed = JSON.parse(canonical(input)) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('RECOVERY_INVALID');
+      return freezeRecovery(parsed);
+    } catch { context.addIssue({ code: z.ZodIssueCode.custom, message: 'RECOVERY_INVALID' }); return z.NEVER; }
+  }),
 };
 function journalRules(value: z.infer<z.ZodObject<typeof journalShape>>, context: z.RefinementCtx) {
   if (value.updatedAtMs < value.createdAtMs) context.addIssue({ code: z.ZodIssueCode.custom, path: ['updatedAtMs'], message: 'TIME_ORDER' });
@@ -34,6 +40,7 @@ function journalRules(value: z.infer<z.ZodObject<typeof journalShape>>, context:
 }
 const journalPayloadSchema = z.object(journalShape).strict().superRefine(journalRules).readonly();
 export const bootstrapJournalSchema = z.object({ ...journalShape, checksum: hex }).strict().superRefine(journalRules).readonly();
+export type BootstrapJournalPayload = z.infer<typeof journalPayloadSchema>;
 export type BootstrapJournal = z.infer<typeof bootstrapJournalSchema>;
 export interface BootstrapObservation { readonly generation: string; readonly record: BootstrapJournal | null }
 export type BootstrapStateErrorCode = 'BOOTSTRAP_STATE_INVALID' | 'BOOTSTRAP_STATE_UNSAFE' | 'BOOTSTRAP_STATE_CHANGED'
@@ -70,11 +77,31 @@ function canonical(input: unknown): string {
   return JSON.stringify(visit(input, 0));
 }
 
+function freezeRecovery(value: unknown): Readonly<Record<string, unknown>> {
+  const freeze = (current: unknown): unknown => {
+    if (Array.isArray(current)) return Object.freeze(current.map(freeze));
+    if (current && typeof current === 'object') return Object.freeze(Object.fromEntries(Object.entries(current).map(([key, item]) => [key, freeze(item)])));
+    return current;
+  };
+  return freeze(value) as Readonly<Record<string, unknown>>;
+}
+
 export function hashBootstrapJournal(input: unknown): string {
   const sanitized = JSON.parse(canonical(input)) as unknown;
   const payload = journalPayloadSchema.safeParse(sanitized);
   if (!payload.success) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
-  return createHash('sha256').update(`deckent.bootstrap-journal.v1\n${canonical(payload.data)}`, 'utf8').digest('hex');
+  return createHash('sha256').update(`deckent.bootstrap-journal.v2\n${canonical(payload.data)}`, 'utf8').digest('hex');
+}
+
+/** Canonical complete journal bytes for an owning writer; this observer never writes them. */
+export function encodeBootstrapJournal(payload: unknown): string {
+  const sanitized = JSON.parse(canonical(payload)) as unknown;
+  const parsed = journalPayloadSchema.safeParse(sanitized);
+  if (!parsed.success) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
+  const record = bootstrapJournalSchema.parse({ ...parsed.data, checksum: hashBootstrapJournal(parsed.data) });
+  const encoded = `${canonical(record)}\n`;
+  if (Buffer.byteLength(encoded, 'utf8') > BOOTSTRAP_JOURNAL_MAX_BYTES) throw new BootstrapStateError('BOOTSTRAP_STATE_INVALID');
+  return encoded;
 }
 
 function same(left: bigint, right: bigint) { return left === right; }

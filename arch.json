@@ -794,6 +794,14 @@
     "src/adapters/core/installation-artifacts": {
       "dependencies": [],
       "plan": "REAL-INIT/P3C-EVIDENCE"
+    },
+    "src/adapters/core/installation-journal": {
+      "dependencies": [
+        "src/platform/core/bootstrap-state",
+        "src/platform/core/config",
+        "src/platform/core/host"
+      ],
+      "plan": "REAL-INIT/P3D-JOURNAL"
     }
   },
   "composition": {

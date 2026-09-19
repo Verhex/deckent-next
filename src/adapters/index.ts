@@ -25,3 +25,6 @@ export * from '#adapters/core/local-runtime-socket/index.js';
 export { readInstallationProfileFile, InstallationProfileFileError } from '#adapters/core/installation-profile-file/index.js';
 export { measureInstalledPackage, InstallationArtifactError } from '#adapters/core/installation-artifacts/index.js';
 export { probeDockerImageAvailability, DockerImageProbeError } from '#adapters/core/docker-supervisor/index.js';
+
+export { withInstallationJournal, InstallationJournalError } from '#adapters/core/installation-journal/index.js';
+export type { InstallationJournalOptions, InstallationJournalSession, InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
