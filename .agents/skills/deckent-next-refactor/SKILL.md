@@ -128,17 +128,39 @@ An unknown/live owner means leave the lock and report; never use recursive delet
 
 ## Jev development decision support — owner 2026-09-19
 
-For uncertain development judgments, use the shared host tool from either repository:
-`node .agents/refactor/jev.mjs check INPUT.json` (offline), then `ask INPUT.json` (external request).
-Input: `{"schemaVersion":1,"state":{"facts":[],"alternatives":[]},"questions":{"supported":{"type":"noul","instructions":"Is the claim supported by the supplied evidence?"}}}`.
-Use narrow independent questions; choice and score are also supported by the current TypeSafe API.
-Prepare only necessary, sanitized facts: no automatic repository, channel, customer data or credential upload.
-Read `.agents/refactor/jev.config.json` for endpoint/model/limits; optional third CLI argument selects another config.
-Credential comes from TYPESAFE_API_KEY, TYPESAFE_API_KEY_FILE, or the configured credentialFile reference
-(current host: ~/.config/typesafe/api-key; owner-private raw key file, mode 0600).
-Never print/source the credential file or put keys in commands, git, evidence, channel or request state.
-One bounded request, no automatic retry; failures mean unavailable advice, never approval or a fallback verdict.
-Record the question/evidence reference and returned model, request digest, usage and uncertainty when using advice.
-Jev is probabilistic decision support, not proof, test success, Fable PASS, policy, owner permission or acceptance.
-Do not select a universal confidence threshold or execute returned content. Resolve conflicts using evidence/review.
-This host integration is excluded from product distribution; a future product capability needs its own card.
+Use Jev regularly for material development judgments: option tradeoffs, modularity/boundary reviews,
+test coverage gaps, evidence/claim fit, and uncertain next actions. Deterministic checks still run directly;
+do not call for every mechanical edit or repeat the same unchanged question to obtain a preferred answer.
+Use the logged preparation layer from either repository (shared host source, not a product feature):
+- `node .agents/refactor/jev-review.mjs prepare CASE.json` validates/compiles context offline.
+- `node .agents/refactor/jev-review.mjs ask CASE.json` records request before the bounded external call.
+- `node .agents/refactor/jev-review.mjs decision CALL_ID DECISION.json` records actor, selectedOption,
+  rationale, actions and evidenceRefs; explicitly explain disagreement or missing evidence.
+- `node .agents/refactor/jev-review.mjs outcome CALL_ID OUTCOME.json` records actor, status
+  (verified/failed/inconclusive), observation, evidenceRefs, labels, inputQuality and outputQuality.
+  Outcome is a final immutable assessment: leave absent while validation is pending. Noul labels require
+  verified evidence and contain questionId, expected boolean, evidenceRef. Never label using Jev's own answer.
+- `node .agents/refactor/jev-review.mjs report` reports bounded coverage, usage, latency, decisions,
+  outcomes and Brier score only where evidence-backed labels exist; agreement is not correctness.
+
+Case schema: schemaVersion=1, objective, scope, exact revision (identify dirty changes), constraints[],
+unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],evidenceIds[]}],
+checks[{id,instructions,evidenceIds[]}]. Use at least two meaningful options; separate facts from assumptions,
+include contrary evidence and realistic tradeoffs. The compiler preserves options and adds defer plus a
+context-sufficiency question. Preparation checks structural coverage, not semantic perfection or truth.
+Question/option identifiers must be unique; evidence references must resolve. Only authored sanitized context
+is sent: no automatic source, channel, customer data, credential or journal upload. Inspect the prepared state.
+
+Settings: .agents/refactor/jev.config.json (provider), jev.review.config.json (context limits/templates/journal).
+Overrides: DECKENT_JEV_CONFIG and DECKENT_JEV_REVIEW_CONFIG paths. Journal root resolves relative to review
+config, defaults to Next .deckent/host/jev for both workspaces, private 0700/0600 and Git-ignored. Records are
+immutable request/response-or-failure/decision/outcome files linked by callId; no auto-deletion/retention yet.
+No recorded response after a crash means response-unknown, not failure or permission to repeat a billed call.
+Credential: TYPESAFE_API_KEY, TYPESAFE_API_KEY_FILE, or configured ~/.config/typesafe/api-key reference.
+Never print/source credentials or put them into state/commands/evidence. Private file storage is not a keyring.
+One bounded call, no hidden retry; failure means unavailable advice. The low-level jev.mjs client is for
+transport tests; normal development consultations use jev-review.mjs so preparation and journaling apply.
+
+Jev is probabilistic advice, not proof, test success, Fable PASS, policy, owner permission or acceptance.
+Do not execute returned content or hardcode a universal confidence threshold. Record actual model/usage;
+use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
