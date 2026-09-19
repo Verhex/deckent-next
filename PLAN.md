@@ -528,3 +528,5 @@ WORKSPACE-VERSION-CONFLICT: DONE — Fable1902 PASS; adapter version stays pinne
 RESERVATION-CLOCK-CONDITION: DONE — Fable1915 PASS; controlled SQLite time condition proven; historical1852 cause remains open. Independent test-only slice does not depend on pending cancellation F1 behavior.
 
 RESERVATION-READABLE-DIAGNOSTIC DONE — Fable PASS 1919; EN/TR bounded detail, incomplete params retain generic text. Service protocol params and measured delay remain open.
+
+CANCELLATION-PAGE-FAIRNESS DONE — Fable PASS 1921; unavailable records no longer starve later pages. Transport backoff remains. SQLite companion race remains separate.

@@ -59,20 +59,25 @@ it('reports an error, resets that scope cursor, and retries it only after its ba
   ]);
 });
 
-it('backs off unavailable only for that scope, then resets the backoff after a successful page', async () => {
-  const controller = new AbortController(); const commands: Command[] = []; let now = 0; let waits = 0;
+it('advances past persistent unavailable records while preserving failure visibility and scope fairness', async () => {
+  const controller = new AbortController(); const commands: Command[] = []; const statuses: string[] = []; let now = 0;
   const loop = new CancellationRuntimeLoop(async command => {
     commands.push(command);
-    if (command.scopeId === 'a' && commands.filter(value => value.scopeId === 'a').length === 1) return { nextAfterAttemptId: 'a1', outcomes: [{ outcome: { status: 'unavailable' } }] };
-    if (commands.filter(value => value.scopeId === 'a').length === 3) controller.abort();
+    if (command.scopeId === 'a' && command.afterAttemptId === null) {
+      return { nextAfterAttemptId: 'a1', outcomes: [{ outcome: { status: 'unavailable' } }] };
+    }
     return { nextAfterAttemptId: null, outcomes: [{ outcome: { status: 'terminal' } }] };
-  }, async () => { now += 5; waits++; }, { now: () => now }, { async onPage() {}, async onError() {} },
-  { scopeIds: ['a', 'b'], pollIntervalMs: 5, failureBackoffMs: 10 });
+  }, async () => { now += 5; }, { now: () => now }, {
+    async onPage(_command, result) {
+      statuses.push(result.outcomes![0]!.outcome.status);
+      if (commands.length === 6) controller.abort();
+    }, async onError() { throw new Error('unexpected page failure'); },
+  }, { scopeIds: ['a', 'b'], pollIntervalMs: 5, failureBackoffMs: 10 });
   await loop.run(controller.signal);
   expect(commands.map(value => [value.scopeId, value.afterAttemptId])).toEqual([
-    ['a', null], ['b', null], ['b', null], ['a', null], ['b', null], ['a', null],
+    ['a', null], ['b', null], ['a', 'a1'], ['b', null], ['a', null], ['b', null],
   ]);
-  expect(waits).toBe(3);
+  expect(statuses).toEqual(['unavailable', 'terminal', 'terminal', 'terminal', 'unavailable', 'terminal']);
 });
 
 it('surfaces observer failure and stops instead of swallowing it', async () => {

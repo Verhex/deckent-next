@@ -32,7 +32,9 @@ export class CancellationRuntimeLoop {
     this.loop = new ScopedRuntimeLoop(drain, wait, clock, observer, loopOptions, {
       command: (scopeId, afterAttemptId) => ({ schemaVersion: 1, scopeId, afterAttemptId }),
       nextCursor: result => result.nextAfterAttemptId,
-      unavailable: result => !!result.outcomes?.some(value => value.outcome.status === 'unavailable'),
+      // Individual delivery failures remain visible; they must not starve later pages.
+      // Page/transport failures throw and retain the shared loop's scope backoff.
+      unavailable: () => false,
     }, () => new CancellationRuntimeLoopError('CANCELLATION_RUNTIME_LOOP_RUNNING'));
   }
   run(signal: AbortSignal): Promise<void> { return this.loop.run(signal); }
