@@ -119,6 +119,37 @@ it('binds plan identity to resolved paths and normalized configuration without l
   expect(JSON.stringify(next)).not.toContain('different-runtime-default');
 });
 
+it('prepares immutable normalized material without changing the authored profile digest or rendering private defaults', async () => {
+  const authored = supplied(), originalDigest = authored.profile.digest;
+  const application = new InstallationPreviewApplication(ports({
+    async resolvePaths(_root, config) {
+      return { config: { ...config, runtimeOnlyDefault: { credentialMarker: 'never-rendered' } }, layout: { schemaVersion: 1,
+        revision: 'layout-prepared', root: '/resolved/data', bootstrapConfigPath: '/project/.deckent/config.json' },
+      paths: { config: '/project/.deckent/config.json', policy: '/resolved/data/policy.json' } };
+    },
+  }));
+  const prepared = await application.prepare('/project', authored, { principal, allowShutdown: true });
+  expect(prepared.material.authoredProfile.profile.digest).toBe(originalDigest);
+  expect(hashInstallationProfilePayload({ ...prepared.material.authoredProfile,
+    profile: { id: prepared.material.authoredProfile.profile.id, version: prepared.material.authoredProfile.profile.version } })).toBe(originalDigest);
+  expect(prepared.material.authoredProfile.configuration).not.toHaveProperty('runtimeOnlyDefault');
+  expect(prepared.material.configuration).toMatchObject({ runtimeOnlyDefault: { credentialMarker: 'never-rendered' } });
+  expect(Object.isFrozen(prepared.material.configuration)).toBe(true);
+  expect(Object.isFrozen((prepared.material.configuration['runtimeOnlyDefault'] as object))).toBe(true);
+  expect(() => { (prepared.material.configuration as { runtimeOnlyDefault: unknown }).runtimeOnlyDefault = null; }).toThrow();
+  expect(prepared.preview.layout).toMatchObject({ root: '/resolved/data', revision: 'layout-prepared' });
+  expect(JSON.stringify(prepared.preview)).not.toContain('runtimeOnlyDefault');
+  expect(JSON.stringify(prepared.preview)).not.toContain('never-rendered');
+});
+
+it('rejects an invalid authored profile before asking the resolver for normalized material', async () => {
+  let resolves = 0;
+  const invalid = supplied(); invalid.scopeId = 'changed-without-rehash';
+  const application = new InstallationPreviewApplication(ports({ async resolvePaths() { resolves++; throw new Error('MUST_NOT_RESOLVE'); } }));
+  await expect(application.prepare('/project', invalid, { principal, allowShutdown: true })).rejects.toMatchObject({ code: 'INSTALLATION_PROFILE_DIGEST' });
+  expect(resolves).toBe(0);
+});
+
 it('returns deeply frozen permission, pool, service and kind bindings', async () => {
   const result = await new InstallationPreviewApplication(ports()).preview('/project', supplied(), { principal, allowShutdown: true });
   expect(result.registry.kinds).toEqual(registry.kinds);

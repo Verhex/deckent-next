@@ -56,7 +56,7 @@ it('preserves schema-3 Run data but never invents pool assignment during schema-
   const { store, path } = await fixture(); await store.createExecutionPool(pool); await store.createRun(create('s')); await store.reserveRunTasks(claim('s'));
   store.close(); stores.splice(stores.indexOf(store), 1);
   const db = new DatabaseSync(path); db.prepare('UPDATE runs SET policy=?').run(JSON.stringify({ schemaVersion: 1, capacity: pool.capacity, ordering: ['a'] }));
-  db.exec('DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; PRAGMA user_version=3;'); db.close();
+  db.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; PRAGMA user_version=3;'); db.close();
   const migrated = await openSqliteAttemptStore(path, options); stores.push(migrated);
   expect((await migrated.loadRun('s', 'run'))!.revision).toBe(1);
   await migrated.createExecutionPool(pool);

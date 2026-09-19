@@ -1,16 +1,19 @@
-import { InstallationProfileError, InstallationEvidenceError } from '#engine/index.js';
-import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError } from '#adapters/index.js';
+import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
+import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
+  InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
-import { DeckentError, ErrorRegistry, ManagedFileError } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } from '#platform/index.js';
 import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
-    || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError) return ErrorRegistry.createError(error.code);
+    || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
+    || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError
+    || error instanceof InstallationFileError || error instanceof BootstrapStateError) return ErrorRegistry.createError(error.code);
   if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') {
     return ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
   }

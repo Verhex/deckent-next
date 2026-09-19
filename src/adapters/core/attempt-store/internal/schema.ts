@@ -7,7 +7,8 @@ import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
 export const DISPATCH_LEDGER_VERSION = 8;
 export const RUN_LEDGER_VERSION = 9;
 export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
-export const CURRENT_LEDGER_VERSION = SERVICE_SHUTDOWN_LEDGER_VERSION;
+export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
+export const CURRENT_LEDGER_VERSION = INSTALLATION_OWNERSHIP_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -21,6 +22,7 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   9: 'CREATE TABLE run_workspace_custody(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,run_id)); PRAGMA user_version=9;',
   10: `CREATE TABLE service_shutdown_commands(scope_id TEXT NOT NULL,service_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,service_id,command_id));
     CREATE TABLE service_shutdown_outcomes(scope_id TEXT NOT NULL,service_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,service_id,command_id)); PRAGMA user_version=10;`,
+  11: `CREATE TABLE installation_ownership(singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton=1),record TEXT NOT NULL); PRAGMA user_version=11;`,
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;

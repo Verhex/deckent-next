@@ -559,7 +559,8 @@
   "cli.runtime.shutdownAdmitted": "Runtime shutdown accepted for {serviceId} instance {instanceId} (command {commandId}).",
   "mcp.tool.runtimeServiceDescriptor": "Return the local runtime service descriptor and exact current instance identity. This grants no shutdown permission.",
   "mcp.tool.shutdownRuntimeService": "Admit a policy-authorized shutdown for the exact service and instance. Acceptance does not mean the service has stopped.",
-  "cli.help.initPreview": "deckent init <preview|inspect> --profile <file> [--allow-shutdown] [--json] [--lang en|tr]\nRead-only supplied profile preview; no installation or permission changes.\ninspect requires --docker-executable <absolute-path>; it observes package bytes and local images without installing.",
+  "cli.help.initPreview": "deckent init preview --profile <file> [--allow-shutdown] [--json]\ndeckent init inspect --profile <file> --docker-executable <absolute-path> [--allow-shutdown] [--json]\ndeckent init apply --profile <file> --docker-executable <absolute-path> --proposal <digest> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <absolute-path> --proposal <digest> --accept-custom [--allow-shutdown] [--json]",
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
-  "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation."
+  "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
+  "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):"
 }

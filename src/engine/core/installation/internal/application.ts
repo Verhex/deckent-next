@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { evaluatePolicy, executionRegistrySchema, identitySchema, immutableJsonObjectSchema,
   type EvaluatorDefinition, type ExecutionProfileDefinition, type JsonObject, type Policy } from '#domain/index.js';
 import type { ExecutionPool } from '#engine/core/runs/index.js';
-import { hashInstallationProfilePayload, installationProfileSchema, profilePayload } from './profile.js';
+import { hashInstallationProfilePayload, installationProfileSchema, profilePayload, type InstallationProfile } from './profile.js';
 
 export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INSTALLATION_PROFILE_DIGEST'
   | 'INSTALLATION_PROFILE_CONFIG' | 'INSTALLATION_PROFILE_REGISTRY' | 'INSTALLATION_PROFILE_ADAPTER'
@@ -59,6 +59,22 @@ export interface InstallationPreview {
   readonly blockers: readonly ['INSTALL_PACKAGE_TRUST_UNVERIFIED', 'INSTALL_IMAGE_PROVENANCE_UNVERIFIED', 'INSTALL_IMAGE_AVAILABILITY_UNCHECKED'];
 }
 
+/** Private recovery material. Never render this configuration snapshot through a surface. */
+export interface InstallationMaterial {
+  readonly schemaVersion: 1;
+  readonly authoredProfile: InstallationProfile;
+  readonly configuration: JsonObject;
+  readonly layout: InstallationPreview['layout'];
+  readonly paths: InstallationPreview['paths'];
+  readonly principal: InstallationPreview['principal'];
+  readonly allowShutdown: boolean;
+  readonly planDigest: string;
+}
+export interface PreparedInstallation {
+  readonly preview: InstallationPreview;
+  readonly material: InstallationMaterial;
+}
+
 function canonical(input: unknown): string {
   const parsed = immutableJsonObjectSchema.safeParse(input);
   if (!parsed.success) throw new InstallationProfileError('INSTALLATION_PROFILE_INVALID');
@@ -74,6 +90,10 @@ export class InstallationPreviewApplication {
   }
 
   async preview(projectRoot: string, supplied: unknown, inputChoices: InstallationPreviewChoices): Promise<InstallationPreview> {
+    return (await this.prepare(projectRoot, supplied, inputChoices)).preview;
+  }
+
+  async prepare(projectRoot: string, supplied: unknown, inputChoices: InstallationPreviewChoices): Promise<PreparedInstallation> {
     const safeProfile = immutableJsonObjectSchema.safeParse(supplied), safeChoices = immutableJsonObjectSchema.safeParse(inputChoices);
     if (!safeProfile.success || !safeChoices.success) throw new InstallationProfileError('INSTALLATION_PROFILE_INVALID');
     const parsed = installationProfileSchema.safeParse(safeProfile.data), choices = choicesSchema.safeParse(safeChoices.data);
@@ -145,10 +165,13 @@ export class InstallationPreviewApplication {
       evaluators: Object.freeze(registry.data.evaluators.map(value => Object.freeze({ id: value.id, version: value.version, implementation: value.implementation }))) });
     const planDigest = digest({ schemaVersion: 1, profileDigest: profile.profile.digest, principal: choices.data.principal,
       allowShutdown: choices.data.allowShutdown, config: resolved.config, layout: resolved.layout, paths: resolved.paths });
-    return Object.freeze({ schemaVersion: 1 as const, status: 'preview' as const, scopeId: profile.scopeId, principal: choices.data.principal, planDigest,
+    const preview = Object.freeze({ schemaVersion: 1 as const, status: 'preview' as const, scopeId: profile.scopeId, principal: choices.data.principal, planDigest,
       profile: Object.freeze({ ...profile.profile, integrity: 'verified' as const }), layout: resolved.layout, paths: resolved.paths,
       policy: profile.policy, pool: Object.freeze({ ...profile.pool, capacity: Object.freeze({ ...profile.pool.capacity }) }), registry: registryReferences, images: Object.freeze(images),
       shutdown: Object.freeze({ enabled: choices.data.allowShutdown, serviceIdentity: service ? Object.freeze({ ...service }) : null, grantRuleId: shutdownRuleId }),
       blockers: Object.freeze(['INSTALL_PACKAGE_TRUST_UNVERIFIED', 'INSTALL_IMAGE_PROVENANCE_UNVERIFIED', 'INSTALL_IMAGE_AVAILABILITY_UNCHECKED'] as const) });
+    return Object.freeze({ preview, material: Object.freeze({ schemaVersion: 1 as const, authoredProfile: profile,
+      configuration: resolved.config, layout: resolved.layout, paths: resolved.paths, principal: choices.data.principal,
+      allowShutdown: choices.data.allowShutdown, planDigest }) });
   }
 }

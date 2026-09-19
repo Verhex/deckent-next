@@ -559,7 +559,8 @@
   "cli.runtime.shutdownAdmitted": "Runtime kapatma isteği {serviceId} örneği {instanceId} için kabul edildi (komut {commandId}).",
   "mcp.tool.runtimeServiceDescriptor": "Yerel runtime servisi tanımlayıcısını ve mevcut örneğin kimliğini döndürür. Kapatma izni vermez.",
   "mcp.tool.shutdownRuntimeService": "Belirtilen servis ve örnek için politika denetimli kapatma isteğini kabul eder. Kabul, servisin durduğu anlamına gelmez.",
-  "cli.help.initPreview": "deckent init <preview|inspect> --profile <file> [--allow-shutdown] [--json] [--lang en|tr]\nSağlanan profilin yazmasız önizlemesi; kurulum veya izin değişikliği yapmaz.\ninspect için --docker-executable <mutlak-yol> gerekir; kurulum yapmadan paket ve yerel imajları gözlemler.",
+  "cli.help.initPreview": "deckent init preview --profile <dosya> [--allow-shutdown] [--json]\ndeckent init inspect --profile <dosya> --docker-executable <mutlak-yol> [--allow-shutdown] [--json]\ndeckent init apply --profile <dosya> --docker-executable <mutlak-yol> --proposal <özet> --accept-custom [--allow-shutdown] [--json]\ndeckent init resume --docker-executable <mutlak-yol> --proposal <özet> --accept-custom [--allow-shutdown] [--json]",
   "cli.init.previewOnly": "Yalnız önizleme: paket/imaj güveni ve kullanılabilirliği doğrulanmadı; hiçbir şey kurulmadı.",
-  "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı."
+  "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı.",
+  "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):"
 }

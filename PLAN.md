@@ -573,3 +573,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | REAL-INIT/P3D-JOURNAL | Single current journal v2 with bounded embedded recovery material; durable generation-checked owning adapter under shared config writer lock | Real filesystem CAS/concurrency/escaped calls/cached config gate and compiled producer SIGKILL; no installer apply/readiness | REVIEW |
 
 2026-09-19 REAL-INIT/P3D-JOURNAL DONE — Fable1988 PASS; journal2 complete recovery envelope and durable owning writer, shared config lock and drained IO; mandatory compiled producer SIGKILL proof; isolated828 product/24native/18host. D-CUSTODY remains strict no-group/other-write until direct owner decision; symlink project aliases unsupported. Actual apply and readiness remain P3E/P4 work.
+
+| REAL-INIT/P3E-PUBLICATION | Custom-proposal explicit apply/resume; retained authored and normalized material; fresh no-replace files; atomic SQLite11 ownership+pool; shared CLI/SDK application | Real local-image/pinned-package installer, moved data root, foreign resources, pending permission-fault recovery without source profile | REVIEW |
+
+2026-09-19 REAL-INIT/P3E-PUBLICATION DONE — Fable1992 PASS; explicit custom proposal consent, journal-before-effects no-replace publication, owned SQLite v11 ledger, CLI/SDK apply and profile-independent resume; isolated 860 product/24 native/18 host. Installation persistence proven; runtime-ready and P4 cross-surface execution remain open. Strict custody retained; slow-disk lock timing and separate upgrade path remain follow-up.

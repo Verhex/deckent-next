@@ -23,6 +23,7 @@ export const CONFIG_FIELDS = Object.freeze({
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   installation: field('config.field.installation', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
+    writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     packageMeasurement: z.object({

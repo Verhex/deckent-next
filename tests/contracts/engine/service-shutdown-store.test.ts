@@ -149,19 +149,19 @@ describe('SQLite service shutdown journal', () => {
     expect(await store.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();
   });
 
-  it('migrates version 9 without data loss and forbid/future versions remain typed', async () => {
+  it('migrates version 9 through shutdown and ownership tables without data loss, while future versions remain typed', async () => {
     const path = await fixture(), seeded = await open(path); seeded.close(); stores.splice(stores.indexOf(seeded), 1);
     const old = new DatabaseSync(path);
     old.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('preserved', '{"marker":true}');
-    old.exec('DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; PRAGMA user_version=9'); old.close();
+    old.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; PRAGMA user_version=9'); old.close();
     await expect(openSqliteAttemptStore(path, options, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
     const migrated = await open(path);
     expect(await migrated.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();
     const check = new DatabaseSync(path, { readOnly: true });
-    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(10);
+    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(11);
     expect(check.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get('preserved')?.policy).toBe('{"marker":true}'); check.close();
     migrated.close(); stores.splice(stores.indexOf(migrated), 1);
-    const future = new DatabaseSync(path); future.exec('PRAGMA user_version=11'); future.close();
+    const future = new DatabaseSync(path); future.exec('PRAGMA user_version=12'); future.close();
     await expect(openSqliteAttemptStore(path, options)).rejects.toThrow('ATTEMPT_STORE_VERSION');
   });
 });

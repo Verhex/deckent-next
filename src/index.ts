@@ -28,5 +28,7 @@ export type { ShutdownCommand, RuntimeServiceDescriptor, ServiceShutdownAdmissio
 
 export { previewSuppliedInstallation as previewInstallation } from '#composition/index.js';
 export { inspectSuppliedInstallation as inspectInstallation } from '#composition/index.js';
+export { applySuppliedInstallation as applyInstallation, resumeInstallation } from '#composition/index.js';
+export type { InstallationApplyChoices } from '#composition/index.js';
 export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
 export type { InstallationProfile, InstallationPreview, InstallationEvidencePreview } from '#engine/index.js';

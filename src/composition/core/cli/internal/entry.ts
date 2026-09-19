@@ -3,7 +3,7 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { pathToFileURL } from 'node:url';
 import { main as runCli } from '#surfaces/index.js';
-import { previewSuppliedInstallation, inspectSuppliedInstallation } from '#composition/core/installation/index.js';
+import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { readInstallationProfileFile } from '#adapters/index.js';
@@ -27,6 +27,17 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       try { return await inspectSuppliedInstallation(projectRoot,
         await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
         { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable }); }
+      catch (error) { throw queryFailure(error); }
+    },
+    applyInstallation: async (projectRoot, input) => {
+      try { return await applySuppliedInstallation(projectRoot,
+        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
+        { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable,
+          proposalDigest: input.proposalDigest, acceptCustom: input.acceptCustom }); }
+      catch (error) { throw queryFailure(error); }
+    },
+    resumeInstallation: async (projectRoot, input) => {
+      try { return await resumeInstallation(projectRoot, input); }
       catch (error) { throw queryFailure(error); }
     },
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),

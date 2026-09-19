@@ -27,13 +27,13 @@ function currentSnapshot() {
     progress: Object.freeze([{ taskId: 't', phase: 'pending' as const, unresolvedEffects: false, eligibleAt: 0 }]), bindings: Object.freeze([]), cancelRequested: false });
 }
 
-it('advances an empty version-seven ledger to eight', async () => {
+it('advances an empty version-seven ledger to current version eleven', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-registry-migration-')); const path = join(root, 'ledger.db');
   try {
     const db = new DatabaseSync(path); createSchemaSeven(db); db.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
-    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(10); } finally { check.close(); }
+    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { check.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -62,7 +62,7 @@ it('accepts a complete current Run and create receipt with selected registry evi
     db.close();
     const store = await openSqliteAttemptStore(path, options); expect(await store.loadRun('s', 'r')).toEqual(snapshot); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
-    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(10); } finally { check.close(); }
+    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { check.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
