@@ -4,7 +4,7 @@ import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefin
   identitySchema, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationCommandSchema,
   MODEL_INVOCATION_NATIVE_JSON_LIMITS, modelInvocationProfileSchema, parseModelActivationRecord,
   parseModelBindingDefinition, parseModelInvocationCommand, parseModelInvocationReceipt, parseModelReference,
-  type ModelInvocationActor, type ModelInvocationReceipt } from '#domain/index.js';
+  modelInvocationRequestEvidence, type ModelInvocationActor, type ModelInvocationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port.js';
 import { verifyModelActivationRecord } from '#engine/core/model-activation/index.js';
 
@@ -64,6 +64,16 @@ export function verifyModelInvocationReceipt(input: unknown): ModelInvocationRec
     }
     return receipt;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
+}
+/** One receipt shape for pre-effect delivery admission and durable claim writers. */
+export function createModelInvocationClaimReceipt(admission: ModelInvocationAdmission): ModelInvocationReceipt {
+  return verifyModelInvocationReceipt({ schemaVersion: 1,
+    request: modelInvocationRequestEvidence(admission.command, admission.requestDigest), actor: admission.actor,
+    authorization: admission.authorization, definition: admission.definition, activationRevision: admission.activation.revision,
+    profile: admission.profile, profileDigest: admission.profileDigest,
+    claim: { scopeId: admission.command.scopeId, commandId: admission.command.commandId, invocationId: admission.invocationId,
+      requestDigest: admission.requestDigest, profileDigest: admission.profileDigest },
+    claimedAtMs: admission.claimedAtMs, outcome: null });
 }
 export function sameModelInvocationRequest(receiptInput: unknown, commandInput: unknown, requestDigest: string,
   actor: ModelInvocationActor): boolean {

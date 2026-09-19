@@ -1,11 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
-import { identitySchema, modelInvocationClaimSchema, modelInvocationRequestEvidence,
+import { identitySchema, modelInvocationClaimSchema,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
   type ModelInvocationReceipt, type ModelInvocationUnknownReason } from '#domain/index.js';
 import { ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
-  verifyModelInvocationReceipt, type ModelInvocationAdmission, type ModelInvocationClaimResult,
+  verifyModelInvocationReceipt, createModelInvocationClaimReceipt, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationReceipt, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationReceipt } from './read.js';
@@ -113,12 +113,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
           if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
         } else this.db.prepare(`INSERT INTO model_invocation_allocations(scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record)
           VALUES(?,?,?,?,?,?,?)`).run(command.scopeId, configured.id, after.maxCalls, after.maxInFlight, after.lifetimeCalls, after.inFlight, encoded(after));
-        const claim = modelInvocationClaimSchema.parse({ scopeId: command.scopeId, commandId: command.commandId,
-          invocationId: admission.invocationId, requestDigest: admission.requestDigest, profileDigest: admission.profileDigest });
-        const receipt = verifyModelInvocationReceipt({ schemaVersion: 1,
-          request: modelInvocationRequestEvidence(command, admission.requestDigest), actor: admission.actor,
-          authorization: admission.authorization, definition: admission.definition, activationRevision: admission.activation.revision,
-          profile, profileDigest: admission.profileDigest, claim, claimedAtMs: admission.claimedAtMs, outcome: null });
+        const receipt = createModelInvocationClaimReceipt(admission);
         const record = encoded(receipt);
         this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
           .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record);

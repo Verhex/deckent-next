@@ -17,7 +17,7 @@ export async function main(root = process.cwd()) {
   return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectModelInvocation: query => inspectConfiguredModelInvocation(root, query),
-    invokeModel: command => invokeConfiguredModel(root, command),
+    invokeModel: command => invokeConfiguredModel(root, command, {}, undefined, { maxResultBytes: config.mcp.responseMaxBytes }),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),

@@ -908,6 +908,8 @@
   "error.MODEL_INVOCATION_OUTCOME_UNKNOWN": "Çağrı sonucu belirsiz. Otomatik tekrar gönderme yapmayın.",
   "error.MODEL_INVOCATION_ACTIVATION_CONFLICT": "Etkin modelin kesin kaydı değişti veya kullanılamıyor.",
   "error.MODEL_INVOCATION_ALLOCATION_CONFLICT": "Çağrı tahsisinin tavanları kalıcı kaydıyla çelişiyor.",
+  "error.MODEL_INVOCATION_RESULT_LIMIT": "Çağrının tam sonucu bu yüzeyin yapılandırılmış kapasitesini aşıyor. Mevcut çağrı yeniden gönderilmez.",
+  "error.MODEL_INVOCATION_DELIVERY_UNAVAILABLE": "Çağrı adapter'ı bu yüzey için sınırlı bir sonuç boyutu belirleyemiyor.",
   "error.MODEL_INVOCATION_QUOTA_EXHAUSTED": "Açık çağrı sayısı tahsisi tükendi.",
   "error.MODEL_INVOCATION_CAPACITY_EXHAUSTED": "Çağrı tahsisinde kullanılabilir eşzamanlı işlem yeri yok.",
   "error.OPENAI_CHAT_DEFINITION_INVALID": "Native HTTP tanımı desteklenmiyor veya geçersiz.",

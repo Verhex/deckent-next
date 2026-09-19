@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand } from '#domain/index.js';
-import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication } from '#engine/index.js';
+import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, createOpenAiChatNativePort,
   OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -9,7 +9,7 @@ import { loadInvocationContext } from './context.js';
 
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
-  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
   try {
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
@@ -31,6 +31,6 @@ export async function invokeConfiguredModel(projectRoot: string, input: ModelInv
       } },
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
       { invocationId: randomUUID, now: Date.now });
-    return await application.invoke(command, undefined, signal);
+    return await application.invoke(command, undefined, signal, delivery);
   } catch (error) { throw queryFailure(error); }
 }

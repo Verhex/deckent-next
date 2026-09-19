@@ -4,7 +4,8 @@ export type { ModelInvocationAuthorizer, ModelInvocationNativePort, ModelInvocat
 export { ModelInvocationInspectionApplication } from './internal/inspection.js';
 export type { ModelInvocationInspection } from './internal/inspection.js';
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
-  parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt } from './internal/evidence.js';
+  parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './internal/evidence.js';
+export type { ModelInvocationDelivery } from './internal/delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
 export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationStore,
   ModelInvocationStoreErrorCode } from './internal/port.js';

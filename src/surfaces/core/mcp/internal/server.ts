@@ -98,6 +98,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     invoke: input => invokeModel.call(applications, modelInvocationCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
+  const invocationLimit = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text',
+    text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
     // MCP requires an object root even when a native command is an object-only discriminated union.
     inputSchema: { ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' } as Tool['inputSchema'],
@@ -110,9 +112,13 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     active++;
     try {
       const value = await tool.invoke(request.params.arguments ?? {}); const encoded = JSON.stringify(value);
-      if (Buffer.byteLength(encoded, 'utf8') > limits.responseMaxBytes) return failure('MCP_RESPONSE_LIMIT');
+      if (Buffer.byteLength(encoded, 'utf8') > limits.responseMaxBytes) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
+        ? invocationLimit('MCP_RESPONSE_LIMIT') : failure('MCP_RESPONSE_LIMIT');
       return { content: [{ type: 'text', text: encoded }], structuredContent: JSON.parse(encoded) as Record<string, unknown> };
-    } catch (error) { return failure(error instanceof DeckentError ? error.code : error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED'); }
+    } catch (error) {
+      if (error instanceof DeckentError && error.code === 'MODEL_INVOCATION_RESULT_LIMIT') return invocationLimit(error.code);
+      return failure(error instanceof DeckentError ? error.code : error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');
+    }
     finally { active--; }
   });
   return server;

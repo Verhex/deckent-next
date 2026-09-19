@@ -596,5 +596,6 @@
   "models.invocation.replayed": "Existing receipt returned; request was not sent again.",
   "models.invocation.notice": "Provider evidence only; this does not accept a task or confirm cost. Inspect native output with --json.",
   "mcp.tool.inspectModelInvocation": "Inspect a persisted model invocation with current authorization.",
-  "mcp.tool.invokeModel": "Submit one native model request using the configured profile and durable command identity. A response is provider evidence, not task acceptance."
+  "mcp.tool.invokeModel": "Submit one native model request using the configured profile and durable command identity. Complete result capacity is checked before a new call. A response is provider evidence, not task acceptance.",
+  "mcp.error.modelInvocationResultLimit": "The complete result cannot fit this MCP surface. Increase its configured response capacity. For an existing invocation, use SDK or CLI inspection to retrieve the saved result; do not submit a new command to repeat the model call."
 }

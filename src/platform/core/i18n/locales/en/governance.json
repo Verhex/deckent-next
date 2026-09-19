@@ -908,6 +908,8 @@
   "error.MODEL_INVOCATION_OUTCOME_UNKNOWN": "The invocation outcome is unknown. Do not resend automatically.",
   "error.MODEL_INVOCATION_ACTIVATION_CONFLICT": "The exact active model record changed or is unavailable.",
   "error.MODEL_INVOCATION_ALLOCATION_CONFLICT": "The invocation allocation ceilings conflict with their durable record.",
+  "error.MODEL_INVOCATION_RESULT_LIMIT": "The complete invocation result exceeds this surface's configured capacity. An existing call is not sent again.",
+  "error.MODEL_INVOCATION_DELIVERY_UNAVAILABLE": "The invocation adapter cannot establish a bounded result for this surface.",
   "error.MODEL_INVOCATION_QUOTA_EXHAUSTED": "The explicit invocation call allocation is exhausted.",
   "error.MODEL_INVOCATION_CAPACITY_EXHAUSTED": "The invocation allocation has no available in-flight slot.",
   "error.OPENAI_CHAT_DEFINITION_INVALID": "The native HTTP definition is unsupported or invalid.",

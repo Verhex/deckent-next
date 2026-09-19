@@ -358,3 +358,5 @@ PROVIDERS/A3B: add explicit scoped native invocation profiles and a bounded text
 PROVIDERS/A3C: shared native invocation and inspection through SDK, bounded CLI file/stdin and MCP. Durable replay never resends. Known MCP full-result overflow remains mandatory corrective work before real provider admission; no paid-provider or dogfood claim.
 
 BIN/ENTRY: installed CLI/MCP entry points share main-module detection; symlink startup and import behavior covered by real process tests.
+
+PROVIDERS/A3D: reject undeliverable model results before invocation claim or network send; preserve receipts and expose MCP recovery guidance without resending.

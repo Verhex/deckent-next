@@ -629,3 +629,7 @@ PROVIDERS/A3C DONE — exact R9 Fable2064 PASS with mandatory C-a before real pr
 | BIN/ENTRY | Installed executable correction; shared host entry identity | Compiled CLI/MCP symlink startup and side-effect-free import, exact source proof | REVIEW |
 
 BIN/ENTRY DONE — Fable2073 PASS; shared main-module detection fixes installed symlink CLI/MCP startup. Exact R1 source, four real process regressions; Linux Node24.15 proof, older-node fallback branch only.
+
+PROVIDERS/A3D REVIEW — preclaim complete-result capacity from final admission and adapter-owned bound, BigInt arithmetic and exact historical/concurrent replay; MCP-only recovery guidance. Corrects C-a delivery defect; no runtime ownership or paid-provider readiness claim.
+
+PROVIDERS/A3D DONE — Fable2075 PASS closes C-a: full-result fit before claim/send, permanent compiled MCP regression and explicit recovery guidance. Full1038/198+24native+18host; no real provider or runtime ownership claim. Rejected-response evidence remains B-b; A4 separate.

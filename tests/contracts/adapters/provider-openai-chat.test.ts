@@ -45,6 +45,30 @@ it('uses exact native nonstream bytes and preserves full native completion evide
   expect(Object.isFrozen(result.native)).toBe(true); expect(Object.isFrozen(result.usage)).toBe(true);
 });
 
+it('bounds the complete serialized native and duplicated usage, including escaped and multibyte text', async () => {
+  const native = response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5,
+    details: { text: '\u0000\n\t"\\İ😀'.repeat(40) } } });
+  const cap = Buffer.byteLength(JSON.stringify(native), 'utf8'); let requests = 0;
+  const origin = await fixture((_req, res) => { requests++; res.end(JSON.stringify(native)); });
+  const { port, prepared } = await token(origin, request, { ...limits, responseMaxBytes: cap });
+  const bound = port.responseBytesUpperBound!(prepared);
+  expect(port.responseBytesUpperBound!(prepared)).toBe(bound); expect(requests).toBe(0);
+  const result = await port.send(prepared);
+  expect(result.native).toEqual(native); expect(result.usage).toEqual(native.usage);
+  expect(BigInt(Buffer.byteLength(JSON.stringify(result), 'utf8')) <= bound).toBe(true);
+  expect(() => port.responseBytesUpperBound!(prepared)).toThrow('OPENAI_CHAT_REQUEST_INVALID');
+  expect(requests).toBe(1);
+});
+
+it('rejects wire numbers whose serialized form grows beyond the declared native capacity', async () => {
+  const raw = JSON.stringify(response('configured-model', { extra: 1_000_000_000_000_000_000_000 })).replace('1e+21', '1e21');
+  // Both representations parse identically; the wire is one byte shorter than its canonical JSON form.
+  const canonical = JSON.stringify(JSON.parse(raw)); expect(canonical.length).toBeGreaterThan(raw.length);
+  const origin = await fixture((_req, res) => res.end(raw));
+  const { port, prepared } = await token(origin, request, { ...limits, responseMaxBytes: Buffer.byteLength(raw, 'utf8') });
+  await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_RESPONSE_TOO_LARGE' });
+});
+
 it('bypasses inherited proxy selectors and rejects external, credential-bearing, proxy, or header definitions before transport', async () => {
   let proxyRequests = 0; const trap = await fixture((_req, res) => { proxyRequests++; res.end('trap'); });
   const original = Object.fromEntries(['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'].map(name => [name, process.env[name]]));

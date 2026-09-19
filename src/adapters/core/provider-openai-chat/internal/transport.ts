@@ -71,6 +71,10 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): OpenA
   const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success && responseSchema.safeParse(copied.data);
   if (!parsed || !parsed.success || parsed.data.model !== prepared.request.model) throw new OpenAiChatHttpError(
     parsed && parsed.success ? 'OPENAI_CHAT_MODEL_MISMATCH' : 'OPENAI_CHAT_RESPONSE_INVALID');
+  // JSON serialization can expand numeric wire spellings. Bound the representation actually persisted/delivered too.
+  if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > prepared.limits.responseMaxBytes) {
+    throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE');
+  }
   const choice = parsed.data.choices[0]!;
   if ('tool_calls' in choice.message || 'function_call' in choice.message) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_INVALID');
@@ -89,6 +93,15 @@ export const openAiChatProtocol = Object.freeze({ family: OPENAI_CHAT_COMPLETION
 export function createOpenAiChatNativePort(): ModelInvocationNativePort {
   const preparedTokens = new WeakSet<object>();
   return Object.freeze({
+    responseBytesUpperBound(prepared: unknown): bigint {
+      if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
+        throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+      }
+      const cap = BigInt((prepared as PreparedOpenAiChatRequest).limits.responseMaxBytes);
+      // usage is null or an unchanged native subtree. Its serialized size cannot exceed native's size.
+      const wrapper = BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 1, native: null, usage: null }), 'utf8'));
+      return wrapper - 8n + cap + (cap > 4n ? cap : 4n);
+    },
     async prepare(profile: unknown, definition: unknown, nativeRequest: unknown): Promise<unknown> {
       const profileEnvelope = openAiChatWireObjectSchema.safeParse(profile);
       if (!profileEnvelope.success) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');

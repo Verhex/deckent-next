@@ -5,7 +5,8 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelInvocationAdmission,
-  sameModelInvocationRequest, verifyModelInvocationReceipt } from './evidence.js';
+  sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './evidence.js';
+import { assertInvocationDeliveryFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore } from './port.js';
 
@@ -19,6 +20,8 @@ export interface ModelInvocationProfileSource {
 export interface ModelInvocationNativePort {
   /** Pure validation/serialization only: no network, credential lookup or other external effect. */
   prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject): Promise<unknown>;
+  /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
+  responseBytesUpperBound?(prepared: unknown): bigint;
   /** The only external transport operation. */
   send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResponse>;
 }
@@ -53,7 +56,8 @@ export class ModelInvocationApplication {
     private readonly profiles: ModelInvocationProfileSource, private readonly natives: ModelInvocationNativeRegistry,
     private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime) {}
 
-  async invoke(input: unknown, credential?: unknown, signal?: AbortSignal): Promise<ModelInvocationResult> {
+  async invoke(input: unknown, credential?: unknown, signal?: AbortSignal, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult> {
+    validateInvocationDelivery(delivery);
     const command = parseModelInvocationCommand(input), requestDigest = modelInvocationRequestDigest(command);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     const actor = modelActivationActorSchema.parse({ id: principal.id, issuer: principal.issuer,
@@ -68,7 +72,7 @@ export class ModelInvocationApplication {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         }
         const receipt = verifyModelInvocationReceipt(prior);
-        return Object.freeze({ replayed: true, receipt });
+        return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt }), delivery);
       }
       const binding = await this.bindings.inspect(command.reference);
       if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
@@ -98,11 +102,16 @@ export class ModelInvocationApplication {
       const admission = parseModelInvocationAdmission({ command, requestDigest, actor, authorization,
         definition: currentBinding.definition, activation, profile: currentProfile, profileDigest: modelInvocationProfileDigest(currentProfile),
         invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now() });
+      const responseBound = delivery ? native.responseBytesUpperBound?.(prepared) : undefined;
+      if (delivery) assertInvocationDeliveryFit(createModelInvocationClaimReceipt(admission), responseBound, delivery);
       const claimResult = checkedResult(await store.claim(admission), command, requestDigest, actor, admission);
-      if (claimResult.replayed) return claimResult;
+      if (claimResult.replayed) return checkInvocationResultDelivery(claimResult, delivery);
       let response;
       try {
         response = parseModelInvocationNativeResponse(await native.send(prepared, signal));
+        if (responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
+          throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
+        }
       } catch {
         try {
           const receipt = verifyModelInvocationReceipt(await store.recordUnknown(claimResult.receipt.claim, 'transport-error', this.runtime.now()));

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -82,8 +83,11 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 1,
       definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 5, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
-  const configPath = join(project, '.deckent/config.json'); await writeFile(configPath, JSON.stringify({ mode: 'api', layout: { root: data },
-    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] } }), { mode: 0o600 });
+  const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
+    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] } };
+  const writeConfig = async (responseMaxBytes = 1_048_576) => writeFile(configPath, JSON.stringify({ ...config,
+    mcp: { responseMaxBytes } }), { mode: 0o600 });
+  await writeConfig();
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   const identity = readLocalOsIdentity(), principal = { ...identity, scopeIds: ['scope'] };
   const activation = new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
@@ -98,6 +102,11 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const command = (commandId: string, scopeId = 'scope') => ({ schemaVersion: 1, commandId, scopeId, reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
     nativeRequest: { model: 'native-model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
+  const invocationCount = (commandId: string) => {
+    const db = new DatabaseSync(ledger, { readOnly: true });
+    try { return db.prepare('SELECT count(*) AS count FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.count; }
+    finally { db.close(); }
+  };
   const firstPath = join(root, 'first.json'); await writeFile(firstPath, JSON.stringify(command('first')), { mode: 0o600 });
   const sdkFirst = await callSdk<ModelInvocationResult>(project, env, 'invoke', firstPath);
   expect(sdkFirst).toMatchObject({ ok: true, value: { replayed: false, receipt: { outcome: { state: 'responded' } } } }); expect(bodies).toHaveLength(1);
@@ -110,23 +119,50 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const replay = await callMcp(project, env, 'invoke_model', command('first'));
   expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toEqual({ replayed: true, receipt: first }); expect(bodies).toHaveLength(1);
 
+  const capCommand = command('mcp-result-cap'); const capPath = join(root, 'mcp-result-cap.json');
+  await writeFile(capPath, JSON.stringify(capCommand), { mode: 0o600 }); await writeConfig(1024);
+  const rejectedBeforeClaim = await callMcp(project, env, 'invoke_model', capCommand);
+  expect(rejectedBeforeClaim.isError).toBe(true);
+  expect(JSON.parse((rejectedBeforeClaim.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
+    code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
+  expect(invocationCount(capCommand.commandId)).toBe(0); expect(bodies).toHaveLength(1);
+  await writeConfig();
+  const capAccepted = await callMcp(project, env, 'invoke_model', capCommand);
+  expect(capAccepted.isError).not.toBe(true);
+  expect(capAccepted.structuredContent).toMatchObject({ replayed: false }); expect(bodies).toHaveLength(2);
+  const capReceipt = (capAccepted.structuredContent as ModelInvocationResult).receipt;
+  await writeConfig(1024);
+  const cappedReplay = await callMcp(project, env, 'invoke_model', capCommand);
+  expect(cappedReplay.isError).toBe(true);
+  expect(JSON.parse((cappedReplay.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
+    code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
+  const cappedInspection = await callMcp(project, env, 'inspect_model_invocation', { schemaVersion: 1, scopeId: 'scope',
+    invocationId: capReceipt.claim.invocationId, reference });
+  expect(cappedInspection.isError).toBe(true);
+  expect(JSON.parse((cappedInspection.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
+    code: 'MCP_RESPONSE_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
+  expect(bodies).toHaveLength(2);
+  expect(await callSdk<ModelInvocationResult>(project, env, 'invoke', capPath)).toEqual({ ok: true, value: { replayed: true, receipt: capReceipt } });
+  expect(bodies).toHaveLength(2);
+  await writeConfig();
+
   const secondPath = join(root, 'second.json'); await writeFile(secondPath, JSON.stringify(command('second')), { mode: 0o600 });
   const cliSecond = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', secondPath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
-  expect(cliSecond.replayed).toBe(false); expect(bodies).toHaveLength(2);
+  expect(cliSecond.replayed).toBe(false); expect(bodies).toHaveLength(3);
   const inspectSecond = await callMcp(project, env, 'inspect_model_invocation', { schemaVersion: 1, scopeId: 'scope',
     invocationId: cliSecond.receipt.claim.invocationId, reference });
   expect(inspectSecond.isError).not.toBe(true); expect((inspectSecond.structuredContent as ModelInvocationInspection).invocation).toEqual(cliSecond.receipt);
 
   await writePolicy(false); const deniedPath = join(root, 'denied.json'); await writeFile(deniedPath, JSON.stringify(command('denied')), { mode: 0o600 });
-  expect(await callSdk(project, env, 'invoke', deniedPath)).toEqual({ ok: false, code: 'POLICY_DENIED' }); expect(bodies).toHaveLength(2);
+  expect(await callSdk(project, env, 'invoke', deniedPath)).toEqual({ ok: false, code: 'POLICY_DENIED' }); expect(bodies).toHaveLength(3);
   const wrongPath = join(root, 'wrong.json'); await writeFile(wrongPath, JSON.stringify(command('wrong', 'wrong-scope')), { mode: 0o600 });
   await expect(execute(process.execPath, [cli, 'models', 'invoke', '--input', wrongPath, '--json'],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
   await writePolicy(true); response = 'oversize'; const largePath = join(root, 'large.json'); await writeFile(largePath, JSON.stringify(command('large')), { mode: 0o600 });
   const large = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', largePath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
-  expect(large.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(bodies).toHaveLength(3);
+  expect(large.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(bodies).toHaveLength(4);
   expect(proxyRequests).toBe(0);
   expect((await readFile(ledger)).includes(Buffer.from('prompt-first'))).toBe(false);
 });

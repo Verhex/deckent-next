@@ -29,7 +29,7 @@ function receipt(input: ModelInvocationAdmission, outcome: ModelInvocationReceip
       requestDigest: input.requestDigest, profileDigest: input.profileDigest }, claimedAtMs: input.claimedAtMs, outcome };
 }
 function fixture(options: { prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
-  denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean } = {}) {
+  denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint } = {}) {
   let stored: ModelInvocationReceipt | null = null, policy = 0, selectedProfile: ModelInvocationProfile = profile, invocationSequence = 0;
   let waitingLoads = 0, releaseLoads: (() => void) | undefined;
   const loadBarrier = new Promise<void>(resolve => { releaseLoads = resolve; });
@@ -51,6 +51,7 @@ function fixture(options: { prepare?: () => void; sendError?: boolean; responseW
       catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
     async () => ({ async loadRecord() { calls.activations++; return activation; }, close() {} }),
     { async resolve() { calls.profiles++; return selectedProfile; } }, { resolve() { return {
+      ...(options.responseBound === undefined ? {} : { responseBytesUpperBound: () => options.responseBound! }),
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
       async send() { calls.sends++; if (options.sendError) throw new Error('RESET');
         return { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
@@ -59,6 +60,70 @@ function fixture(options: { prepare?: () => void; sendError?: boolean; responseW
 }
 
 describe('model invocation application', () => {
+  it('rejects unsupported and insufficient delivery before any durable claim or native effect', async () => {
+    const unsupported = fixture();
+    await expect(unsupported.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_DELIVERY_UNAVAILABLE' });
+    expect(unsupported.calls).toMatchObject({ claims: 0, sends: 0 });
+    const small = fixture({ responseBound: 100n });
+    await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: 100 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(small.calls).toMatchObject({ claims: 0, sends: 0 });
+    const huge = fixture({ responseBound: BigInt(Number.MAX_SAFE_INTEGER) * 2n });
+    await expect(huge.app.invoke(command, undefined, undefined, { maxResultBytes: Number.MAX_SAFE_INTEGER }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(huge.calls).toMatchObject({ claims: 0, sends: 0 });
+  });
+
+  it('delivers a complete bounded result and rejects config-shrunk replay without resending', async () => {
+    const f = fixture({ responseBound: 100n });
+    const first = await f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 });
+    expect(first.receipt.outcome?.state).toBe('responded');
+    const actual = Buffer.byteLength(JSON.stringify({ ...first, replayed: true }), 'utf8');
+    expect(await f.app.invoke(command, undefined, undefined, { maxResultBytes: actual })).toEqual({ ...first, replayed: true });
+    await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: actual - 1 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(f.calls).toMatchObject({ claims: 1, sends: 1 });
+  });
+
+  it('accepts the exact proven preclaim capacity and rejects one byte less without effects', async () => {
+    const probe = await fixture().app.invoke(command);
+    const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...probe.receipt,
+      outcome: { schemaVersion: 1, state: 'responded', response: null, observedAtMs: Number.MAX_SAFE_INTEGER } } }), 'utf8') - 4 + 100;
+    const unknown = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...probe.receipt,
+      outcome: { schemaVersion: 1, state: 'unknown', reason: 'transport-error', observedAtMs: Number.MAX_SAFE_INTEGER } } }), 'utf8');
+    const required = Math.max(responded, unknown), small = fixture({ responseBound: 100n });
+    await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: required - 1 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(small.calls).toMatchObject({ claims: 0, sends: 0 });
+    const exact = fixture({ responseBound: 100n });
+    expect((await exact.app.invoke(command, undefined, undefined, { maxResultBytes: required })).receipt.outcome?.state).toBe('responded');
+    expect(exact.calls).toMatchObject({ claims: 1, sends: 1 });
+  });
+
+  it('preserves unknown custody when an adapter violates its declared response bound', async () => {
+    const f = fixture({ responseBound: 1n });
+    const result = await f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 });
+    expect(result.receipt.outcome?.state).toBe('unknown');
+    expect((await f.app.invoke(command)).receipt).toEqual(result.receipt);
+    expect(f.calls).toMatchObject({ claims: 1, sends: 1 });
+  });
+
+  it('exact-checks concurrent historical replay even when its pinned profile is larger than the fresh admission', async () => {
+    const f = fixture({ responseBound: 100n }), first = await f.app.invoke(command);
+    const historicalProfile = { ...first.receipt.profile,
+      adapter: { ...first.receipt.profile.adapter, definition: { text: 'İ😀\n'.repeat(3000) } } };
+    const digest = modelInvocationProfileDigest(historicalProfile);
+    const historical = { ...first.receipt, profile: historicalProfile, profileDigest: digest,
+      claim: { ...first.receipt.claim, profileDigest: digest } };
+    f.store.loadReceipt = async () => null;
+    f.store.claim = async () => ({ replayed: true, receipt: historical });
+    await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(f.calls.sends).toBe(1);
+    expect((await f.app.invoke(command)).receipt).toEqual(historical);
+    expect(f.calls.sends).toBe(1);
+  });
   it('samples policy again after preparation, claims once, sends once, and replays without live dependencies', async () => {
     const f = fixture(), first = await f.app.invoke(command);
     expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded' } } });
@@ -68,7 +133,8 @@ describe('model invocation application', () => {
   });
 
   it('does not claim or send when the last policy sample denies after pure preparation', async () => {
-    const f = fixture({ denySecond: true }); await expect(f.app.invoke(command)).rejects.toThrow('DENIED');
+    const f = fixture({ denySecond: true });
+    await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: 1 })).rejects.toThrow('DENIED');
     expect(f.calls).toMatchObject({ claims: 0, sends: 0 });
   });
 
