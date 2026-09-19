@@ -16,7 +16,7 @@ export async function healCorruptProjectConfig(path: string, corrupt: Extract<Js
     await assertConfigPreimage(path, corrupt.digest);
     const config = createDefaultConfig();
     await writeJsonAtomic(path, config);
-    await pruneConfigBackups(path);
+    await pruneConfigBackups(path, 3, backupPath);
     return { config, backupPath };
   }, 2_000, options);
 }

@@ -1,5 +1,5 @@
 import { open, unlink, readdir, lstat } from 'node:fs/promises';
-import { dirname, basename, join } from 'node:path';
+import { dirname, basename, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { withConfigWriteLock, type ConfigLockOptions } from './lock.js';
 export { withConfigWriteLock } from './lock.js';
@@ -24,14 +24,20 @@ export async function backupConfig(path: string, text: string): Promise<string> 
   try { await handle.writeFile(text); await handle.sync(); } finally { await handle.close(); }
   return target;
 }
-export async function pruneConfigBackups(path: string, keep = 3): Promise<void> {
+export async function pruneConfigBackups(path: string, keep = 3, protectedBackup?: string): Promise<void> {
   if (!Number.isSafeInteger(keep) || keep < 1) throw ErrorRegistry.createError('CLI_USAGE');
   const prefix = `${basename(path)}.bak.`;
   const names = (await readdir(dirname(path))).filter(name => name.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}T[\dT.Z-]+\.[a-f0-9-]{36}$/.test(name.slice(prefix.length))).sort().reverse();
-  for (const name of names.slice(keep)) {
-    const target = join(dirname(path), name);
-    if ((await lstat(target)).isFile()) await unlink(target);
+  const regular: string[] = [];
+  for (const name of names) if ((await lstat(join(dirname(path), name))).isFile()) regular.push(name);
+  const protectedName = protectedBackup === undefined ? undefined : basename(protectedBackup);
+  if (protectedBackup !== undefined && (resolve(dirname(protectedBackup)) !== resolve(dirname(path)) || !regular.includes(protectedName!))) {
+    throw ErrorRegistry.createError('CLI_USAGE');
   }
+  // Preserve this healing receipt even after clock rollback or same-millisecond UUID ties.
+  // Prior backups keep filename ordering; that ordering is not a causal clock.
+  const prior = regular.filter(name => name !== protectedName);
+  for (const name of prior.slice(keep - (protectedName === undefined ? 0 : 1))) await unlink(join(dirname(path), name));
 }
 export async function writeConfig(path: string, config: JsonRecord, expectedDigest?: string | null, options: ConfigLockOptions = {}): Promise<void> {
   validateConfig(deepMerge(createDefaultConfig(), versionedConfig(config)));

@@ -235,6 +235,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   INSTALLATION_JOURNAL_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_UNSAFE', p, l) }) },
   INSTALLATION_JOURNAL_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_CONFLICT', p, l) }) },
   INSTALLATION_JOURNAL_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_UNAVAILABLE', p, l) }) },
+  INSTALLATION_JOURNAL_BUSY: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_BUSY', p, l) }) },
   INSTALLATION_JOURNAL_OUTCOME_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_OUTCOME_UNKNOWN', p, l) }) },
   INSTALLATION_JOURNAL_EXPIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_EXPIRED', p, l) }) },
   INSTALLATION_JOURNAL_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_UNSUPPORTED', p, l) }) },

@@ -809,7 +809,8 @@
       "dependencies": [
         "src/platform/core/bootstrap-state",
         "src/platform/core/config",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/errors"
       ],
       "plan": "REAL-INIT/P3D-JOURNAL"
     },

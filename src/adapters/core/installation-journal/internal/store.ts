@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { BootstrapStateError, encodeBootstrapJournal, observeBootstrapState, productResourcePath,
+import { BootstrapStateError, DeckentError, encodeBootstrapJournal, observeBootstrapState, productResourcePath,
   resolveProductLayout, withConfigWriteLock, type BootstrapJournalPayload, type BootstrapObservation } from '#platform/index.js';
 
 export type InstallationJournalErrorCode = 'INSTALLATION_JOURNAL_INVALID' | 'INSTALLATION_JOURNAL_UNSAFE'
-  | 'INSTALLATION_JOURNAL_CONFLICT' | 'INSTALLATION_JOURNAL_UNAVAILABLE'
+  | 'INSTALLATION_JOURNAL_CONFLICT' | 'INSTALLATION_JOURNAL_UNAVAILABLE' | 'INSTALLATION_JOURNAL_BUSY'
   | 'INSTALLATION_JOURNAL_OUTCOME_UNKNOWN' | 'INSTALLATION_JOURNAL_EXPIRED' | 'INSTALLATION_JOURNAL_UNSUPPORTED';
 export class InstallationJournalError extends Error {
   constructor(readonly code: InstallationJournalErrorCode) { super(code); this.name = 'InstallationJournalError'; }
@@ -22,6 +22,9 @@ export interface InstallationJournalSession {
 
 function unavailable(error: unknown): never {
   if (error instanceof InstallationJournalError) throw error;
+  if (error instanceof DeckentError && error.code === 'CONFIG_WRITE_LOCKED') {
+    throw new InstallationJournalError('INSTALLATION_JOURNAL_BUSY');
+  }
   if (error instanceof BootstrapStateError) {
     const mapped = error.code === 'BOOTSTRAP_STATE_UNSAFE' ? 'INSTALLATION_JOURNAL_UNSAFE'
       : error.code === 'BOOTSTRAP_STATE_CHANGED' ? 'INSTALLATION_JOURNAL_CONFLICT'

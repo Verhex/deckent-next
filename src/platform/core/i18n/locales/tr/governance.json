@@ -866,6 +866,7 @@
   "error.INSTALLATION_JOURNAL_UNSAFE": "Kurulum günlüğü yolu sahiplik koşullarını karşılamıyor.",
   "error.INSTALLATION_JOURNAL_CONFLICT": "Kurulum durumu değişti; bekleyen işlem kabul edilmedi.",
   "error.INSTALLATION_JOURNAL_UNAVAILABLE": "Kurulum günlüğüne güvenle erişilemedi veya kilit alınamadı.",
+  "error.INSTALLATION_JOURNAL_BUSY": "Başka bir kurulum veya yapılandırma değişikliği sürüyor. Tamamlandıktan sonra yeniden deneyin.",
   "error.INSTALLATION_JOURNAL_OUTCOME_UNKNOWN": "Günlük yazımı gerçekleşmiş olabilir; kayıtlı kurulumu inceleyip sürdürün.",
   "error.INSTALLATION_JOURNAL_EXPIRED": "Kurulum günlüğü oturumu sona erdi.",
   "error.INSTALLATION_JOURNAL_UNSUPPORTED": "Bu platformda kurulum günlüğü yayımlama desteklenmiyor.",

@@ -866,6 +866,7 @@
   "error.INSTALLATION_JOURNAL_UNSAFE": "The installation journal path does not satisfy ownership checks.",
   "error.INSTALLATION_JOURNAL_CONFLICT": "Installation state changed; the pending operation was not accepted.",
   "error.INSTALLATION_JOURNAL_UNAVAILABLE": "The installation journal could not be accessed or locked safely.",
+  "error.INSTALLATION_JOURNAL_BUSY": "Another setup or configuration change is still in progress. Try again after it finishes.",
   "error.INSTALLATION_JOURNAL_OUTCOME_UNKNOWN": "The journal write may have occurred; inspect and resume the recorded installation.",
   "error.INSTALLATION_JOURNAL_EXPIRED": "The installation journal session has ended.",
   "error.INSTALLATION_JOURNAL_UNSUPPORTED": "Installation journal publication is unsupported on this platform.",

@@ -52,6 +52,20 @@ it('serializes actual concurrent callbacks through the fixed config writer lock'
   release(); await Promise.all([first, second]); expect(secondEntered).toBe(true);
 });
 
+it('returns a typed bounded busy hold without entering the losing callback, then admits a fresh call after release', async () => {
+  const root = await project(); let release!: () => void, loserEntered = false, retryEntered = false;
+  const held = new Promise<void>(resolve => { release = resolve; }); let entered!: () => void;
+  const firstEntered = new Promise<void>(resolve => { entered = resolve; });
+  const first = withInstallationJournal(root, options, async () => { entered(); await held; }); await firstEntered;
+  try {
+    await expect(withInstallationJournal(root, { timeoutMs: 25 }, async () => { loserEntered = true; }))
+      .rejects.toMatchObject({ code: 'INSTALLATION_JOURNAL_BUSY' });
+    expect(loserEntered).toBe(false);
+  } finally { release(); await first; }
+  await withInstallationJournal(root, { timeoutMs: 25 }, async () => { retryEntered = true; });
+  expect(retryEntered).toBe(true);
+});
+
 it('serializes overlapping writes in one session so the same expected generation cannot win twice', async () => {
   const root = await project();
   await expect(withInstallationJournal(root, options, async session => {
