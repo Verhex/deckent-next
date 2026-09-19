@@ -1,1 +1,1 @@
-export { loadConfiguredScopeContext } from './internal/context.js';
+export { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from './internal/context.js';

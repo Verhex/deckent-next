@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
+import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConfiguredModel,
+  inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, ModelInvocationStoreError, modelInvocationProfileDigest, modelInvocationTargetId,
@@ -66,6 +67,31 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
 }
 
 describe('configured native model invocation', () => {
+  it('binds peer invocation and inspection to current policy without an ambient-identity fallback', async () => {
+    const f = await fixture(), identity = readLocalOsIdentity();
+    const peer = { pid: process.pid, uid: Number(identity.subject), gid: process.getgid!(), assurance: 'linux-so-peercred' as const };
+    const input = f.command('peer-call'), before = await readFile(f.ledger);
+    for (const invalid of [undefined, { ...peer, uid: peer.uid + 1 }, { ...peer, assurance: 'wire-actor' }]) {
+      await expect(invokePeerConfiguredModel(f.project, input, invalid as never, { env: f.env }))
+        .rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
+      await expect(inspectPeerConfiguredModelInvocation(f.project, { schemaVersion: 1, scopeId: 'scope',
+        invocationId: 'absent', reference }, invalid as never, { env: f.env }))
+        .rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
+    }
+    // No valid project/config exists here: peer denial must occur before trying to load either.
+    await expect(invokePeerConfiguredModel(join(f.project, 'not-initialized'), input, undefined as never, { env: f.env }))
+      .rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
+    expect(f.requests).toBe(0); expect(await readFile(f.ledger)).toEqual(before);
+    const result = await invokePeerConfiguredModel(f.project, input, peer, { env: f.env }, { maxResultBytes: 100_000 });
+    expect(result.receipt.actor).toEqual(identity); expect(f.requests).toBe(1);
+    const query = { schemaVersion: 1 as const, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference };
+    expect((await inspectPeerConfiguredModelInvocation(f.project, query, peer, { env: f.env })).invocation).toEqual(result.receipt);
+    await f.policy(false);
+    await expect(invokePeerConfiguredModel(f.project, input, peer, { env: f.env })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(inspectPeerConfiguredModelInvocation(f.project, query, peer, { env: f.env })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.requests).toBe(1);
+  });
+
   it('records one bounded native response, replays without a request and exposes exact durable inspection', async () => {
     const f = await fixture(), first = await invokeConfiguredModel(f.project, f.command('one'), { env: f.env });
     expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded', response: { native: { model: 'native-model' } } } } });

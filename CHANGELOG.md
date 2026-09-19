@@ -360,3 +360,5 @@ PROVIDERS/A3C: shared native invocation and inspection through SDK, bounded CLI 
 BIN/ENTRY: installed CLI/MCP entry points share main-module detection; symlink startup and import behavior covered by real process tests.
 
 PROVIDERS/A3D: reject undeliverable model results before invocation claim or network send; preserve receipts and expose MCP recovery guidance without resending.
+
+PROVIDERS/A4A: share native peer authentication and current scope policy for model invocation; validate correlated receipts without relaxing inner limits.

@@ -6,4 +6,4 @@ export { startLocalRuntimeSocketServer } from './internal/server.js';
 export type { LocalRuntimeSocketServer, RuntimeServiceHandler } from './internal/server.js';
 export { requestLocalRuntime } from './internal/client.js';
 export type { LocalPeerIdentity } from './internal/peer.js';
-export { LocalPeerShutdownAuthentication } from './internal/authentication.js';
+export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './internal/authentication.js';

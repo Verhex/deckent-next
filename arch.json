@@ -902,6 +902,7 @@
       "dependencies": [
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",
+        "src/adapters/core/local-runtime-socket",
         "src/composition/core/policy",
         "src/domain/core/policy",
         "src/engine/core/policy",
@@ -966,6 +967,7 @@
     },
     "src/composition/core/model-invocation": {
       "dependencies": [
+        "src/adapters/core/local-runtime-socket",
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/sqlite-model-activation",
         "src/adapters/core/sqlite-model-invocation",

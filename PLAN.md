@@ -633,3 +633,7 @@ BIN/ENTRY DONE — Fable2073 PASS; shared main-module detection fixes installed 
 PROVIDERS/A3D REVIEW — preclaim complete-result capacity from final admission and adapter-owned bound, BigInt arithmetic and exact historical/concurrent replay; MCP-only recovery guidance. Corrects C-a delivery defect; no runtime ownership or paid-provider readiness claim.
 
 PROVIDERS/A3D DONE — Fable2075 PASS closes C-a: full-result fit before claim/send, permanent compiled MCP regression and explicit recovery guidance. Full1038/198+24native+18host; no real provider or runtime ownership claim. Rejected-response evidence remains B-b; A4 separate.
+
+PROVIDERS/A4A REVIEW — shared local peer identity before scoped policy/model invocation and strict engine-owned command/query result correlation. Native runtime wire/client/server integration and disconnect proof follow A4B; not yet implemented.
+
+PROVIDERS/A4A DONE — Fable2080 PASS: verified same-UID native peer before policy/config/store, shared scoped invocation, strict command/query receipt correlation. Full1045/199+24native+18host. Public service wiring is A4B; replay metadata is advisory, multi-user identity remains unsupported.

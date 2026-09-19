@@ -1,2 +1,2 @@
-export { invokeConfiguredModel } from './internal/invoke.js';
-export { inspectConfiguredModelInvocation } from './internal/inspect.js';
+export { invokeConfiguredModel, invokePeerConfiguredModel } from './internal/invoke.js';
+export { inspectConfiguredModelInvocation, inspectPeerConfiguredModelInvocation } from './internal/inspect.js';

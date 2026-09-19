@@ -1,11 +1,19 @@
 import { userInfo } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { LocalPeerShutdownAuthentication, readLocalOsIdentity, type LocalPeerIdentity } from '../../../src/adapters/index.js';
+import { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity, readLocalOsIdentity, type LocalPeerIdentity } from '../../../src/adapters/index.js';
 
 const os = userInfo();
 const peer: LocalPeerIdentity = Object.freeze({ pid: 123, uid: os.uid, gid: os.gid, assurance: 'linux-so-peercred' });
 
 describe('local peer shutdown authentication', () => {
+  it('shares kernel peer identity verification without granting a policy scope', () => {
+    const identity = verifyLocalPeerIdentity(peer);
+    expect(identity).toEqual(readLocalOsIdentity()); expect(identity).not.toHaveProperty('scopeIds');
+    expect(() => verifyLocalPeerIdentity(peer, { subject: String(peer.uid) })).toThrow('AUTHENTICATION_REQUIRED');
+    expect(() => verifyLocalPeerIdentity(undefined as never)).toThrow('AUTHENTICATION_REQUIRED');
+    expect(() => verifyLocalPeerIdentity({ ...peer, uid: peer.uid + 1 })).toThrow('AUTHENTICATION_REQUIRED');
+    expect(() => verifyLocalPeerIdentity({ ...peer, assurance: 'client-declared' } as never)).toThrow('AUTHENTICATION_REQUIRED');
+  });
   it('binds native peer evidence to the current OS principal and externally supplied scopes', async () => {
     const actor = await new LocalPeerShutdownAuthentication(peer, ['service-scope']).verify(undefined);
     expect(actor).toEqual({

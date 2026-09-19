@@ -2,19 +2,28 @@ import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand } from '#domain/index.js';
 import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, createOpenAiChatNativePort,
-  OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION } from '#adapters/index.js';
+  OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { loadInvocationContext } from './context.js';
+import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
   options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
+  return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options), signal, delivery);
+}
+/** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
+export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
+  peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery) {
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), undefined, delivery);
+}
+async function invoke(input: ModelInvocationCommand,
+  loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
   try {
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data as ModelInvocationCommand;
-    const context = await loadInvocationContext(projectRoot, command.scopeId, options);
+    const context = await loadContext(command.scopeId);
     const application = new ModelInvocationApplication({ async verify() { return context.principal; } },
       new ModelInvocationPolicyAuthorization(context.policy),
       new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } }),
