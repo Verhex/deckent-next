@@ -36,6 +36,9 @@ function walk(dir, predicate, out = []) {
 const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
 const srcFiles = walk(join(ROOT, 'src'), isTs);
 const appFiles = walk(join(ROOT, 'apps'), isTs);
+const tsConfig = ts.parseJsonConfigFileContent(JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')), ts.sys, ROOT);
+const program = ts.createProgram(tsConfig.fileNames, tsConfig.options);
+const checker = program.getTypeChecker();
 const packageNames = Object.keys(arch.packages);
 // Current domain/runtime contracts have one active shape. A second source module
 // or public V2 name creates two authorities; migration history is the explicit
@@ -75,6 +78,12 @@ function unitOf(file) {
   return { pkg, tier: third, unit: parts.length >= 5 ? fourth : null, rootFile: null };
 }
 
+const unitId = info => info?.unit ? `src/${info.pkg}/${info.tier}/${info.unit}` : null;
+const dependencyId = file => {
+  const info = unitOf(file);
+  return unitId(info) ?? (info?.pkg && info.tier === null ? `src/${info.pkg}` : null);
+};
+
 function packageOf(file) {
   const r = rel(file);
   if (r.startsWith('src/')) {
@@ -101,6 +110,67 @@ function importsOf(file) {
     out.push({ spec, target, aliased: spec.startsWith(aliasPrefix), line: src.slice(0, m.index).split('\n').length });
   }
   return out;
+}
+
+function resolvedSymbol(node) {
+  let symbol = checker.getSymbolAtLocation(node);
+  if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+  return symbol;
+}
+
+function symbolDependency(symbol) {
+  for (const declaration of symbol?.declarations ?? []) {
+    const dependency = dependencyId(declaration.getSourceFile().fileName);
+    if (dependency) return dependency;
+  }
+  return null;
+}
+
+function effectiveDependencies(file) {
+  const sourceFile = program.getSourceFile(file);
+  const dependencies = new Set();
+  if (!sourceFile) return dependencies;
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+      let resolved = false;
+      const add = symbol => { const dependency = symbolDependency(symbol); if (dependency) { dependencies.add(dependency); resolved = true; } };
+      if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+        for (const element of statement.exportClause.elements) add(resolvedSymbol(element.name));
+      } else {
+        const moduleSymbol = resolvedSymbol(statement.moduleSpecifier);
+        for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
+      }
+      if (!resolved) {
+        const specifier = statement.moduleSpecifier.text;
+        const target = specifier.startsWith(arch.imports?.aliasPrefix ?? '#')
+          ? resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'))
+          : specifier.startsWith('.') ? resolve(dirname(file), specifier.replace(/\.js$/, '.ts')) : null;
+        const dependency = target ? dependencyId(target) : null;
+        if (dependency) dependencies.add(dependency);
+      }
+      continue;
+    }
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const clause = statement.importClause;
+    let resolved = false;
+    const add = symbol => { const dependency = symbolDependency(symbol); if (dependency) { dependencies.add(dependency); resolved = true; } };
+    if (clause?.name) add(resolvedSymbol(clause.name));
+    if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      for (const element of clause.namedBindings.elements) add(resolvedSymbol(element.name));
+    } else if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+      const moduleSymbol = resolvedSymbol(statement.moduleSpecifier);
+      for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
+    }
+    if (!resolved) {
+      const specifier = statement.moduleSpecifier.text;
+      let target;
+      if (specifier.startsWith(arch.imports?.aliasPrefix ?? '#')) target = resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'));
+      else if (specifier.startsWith('.')) target = resolve(dirname(file), specifier.replace(/\.js$/, '.ts'));
+      const dependency = target ? dependencyId(target) : null;
+      if (dependency) dependencies.add(dependency);
+    }
+  }
+  return dependencies;
 }
 
 // ---- 0: one active contract shape (migration history is exempt)
@@ -153,6 +223,16 @@ for (const file of srcFiles) {
 }
 
 // ---- 1 + 2: direction, public API, internal isolation, observability, apps
+const discoveredUnits = new Set();
+const observedUnitDependencies = new Map();
+for (const file of srcFiles) {
+  const id = unitId(unitOf(file));
+  if (id) {
+    discoveredUnits.add(id);
+    if (!observedUnitDependencies.has(id)) observedUnitDependencies.set(id, new Set());
+    for (const dependency of effectiveDependencies(file)) if (dependency !== id) observedUnitDependencies.get(id).add(dependency);
+  }
+}
 for (const file of [...srcFiles, ...appFiles]) {
   const from = packageOf(file);
   if (from.startsWith('(unknown')) fail('layout', rel(file), `file is outside a declared package (${from}); declare it in arch.json`);
@@ -183,6 +263,81 @@ for (const file of [...srcFiles, ...appFiles]) {
     if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
     const importedBy = arch.packages[to]?.importedBy;
     if (Array.isArray(importedBy) && !importedBy.includes(from)) fail('read-only', `${rel(file)}:${imp.line}`, `${to} may only be imported by [${importedBy.join(', ') || 'nobody'}]`);
+  }
+}
+
+// Every unit declares its exact static dependencies and an accountable PLAN row. The graph has no baseline:
+// discovered and declared units are a bijection, and every cycle is a violation.
+const declaredUnits = arch.units ?? {};
+const planText = existsSync(join(ROOT, 'PLAN.md')) ? readFileSync(join(ROOT, 'PLAN.md'), 'utf8') : '';
+const planIds = new Set([...planText.matchAll(/^\|\s*([^|\s][^|]*?)\s*\|/gm)].map(match => match[1].trim()).filter(id => id !== 'ID' && id !== 'Card'));
+for (const unit of discoveredUnits) if (!Object.hasOwn(declaredUnits, unit)) fail('unit-declaration', unit, 'unit is missing from arch.json units');
+for (const [unit, declaration] of Object.entries(declaredUnits)) {
+  if (!discoveredUnits.has(unit)) fail('unit-declaration', unit, 'declared unit does not exist');
+  if (!planIds.has(declaration.plan)) fail('unit-plan', unit, `unknown PLAN row "${declaration.plan}"`);
+  const declared = new Set(declaration.dependencies ?? []);
+  if (declared.size !== (declaration.dependencies ?? []).length) fail('unit-dependency', unit, 'duplicate declared dependency');
+  for (const dependency of declared) {
+    const valid = discoveredUnits.has(dependency) || /^src\/[^/]+$/.test(dependency) && packageNames.includes(dependency.slice(4));
+    if (!valid) fail('unit-dependency', unit, `unknown dependency ${dependency}`);
+  }
+  const observed = observedUnitDependencies.get(unit) ?? new Set();
+  for (const dependency of observed) if (!declared.has(dependency)) fail('unit-dependency', unit, `undeclared dependency ${dependency}`);
+  for (const dependency of declared) if (!observed.has(dependency)) fail('unit-dependency', unit, `stale dependency ${dependency}`);
+}
+const visitState = new Map(), visitStack = [];
+function visitUnit(unit) {
+  visitState.set(unit, 1); visitStack.push(unit);
+  for (const dependency of observedUnitDependencies.get(unit) ?? []) {
+    if (!discoveredUnits.has(dependency)) continue;
+    if (!visitState.has(dependency)) visitUnit(dependency);
+    else if (visitState.get(dependency) === 1) {
+      const start = visitStack.indexOf(dependency);
+      fail('unit-cycle', unit, visitStack.slice(start).concat(dependency).join(' → '));
+    }
+  }
+  visitStack.pop(); visitState.set(unit, 2);
+}
+for (const unit of discoveredUnits) if (!visitState.has(unit)) visitUnit(unit);
+
+// Composition may validate schemas and carry domain types, but domain decision functions belong behind
+// application services. Resolve re-exports with the TypeScript checker so aliases cannot hide their origin.
+if (arch.composition?.enforceDomainDecisionImports) {
+  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/'))
+    && checker.getTypeOfSymbolAtLocation(symbol, node).getCallSignatures().length);
+  for (const sourceFile of program.getSourceFiles()) {
+    if (!rel(sourceFile.fileName).startsWith('src/composition/')) continue;
+    const namespaces = new Map();
+    for (const statement of sourceFile.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly) continue;
+      const check = (node, name) => {
+        const symbol = resolvedSymbol(node);
+        if (!isDomainCallable(symbol, node)) return;
+        const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+        fail('composition-purity', `${rel(sourceFile.fileName)}:${line}`, `domain decision function ${name} must be invoked by an application service`);
+      };
+      if (clause.name) check(clause.name, clause.name.text);
+      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+        for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) check(element.name, element.name.text);
+      } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+        namespaces.set(clause.namedBindings.name.text, clause.namedBindings.name);
+      }
+    }
+    const visitNamespaceAccess = node => {
+      if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && namespaces.has(node.expression.text)) checkNamespaceMember(node.name, node.name.text);
+      if (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) && namespaces.has(node.expression.text)
+        && ts.isStringLiteral(node.argumentExpression)) checkNamespaceMember(node.argumentExpression, node.argumentExpression.text);
+      ts.forEachChild(node, visitNamespaceAccess);
+    };
+    const checkNamespaceMember = (node, name) => {
+      const symbol = resolvedSymbol(node);
+      if (!isDomainCallable(symbol, node)) return;
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      fail('composition-purity', `${rel(sourceFile.fileName)}:${line}`, `domain decision function ${name} must be invoked by an application service`);
+    };
+    visitNamespaceAccess(sourceFile);
   }
 }
 
@@ -339,7 +494,7 @@ for (const file of tracked) {
 }
 for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
 
-// ---- 8: vocabulary (owner: the product says run, never sprint)
+// ---- 8: canonical product vocabulary
 const vocab = arch.vocabulary;
 if (vocab?.enforce) {
   const vocabRes = vocab.forbidden.map(p => new RegExp(p, 'g'));

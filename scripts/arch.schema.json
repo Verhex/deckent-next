@@ -7,6 +7,10 @@
     "packages",
     "apps",
     "tiers",
+    "imports",
+    "units",
+    "composition",
+    "vocabulary",
     "budgets",
     "i18n",
     "literals",
@@ -173,6 +177,46 @@
         },
         "note": {
           "type": "string"
+        }
+      }
+    },
+    "units": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^src/[^/]+/[^/]+/[^/]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dependencies",
+          "plan"
+        ],
+        "properties": {
+          "dependencies": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^src/[^/]+(?:/[^/]+/[^/]+)?$"
+            }
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enforceDomainDecisionImports"
+      ],
+      "properties": {
+        "enforceDomainDecisionImports": {
+          "type": "boolean"
         }
       }
     },

@@ -12,8 +12,9 @@ export { ErrorRegistry, ERROR_CODES, createCrossVerifyContractError, createExecu
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
 export type { ExitCode } from '#platform/core/errors/index.js';
 export { lintErrorRegistry, assertErrorRegistry } from '#platform/core/errors/index.js';
-export { formatHumanError, redactSensitive, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/errors/index.js';
-export type { CrashArtifactV1 } from '#platform/core/errors/index.js';
+export { redactSensitive } from '#platform/core/errors/index.js';
+export { formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal } from '#platform/core/crash-reporting/index.js';
+export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
 export { ENVIRONMENT_KEYS, envValue } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';

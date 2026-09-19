@@ -60,7 +60,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Accepted size policy: 1,500 lines maximum per file including native C; 800 is a design target, not a second
   hard ceiling. Current 800-line gates remain until FOUNDATION updates their scope and settings coherently.
   No silent native exemption. Variable product policies/catalogs are data; protocol constants and safety
-  invariants are explicit versioned code contracts. Unit cohesion matters beyond the existing 4,000-line budget.
+  invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,000-line unit budget.
 
 ### Task-centered execution — owner checkpoint 2026-09-17
 
@@ -299,3 +299,5 @@ SQLite reader contention is tested by journal mode; ordinary WAL readers do not 
 ExecutionSupervisor v1 now has a real Docker adapter. Process exit is evidence, never Task acceptance. Containers remain until explicit release after durable application receipt. Trusted workspace allocation, dispatch fencing after release, durable output and aggregate scheduler quotas remain prerequisites for public execution.
 
 Execution ledger identity is scope + local ID: attempts use (scope_id, attempt_id), command receipts use (scope_id, command_id); an ID alone carries no cross-scope authority. Fable1484 confirms the existing contract.
+
+ARCH-GATES/E1: unit dependencies are declared in arch.json with owning PLAN references; the gate resolves TypeScript symbol origins through package indexes and rejects observed unit cycles and composition imports of domain decision functions. This is a static gate, not proof against reflection or arbitrary runtime values. No baseline or exception suppresses measured violations.

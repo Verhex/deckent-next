@@ -536,3 +536,11 @@ CONFIG-LOCK-GENERATION DONE — Fable PASS1927; generation replacement yields co
 MANAGED-COMPANION-UNLINK DONE — Fable PASS 1933:c2794c4444dd; exact reviewed candidate landed; historical failures remain separately qualified.
 
 RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewed candidate landed; historical failures remain separately qualified.
+
+| AUTH/A | Mandatory verifier + scope/authorization before store/replay, actor-bound receipt, v2 command without client principalId; direct-local OS verifier | Isolated142 tests including4 real Docker; proof/AUTH-A-verification.json | REVIEW |
+
+| WORKSPACE/A | Git-backed per-attempt private checkout, pinned commit, no shared hardlinks/alternates, protected lease replay | Isolated146 tests incl4 real Git +4 real Docker; proof/WORKSPACE-A-verification.json | REVIEW |
+
+| ARCH-GATES/E1 | Exact declared unit dependencies, resolved-symbol cycle and composition decision-import gates, canonical vocabulary, 2000-line unit budget | Candidate verification and independent review pending | REVIEW |
+
+2026-09-19 ARCH-GATES/E1 DONE — Fable1954 PASS; exact reviewed candidate landed. Unit dependency/cycle/PLAN reference and composition decision gates enforced; unit budget 2000 and vocabulary enforced.

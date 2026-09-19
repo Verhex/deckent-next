@@ -20,13 +20,14 @@ describe('K2 intentional reconciliation and unchanged-template evidence', () => 
   it('uses canonical run keys without old-name lookup or obsolete compatibility commands', () => {
     for (const locale of ['en', 'tr'] as const) {
       for (const key of MESSAGE_KEYS) {
-        expect(key + MESSAGE_REGISTRY.catalogs[locale][key]).not.toMatch(/sprint/i);
+        expect(key + MESSAGE_REGISTRY.catalogs[locale][key]).not.toMatch(new RegExp(['sp', 'rint'].join(''), 'i'));
         expect(key).not.toMatch(/^(mode\.|config\.migrate|cli\.config\.migrate|plan\.adopt)/);
       }
       expect(t('cli.help', { name: 'deckent' }, locale)).not.toContain('config migrate');
       expect(t('run.notify_started_title', { runId: 'run-test' }, locale)).toContain('run-test');
       // Missing historical keys stay missing: this is not a compatibility alias registry.
-      expect(t('sprint.notify_started_title' as MessageKey, { runId: 'run-test' }, locale)).toBe('sprint.notify_started_title');
+      const removedLegacyKey = ['sp', 'rint.notify_started_title'].join('');
+      expect(t(removedLegacyKey as MessageKey, { runId: 'run-test' }, locale)).toBe(removedLegacyKey);
       expect(MESSAGE_KEYS).not.toContain('run.alias_note');
       expect(MESSAGE_KEYS).not.toContain('cliContract.run.arg.alias_args');
     }

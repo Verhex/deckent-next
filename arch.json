@@ -66,7 +66,7 @@
       "user"
     ],
     "enforce": true,
-    "unitLines": 4000,
+    "unitLines": 2000,
     "note": "Lower tiers import only lower/same-tier unit index.ts; package index.ts composes shipped units. Optional editions are loaded lazily when implemented."
   },
   "imports": {
@@ -92,7 +92,7 @@
       "tests",
       "scripts"
     ],
-    "enforce": false,
+    "enforce": true,
     "note": "Catalog uses canonical run terminology. Code-wide vocabulary enforcement and the accepted Task/Run/Attempt/Operation/Effect ontology are reconciled in CONTRACT; no legacy aliases."
   },
   "budgets": {
@@ -189,5 +189,553 @@
     "trackedAllowGlobs": [
       ".agents/skills/deckent-next-refactor/*.md"
     ]
+  },
+  "units": {
+    "src/adapters/core/attempt-store": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/engine/core/attempts",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/scheduling",
+        "src/engine/core/supervisor",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/workspaces",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "STORE/A"
+    },
+    "src/adapters/core/contract": {
+      "dependencies": [
+        "src/adapters/core/registry",
+        "src/platform/core/common",
+        "src/platform/core/config"
+      ],
+      "plan": "P1"
+    },
+    "src/adapters/core/docker-supervisor": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/engine/core/supervisor",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "SUPERVISOR/A"
+    },
+    "src/adapters/core/file-artifacts": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/primitives",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/file-policy": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/engine/core/policy"
+      ],
+      "plan": "AUTH/A"
+    },
+    "src/adapters/core/git-workspace": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/workspaces",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "WORKSPACE/A"
+    },
+    "src/adapters/core/local-principal": {
+      "dependencies": [
+        "src/domain/core/principal",
+        "src/engine/core/authentication"
+      ],
+      "plan": "AUTH/A"
+    },
+    "src/adapters/core/local-runtime-socket": {
+      "dependencies": [
+        "src/engine/core/runtime"
+      ],
+      "plan": "R1"
+    },
+    "src/adapters/core/process-runner": {
+      "dependencies": [
+        "src/adapters/core/docker-supervisor"
+      ],
+      "plan": "SUPERVISOR/A"
+    },
+    "src/adapters/core/process-supervisor": {
+      "dependencies": [
+        "src/engine/core/supervisor"
+      ],
+      "plan": "SUPERVISOR/A"
+    },
+    "src/adapters/core/registry": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/host"
+      ],
+      "plan": "P1"
+    },
+    "src/capabilities/core/artifacts": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/capabilities/core/evaluation-evidence": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/artifacts": {
+      "dependencies": [
+        "src/adapters/core/file-artifacts",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/cli": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/composition/core/runtime-service",
+        "src/platform/core/config",
+        "src/surfaces/core/cli"
+      ],
+      "plan": "S0"
+    },
+    "src/composition/core/execution": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/git-workspace",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/domain/core/attempt",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/workspaces",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/inventory": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/domain/core/policy",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/mcp": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/composition/core/runtime-service",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/surfaces/core/mcp"
+      ],
+      "plan": "S1"
+    },
+    "src/composition/core/policy": {
+      "dependencies": [
+        "src/adapters/core/file-policy",
+        "src/platform/core/host"
+      ],
+      "plan": "AUTH/A"
+    },
+    "src/composition/core/query-errors": {
+      "dependencies": [
+        "src/adapters/core/local-runtime-socket",
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/task-evaluation",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/workspaces",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "K1"
+    },
+    "src/composition/core/runs": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/local-principal",
+        "src/capabilities/core/evaluation-evidence",
+        "src/composition/core/inventory",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/supervisor",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/runtime": {
+      "dependencies": [
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/platform/core/config",
+        "src/platform/core/errors"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/runtime-service": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/local-runtime-socket",
+        "src/composition/core/execution",
+        "src/composition/core/inventory",
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/composition/core/runtime",
+        "src/domain/core/attempt",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/storage": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "STORE/C"
+    },
+    "src/composition/core/workspaces": {
+      "dependencies": [
+        "src/adapters/core/git-workspace",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "WORKSPACE/A"
+    },
+    "src/domain/core/attempt": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT/B"
+    },
+    "src/domain/core/policy": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal"
+      ],
+      "plan": "CONTRACT/C"
+    },
+    "src/domain/core/primitives": {
+      "dependencies": [],
+      "plan": "CONTRACT/C"
+    },
+    "src/domain/core/principal": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT/C"
+    },
+    "src/domain/core/run": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "CONTRACT/A"
+    },
+    "src/domain/core/task-evaluation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run"
+      ],
+      "plan": "CONTRACT/C"
+    },
+    "src/domain/core/task-graph": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT/A"
+    },
+    "src/engine/core/attempts": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/engine/core/authentication"
+      ],
+      "plan": "CONTRACT/B"
+    },
+    "src/engine/core/authentication": {
+      "dependencies": [
+        "src/domain/core/principal"
+      ],
+      "plan": "AUTH/A"
+    },
+    "src/engine/core/dispatch": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/engine/core/authentication",
+        "src/engine/core/supervisor"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/policy": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/dispatch",
+        "src/engine/core/supervisor"
+      ],
+      "plan": "AUTH/A"
+    },
+    "src/engine/core/runs": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/scheduling"
+      ],
+      "plan": "CONTRACT/A"
+    },
+    "src/engine/core/runtime": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/scheduling": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "CONTRACT/A"
+    },
+    "src/engine/core/supervisor": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives"
+      ],
+      "plan": "SUPERVISOR/A"
+    },
+    "src/engine/core/task-evaluation": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation",
+        "src/domain/core/task-graph",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/supervisor"
+      ],
+      "plan": "CONTRACT/C"
+    },
+    "src/engine/core/workspaces": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives"
+      ],
+      "plan": "WORKSPACE/A"
+    },
+    "src/platform/core/common": {
+      "dependencies": [],
+      "plan": "K1"
+    },
+    "src/platform/core/config": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/utils"
+      ],
+      "plan": "K1-F1"
+    },
+    "src/platform/core/config-fields": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/i18n"
+      ],
+      "plan": "K1-F1"
+    },
+    "src/platform/core/crash-reporting": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/errors": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/i18n"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/host": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/errors"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/i18n": {
+      "dependencies": [
+        "src/platform/core/common"
+      ],
+      "plan": "K2"
+    },
+    "src/platform/core/identity": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/validate"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/managed-files": {
+      "dependencies": [
+        "src/platform/core/host"
+      ],
+      "plan": "PATH-LAYOUT/A+B"
+    },
+    "src/platform/core/output": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/config-fields",
+        "src/platform/core/host",
+        "src/platform/core/i18n"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/utils": {
+      "dependencies": [
+        "src/platform/core/errors"
+      ],
+      "plan": "K1"
+    },
+    "src/platform/core/validate": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/host"
+      ],
+      "plan": "K1"
+    },
+    "src/surfaces/core/cli": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/common",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/crash-reporting",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/identity",
+        "src/platform/core/output"
+      ],
+      "plan": "S0"
+    },
+    "src/surfaces/core/mcp": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/i18n"
+      ],
+      "plan": "S1"
+    }
+  },
+  "composition": {
+    "enforceDomainDecisionImports": true
   }
 }
