@@ -146,7 +146,7 @@ Use the logged preparation layer from either repository (shared host source, not
 Case schema: schemaVersion=1, objective, scope, exact revision (identify dirty changes), constraints[],
 unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],evidenceIds[]}],
 checks[{id,instructions,evidenceIds[]}]. Use at least two meaningful options; separate facts from assumptions,
-include contrary evidence and realistic tradeoffs. The compiler preserves options and adds defer plus a
+include contrary evidence and realistic tradeoffs. The compiler preserves authored options and always adds separate none_of_the_above (option set unsuitable) and insufficient_information (context inadequate) choices plus a
 context-sufficiency question. Preparation checks structural coverage, not semantic perfection or truth.
 Question/option identifiers must be unique; evidence references must resolve. Only authored sanitized context
 is sent: no automatic source, channel, customer data, credential or journal upload. Inspect the prepared state.
@@ -164,3 +164,5 @@ transport tests; normal development consultations use jev-review.mjs so preparat
 Jev is probabilistic advice, not proof, test success, Fable PASS, policy, owner permission or acceptance.
 Do not execute returned content or hardcode a universal confidence threshold. Record actual model/usage;
 use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
+
+Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=2; low-level transport remains generic, normal development consultations use the preparation layer.

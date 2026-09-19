@@ -12,21 +12,21 @@ const key = 'local-test-secret-never-live';
 const fixture = () => ({ schemaVersion: 1, objective: 'Choose next validation action.', scope: 'host-test', revision: 'fixture-v1', evidence: [{ id: 'test', source: 'fixture', observedAt: '2026-09-19T00:00:00Z', observation: 'A test failed without a known cause.' }], constraints: ['Do not claim an unexplained failure fixed.'], unknowns: ['Failure cause'], options: [{ id: 'investigate', action: 'Inspect failure evidence', tradeoffs: ['Consumes time'], evidenceIds: ['test'] }, { id: 'accept', action: 'Accept without investigation', tradeoffs: ['Unresolved failure risk'], evidenceIds: ['test'] }], checks: [{ id: 'supported', instructions: 'Is acceptance supported?', evidenceIds: ['test'] }] });
 const transport = async (_url, options) => {
   const request = JSON.parse(options.body);
-  return Response.json({ model: 'fixture-model', answers: Object.fromEntries(Object.entries(request.questions).map(([id, q]) => [id, q.type === 'noul' ? { type: 'noul', noul: 0.1 } : { type: 'choice', choice: 'investigate', confidence: 0.8, probabilities: { investigate: 0.9, accept: 0.05, defer: 0.05 } }])), usage: { input_tokens: 10, output_tokens: 5 } });
+  return Response.json({ model: 'fixture-model', answers: Object.fromEntries(Object.entries(request.questions).map(([id, q]) => [id, q.type === 'noul' ? { type: 'noul', noul: 0.1 } : { type: 'choice', choice: 'investigate', confidence: 0.8, probabilities: { investigate: 0.9, accept: 0.05, none_of_the_above: 0.02, insufficient_information: 0.03 } }])), usage: { input_tokens: 10, output_tokens: 5 } });
 };
 async function sandbox(fn) {
   const root = await mkdtemp(join(tmpdir(), 'jev-journal-test-'));
   try { await fn(root); } finally { await rm(root, { recursive: true, force: true }); }
 }
-test('preparation preserves authored evidence/options, rejects dangling references and supplies defer', () => {
+test('preparation preserves authored evidence/options, rejects dangling references and supplies two distinct abstention choices', () => {
   const c = fixture(); const p = prepare(c, policy);
   assert.deepEqual(p.input.state, c);
-  assert.deepEqual(Object.keys(p.input.questions.next_action.criteria), ['investigate', 'accept', 'defer']);
+  assert.deepEqual(Object.keys(p.input.questions.next_action.criteria), ['investigate', 'accept', 'none_of_the_above', 'insufficient_information']);
   c.options[0].evidenceIds = ['invented']; assert.throws(() => prepare(c, policy), /JEV_OPTION/);
   c.options[0].evidenceIds = ['test']; c.checks[0].evidenceIds = []; assert.throws(() => prepare(c, policy), /JEV_CHECK/);
 });
 test('duplicate/reserved choices and oversized context cannot reach network', async () => {
-  for (const change of [c => { c.options[1].id = 'investigate'; }, c => { c.options[1].id = 'defer'; }, c => { c.evidence.push(c.evidence[0]); }, c => { c.objective = 'x'.repeat(policy.maxCaseBytes); }]) {
+  for (const change of [c => { c.options[1].id = 'investigate'; }, c => { c.options[1].id = 'defer'; }, c => { c.options[1].id = 'none_of_the_above'; }, c => { c.options[1].id = 'insufficient_information'; }, c => { c.evidence.push(c.evidence[0]); }, c => { c.objective = 'x'.repeat(policy.maxCaseBytes); }]) {
     const c = fixture(); change(c); assert.throws(() => prepare(c, policy));
   }
 });
@@ -86,4 +86,34 @@ test('a persisted request without response remains unknown, not failed or succes
   assert.equal(summary.rows[0].outcome, 'unobserved');
   assert.equal(summary.usage.inputTokens, 0);
   assert.equal(summary.usage.excludesFailedAndUnrecordedUsage, true);
+}));
+
+test('abstention choices survive response, decision and reporting as distinct signals', async () => sandbox(async root => {
+  for (const selected of ['none_of_the_above', 'insufficient_information']) {
+    const result = await consult(config, policy, fixture(), root, key, async (_url, options) => {
+      const { questions } = JSON.parse(options.body);
+      return Response.json({ model: 'fixture-model', answers: Object.fromEntries(Object.entries(questions).map(([id, q]) => [id,
+        q.type === 'noul' ? { type: 'noul', noul: 0.5 } : { type: 'choice', choice: selected, confidence: 0.8,
+          probabilities: Object.fromEntries(Object.keys(q.criteria).map(option => [option, option === selected ? 1 : 0])) }])), usage: { input_tokens: 1, output_tokens: 1 } });
+    });
+    await followup(root, result.callId, 'decision', { actor: 'test', selectedOption: selected, rationale: 'Fixture signal, not correctness proof.', actions: [], evidenceRefs: [] }, key);
+  }
+  const summary = await report(root, 10);
+  assert.deepEqual(summary.abstentions.none_of_the_above, { offered: 2, selected: 1 });
+  assert.deepEqual(summary.abstentions.insufficient_information, { offered: 2, selected: 1 });
+  assert.deepEqual(summary.abstentions.defer, { offered: 0, selected: 0 });
+  assert.equal(summary.quality.brierScore, null);
+  assert.equal(summary.rows.every(r => r.agreement === true), true);
+}));
+
+test('historical defer is interpreted from the recorded request, never relabeled', async () => sandbox(async root => {
+  const id = callId(); const input = prepare(fixture(), policy).input;
+  input.questions.next_action.criteria = { investigate: 'Inspect', accept: 'Accept', defer: 'Old combined deferral' };
+  await writeEvent(join(root, id), 'request.json', { case: fixture(), input }, key);
+  await followup(root, id, 'decision', { actor: 'test', selectedOption: 'defer', rationale: 'Historic meaning retained.', actions: [], evidenceRefs: [] }, key);
+  const summary = await report(root, 10);
+  assert.deepEqual(summary.abstentions.defer, { offered: 1, selected: 0 });
+  assert.deepEqual(summary.abstentions.insufficient_information, { offered: 0, selected: 0 });
+  assert.equal(summary.rows[0].selectedOption, 'defer');
+  assert.equal(summary.rows[0].abstentionProbabilities.insufficient_information, null);
 }));

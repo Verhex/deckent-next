@@ -52,8 +52,10 @@ export function validateResponse(response, questions) {
       continue;
     }
     const criteria = q.type === 'choice' ? q.criteria : Object.fromEntries(q.criteria.map((v, i) => [String(i), v]));
-    check(object(a.probabilities) && sameKeys(a.probabilities, criteria) && Object.values(a.probabilities).every(probability), 'JEV_DISTRIBUTION');
-    check(Math.abs(Object.values(a.probabilities).reduce((sum, p) => sum + p, 0) - 1) < 0.001 && probability(a.confidence), 'JEV_DISTRIBUTION');
+    check(object(a.probabilities) && sameKeys(a.probabilities, criteria), 'JEV_DISTRIBUTION_KEYS');
+    check(Object.values(a.probabilities).every(probability), 'JEV_DISTRIBUTION_RANGE');
+    check(Math.abs(Object.values(a.probabilities).reduce((sum, p) => sum + p, 0) - 1) < 0.001, 'JEV_DISTRIBUTION_SUM');
+    check(probability(a.confidence), 'JEV_DISTRIBUTION_CONFIDENCE');
     const normalized = { type: a.type, probabilities: a.probabilities, confidence: a.confidence };
     if (q.type === 'choice') {
       check(typeof a.choice === 'string' && Object.hasOwn(criteria, a.choice), 'JEV_ANSWER');
