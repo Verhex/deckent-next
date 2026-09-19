@@ -848,5 +848,18 @@
   "error.BOOTSTRAP_STATE_CHANGED": "Yapılandırma okunurken kurulum durumu değişti; kurtarma tamamlandıktan sonra yeniden deneyin.",
   "error.BOOTSTRAP_INSTALLATION_INCOMPLETE": "Kurulum tamamlanmadı; proje yapılandırmasını kullanmadan önce kayıtlı işlemi kurtarın.",
   "error.BOOTSTRAP_STATE_UNAVAILABLE": "Kurulum durumu güvenli biçimde okunamadı.",
-  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Bu platformda kurulum kaydı sahipliği denetimi desteklenmiyor."
+  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Bu platformda kurulum kaydı sahipliği denetimi desteklenmiyor.",
+  "error.INSTALL_INSPECTION_UNAVAILABLE": "Kurulum kanıtı incelemesi kullanılamıyor.",
+  "error.INSTALLATION_EVIDENCE_INVALID": "Kurulum kanıtı geçersiz.",
+  "error.INSTALLATION_EVIDENCE_IMAGES": "Ölçülen imajlar kurulum planıyla veya yürütme servisiyle eşleşmiyor.",
+  "error.INSTALLATION_EVIDENCE_CHANGED": "İnceleme sırasında kurulu paket değişti; karar vermeden önce yeniden inceleyin.",
+  "error.INSTALLATION_ARTIFACT_INVALID": "Paket ölçümü girdisi veya dağıtım listesi geçersiz.",
+  "error.INSTALLATION_ARTIFACT_UNSAFE": "Paket ölçümünde güvenli olmayan yol veya dosya bulundu.",
+  "error.INSTALLATION_ARTIFACT_LIMIT": "Paket ölçümü yapılandırılmış sınırlarını aştı.",
+  "error.INSTALLATION_ARTIFACT_CHANGED": "Ölçüm sırasında paket dosyaları değişti.",
+  "error.INSTALLATION_ARTIFACT_UNAVAILABLE": "Paket dosyaları ölçülemedi.",
+  "error.DOCKER_IMAGE_PROBE_INVALID": "Docker imaj inceleme ayarları geçersiz.",
+  "error.DOCKER_IMAGE_PROBE_UNAVAILABLE": "Tam imaj kimliği seçilen yerel Docker servisinde doğrulanamadı.",
+  "error.DOCKER_IMAGE_PROBE_CHANGED": "İmaj incelemesi sırasında Docker servisinin kimliği değişti.",
+  "error.INSTALL_INSPECTION_CONTROL_REQUIRED": "Docker yürütülebilir dosyasını --docker-executable ile açıkça seçin; sağlanan profil çalıştırılacak host programını seçemez."
 }

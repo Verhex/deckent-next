@@ -565,3 +565,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 2026-09-19 REAL-INIT/P3A DONE — Fable1971 PASS; supplied profile integrity and normalized plan identity, actual OS-bound narrow policy checks, independent shutdown choice, immutable complete CLI/SDK preview. Full verify775 product/24native/18host. Package/image trust and availability remain unverified; no apply/readiness/builtin release profile claim. P3B journal/materialization and P4 acceptance remain open.
 
 | REAL-INIT/P3B-GATE | Fixed installation journal resource, private checksum-checked journal observer, generation fence before config cache and after fresh/cache reads | Pending/unsafe/corrupt/change hold; global-only independent; no installer producer/apply/readiness claim | REVIEW |
+
+| REAL-INIT/P3C-EVIDENCE | Read-only installed distribution measurement and exact local Docker image observations; shared CLI/SDK proposal identity | Explicit measurement coverage, no publisher/approval/readiness claim, no project writes | REVIEW |
+
+2026-09-19 TOOL/EXIT, REAL-INIT/P3B-GATE and REAL-INIT/P3C-EVIDENCE DONE — Fable1983 PASS. Separate exact commits; combined isolated verify814 product/24native/18host. Journal admission gate and CLI/SDK evidence proposal delivered; no apply, recorded consent, publisher authenticity or ready claim. P3D durable writer and P3E publication remain open.

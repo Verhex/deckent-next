@@ -23,6 +23,11 @@ export const installationProfileSchema = installationProfilePayloadObjectSchema.
 export type InstallationProfilePayload = z.infer<typeof installationProfilePayloadSchema>;
 export type InstallationProfile = z.infer<typeof installationProfileSchema>;
 
+/** Freeze caller data before any asynchronous host observation; integrity is checked by preview. */
+export function snapshotInstallationProfile(input: unknown): InstallationProfile {
+  return installationProfileSchema.parse(immutableJsonObjectSchema.parse(input));
+}
+
 export function encodeInstallationProfilePayload(input: unknown): string {
   const sanitized = immutableJsonObjectSchema.safeParse(input);
   if (!sanitized.success) throw sanitized.error;

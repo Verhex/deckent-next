@@ -13,4 +13,4 @@ export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeO
 
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 
-export { previewSuppliedInstallation } from '#composition/core/installation/index.js';
+export { previewSuppliedInstallation, inspectSuppliedInstallation } from '#composition/core/installation/index.js';

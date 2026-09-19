@@ -848,5 +848,18 @@
   "error.BOOTSTRAP_STATE_CHANGED": "Installation state changed while configuration was being read; retry after recovery settles.",
   "error.BOOTSTRAP_INSTALLATION_INCOMPLETE": "Installation is incomplete; recover the recorded transaction before using project configuration.",
   "error.BOOTSTRAP_STATE_UNAVAILABLE": "Installation state could not be read safely.",
-  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Installation journal custody is not supported on this platform."
+  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Installation journal custody is not supported on this platform.",
+  "error.INSTALL_INSPECTION_UNAVAILABLE": "Installation evidence inspection is unavailable.",
+  "error.INSTALLATION_EVIDENCE_INVALID": "Installation evidence is invalid.",
+  "error.INSTALLATION_EVIDENCE_IMAGES": "Measured images do not match the installation plan or execution daemon.",
+  "error.INSTALLATION_EVIDENCE_CHANGED": "Installed package bytes changed during inspection; inspect again before deciding.",
+  "error.INSTALLATION_ARTIFACT_INVALID": "Package measurement input or distribution manifest is invalid.",
+  "error.INSTALLATION_ARTIFACT_UNSAFE": "Package measurement encountered an unsafe path or file.",
+  "error.INSTALLATION_ARTIFACT_LIMIT": "Package measurement exceeded its configured bounds.",
+  "error.INSTALLATION_ARTIFACT_CHANGED": "Package files changed during measurement.",
+  "error.INSTALLATION_ARTIFACT_UNAVAILABLE": "Package files could not be measured.",
+  "error.DOCKER_IMAGE_PROBE_INVALID": "Docker image inspection settings are invalid.",
+  "error.DOCKER_IMAGE_PROBE_UNAVAILABLE": "The exact image could not be verified on the selected local Docker daemon.",
+  "error.DOCKER_IMAGE_PROBE_CHANGED": "Docker daemon identity changed during image inspection.",
+  "error.INSTALL_INSPECTION_CONTROL_REQUIRED": "Select the Docker executable explicitly with --docker-executable; a supplied profile cannot choose a host program to run."
 }

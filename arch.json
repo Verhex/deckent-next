@@ -378,6 +378,8 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/installation-artifacts",
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
         "src/capabilities/core/evaluation-evidence",
@@ -770,14 +772,16 @@
     "src/composition/core/installation": {
       "dependencies": [
         "src/adapters/core/contract",
-        "src/adapters/core/local-principal",
         "src/adapters/core/docker-supervisor",
+        "src/adapters/core/installation-artifacts",
+        "src/adapters/core/local-principal",
         "src/capabilities/core/evaluation-evidence",
-        "src/engine/core/installation",
         "src/domain/core/primitives",
+        "src/engine/core/installation",
         "src/platform/core/common",
-        "src/platform/core/host",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/host"
       ],
       "plan": "REAL-INIT/P3A"
     },
@@ -786,6 +790,10 @@
         "src/platform/core/host"
       ],
       "plan": "REAL-INIT/P3B-GATE"
+    },
+    "src/adapters/core/installation-artifacts": {
+      "dependencies": [],
+      "plan": "REAL-INIT/P3C-EVIDENCE"
     }
   },
   "composition": {

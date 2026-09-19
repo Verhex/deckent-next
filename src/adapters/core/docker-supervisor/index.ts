@@ -5,3 +5,5 @@ export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment } 
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from './internal/command.js';
 export { validateDockerSupervisorProfile } from './internal/profile.js';
 export { validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError } from './internal/task-profile.js';
+export { probeDockerImageAvailability, DockerImageProbeError } from './internal/image.js';
+export type { DockerImageAvailabilityProbeInput, DockerImageAvailability, DockerImageProbeErrorCode } from './internal/image.js';

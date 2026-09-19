@@ -3,7 +3,7 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { pathToFileURL } from 'node:url';
 import { main as runCli } from '#surfaces/index.js';
-import { previewSuppliedInstallation } from '#composition/core/installation/index.js';
+import { previewSuppliedInstallation, inspectSuppliedInstallation } from '#composition/core/installation/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { readInstallationProfileFile } from '#adapters/index.js';
@@ -21,6 +21,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       try { return await previewSuppliedInstallation(projectRoot,
         await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
         { allowShutdown: input.allowShutdown }); }
+      catch (error) { throw queryFailure(error); }
+    },
+    inspectInstallation: async (projectRoot, input) => {
+      try { return await inspectSuppliedInstallation(projectRoot,
+        await readInstallationProfileFile(input.profilePath, getConfigFieldDefault('installation').profileMaxBytes),
+        { allowShutdown: input.allowShutdown, dockerExecutable: input.dockerExecutable }); }
       catch (error) { throw queryFailure(error); }
     },
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),

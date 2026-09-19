@@ -343,3 +343,25 @@ unsupported, while a genuinely absent journal preserves ordinary reads.
 This slice supplies the observer and live config/CLI gate. The product journal writer, materialized digest-
 preserving profile, multi-resource publish/replay/recovery, and real image/package trust remain separate open
 installer work. No full init, committed installation producer, P4 acceptance or readiness is claimed here.
+
+Installation evidence preparation (REAL-INIT/P3C-EVIDENCE): CLI init inspect and SDK inspectInstallation
+share one application observation sequence. A freshly validated profile is copied before asynchronous work.
+The host Docker executable must be supplied separately by the operator, must equal the proposed profile
+value, and is never chosen implicitly from that profile. Mutable inspection bounds come from the central
+installation registry; supplied profile values may only narrow the installed host defaults during inspection.
+
+The adapter measures package.json plus present literal distribution scopes declared by the running package,
+not a caller-selected package root. It rejects observed symlinks (including declared ancestors), hardlinks,
+nonregular files and generation changes; file/directory/depth/byte counts are bounded before allocation.
+Missing declared scopes are reported explicitly. This is a trusted-host installed-byte measurement, not a
+publisher signature, reproducible-build proof, npm package completeness claim, or hostile same-UID filesystem
+sandbox. Third-party dependency bytes are explicitly excluded. Node pathname generation checks do not offer
+openat-style race-proof ancestry custody; the running application package and host remain trusted.
+
+Docker observations pin a local Unix endpoint, compare daemon identity before/after exact image-ID inspection,
+and never pull/create/start an image. Package bytes are remeasured after image observations. The proposal
+digest binds the normalized profile plan and measured package/image/daemon evidence. CLI and SDK expose
+operatorApproval=not-recorded and publisherVerification=unverified; availability observation removes only
+the availability-unknown marker. A future explicit apply must compare newly measured evidence against the
+previously displayed proposal digest; accepting an old plan digest alone cannot approve new package bytes.
+No journal publication, permission grant, publisher trust, installation readiness or apply is produced here.

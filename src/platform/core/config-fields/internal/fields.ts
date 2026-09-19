@@ -21,7 +21,17 @@ export const CONFIG_FIELDS = Object.freeze({
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  installation: field('config.field.installation', z.object({ profileMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  installation: field('config.field.installation', z.object({
+    profileMaxBytes: z.number().int().positive().safe().default(1048576),
+    imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
+      outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
+    packageMeasurement: z.object({
+      maxFiles: z.number().int().positive().safe().default(8192),
+      maxFileBytes: z.number().int().positive().safe().default(67108864),
+      maxTotalBytes: z.number().int().positive().safe().default(536870912),
+      maxDepth: z.number().int().positive().safe().default(32),
+    }).strict().default({}),
+  }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cli: field('config.field.cli', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),

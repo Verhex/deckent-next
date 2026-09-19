@@ -4,7 +4,7 @@ import type { TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
-import type { InstallationPreviewHandler } from './init.js';
+import type { InstallationPreviewHandler, InstallationInspectionHandler } from './init.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -15,6 +15,7 @@ import {
 
 export interface CommandContext {
   previewInstallation?: InstallationPreviewHandler;
+  inspectInstallation?: InstallationInspectionHandler;
   createRun?: RunAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
   inspectRun?: RunQueryHandler;
