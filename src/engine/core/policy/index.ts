@@ -7,3 +7,4 @@ export { resolvePolicyScopeMembership } from './internal/membership.js';
 export { getPolicyVocabulary } from '#domain/index.js';
 export { ServicePolicyAuthorization } from './internal/service.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';
+export { ModelActivationPolicyAuthorization } from './internal/model-activation.js';

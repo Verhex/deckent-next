@@ -17,6 +17,7 @@ async function seed(path: string, version = 11) {
   const expected = await store.loadRun('s', 'r'); store.close();
   const db = new DatabaseSync(path);
   downgradeRunEligibilityFixtures(db);
+  if (version < 13) db.exec('DROP TABLE model_activation_receipts; DROP TABLE model_activations');
   if (version < 11) db.exec('DROP TABLE installation_ownership');
   if (version < 10) db.exec('DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes');
   if (version < 9) db.exec('DROP TABLE run_workspace_custody');
@@ -41,7 +42,7 @@ async function workspace(work: (path: string) => Promise<void>) {
 }
 it('creates an empty current ledger directly from version zero', async () => workspace(async path => {
   const store = await openSqliteAttemptStore(path, options); store.close();
-  expect(dump(path).version).toMatchObject({ user_version: 12 });
+  expect(dump(path).version).toMatchObject({ user_version: 13 });
 }));
 it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])('converts evidenced history from version %i and preserves commands, attempts and revisions', async version => workspace(async path => {
   const expected = await seed(path, version), before = dump(path);
@@ -51,7 +52,7 @@ it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])('converts evidenced history from version 
     const replay = await store.cancelRun({ commandId: 'cancel-again', actor, scopeId: 's', runId: 'r', expectedRevision: 2 });
     expect(replay.snapshot).toEqual(expected);
   } finally { store.close(); }
-  const after = dump(path); expect(after.version).toMatchObject({ user_version: 12 });
+  const after = dump(path); expect(after.version).toMatchObject({ user_version: 13 });
   expect(after.tables.attempts).toEqual(before.tables.attempts);
   expect(after.tables.attempt_receipts).toEqual(before.tables.attempt_receipts);
   expect(after.tables.dispatches).toEqual(before.tables.dispatches);

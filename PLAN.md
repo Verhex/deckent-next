@@ -601,3 +601,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run snapshot3, scheduling2, receipt-proven forward ledger12 migration; Fable2016 designGO K1–K5. No clock clamp or TTL change.
 
 2026-09-19 RESERVATION/IMMEDIATE DONE — Fable2028 PASS exact38files; root and independent949product/24native/18host. Run snapshot3/scheduling2, explicit eligibility, evidence-proven ledger12 forward migration, readonly minimum12, EN/TR delay gap. K3 wall-clock inventory remains open for unrelated TTL/retry/lock behavior.
+
+| PROVIDERS/A2A | P5; A1+STORE+IMMEDIATE prerequisites | Scoped activation domain/application, separate SQLite adapter and atomic audit; ledger13, no invocation or surface mutation yet | REVIEW |
+
+2026-09-19 PROVIDERS/A2A DONE — Fable2032 PASS exact41files, root and independent975product/24native/18host. Scoped activation CAS, fresh authorization and immutable historical replay, catalog-independent revocation, shared ledger13 atomic state+receipt. No public activation or invocation claim in this slice.

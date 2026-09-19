@@ -31,3 +31,4 @@ export { withInstallationJournal, InstallationJournalError } from '#adapters/cor
 export type { InstallationJournalOptions, InstallationJournalSession, InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
 export { inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
 export { initializeInstallationLedger, verifyInstallationLedger, InstallationLedgerError } from '#adapters/core/attempt-store/index.js';
+export { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';

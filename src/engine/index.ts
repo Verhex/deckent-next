@@ -32,3 +32,5 @@ export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 
 export * from '#engine/core/installation/index.js';
 export * from '#engine/core/provider-catalog/index.js';
+export * from '#engine/core/model-activation/index.js';
+export { ModelActivationPolicyAuthorization } from '#engine/core/policy/index.js';

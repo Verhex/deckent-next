@@ -565,6 +565,7 @@
         "src/domain/core/policy",
         "src/domain/core/principal",
         "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
         "src/engine/core/supervisor"
       ],
       "plan": "AUTH/A"
@@ -857,6 +858,36 @@
         "src/platform/core/config-fields"
       ],
       "plan": "STORE/LEDGER-OWNER"
+    },
+    "src/domain/core/model-activation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS/A2A"
+    },
+    "src/engine/core/model-activation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS/A2A"
+    },
+    "src/adapters/core/sqlite-model-activation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation"
+      ],
+      "plan": "PROVIDERS/A2A"
     }
   },
   "composition": {

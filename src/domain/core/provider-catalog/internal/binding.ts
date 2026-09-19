@@ -50,13 +50,14 @@ const definitionShape = z.object({
   model: z.unknown(),
 }).strict();
 const definitionEnvelopeSchema = createImmutableJsonObjectSchema(PROVIDER_CATALOG_WIRE_LIMITS);
+const MODEL_BINDING_DEFINITION_REVISION = 'model-binding-definition';
 
-function parseDefinition(input: unknown): ModelBindingDefinition {
+export function parseModelBindingDefinition(input: unknown): ModelBindingDefinition {
   const copied = definitionEnvelopeSchema.safeParse(input);
   if (!copied.success) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID', sanitizeIssues(copied.error.issues));
   const shaped = definitionShape.safeParse(copied.data);
   if (!shaped.success) throw new ProviderCatalogError('PROVIDER_CATALOG_INVALID', sanitizeIssues(shaped.error.issues));
-  const catalog = parseProviderCatalog({ schemaVersion: 1, revision: 'model-binding-definition', providers: [
+  const catalog = parseProviderCatalog({ schemaVersion: 1, revision: MODEL_BINDING_DEFINITION_REVISION, providers: [
     { id: shaped.data.provider.id, version: shaped.data.provider.version, models: [shaped.data.model] },
   ] });
   const model = catalog.providers[0]?.models[0];
@@ -67,5 +68,5 @@ function parseDefinition(input: unknown): ModelBindingDefinition {
 
 /** UTF-16 key ordering with ECMAScript JSON scalar encoding; this is deliberately not an RFC-JCS claim. */
 export function encodeModelBindingDefinition(definitionInput: unknown): string {
-  return `${MODEL_BINDING_PREFIX}${canonicalJson(parseDefinition(definitionInput))}`;
+  return `${MODEL_BINDING_PREFIX}${canonicalJson(parseModelBindingDefinition(definitionInput))}`;
 }
