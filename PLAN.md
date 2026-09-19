@@ -510,3 +510,5 @@ RUNTIME-DESCRIPTION-rebased PASS1853: fix(config): describe automatic cancellati
 JOURNAL-FINALIZATION-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668 tests. Reservation1852 remains open; reconciliation R1 separate.
 
 OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668 tests. Reservation1852 remains open; reconciliation R1 separate.
+
+RECONCILIATION-PAGE-REVIEW2: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.

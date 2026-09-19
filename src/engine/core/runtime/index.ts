@@ -5,3 +5,6 @@ export type { RuntimeServiceDeadline, RuntimeServiceLifecycleOptions, RuntimeSer
 export { RuntimeServiceProtocolError, classifyRuntimeServiceOperation, parseRuntimeServiceResponse, runtimeServiceOperationSchema,
   runtimeServiceRequestSchema, runtimeServiceResponseSchema } from './internal/service-protocol.js';
 export type { RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse } from './internal/service-protocol.js';
+
+export { ReconciliationRecoveryApplication, ReconciliationRecoveryError } from './internal/reconciliation-recovery.js';
+export type { ReconciliationRecoveryCommand, ReconciliationRecoveryInventory, ReconciliationRecoveryExecutor, ReconciliationRecoveryOptions, ReconciliationRecoveryOutcome, ReconciliationRecoveryPage } from './internal/reconciliation-recovery.js';
