@@ -24,3 +24,5 @@ export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEval
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
 export { TaskEvaluationApplication, taskEvaluationCommandSchema } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator } from '#engine/core/task-evaluation/index.js';
+
+export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';

@@ -5,13 +5,19 @@ import type { SandboxRequest, SandboxResult } from '#engine/core/supervisor/inde
 import { DispatchError, type DispatchRecord } from './port.js';
 const outputSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
   completeness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string() }).strict();
-export function verifyRetainedOutputEnvelope(bytes: Uint8Array, identity: unknown) {
+export function parseRetainedOutputEnvelope(bytes: Uint8Array, identity: unknown) {
   const expected = attemptIdentitySchema.safeParse(identity); let output;
   try { output = outputSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))); }
   catch { throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED'); }
-  if (!expected.success || !sameAttemptIdentity(output.identity, expected.data) || output.completeness !== 'complete') {
+  if (!expected.success || !sameAttemptIdentity(output.identity, expected.data)) {
     throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
   }
+  return output;
+}
+/** Acceptance and resource release still require complete evidence, including on recovery replay. */
+export function verifyRetainedOutputEnvelope(bytes: Uint8Array, identity: unknown) {
+  const output = parseRetainedOutputEnvelope(bytes, identity);
+  if (output.completeness !== 'complete') throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
   return output;
 }
 export async function retainRecoveredOutput(store: ArtifactStore, request: SandboxRequest, output: { stdout: string; stderr: string }) {

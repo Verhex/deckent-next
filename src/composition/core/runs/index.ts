@@ -7,3 +7,5 @@ export { evaluateConfiguredTask } from './internal/evaluate.js';
 export { loadConfiguredRunContext } from './internal/context.js';
 export { reserveConfiguredRunTasks } from './internal/reserve.js';
 export { recoverConfiguredCancellations } from './internal/recover-cancellation.js';
+
+export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
