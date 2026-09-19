@@ -8,3 +8,6 @@ export type { RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResp
 
 export { ReconciliationRecoveryApplication, ReconciliationRecoveryError } from './internal/reconciliation-recovery.js';
 export type { ReconciliationRecoveryCommand, ReconciliationRecoveryInventory, ReconciliationRecoveryExecutor, ReconciliationRecoveryOptions, ReconciliationRecoveryOutcome, ReconciliationRecoveryPage } from './internal/reconciliation-recovery.js';
+
+export { ReconciliationRuntimeLoop, ReconciliationRuntimeLoopError } from './internal/reconciliation-loop.js';
+export type { ReconciliationRuntimeLoopOptions, ReconciliationRecoveryDrain, ReconciliationRuntimeLoopObserver } from './internal/reconciliation-loop.js';

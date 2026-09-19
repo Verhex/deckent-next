@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
 import type { CancellationRecoveryCommand } from '#engine/core/runs/index.js';
+import { ScopedRuntimeLoop } from './scoped-loop.js';
 
 const loopOptionsSchema = z.object({ scopeIds: z.array(identitySchema).min(1), pollIntervalMs: z.number().int().positive().safe(),
   failureBackoffMs: z.number().int().positive().safe() }).strict();
@@ -20,49 +21,19 @@ export class CancellationRuntimeLoopError extends Error {
 
 /** Trusted host lifecycle helper: drains at most one recovery page per scope per cycle. */
 export class CancellationRuntimeLoop {
-  private readonly scopeIds: readonly string[];
-  private readonly pollIntervalMs: number;
-  private readonly failureBackoffMs: number;
-  private readonly cursors = new Map<string, string | null>();
-  private readonly retryNotBefore = new Map<string, number>();
-  private running: Promise<void> | null = null;
-  constructor(private readonly drain: CancellationRecoveryDrain, private readonly wait: CancellationRuntimeWait,
-    private readonly clock: CancellationRuntimeClock, private readonly observer: CancellationRuntimeLoopObserver, options: CancellationRuntimeLoopOptions) {
+  private readonly loop: ScopedRuntimeLoop<CancellationRecoveryCommand, CancellationRecoveryPageResult>;
+  constructor(drain: CancellationRecoveryDrain, wait: CancellationRuntimeWait,
+    clock: CancellationRuntimeClock, observer: CancellationRuntimeLoopObserver, options: CancellationRuntimeLoopOptions) {
     let parsed;
     try { parsed = loopOptionsSchema.parse(options); }
     catch { throw new CancellationRuntimeLoopError('CANCELLATION_RUNTIME_LOOP_OPTIONS'); }
     if (new Set(parsed.scopeIds).size !== parsed.scopeIds.length) throw new CancellationRuntimeLoopError('CANCELLATION_RUNTIME_LOOP_OPTIONS');
-    this.scopeIds = Object.freeze([...parsed.scopeIds]); this.pollIntervalMs = parsed.pollIntervalMs; this.failureBackoffMs = parsed.failureBackoffMs;
-    for (const scopeId of this.scopeIds) this.cursors.set(scopeId, null);
+    const loopOptions = { ...parsed, scopeIds: Object.freeze([...parsed.scopeIds]) };
+    this.loop = new ScopedRuntimeLoop(drain, wait, clock, observer, loopOptions, {
+      command: (scopeId, afterAttemptId) => ({ schemaVersion: 1, scopeId, afterAttemptId }),
+      nextCursor: result => result.nextAfterAttemptId,
+      unavailable: result => !!result.outcomes?.some(value => value.outcome.status === 'unavailable'),
+    }, () => new CancellationRuntimeLoopError('CANCELLATION_RUNTIME_LOOP_RUNNING'));
   }
-  async run(signal: AbortSignal): Promise<void> {
-    if (this.running) throw new CancellationRuntimeLoopError('CANCELLATION_RUNTIME_LOOP_RUNNING');
-    const work = this.drainUntilStopped(signal); this.running = work;
-    try { await work; } finally { this.running = null; }
-  }
-  private async drainUntilStopped(signal: AbortSignal): Promise<void> {
-    while (!signal.aborted) {
-      for (const scopeId of this.scopeIds) {
-        if (signal.aborted) break;
-        if ((this.retryNotBefore.get(scopeId) ?? 0) > this.clock.now()) continue;
-        const command: CancellationRecoveryCommand = { schemaVersion: 1, scopeId, afterAttemptId: this.cursors.get(scopeId) ?? null };
-        let result: CancellationRecoveryPageResult;
-        try {
-          result = await this.drain(command);
-        } catch (error) {
-          this.cursors.set(scopeId, null);
-          this.retryNotBefore.set(scopeId, this.clock.now() + this.failureBackoffMs);
-          await this.observer.onError(command, error);
-          continue;
-        }
-        this.cursors.set(scopeId, result.nextAfterAttemptId);
-        if (result.outcomes?.some(value => value.outcome.status === 'unavailable')) {
-          this.cursors.set(scopeId, null);
-          this.retryNotBefore.set(scopeId, this.clock.now() + this.failureBackoffMs);
-        } else this.retryNotBefore.delete(scopeId);
-        await this.observer.onPage(command, result);
-      }
-      if (!signal.aborted) await this.wait(this.pollIntervalMs, signal);
-    }
-  }
+  run(signal: AbortSignal): Promise<void> { return this.loop.run(signal); }
 }

@@ -294,3 +294,5 @@ JOURNAL-FINALIZATION-REVIEW2 DONE — Fable1878 unconditional PASS; combined cha
 OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668 tests. Reservation1852 remains open; reconciliation R1 separate.
 
 - RECONCILIATION-PAGE-REVIEW2: recover bounded reconciliation pages (Fable1878/1895; reviewed slice).
+
+- RECONCILIATION-LOOP-REVIEW2: host scoped recovery loops (Fable1878/1895; reviewed slice).
