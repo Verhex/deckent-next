@@ -544,3 +544,5 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | ARCH-GATES/E1 | Exact declared unit dependencies, resolved-symbol cycle and composition decision-import gates, canonical vocabulary, 2000-line unit budget | Candidate verification and independent review pending | REVIEW |
 
 2026-09-19 ARCH-GATES/E1 DONE — Fable1954 PASS; exact reviewed candidate landed. Unit dependency/cycle/PLAN reference and composition decision gates enforced; unit budget 2000 and vocabulary enforced.
+
+2026-09-19 LOCAL-PEER-TRANSPORT/P1 DONE — Fable1955 PASS; Linux peer lifecycle, native fatal handling and pinned endpoint cleanup. F-P1a bounded transient accept-pressure handling remains mandatory before P4; P2/P3 and final surface acceptance remain open.

@@ -320,3 +320,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - fix(diagnostics): measure earliest delayed task eligibility gap (Fable PASS 1934:060bceb9e229).
 
 2026-09-19 ARCH-GATES/E1 DONE — Fable1954 PASS; exact reviewed candidate landed. Unit dependency/cycle/PLAN reference and composition decision gates enforced; unit budget 2000 and vocabulary enforced.
+
+2026-09-19 LOCAL-PEER-TRANSPORT/P1 DONE — Fable1955 PASS; Linux peer lifecycle, native fatal handling and pinned endpoint cleanup. F-P1a bounded transient accept-pressure handling remains mandatory before P4; P2/P3 and final surface acceptance remain open.

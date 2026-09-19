@@ -23,3 +23,6 @@ native/**/build/
 !.codex/
 .codex/*
 !.codex/skills
+
+# Adapter-owned native build artifacts.
+src/adapters/**/native/build/

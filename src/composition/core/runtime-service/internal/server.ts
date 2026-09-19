@@ -1,7 +1,7 @@
 import { socketOptions } from './socket-options.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, startLocalRuntimeSocketServer } from '#adapters/index.js';
+import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError } from '#adapters/index.js';
 import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -42,18 +42,30 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const done = new Promise<void>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
   void done.catch(() => undefined);
   let stopping: Promise<RuntimeServiceDrainResult> | null = null;
+  let transportFailure: ReturnType<typeof queryFailure> | null = null;
   const stop = () => {
     if (stopping) return stopping;
     server.stopAccepting();
     stopping = lifecycle.stop(config.service.shutdownGraceMs, () => server.dispose()).then(result => {
       // Drop transport clients at the same deadline without aborting their admitted worker operations.
-      if (result.state === 'incomplete') server.disconnectClients();
+      if (result.state === 'incomplete') {
+        server.disconnectClients();
+        // Fatal transport has no signal caller to observe stop()'s deadline result.
+        // Release the foreground host with an honest incomplete outcome, not an unbounded done wait.
+        if (transportFailure) rejectDone(queryFailure(ErrorRegistry.createError('RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE')));
+      }
       return result;
     });
     // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle.
-    void lifecycle.whenSettled().then(resolveDone, error => rejectDone(queryFailure(error)));
+    void lifecycle.whenSettled().then(() => transportFailure ? rejectDone(transportFailure) : resolveDone(), error => rejectDone(queryFailure(error)));
     return stopping;
   };
+  void server.termination.then(event => {
+    if (event.reason !== 'requested') {
+      transportFailure = queryFailure(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT'));
+      void stop().catch(error => rejectDone(queryFailure(error)));
+    }
+  });
   const hostedRecovery = [
     preparedRecovery.run(controller.signal),
     ...(preparedReconciliation ? [preparedReconciliation.run(controller.signal)] : []),

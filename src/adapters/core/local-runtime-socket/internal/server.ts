@@ -2,12 +2,13 @@ import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
+import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
 import { encodeServiceFrame, ServiceFrameDecoder } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 
-export type RuntimeServiceHandler = (request: RuntimeServiceRequest) => Promise<RuntimeServiceResponse>;
-export interface LocalRuntimeSocketServer { readonly endpoint: string; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
+export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity) => Promise<RuntimeServiceResponse>;
+export interface LocalRuntimeSocketServer { readonly endpoint: string; readonly termination: Promise<PeerClosure>; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -28,7 +29,7 @@ function transportFailure(requestId: string): RuntimeServiceResponse {
   return { schemaVersion: 1, requestId, ok: false, error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } };
 }
 
-function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, handler: RuntimeServiceHandler): void {
+function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, handler: RuntimeServiceHandler, peer: LocalPeerIdentity): void {
   const decoder = new ServiceFrameDecoder(options.inputMaxBytes);
   const timer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')),
     options.headerTimeoutMs);
@@ -44,7 +45,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     let request: RuntimeServiceRequest;
     try { request = runtimeServiceRequestSchema.parse(decoder.finish()); }
     catch { socket.destroy(); return; }
-    void Promise.resolve().then(() => handler(request)).then(value => runtimeServiceResponseSchema.parse(value))
+    void Promise.resolve().then(() => handler(request, peer)).then(value => runtimeServiceResponseSchema.parse(value))
       .catch(() => transportFailure(request.requestId))
       .then(response => {
         if (response.requestId !== request.requestId) response = transportFailure(request.requestId);
@@ -65,30 +66,27 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
-  const clients = new Set<Socket>();
-  const endpoint = createServer({ allowHalfOpen: true }, socket => {
-    clients.add(socket);
-    socket.once('close', () => clients.delete(socket));
-    accept(socket, resolved, handler);
-  });
-  endpoint.maxConnections = resolved.maxConnections;
+  let endpoint: ReturnType<typeof listenWithPeerIdentity> | undefined;
   try {
     await removeOwnedSocket(resolved.endpoint, true);
-    await listen(endpoint, resolved.endpoint);
+    endpoint = listenWithPeerIdentity(resolved.endpoint, resolved.maxConnections,
+      (socket, peer) => accept(socket, resolved, handler, peer));
     await chmod(resolved.endpoint, 0o600);
   } catch (error) {
-    if (endpoint.listening) await close(endpoint).catch(() => undefined);
-    await close(guard).catch(() => undefined);
+    endpoint?.stopAccepting(); endpoint?.disconnectClients();
+    try {
+      if (endpoint) { await Promise.all([endpoint.drained, endpoint.settled]); endpoint.removeEndpoint(); }
+    } finally { await close(guard).catch(() => undefined); }
     if (error instanceof LocalRuntimeSocketError) throw error;
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
   let stopping: Promise<void> | null = null;
   let disposed: Promise<void> | null = null;
   const stopAccepting = () => {
-    if (!stopping) stopping = close(endpoint);
+    if (!stopping) { endpoint.stopAccepting(); stopping = Promise.all([endpoint.drained, endpoint.settled]).then(() => undefined); }
   };
   const disconnectClients = () => {
-    for (const socket of clients) socket.destroy();
+    endpoint.disconnectClients();
   };
   const dispose = async () => {
     if (disposed) return await disposed;
@@ -97,10 +95,10 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
     if (!stopped) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
     disposed = (async () => {
       await stopped;
-      await removeOwnedSocket(resolved.endpoint, true);
-      await close(guard);
+      try { endpoint.removeEndpoint(); }
+      finally { await close(guard); }
     })();
     return await disposed;
   };
-  return Object.freeze({ endpoint: resolved.endpoint, stopAccepting, disconnectClients, dispose });
+  return Object.freeze({ endpoint: resolved.endpoint, termination: endpoint.settled, stopAccepting, disconnectClients, dispose });
 }

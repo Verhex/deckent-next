@@ -1,0 +1,14 @@
+{
+  "name": "deckent-local-peer-credentials",
+  "private": true,
+  "type": "module",
+  "deckentNative": {
+    "platforms": ["linux"],
+    "artifacts": ["build/Release/peer_credentials.node"]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:test": "node build.mjs --test",
+    "test": "node build.mjs --test && node --test test/*.mjs"
+  }
+}

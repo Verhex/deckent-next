@@ -52,6 +52,33 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     } finally { await server.dispose(); }
   });
 
+  it('delivers immutable kernel peer identity instead of client supplied actor fields', async () => {
+    const { options } = await fixture();
+    const server = await startLocalRuntimeSocketServer(options, async (request, peer) => {
+      expect(Object.isFrozen(peer)).toBe(true);
+      return { schemaVersion: 1, requestId: request.requestId, ok: true, result: peer };
+    });
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'peer-proof',
+        operation: 'inspectRun', input: { actor: { uid: 0, pid: 1 } } })).resolves.toMatchObject({
+        ok: true, result: { uid: process.getuid!(), gid: process.getgid!(), pid: process.pid, assurance: 'linux-so-peercred' },
+      });
+    } finally { await server.dispose(); }
+  });
+
+  it('releases the guard when endpoint cleanup is refused without deleting the replacement', async () => {
+    const { options } = await fixture();
+    const handler = async (request: { requestId: string }) => ({ schemaVersion: 1 as const,
+      requestId: request.requestId, ok: true as const, result: null });
+    const server = await startLocalRuntimeSocketServer(options, handler);
+    await rm(options.endpoint); await writeFile(options.endpoint, 'replacement', { mode: 0o600 });
+    await expect(server.dispose()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+    expect(await readFile(options.endpoint, 'utf8')).toBe('replacement');
+    await rm(options.endpoint);
+    const next = await startLocalRuntimeSocketServer(options, handler);
+    await next.dispose();
+  });
+
   it('holds exclusive ownership and releases it on ordered close', async () => {
     const { options } = await fixture();
     const first = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
