@@ -19,7 +19,9 @@ async function seedVersionTwelve(path: string) {
   } finally { store.close(); }
   const db = new DatabaseSync(path);
   try {
-    db.exec('DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=12');
+    db.exec(`DROP INDEX model_invocations_allocation_state;
+      DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
+      DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=12`);
   } finally { db.close(); }
 }
 function executionEvidence(path: string) {
@@ -34,32 +36,33 @@ function executionEvidence(path: string) {
   } finally { db.close(); }
 }
 
-it('migrates a genuine v12 execution ledger to v13 without changing existing run, receipt, attempt or policy payloads', async () => workspace(async path => {
+it('migrates a genuine v12 execution ledger to v14 without changing existing run, receipt, attempt or policy payloads', async () => workspace(async path => {
   await seedVersionTwelve(path); const before = executionEvidence(path);
   expect(before.version).toBe(12);
   const activation = await openSqliteModelActivationStore(path, options, 'allow'); activation.close();
   const after = executionEvidence(path);
-  expect(after).toEqual({ ...before, version: 13 });
+  expect(after).toEqual({ ...before, version: 14 });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
-    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('model_activations','model_activation_receipts') ORDER BY name").all())
-      .toEqual([{ name: 'model_activation_receipts' }, { name: 'model_activations' }]);
+    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('model_activations','model_activation_receipts','model_invocation_allocations','model_invocations') ORDER BY name").all())
+      .toEqual([{ name: 'model_activation_receipts' }, { name: 'model_activations' }, { name: 'model_invocation_allocations' },
+        { name: 'model_invocations' }]);
   } finally { db.close(); }
 }));
 
-it('forbids v12 read-only activation opening without mutation, and rolls back partial schema13 DDL on a collision', async () => workspace(async path => {
+it('forbids v12 read-only activation opening without mutation, and rolls back partial schema14 DDL on a collision', async () => workspace(async path => {
   await seedVersionTwelve(path); const before = executionEvidence(path);
   await expect(openSqliteModelActivationStore(path, options, 'forbid')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(executionEvidence(path)).toEqual(before);
 
   const db = new DatabaseSync(path);
-  try { db.exec('CREATE TABLE model_activation_receipts(marker TEXT)'); } finally { db.close(); }
+  try { db.exec('CREATE TABLE model_invocations(marker TEXT)'); } finally { db.close(); }
   await expect(openSqliteModelActivationStore(path, options, 'allow')).rejects.toThrow();
   const failed = new DatabaseSync(path, { readOnly: true });
   try {
     expect(failed.prepare('PRAGMA user_version').get()?.user_version).toBe(12);
     expect(failed.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name='model_activations'").all()).toEqual([]);
-    expect(failed.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='model_activation_receipts'").get()?.sql).toContain('marker TEXT');
+    expect(failed.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='model_invocations'").get()?.sql).toContain('marker TEXT');
   } finally { failed.close(); }
   expect(executionEvidence(path)).toEqual(before);
 }));

@@ -613,3 +613,7 @@ RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run sna
 | AUTH/NATIVE-CONFIG | P5; A2B | API metadata/config reads no longer require an unrelated provider credential; no invocation authority | REVIEW |
 
 2026-09-20 AUTH/NATIVE-CONFIG DONE — Fable2042 PASS exact9files, root and independent986product/24native/18host. Known defect removed: API-mode metadata and activation required an unrelated vendor credential. Generic cache revalidation, secret handling, policy and activation remain; native invocation requires its separate selected-profile/credential/budget admission, not a global config gate.
+
+| PROVIDERS/A3A | P5; A2+AUTH | Standalone invocation contract/application and scoped atomic call-count/in-flight claim; shared ledger14; native transport is A3B | REVIEW |
+
+PROVIDERS/A3A DONE — exact R6 independently reviewed; immutable invocation contracts/application and one canonical SQLite14 record with scoped unique command identity, durable call/in-flight bounds, conservative unknown custody. Full1007/191+24native+18host; two actual processes samecommand yield one fresh claim/one replay. Native transport and public invocation surfaces remain A3B/C; no provider/Brain/dogfood claim.

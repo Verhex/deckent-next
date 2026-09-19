@@ -33,7 +33,19 @@ it('reads the current exact record and returns null for a missing key without wr
   await expect(reader.loadRecord('scope', reference)).resolves.toMatchObject({ revision: 1, state: 'active', binding });
   await expect(reader.loadRecord('other-scope', reference)).resolves.toBeNull(); reader.close();
   expect(await readFile(file)).toEqual(before);
-  const db = new DatabaseSync(file, { readOnly: true }); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(13); db.close();
+  const db = new DatabaseSync(file, { readOnly: true }); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(14); db.close();
+});
+
+it('accepts a genuine historical v13 activation ledger read-only without changing its bytes', async () => {
+  const file = await seeded(), db = new DatabaseSync(file);
+  db.exec(`DROP INDEX model_invocations_allocation_state;
+    DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; PRAGMA user_version=13`);
+  db.close();
+  const before = await readFile(file), reader = await openSqliteModelActivationReader(file, { busyTimeoutMs: 100 });
+  await expect(reader.loadRecord('scope', reference)).resolves.toMatchObject({ revision: 1, state: 'active', binding });
+  reader.close();
+  expect(await readFile(file)).toEqual(before);
+  const check = new DatabaseSync(file, { readOnly: true }); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(13); check.close();
 });
 
 it('does not create a missing database and rejects an older schema without changing it', async () => {

@@ -56,7 +56,7 @@ it.skipIf(unsupported)('publishes a relocated installation through SDK and repla
     resources: expect.arrayContaining(['config', 'policy', 'ledger'].map(resource => expect.objectContaining({ resource, state: 'published' }))) });
   const db = new DatabaseSync(join(f.data, 'state/ledger.db'), { readOnly: true });
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(13);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(14);
     expect(db.prepare('SELECT count(*) AS count FROM installation_ownership').get()?.count).toBe(1);
     expect(JSON.parse(String(db.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get('pool-1')?.policy))).toEqual(f.profile.pool);
   } finally { db.close(); }

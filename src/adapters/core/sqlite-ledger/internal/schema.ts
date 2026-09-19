@@ -12,7 +12,8 @@ export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
 export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
 export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
-export const CURRENT_LEDGER_VERSION = MODEL_ACTIVATION_LEDGER_VERSION;
+export const MODEL_INVOCATION_LEDGER_VERSION = 14;
+export const CURRENT_LEDGER_VERSION = MODEL_INVOCATION_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -33,6 +34,14 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
     PRIMARY KEY(scope_id,provider_id,provider_version,model_id,model_version));
     CREATE TABLE model_activation_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,
     PRIMARY KEY(scope_id,command_id)); PRAGMA user_version=13;`,
+  14: `CREATE TABLE model_invocation_allocations(scope_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
+    max_calls INTEGER NOT NULL,max_in_flight INTEGER NOT NULL,lifetime_calls INTEGER NOT NULL,in_flight INTEGER NOT NULL,
+    record TEXT NOT NULL,PRIMARY KEY(scope_id,allocation_id));
+    CREATE TABLE model_invocations(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,invocation_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('claimed','responded','unknown')),record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,invocation_id),UNIQUE(scope_id,command_id));
+    CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state);
+    PRAGMA user_version=14;`,
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;

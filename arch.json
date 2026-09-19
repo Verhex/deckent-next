@@ -909,6 +909,38 @@
         "src/platform/core/config"
       ],
       "plan": "PROVIDERS/A2B"
+    },
+    "src/domain/core/model-invocation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS/A3A"
+    },
+    "src/engine/core/model-invocation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/model-activation",
+        "src/engine/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS/A3A"
+    },
+    "src/adapters/core/sqlite-model-invocation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDERS/A3A"
     }
   },
   "composition": {
