@@ -507,7 +507,6 @@ if (vocab?.enforce) {
 
 // ---- report
 const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
-if (violations.length === 0) { process.stdout.write(`${summary}\n`); process.exit(0); }
-for (const v of violations) process.stdout.write(`✗ [${v.rule}] ${v.file} — ${v.message}\n`);
-process.stdout.write(`${summary}\n`);
-process.exit(1);
+const report = [...violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}`), summary].join('\n') + '\n';
+process.stdout.write(report);
+process.exitCode = violations.length === 0 ? 0 : 1;
