@@ -1,0 +1,102 @@
+import http, { Agent, createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { afterEach, expect, it } from 'vitest';
+import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID,
+  OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, prepareOpenAiChatHttpRequest } from '#adapters/core/provider-openai-chat/index.js';
+
+const servers: Server[] = [];
+afterEach(async () => Promise.all(servers.splice(0).map(close)));
+const limits = { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 5000 };
+const request = { model: 'configured-model', messages: [{ role: 'user' as const, content: 'native text' }], max_completion_tokens: 12 };
+const binding = { encodingVersion: 1, provider: { id: 'provider', version: 1 }, model: { id: 'model', version: 1,
+  nativeId: 'configured-model', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] } };
+
+async function close(server: Server) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+async function fixture(handler: (req: IncomingMessage, res: ServerResponse) => void) {
+  const server = createServer(handler); servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('fixture address');
+  return `http://127.0.0.1:${address.port}`;
+}
+function profile(origin: string, profileLimits = limits, definition: Record<string, unknown> = { origin, maxOutputTokens: 32 }) {
+  return { schemaVersion: 1, id: 'profile', version: 1, scopeId: 'scope', reference: { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 },
+    bindingDigest: 'a'.repeat(64), protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 1, definition },
+    allocation: { id: 'allocation', maxCalls: 1, maxInFlight: 1 }, limits: profileLimits };
+}
+async function token(origin: string, input: unknown = request, profileLimits = limits, definition?: Record<string, unknown>) {
+  const port = createOpenAiChatNativePort(); const prepared = await port.prepare(profile(origin, profileLimits, definition), binding, input);
+  return { port, prepared };
+}
+function response(model = 'configured-model', overrides: Record<string, unknown> = {}) {
+  return { id: 'chatcmpl-local', object: 'chat.completion', created: 1, model, choices: [{ index: 0, finish_reason: 'stop',
+    message: { role: 'assistant', content: 'native answer' } }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }, ...overrides };
+}
+
+it('uses exact native nonstream bytes and preserves full native completion evidence without credentials', async () => {
+  let seen: { method?: string; url?: string; headers?: IncomingMessage['headers']; body?: string } = {};
+  const origin = await fixture((req, res) => { const chunks: Buffer[] = []; req.on('data', (chunk: Buffer) => chunks.push(chunk)); req.on('end', () => {
+    seen = { method: req.method, url: req.url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') }; res.end(JSON.stringify(response()));
+  }); });
+  const { port, prepared } = await token(origin), result = await port.send(prepared);
+  expect({ id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION,
+    family: OPENAI_CHAT_COMPLETIONS_FAMILY, protocol: OPENAI_CHAT_COMPLETIONS_VERSION }).toEqual({
+    id: 'openai-chat-http', version: 1, family: 'openai-chat-completions', protocol: 'v1' });
+  expect(seen.method).toBe('POST'); expect(seen.url).toBe('/v1/chat/completions'); expect(JSON.parse(seen.body ?? '')).toEqual({ ...request, stream: false });
+  expect(seen.headers?.authorization).toBeUndefined(); expect(seen.headers?.['proxy-authorization']).toBeUndefined();
+  expect(result).toEqual({ schemaVersion: 1, native: response(), usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
+  expect(Object.isFrozen(result.native)).toBe(true); expect(Object.isFrozen(result.usage)).toBe(true);
+});
+
+it('bypasses inherited proxy selectors and rejects external, credential-bearing, proxy, or header definitions before transport', async () => {
+  let proxyRequests = 0; const trap = await fixture((_req, res) => { proxyRequests++; res.end('trap'); });
+  const original = Object.fromEntries(['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'].map(name => [name, process.env[name]]));
+  const originalAgent = http.globalAgent, proxyAgent = new Agent({ proxyEnv: { HTTP_PROXY: trap, NO_PROXY: '' } });
+  http.globalAgent = proxyAgent;
+  try {
+    process.env.HTTP_PROXY = trap; process.env.HTTPS_PROXY = trap; process.env.NO_PROXY = '';
+    const origin = await fixture((_req, res) => res.end(JSON.stringify(response()))), { port, prepared } = await token(origin);
+    await expect(port.send(prepared)).resolves.toMatchObject({ native: { model: 'configured-model' } }); expect(proxyRequests).toBe(0);
+    for (const definition of [
+      { origin: 'http://8.8.8.8:80', maxOutputTokens: 2 }, { origin: 'http://user:pass@127.0.0.1:80', maxOutputTokens: 2 },
+      { origin, maxOutputTokens: 2, proxy: trap }, { origin, maxOutputTokens: 2, headers: { authorization: 'x' } },
+    ]) expect(() => parseOpenAiChatHttpDefinition(definition)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+    expect(proxyRequests).toBe(0);
+  } finally {
+    http.globalAgent = originalAgent; proxyAgent.destroy();
+    for (const [name, value] of Object.entries(original)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+  }
+});
+
+it('keeps preparation pure, rejects unsupported/getter input, binding mismatch, and reusing a sent token without a second request', async () => {
+  let requests = 0; const origin = await fixture((_req, res) => { requests++; const value = response(); delete value.usage; res.end(JSON.stringify(value)); });
+  const port = createOpenAiChatNativePort(); let getterCalls = 0; const getter = { ...request };
+  Object.defineProperty(getter, 'stream', { get() { getterCalls++; return false; } });
+  await expect(port.prepare(profile(origin), binding, getter)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' } satisfies Partial<OpenAiChatHttpError>);
+  expect(getterCalls).toBe(0); await expect(port.prepare(profile(origin), binding, { ...request, tools: [] })).rejects.toThrow('OPENAI_CHAT_REQUEST_INVALID');
+  await expect(port.prepare(profile(origin), { ...binding, model: { ...binding.model, nativeId: 'other-model' } }, request))
+    .rejects.toMatchObject({ code: 'OPENAI_CHAT_MODEL_MISMATCH' } satisfies Partial<OpenAiChatHttpError>); expect(requests).toBe(0);
+  const prepared = await port.prepare(profile(origin), binding, request); await expect(port.send(prepared)).resolves.toMatchObject({ usage: null });
+  await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' } satisfies Partial<OpenAiChatHttpError>); expect(requests).toBe(1);
+  expect(() => prepareOpenAiChatHttpRequest({ origin: 'http://localhost:1', maxOutputTokens: 1 }, limits, request)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+});
+
+it('reports cancellation and timeout after the owned fixture has observed the request', async () => {
+  let seen!: () => void; const observed = new Promise<void>(resolve => { seen = resolve; });
+  const origin = await fixture(() => seen()); const { port, prepared } = await token(origin); const controller = new AbortController(); const cancelling = port.send(prepared, controller.signal);
+  await observed; controller.abort(); await expect(cancelling).rejects.toMatchObject({ code: 'OPENAI_CHAT_CANCELLED' } satisfies Partial<OpenAiChatHttpError>);
+  const slowOrigin = await fixture(() => undefined), slow = await token(slowOrigin, request, { ...limits, timeoutMs: 40 });
+  await expect(slow.port.send(slow.prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_TIMEOUT' } satisfies Partial<OpenAiChatHttpError>);
+});
+
+it('does not follow redirects and rejects reset, oversize, malformed, non-text, empty/multiple choice, and invalid usage evidence', async () => {
+  let turn = 0; const origin = await fixture((_req, res) => {
+    turn++; if (turn === 1) { res.writeHead(307, { location: 'http://127.0.0.1:9/other' }); res.end(); return; }
+    if (turn === 2) { res.destroy(); return; } if (turn === 3) { res.end('x'.repeat(5000)); return; } if (turn === 4) { res.end('{'); return; }
+    if (turn === 5) { const value = response(); value.choices[0].message.tool_calls = []; res.end(JSON.stringify(value)); return; }
+    if (turn === 6) { res.end(JSON.stringify(response('configured-model', { choices: [] }))); return; }
+    if (turn === 7) { const value = response(); value.choices.push(value.choices[0]); res.end(JSON.stringify(value)); return; }
+    if (turn === 8) { res.end(JSON.stringify(response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 1 } }))); return; }
+    res.end(JSON.stringify(response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 13, total_tokens: 16 } })));
+  });
+  const codes = ['OPENAI_CHAT_REDIRECT_UNKNOWN', 'OPENAI_CHAT_TRANSPORT_UNKNOWN', 'OPENAI_CHAT_RESPONSE_TOO_LARGE', 'OPENAI_CHAT_RESPONSE_INVALID',
+    'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID'];
+  for (const code of codes) { const { port, prepared } = await token(origin); await expect(port.send(prepared)).rejects.toMatchObject({ code }); }
+});

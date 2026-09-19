@@ -585,5 +585,6 @@
   "models.activation.receipt": "{replay}: command {command} recorded {state} activation for {reference} in scope {scope} at revision {revision}.",
   "models.activation.replayed": "Historical replay",
   "models.activation.admitted": "Admitted",
-  "models.activation.notice": "Recorded activation only; provider availability and invocation permission are not established."
+  "models.activation.notice": "Recorded activation only; provider availability and invocation permission are not established.",
+  "config.field.provider_invocation_profiles": "Native invocation profiles and explicit request allocations"
 }

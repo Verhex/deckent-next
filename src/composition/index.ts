@@ -18,3 +18,4 @@ export type { InstallationApplyChoices } from '#composition/core/installation/in
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 export { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 export { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+export * from '#composition/core/model-invocation/index.js';

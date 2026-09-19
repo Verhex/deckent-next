@@ -25,7 +25,7 @@ export interface ModelInvocationStore {
 }
 export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' | 'MODEL_INVOCATION_CORRUPT'
   | 'MODEL_INVOCATION_UNAVAILABLE' | 'MODEL_INVOCATION_OUTCOME_UNKNOWN' | 'MODEL_INVOCATION_ACTIVATION_CONFLICT'
-  | 'MODEL_INVOCATION_QUOTA_EXHAUSTED' | 'MODEL_INVOCATION_CAPACITY_EXHAUSTED';
+  | 'MODEL_INVOCATION_ALLOCATION_CONFLICT' | 'MODEL_INVOCATION_QUOTA_EXHAUSTED' | 'MODEL_INVOCATION_CAPACITY_EXHAUSTED';
 export class ModelInvocationStoreError extends Error {
   constructor(readonly code: ModelInvocationStoreErrorCode) { super(code); this.name = 'ModelInvocationStoreError'; }
 }

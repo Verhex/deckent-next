@@ -1,0 +1,36 @@
+import { randomUUID } from 'node:crypto';
+import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand } from '#domain/index.js';
+import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication } from '#engine/index.js';
+import { openSqliteModelInvocationStore, openSqliteModelActivationReader, createOpenAiChatNativePort,
+  OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION } from '#adapters/index.js';
+import type { ConfigLoadOptions } from '#platform/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
+import { loadInvocationContext } from './context.js';
+
+/** A direct local invocation. A claimed operation is never sent again by receipt replay. */
+export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
+  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  try {
+    const parsed = modelInvocationCommandInputSchema.safeParse(input);
+    if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+    const command = parsed.data as ModelInvocationCommand;
+    const context = await loadInvocationContext(projectRoot, command.scopeId, options);
+    const application = new ModelInvocationApplication({ async verify() { return context.principal; } },
+      new ModelInvocationPolicyAuthorization(context.policy),
+      new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } }),
+      async () => openSqliteModelActivationReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }),
+      { async resolve(scopeId, reference) {
+        const configured = (await context.freshConfig())['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
+        const profiles = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)) ?? [];
+        return profiles.find(profile => profile.scopeId === scopeId
+          && JSON.stringify(profile.reference) === JSON.stringify(reference)) ?? null;
+      } },
+      { resolve(profile) {
+        if (profile.adapter.id !== OPENAI_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENAI_CHAT_HTTP_ADAPTER_VERSION) return null;
+        return createOpenAiChatNativePort();
+      } },
+      async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
+      { invocationId: randomUUID, now: Date.now });
+    return await application.invoke(command, undefined, signal);
+  } catch (error) { throw queryFailure(error); }
+}

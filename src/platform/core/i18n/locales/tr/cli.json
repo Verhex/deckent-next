@@ -585,5 +585,6 @@
   "models.activation.receipt": "{replay}: {command} komutu, {scope} kapsamındaki {reference} için revizyon {revision} ile {state} aktivasyonu kaydetti.",
   "models.activation.replayed": "Geçmiş kayıt tekrarlandı",
   "models.activation.admitted": "Kabul edildi",
-  "models.activation.notice": "Yalnız kayıtlı aktivasyon; sağlayıcı kullanılabilirliği ve çağrı yetkisi doğrulanmış değil."
+  "models.activation.notice": "Yalnız kayıtlı aktivasyon; sağlayıcı kullanılabilirliği ve çağrı yetkisi doğrulanmış değil.",
+  "config.field.provider_invocation_profiles": "Native çağrı profilleri ve açık istek tahsisleri"
 }

@@ -33,3 +33,4 @@ export { inspectInstallationFile, publishInstallationFile, InstallationFileError
 export { initializeInstallationLedger, verifyInstallationLedger, InstallationLedgerError } from '#adapters/core/attempt-store/index.js';
 export { openSqliteModelActivationStore, openSqliteModelActivationReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';
+export * from '#adapters/core/provider-openai-chat/index.js';

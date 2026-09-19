@@ -99,7 +99,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT'); }
         const configured = profile.allocation, current = this.allocation(command.scopeId, configured.id);
         if (current && (current.maxCalls !== configured.maxCalls || current.maxInFlight !== configured.maxInFlight)) {
-          throw new ModelInvocationStoreError('MODEL_INVOCATION_QUOTA_EXHAUSTED');
+          throw new ModelInvocationStoreError('MODEL_INVOCATION_ALLOCATION_CONFLICT');
         }
         const before = current ?? allocationSchema.parse({ schemaVersion: 1, scopeId: command.scopeId, allocationId: configured.id,
           maxCalls: configured.maxCalls, maxInFlight: configured.maxInFlight, lifetimeCalls: 0, inFlight: 0 });

@@ -77,12 +77,25 @@ it('releases in-flight once for a definitive response while lifetime count never
   expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 2, in_flight: 1 }); db.close();
 });
 
-it('keeps allocation ceilings immutable and rolls all claim writes back when receipt insertion fails', async () => {
+it('reports immutable allocation ceiling conflicts without mutation and rolls all claim writes back when insertion fails', async () => {
   const base = await fixture(3, 2), seed = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const first = await seed.claim(admission(base, 'command-1', 'invocation-1')); seed.close();
-  const changed = { ...base, profile: { ...base.profile, version: 2, allocation: { ...base.profile.allocation, maxCalls: 4 } } };
+  const beforeDb = new DatabaseSync(base.path, { readOnly: true });
+  const beforeAllocation = beforeDb.prepare('SELECT * FROM model_invocation_allocations').get();
+  const beforeInvocations = beforeDb.prepare('SELECT count(*) AS count FROM model_invocations').get(); beforeDb.close();
   const conflict = await openSqliteModelInvocationStore(base.path, options, 'forbid');
-  await expect(conflict.claim(admission(changed, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_QUOTA_EXHAUSTED'); conflict.close();
+  for (const [suffix, allocation] of [
+    ['calls', { ...base.profile.allocation, maxCalls: 4 }],
+    ['flight', { ...base.profile.allocation, maxInFlight: 3 }],
+  ] as const) {
+    const changed = { ...base, profile: { ...base.profile, version: 2, allocation } };
+    await expect(conflict.claim(admission(changed, `command-${suffix}`, `invocation-${suffix}`)))
+      .rejects.toThrow('MODEL_INVOCATION_ALLOCATION_CONFLICT');
+  }
+  conflict.close();
+  const unchanged = new DatabaseSync(base.path, { readOnly: true });
+  expect(unchanged.prepare('SELECT * FROM model_invocation_allocations').get()).toEqual(beforeAllocation);
+  expect(unchanged.prepare('SELECT count(*) AS count FROM model_invocations').get()).toEqual(beforeInvocations); unchanged.close();
   const db = new DatabaseSync(base.path); db.exec(`CREATE TRIGGER reject_invocation BEFORE INSERT ON model_invocations
     WHEN NEW.command_id='command-2' BEGIN SELECT RAISE(ABORT,'fixture invocation failure'); END;`); db.close();
   const failing = await openSqliteModelInvocationStore(base.path, options, 'forbid');

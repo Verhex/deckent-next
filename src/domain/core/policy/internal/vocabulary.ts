@@ -8,6 +8,7 @@ export const policyResources = Object.freeze({
   run: Object.freeze({ kind: 'run' as const, actions: Object.freeze(['create', 'inspect', 'cancel', 'reserve'] as const) }),
   service: Object.freeze({ kind: 'service' as const, actions: Object.freeze(['shutdown'] as const) }),
   modelActivation: Object.freeze({ kind: 'model-activation' as const, actions: Object.freeze(['activate', 'deactivate', 'inspect'] as const) }),
+  modelInvocation: Object.freeze({ kind: 'model-invocation' as const, actions: Object.freeze(['invoke', 'inspect'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

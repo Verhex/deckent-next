@@ -8,3 +8,4 @@ export { getPolicyVocabulary } from '#domain/index.js';
 export { ServicePolicyAuthorization } from './internal/service.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';
 export { ModelActivationPolicyAuthorization } from './internal/model-activation.js';
+export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';

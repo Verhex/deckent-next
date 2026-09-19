@@ -1,4 +1,7 @@
 import { ModelActivationError } from '#domain/index.js';
+import { ModelInvocationError } from '#domain/index.js';
+import { ModelInvocationStoreError } from '#engine/index.js';
+import { OpenAiChatHttpError } from '#adapters/index.js';
 import { ModelActivationStoreError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
@@ -12,6 +15,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
+  if (error instanceof ModelInvocationError || error instanceof ModelInvocationStoreError || error instanceof OpenAiChatHttpError) return ErrorRegistry.createError(error.code);
   if (error instanceof ModelActivationError || error instanceof ModelActivationStoreError) return ErrorRegistry.createError(error.code);
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError

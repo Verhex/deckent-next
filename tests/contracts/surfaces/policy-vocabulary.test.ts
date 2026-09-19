@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 it('exposes the same versioned action/resource matrix through compiled CLI and SDK without requiring a project', async () => {
   const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: '/tmp' });
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['attempt', 'scope', 'pool', 'run', 'service', 'model-activation']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['attempt', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'model-activation')!.actions).toEqual(['activate', 'deactivate', 'inspect']);

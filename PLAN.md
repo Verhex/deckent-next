@@ -617,3 +617,7 @@ RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run sna
 | PROVIDERS/A3A | P5; A2+AUTH | Standalone invocation contract/application and scoped atomic call-count/in-flight claim; shared ledger14; native transport is A3B | REVIEW |
 
 PROVIDERS/A3A DONE — exact R6 independently reviewed; immutable invocation contracts/application and one canonical SQLite14 record with scoped unique command identity, durable call/in-flight bounds, conservative unknown custody. Full1007/191+24native+18host; two actual processes samecommand yield one fresh claim/one replay. Native transport and public invocation surfaces remain A3B/C; no provider/Brain/dogfood claim.
+
+| PROVIDERS/A3B | P5; A3A | Explicit profiles, current invocation policy and adapter-owned native text HTTP; canonical loopback/no credentials; owned fixture only | REVIEW |
+
+PROVIDERS/A3B DONE — exact R8 reviewed: adapter-owned nonstream text HTTP, explicit scoped profile, current policy/composition and distinct immutable allocation conflict. Full1019/194+24native+18host. Canonical numeric loopback with per-request no-proxy transport; owned fixture only. Shared invocation surfaces follow A3C; runtime ownership remains A4. No real provider, credential, monetary or dogfood claim.
