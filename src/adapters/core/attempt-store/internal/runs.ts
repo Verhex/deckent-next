@@ -3,7 +3,7 @@ import { SqliteExecutionPools } from './pools.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
-  assertRunExecution, assertTaskEvaluationCustody, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
+  assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { sqliteFailure } from './options.js';
@@ -157,7 +157,9 @@ export class SqliteRunJournal {
       let wave;
       try { wave = planSchedulingWave(current.graph, { schemaVersion: 1, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
-      if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) throw new RunStoreError('RUN_CAPACITY_OR_ORDER');
+      if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) {
+        throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));
+      }
       new SqliteExecutionPools(this.db).assertAvailable(policy.poolId, parsed.identities.length);
       const snapshot = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
       for (const identity of parsed.identities) {

@@ -235,7 +235,22 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
       const firstBase = firstLease!.baseCommit;
       await git('add', 'input'); await git('commit', '-m', 'owner source update');
       const sourceHead = await git('rev-parse', 'HEAD'); expect(sourceHead).not.toBe(firstBase);
-      const next = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve-second', scopeId: 's', runId: 'r', expectedRevision: firstEvaluation.evaluation.run.revision }, f.options);
+      const beforeReservation = await runtime.store.loadRun('s', 'r');
+      const evaluationReceipt = await runtime.store.loadRunReceipt('s', 'evaluate-first');
+      expect(beforeReservation?.revision).toBe(firstEvaluation.evaluation.run.revision);
+      expect(beforeReservation?.progress).toEqual(evaluationReceipt?.snapshot.progress);
+      expect(beforeReservation?.progress.find(task => task.taskId === 't')?.phase).toBe('accepted');
+      const observedBeforeMs = Date.now();
+      const next = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve-second', scopeId: 's', runId: 'r', expectedRevision: firstEvaluation.evaluation.run.revision }, f.options)
+        .catch(async (error: unknown) => {
+          // Fixture-only evidence. Do not mask the original failure with retry or infer a cause from a later snapshot.
+          const afterReservation = await runtime.store.loadRun('s', 'r');
+          const policy = await runtime.store.loadRunExecutionPolicy('s', 'r');
+          throw new Error(`RESERVATION_FIXTURE_EVIDENCE ${JSON.stringify({ observedBeforeMs, observedAfterMs: Date.now(),
+            expectedRevision: firstEvaluation.evaluation.run.revision,
+            before: beforeReservation && { revision: beforeReservation.revision, progress: beforeReservation.progress },
+            after: afterReservation && { revision: afterReservation.revision, progress: afterReservation.progress }, policy })}`, { cause: error });
+        });
       secondIdentity = next.reservation.identities[0]!; expect(secondIdentity.taskId).toBe('t2');
       const second = await executeTask(f.project, secondIdentity, f.options);
       expect(second.execution).toMatchObject({ status: 'terminal', terminal: { exitCode: 0 }, outputRecorded: true });

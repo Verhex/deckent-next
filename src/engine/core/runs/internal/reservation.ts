@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { counterSchema, identitySchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
-import { planSchedulingWave } from '#engine/core/scheduling/index.js';
+import { diagnoseReservationWave, planSchedulingWave } from '#engine/core/scheduling/index.js';
 import { runQuerySchema, type RunAuthorization } from './application.js';
 import { runExecutionPolicySchema, runReservationSchema, RunStoreError, type RunStore, type RunReceipt, type RunReservation } from './store.js';
 import { assertRunExecution } from './registry.js';
@@ -63,7 +63,7 @@ export class RunReservationApplication {
       const now = counterSchema.parse(this.runtime.now());
       const wave = planSchedulingWave(run.graph, { schemaVersion: 1, capacity: policy.capacity, ordering: policy.ordering,
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
-      if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER');
+      if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
         attemptId: identitySchema.parse(this.runtime.attemptId()), generation: 1 }));
       await this.authorization.authorize('reserve', command, principal);

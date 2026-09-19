@@ -302,3 +302,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - RECONCILIATION-SERVICE-REVIEW2: recover offline workers in shared service (Fable1878/1895; reviewed slice).
 
 - RECONCILIATION-R1: advance reconciliation past unavailable records (Fable1878/1895; reviewed slice).
+
+- RESERVATION-DIAGNOSTIC: expose bounded reservation diagnostics (Fable1878/1895; reviewed slice).

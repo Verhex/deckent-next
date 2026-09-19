@@ -520,3 +520,5 @@ RECONCILIATION-COMPOSITION-REVIEW2: DONE — Fable1878/1895 PASS; exact reviewed
 RECONCILIATION-SERVICE-REVIEW2: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.
 
 RECONCILIATION-R1: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.
+
+RESERVATION-DIAGNOSTIC: DONE — Fable1878/1895 PASS; exact reviewed candidate landed. Cancellation fairness F1 and reservation1852 root cause remain separate open work.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
+import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
 const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
 const capacity = z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict();
 export const executionPoolSchema = z.object({ schemaVersion: z.literal(1), poolId: identitySchema, capacity }).strict().readonly();
@@ -31,5 +32,6 @@ export interface RunStore {
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;
 }
 export class RunStoreError extends Error {
-  constructor(readonly code: 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL') { super(code); this.name = 'RunStoreError'; }
+  constructor(readonly code: 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL',
+    readonly diagnostic?: ReservationDiagnostic) { super(code); this.name = 'RunStoreError'; }
 }
