@@ -3,17 +3,26 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, startLocalRuntimeSocketServer } from '#adapters/index.js';
 import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { prepareConfiguredCancellationRuntime, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
+import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 
+export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
+  onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
+  onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
+}
+
 /** Explicit local host. Client disconnects never call worker cancellation or stop this host. */
-async function startService(projectRoot: string, observer: ConfiguredCancellationRuntimeObserver,
+async function startService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}) {
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
+  const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
+    onPage: (command, result) => observer.onReconciliationPage?.(command, result),
+    onError: (command, error) => observer.onReconciliationError?.(command, error),
+  }, options) : null;
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
@@ -45,12 +54,21 @@ async function startService(projectRoot: string, observer: ConfiguredCancellatio
     void lifecycle.whenSettled().then(resolveDone, error => rejectDone(queryFailure(error)));
     return stopping;
   };
-  recovery = preparedRecovery.run(controller.signal);
+  const hostedRecovery = [
+    preparedRecovery.run(controller.signal),
+    ...(preparedReconciliation ? [preparedReconciliation.run(controller.signal)] : []),
+  ];
+  recovery = Promise.allSettled(hostedRecovery.map(work => work.catch(error => {
+    controller.abort(); void stop().catch(() => undefined); throw error;
+  }))).then(results => {
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+  });
   void recovery.catch(() => { void stop().catch(() => undefined); });
   return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, stop });
 }
 
-export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredCancellationRuntimeObserver,
+export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}) {
   try { return await startService(projectRoot, observer, options); }
   catch (error) { throw queryFailure(error); }

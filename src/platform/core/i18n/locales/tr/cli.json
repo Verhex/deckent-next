@@ -551,5 +551,7 @@
   "cli.run.cancel.deliveryExhausted": "tekrar sınırına ulaşıldı; belirsiz etkileri inceleyin",
   "cli.run.inspect.profile": "  Profil: {profile} v{version}; kabul kriterleri: {criteria}",
   "cli.run.inspect.criterion": "Kriter {criterion}: {description} ({evaluator} v{version})",
-  "cli.help.runtime": "Kullanım: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nOrtak yerel servisi ön planda başlatır. Diğer CLI/MCP süreçleri ona bağlanır.\n    Ctrl+C kontrollü kapanış ister; worker’ları iptal etmez."
+  "cli.help.runtime": "Kullanım: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nOrtak yerel servisi ön planda başlatır. Diğer CLI/MCP süreçleri ona bağlanır.\n    Ctrl+C kontrollü kapanış ister; worker’ları iptal etmez.",
+  "cli.runtime.reconciliation": "Uzlaştırma sayfası tamamlandı: {count} sonuç. Görev kabulü değişmedi.",
+  "cli.runtime.reconciliationFailed": "Uzlaştırma kurtarması başarısız: {code}."
 }

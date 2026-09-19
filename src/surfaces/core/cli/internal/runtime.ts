@@ -1,5 +1,5 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import type { CancellationRecoveryCommand, CancellationRecoveryPageResult, RuntimeServiceDrainResult } from '#engine/index.js';
+import type { CancellationRecoveryCommand, CancellationRecoveryPageResult, RuntimeServiceDrainResult, ReconciliationRecoveryCommand, ReconciliationRecoveryPage } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 export interface RuntimeServiceHost {
@@ -9,6 +9,8 @@ export interface RuntimeServiceHost {
   stop(): Promise<RuntimeServiceDrainResult>;
 }
 export interface RuntimeServiceObserver {
+  onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
+  onReconciliationError?(command: ReconciliationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
 }
@@ -40,6 +42,15 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
   const output = (value: unknown, render: () => string, level: 'info' | 'error' = 'info') => emit(value, { json, level,
     ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render });
   const host = await context.startRuntimeService(root, {
+    onReconciliationPage: async (command, result) => {
+      const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');
+      if (changed.length) output({ schemaVersion: 1, event: 'reconciliation', command, result },
+        () => t('cli.runtime.reconciliation', { count: changed.length }, locale));
+    },
+    onReconciliationError: async (_command, error) => {
+      output({ schemaVersion: 1, event: 'reconciliation-failed', code: error.code },
+        () => t('cli.runtime.reconciliationFailed', { code: error.code }, locale), 'error');
+    },
     onPage: async (command, result) => { const outcomes = result.outcomes ?? [];
       if (outcomes.length) output({ schemaVersion: 1, event: 'recovery', command, result },
         () => t('cli.runtime.recovery', { count: outcomes.length }, locale)); },

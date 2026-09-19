@@ -551,5 +551,7 @@
   "cli.run.cancel.deliveryExhausted": "retry limit reached; inspect unresolved effects",
   "cli.run.inspect.profile": "  Profile: {profile} v{version}; acceptance criteria: {criteria}",
   "cli.run.inspect.criterion": "Criterion {criterion}: {description} ({evaluator} v{version})",
-  "cli.help.runtime": "Usage: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nStarts the common local service in the foreground. Other CLI/MCP processes\n    connect to it. Ctrl+C requests graceful shutdown; it does not cancel\n    workers."
+  "cli.help.runtime": "Usage: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nStarts the common local service in the foreground. Other CLI/MCP processes\n    connect to it. Ctrl+C requests graceful shutdown; it does not cancel\n    workers.",
+  "cli.runtime.reconciliation": "Reconciliation page completed: {count} outcomes. Task acceptance is unchanged.",
+  "cli.runtime.reconciliationFailed": "Reconciliation recovery failed: {code}."
 }
