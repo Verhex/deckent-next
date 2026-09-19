@@ -11,3 +11,12 @@ export type { ReconciliationRecoveryCommand, ReconciliationRecoveryInventory, Re
 
 export { ReconciliationRuntimeLoop, ReconciliationRuntimeLoopError } from './internal/reconciliation-loop.js';
 export type { ReconciliationRuntimeLoopOptions, ReconciliationRecoveryDrain, ReconciliationRuntimeLoopObserver } from './internal/reconciliation-loop.js';
+export { serviceIdentitySchema, serviceInstanceSchema, shutdownCommandSchema, serviceActorSchema,
+  shutdownAdmissionSchema, shutdownOutcomeSchema, runtimeServiceDescriptorSchema,
+  stableShutdownActor, sameShutdownAdmission } from './internal/shutdown-contract.js';
+export type { ServiceIdentity, ServiceInstance, ShutdownCommand, ServiceActor, ShutdownAdmission,
+  ShutdownOutcome, RuntimeServiceDescriptor, StableShutdownActor } from './internal/shutdown-contract.js';
+export { ServiceShutdownError } from './internal/shutdown-store.js';
+export type { ServiceShutdownStore, ServiceShutdownKey, ServiceShutdownReceipt, ServiceShutdownAdmissionResult } from './internal/shutdown-store.js';
+export { ServiceShutdownApplication } from './internal/shutdown-application.js';
+export type { ServiceShutdownAuthentication, ServiceShutdownAuthorization } from './internal/shutdown-application.js';

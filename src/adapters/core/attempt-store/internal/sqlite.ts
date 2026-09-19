@@ -4,9 +4,10 @@ import { loadCancellationDispatch } from './run-cancellation.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
+import { SqliteServiceShutdownJournal } from './service-shutdown.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
-import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, TaskEvaluationCommit, TaskEvaluationStore } from '#engine/index.js';
+import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -16,7 +17,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, ty
 import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, TaskEvaluationStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore {
   private readonly db: DatabaseSync;
   constructor(path: string, options: SqliteAttemptOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -52,6 +53,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     return new SqliteCancellationRecoveryQuery(this.db).discoverCancellationRecovery(input);
   }
   async loadRunWorkspaceCustody(scopeId: string, runId: string) { return new SqliteRunWorkspaceCustody(this.db).loadRunWorkspaceCustody(scopeId, runId); }
+  async admitServiceShutdown(admission: import('#engine/index.js').ShutdownAdmission) { return new SqliteServiceShutdownJournal(this.db).admitServiceShutdown(admission); }
+  async readServiceShutdown(key: import('#engine/index.js').ServiceShutdownKey) { return new SqliteServiceShutdownJournal(this.db).readServiceShutdown(key); }
+  async retainServiceShutdownOutcome(outcome: import('#engine/index.js').ShutdownOutcome) { return new SqliteServiceShutdownJournal(this.db).retainServiceShutdownOutcome(outcome); }
   async resolveRunWorkspaceCustody(input: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunWorkspaceCustody(this.db).resolveRunWorkspaceCustody(input); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }

@@ -5,3 +5,5 @@ export { PoolPolicyAuthorization } from './internal/pool.js';
 export type { PoolAuthorization } from './internal/pool.js';
 export { resolvePolicyScopeMembership } from './internal/membership.js';
 export { getPolicyVocabulary } from '#domain/index.js';
+export { ServicePolicyAuthorization } from './internal/service.js';
+export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';

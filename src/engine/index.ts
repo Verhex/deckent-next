@@ -11,6 +11,8 @@ export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutc
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
 export { PoolPolicyAuthorization, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, resolvePolicyScopeMembership } from '#engine/core/policy/index.js';
 export type { PoolAuthorization, PolicySource } from '#engine/core/policy/index.js';
+export { ServicePolicyAuthorization } from '#engine/core/policy/index.js';
+export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';
 export { diagnoseReservationWave, planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
