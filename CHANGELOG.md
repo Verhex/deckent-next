@@ -362,3 +362,5 @@ BIN/ENTRY: installed CLI/MCP entry points share main-module detection; symlink s
 PROVIDERS/A3D: reject undeliverable model results before invocation claim or network send; preserve receipts and expose MCP recovery guidance without resending.
 
 PROVIDERS/A4A: share native peer authentication and current scope policy for model invocation; validate correlated receipts without relaxing inner limits.
+
+PROVIDERS/A4B: SDK/CLI/MCP model invocation and inspection use the shared runtime; client disconnect preserves work, bounded delivery is checked before effects, recorded results survive graceful service restart.

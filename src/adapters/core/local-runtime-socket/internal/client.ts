@@ -4,28 +4,35 @@ import { parseRuntimeServiceResponse, runtimeServiceRequestSchema, type RuntimeS
 import { encodeServiceFrame, ServiceFrameDecoder } from './framing.js';
 import { assertOwnedSocket, LocalRuntimeSocketError, resolveSocketOptions, type LocalRuntimeSocketOptions } from './endpoint.js';
 
-function connected(socket: Socket, endpoint: string, timeoutMs: number): Promise<void> {
+function connected(socket: Socket, endpoint: string, timeoutMs: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { socket.destroy(); reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); }, timeoutMs);
     timer.unref();
-    const error = (cause: Error) => { clearTimeout(timer); socket.off('connect', ready); reject(cause); };
-    const ready = () => { clearTimeout(timer); socket.off('error', error); resolve(); };
+    const abort = () => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT'));
+    const error = (cause: Error) => { clearTimeout(timer); signal?.removeEventListener('abort', abort); socket.off('connect', ready); reject(cause); };
+    const ready = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); socket.off('error', error); resolve(); };
     socket.once('error', error);
     socket.once('connect', ready);
-    socket.connect(endpoint);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort(); else socket.connect(endpoint);
   });
 }
 export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
-  value: RuntimeServiceRequest): Promise<RuntimeServiceResponse> {
+  value: RuntimeServiceRequest, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
+  if (signal?.aborted) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
   const request = runtimeServiceRequestSchema.parse(value);
   const resolved = await resolveSocketOptions(options);
+  const frame = encodeServiceFrame(request, resolved.inputMaxBytes);
   await assertOwnedSocket(resolved.endpoint);
   const socket = new Socket({ allowHalfOpen: true });
-  try { await connected(socket, resolved.endpoint, resolved.headerTimeoutMs); }
+  try { await connected(socket, resolved.endpoint, resolved.headerTimeoutMs, signal); }
   catch (error) { socket.destroy(); throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error }); }
   const decoder = new ServiceFrameDecoder(resolved.responseMaxBytes);
   return await new Promise((resolve, reject) => {
     let ended = false;
+    // Aborting this client disconnects its wait; an accepted server operation is never cancelled here.
+    const abort = () => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT'));
+    signal?.addEventListener('abort', abort, { once: true });
     socket.on('data', chunk => {
       try {
         if (!Buffer.isBuffer(chunk)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
@@ -37,9 +44,9 @@ export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
       try { resolve(parseRuntimeServiceResponse(request.requestId, decoder.finish())); }
       catch (error) { reject(error); }
     });
-    socket.once('close', () => { if (!ended) reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); });
+    socket.once('close', () => { signal?.removeEventListener('abort', abort); if (!ended) reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); });
     socket.once('error', error => reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error })));
-    try { socket.end(encodeServiceFrame(request, resolved.inputMaxBytes)); }
+    try { if (signal?.aborted) abort(); else socket.end(frame); }
     catch (error) { socket.destroy(); reject(error); }
   });
 }

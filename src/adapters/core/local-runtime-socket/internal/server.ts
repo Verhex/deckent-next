@@ -3,7 +3,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
-import { encodeServiceFrame, ServiceFrameDecoder } from './framing.js';
+import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 
@@ -29,8 +29,8 @@ function listen(server: Server, endpoint: string): Promise<void> {
 function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 }
-function transportFailure(requestId: string): RuntimeServiceResponse {
-  return { schemaVersion: 2, requestId, ok: false, error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } };
+function transportFailure(requestId: string, code = 'RUNTIME_SERVICE_TRANSPORT'): RuntimeServiceResponse {
+  return { schemaVersion: 3, requestId, ok: false, error: { code, category: 'error' } };
 }
 function isAfterResponseOrDisconnect(value: unknown): value is () => void { return typeof value === 'function'; }
 function reply(value: RuntimeServiceHandlerReply) {
@@ -70,6 +70,10 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     let request: RuntimeServiceRequest;
     try { request = runtimeServiceRequestSchema.parse(decoder.finish()); }
     catch { socket.destroy(); return; }
+    // Prove a correlated error can be delivered before admitting any effect. Tiny limits must not fail after dispatch.
+    let limitFrame: Buffer;
+    try { limitFrame = encodeServiceFrame(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT'), options.responseMaxBytes); }
+    catch { socket.destroy(); return; }
     void Promise.resolve().then(() => handler(request, peer)).then(reply)
       .then(value => {
         let response = value.response;
@@ -79,7 +83,13 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
         responseTimer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')), options.responseTimeoutMs);
         responseTimer.unref();
         try {
-          socket.end(encodeServiceFrame(response, options.responseMaxBytes), () => {
+          let frame: Buffer;
+          try { frame = encodeServiceFrame(response, options.responseMaxBytes); }
+          catch (error) {
+            if (!(error instanceof ServiceFrameError) || error.code !== 'SERVICE_FRAME_LIMIT') throw error;
+            frame = limitFrame;
+          }
+          socket.end(frame, () => {
             if (responseTimer) clearTimeout(responseTimer); finishHandoff();
           });
         } catch { socket.destroy(); }

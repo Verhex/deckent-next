@@ -637,3 +637,7 @@ PROVIDERS/A3D DONE — Fable2075 PASS closes C-a: full-result fit before claim/s
 PROVIDERS/A4A REVIEW — shared local peer identity before scoped policy/model invocation and strict engine-owned command/query result correlation. Native runtime wire/client/server integration and disconnect proof follow A4B; not yet implemented.
 
 PROVIDERS/A4A DONE — Fable2080 PASS: verified same-UID native peer before policy/config/store, shared scoped invocation, strict command/query receipt correlation. Full1045/199+24native+18host. Public service wiring is A4B; replay metadata is advisory, multi-user identity remains unsupported.
+
+PROVIDERS/A4B REVIEW — one current wire3; native peer-owned invocation/inspection, narrowed caller/server delivery limits, pre-dispatch error-envelope fit and typed overflow. SDK/CLI/MCP use runtime without direct fallback. Disconnect is not cancellation; real socket/compiled consumer, clean/incomplete drain and restart proof. No paid provider, automatic unknown resolution, Brain or dogfood claim.
+
+PROVIDERS/A4B DONE — Fable2087 PASS with E-a text correction before M1; single wire3, peer-owned native invocation, exact caller/server capacity propagation, typed overflow before/after handler, disconnect is not cancellation. Full1052/200+24native+18host. No explicit model cancel/unknown resolution, paid provider or dogfood claim.

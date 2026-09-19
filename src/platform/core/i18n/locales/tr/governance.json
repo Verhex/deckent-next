@@ -807,6 +807,8 @@
   "error.LOCAL_RUNTIME_TRANSPORT": "Runtime servisine ulaşılamadı veya bağlantı kesildi. Yapılandırılmış servisi başlatıp aynı komutu yeniden deneyin.",
   "error.RUNTIME_SERVICE_TRANSPORT": "Runtime yanıtı güvenle iletilemedi. Yeniden denemeden önce kayıtlı durumu inceleyin.",
   "error.RUNTIME_SERVICE_CORRELATION": "Runtime yanıtı istekle eşleşmiyor.",
+  "error.RUNTIME_SERVICE_RESPONSE_LIMIT": "Yapılandırılmış runtime yanıt kapasitesi sonuç zarfını taşıyamıyor.",
+  "error.RUNTIME_SERVICE_DELIVERY_INVALID": "Runtime sonuç teslimi sınırı geçersiz.",
   "error.RUNTIME_SERVICE_OPTIONS": "Runtime servisi sınırları geçersiz.",
   "error.RUNTIME_SERVICE_BUSY": "Runtime servisi istek kapasitesine ulaştı. Daha sonra yeniden deneyin.",
   "error.RUNTIME_SERVICE_STOPPING": "Runtime servisi kapanıyor ve yeni istek kabul etmiyor.",

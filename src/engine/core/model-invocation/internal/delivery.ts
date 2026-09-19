@@ -1,5 +1,4 @@
 import type { ModelInvocationReceipt } from '#domain/index.js';
-import type { ModelInvocationResult } from './application.js';
 import { ModelInvocationStoreError } from './port.js';
 
 /** Internal caller capacity, never a permission or a persisted invocation field. */
@@ -24,7 +23,7 @@ export function assertInvocationDeliveryFit(receipt: ModelInvocationReceipt, res
     throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
   }
 }
-export function checkInvocationResultDelivery(result: ModelInvocationResult, delivery?: ModelInvocationDelivery): ModelInvocationResult {
+export function checkInvocationResultDelivery<T>(result: T, delivery?: ModelInvocationDelivery): T {
   if (delivery && bytes(result) > BigInt(delivery.maxResultBytes)) throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
   return result;
 }

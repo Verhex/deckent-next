@@ -9,6 +9,7 @@ import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServic
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
+import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
@@ -42,19 +43,21 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
-        return { schemaVersion: 2, requestId: request.requestId, ok: true, result };
+        return { schemaVersion: 3, requestId: request.requestId, ok: true, result };
       }
       if (request.operation === 'shutdownService') {
         if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
         const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
-        return { response: { schemaVersion: 2, requestId: request.requestId, ok: true, result },
+        return { response: { schemaVersion: 3, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
-      return { schemaVersion: 2, requestId: request.requestId, ok: true, result };
+      const result = await lifecycle.admit(() => request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation'
+        ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
+        : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
+      return { schemaVersion: 3, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: 2, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      return { schemaVersion: 3, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;

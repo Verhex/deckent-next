@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
@@ -16,10 +16,14 @@ import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocati
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
-const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [];
+const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [], runtimeProcesses: ChildProcess[] = [], clientProcesses: ChildProcess[] = [],
+  heldReleases: (() => void)[] = [];
 const sdk = resolve('dist/index.js'), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 afterEach(async () => {
+  for (const release of heldReleases.splice(0)) release();
+  for (const child of clientProcesses.splice(0)) await terminate(child);
+  for (const child of runtimeProcesses.splice(0)) await stopRuntime(child);
   clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(done => server.close(() => done()))));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -27,6 +31,40 @@ async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 10_
   let timer: ReturnType<typeof setTimeout> | undefined;
   try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]); }
   finally { if (timer) clearTimeout(timer); }
+}
+async function terminate(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGKILL');
+  await bounded(new Promise<void>(resolve => child.once('exit', () => resolve())), 'CLIENT_EXIT_TIMEOUT');
+}
+async function stopRuntime(child: ChildProcess): Promise<void> {
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGTERM');
+    await bounded(new Promise<void>(resolve => child.once('exit', () => resolve())), 'RUNTIME_STOP_TIMEOUT');
+  }
+}
+async function startRuntime(project: string, env: Record<string, string>): Promise<ChildProcess> {
+  const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  runtimeProcesses.push(child); let stderr = '', buffer = '';
+  child.stderr!.on('data', chunk => { stderr += String(chunk); });
+  await bounded(new Promise<void>((resolve, reject) => {
+    const failed = () => reject(new Error(`RUNTIME_START_FAILED:${stderr.slice(-2048)}`));
+    child.once('error', failed); child.once('exit', failed);
+    child.stdout!.on('data', chunk => {
+      buffer += String(chunk); const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        try { if ((JSON.parse(line) as { event?: string }).event === 'ready') resolve(); } catch { /* Ready output is JSON only. */ }
+      }
+    });
+  }), 'RUNTIME_READY_TIMEOUT');
+  return child;
+}
+async function waitFor(check: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error(label);
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
 }
 const sdkProgram = `
 import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url';
@@ -65,8 +103,18 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const proxyAddress = proxy.address(); if (!proxyAddress || typeof proxyAddress === 'string') throw new Error('PROXY_FIXTURE_ADDRESS');
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', NODE_USE_ENV_PROXY: '1',
     HTTP_PROXY: `http://127.0.0.1:${proxyAddress.port}`, NO_PROXY: '' }, bodies: string[] = []; let response: 'normal' | 'oversize' = 'normal';
+  let holdResponse = false, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined;
+  const hold = () => {
+    holdResponse = true;
+    const observed = new Promise<void>(resolve => { observeHeld = resolve; });
+    heldReleases.push(() => releaseHeld?.());
+    return observed;
+  };
   const server = createServer((request, reply) => { const chunks: Buffer[] = [];
-    request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', () => { bodies.push(Buffer.concat(chunks).toString('utf8'));
+    request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => { bodies.push(Buffer.concat(chunks).toString('utf8'));
+      if (holdResponse) {
+        observeHeld?.(); await new Promise<void>(resolve => { releaseHeld = resolve; }); holdResponse = false;
+      }
       const native = response === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${bodies.length}`, object: 'chat.completion', created: 1,
         model: 'native-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
@@ -84,7 +132,11 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
       definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 5, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
-    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] } };
+    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
+    cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
+    cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
+    service: { inputMaxBytes: 65536, responseMaxBytes: 1_048_576, maxConnections: 8, maxConcurrentRequests: 4,
+      maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 2000 } };
   const writeConfig = async (responseMaxBytes = 1_048_576) => writeFile(configPath, JSON.stringify({ ...config,
     mcp: { responseMaxBytes } }), { mode: 0o600 });
   await writeConfig();
@@ -108,11 +160,29 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     finally { db.close(); }
   };
   const firstPath = join(root, 'first.json'); await writeFile(firstPath, JSON.stringify(command('first')), { mode: 0o600 });
-  const sdkFirst = await callSdk<ModelInvocationResult>(project, env, 'invoke', firstPath);
-  expect(sdkFirst).toMatchObject({ ok: true, value: { replayed: false, receipt: { outcome: { state: 'responded' } } } }); expect(bodies).toHaveLength(1);
-  const first = (sdkFirst as { ok: true; value: ModelInvocationResult }).value.receipt;
-  const queryOne = { schemaVersion: 1, scopeId: 'scope', invocationId: first.claim.invocationId, reference };
+  expect(await callSdk(project, env, 'invoke', firstPath)).toEqual({ ok: false, code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  expect(bodies).toHaveLength(0);
+  const runtime = await startRuntime(project, env);
+  const firstObserved = hold();
+  const firstClient = spawn(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, 'invoke', project, firstPath],
+    { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  clientProcesses.push(firstClient);
+  await firstObserved;
+  await terminate(firstClient);
+  clientProcesses.splice(clientProcesses.indexOf(firstClient), 1);
+  releaseHeld?.();
+  await waitFor(() => invocationCount('first') === 1, 'DISCONNECTED_CLIENT_RESULT_MISSING');
+  expect(bodies).toHaveLength(1);
+  await stopRuntime(runtime); runtimeProcesses.splice(runtimeProcesses.indexOf(runtime), 1);
+  await startRuntime(project, env);
+  const db = new DatabaseSync(ledger, { readOnly: true });
+  const firstRow = db.prepare('SELECT invocation_id FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', 'first') as { invocation_id: string };
+  db.close();
+  const queryOne = { schemaVersion: 1, scopeId: 'scope', invocationId: firstRow.invocation_id, reference };
   const queryOnePath = join(root, 'query-one.json'); await writeFile(queryOnePath, JSON.stringify(queryOne), { mode: 0o600 });
+  const recovered = await callSdk<ModelInvocationInspection>(project, env, 'inspect', queryOnePath);
+  expect(recovered).toMatchObject({ ok: true, value: { invocation: { outcome: { state: 'responded' } } } });
+  const first = (recovered as { ok: true; value: ModelInvocationInspection }).value.invocation!;
   const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', queryOnePath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
   expect(cliInspection.invocation).toEqual(first);
@@ -140,7 +210,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     invocationId: capReceipt.claim.invocationId, reference });
   expect(cappedInspection.isError).toBe(true);
   expect(JSON.parse((cappedInspection.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
-    code: 'MCP_RESPONSE_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
+    code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
   expect(bodies).toHaveLength(2);
   expect(await callSdk<ModelInvocationResult>(project, env, 'invoke', capPath)).toEqual({ ok: true, value: { replayed: true, receipt: capReceipt } });
   expect(bodies).toHaveLength(2);

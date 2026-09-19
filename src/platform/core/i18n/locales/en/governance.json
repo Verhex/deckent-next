@@ -807,6 +807,8 @@
   "error.LOCAL_RUNTIME_TRANSPORT": "The runtime service could not be reached or the connection failed. Start the configured service and retry the same command.",
   "error.RUNTIME_SERVICE_TRANSPORT": "The runtime response could not be delivered safely. Inspect recorded state before retrying.",
   "error.RUNTIME_SERVICE_CORRELATION": "The runtime response does not match the request.",
+  "error.RUNTIME_SERVICE_RESPONSE_LIMIT": "The configured runtime response capacity cannot carry this result envelope.",
+  "error.RUNTIME_SERVICE_DELIVERY_INVALID": "The runtime result delivery constraint is invalid.",
   "error.RUNTIME_SERVICE_OPTIONS": "The runtime service limits are invalid.",
   "error.RUNTIME_SERVICE_BUSY": "The runtime service has reached its request capacity. Retry later.",
   "error.RUNTIME_SERVICE_STOPPING": "The runtime service is stopping and accepts no new requests.",
