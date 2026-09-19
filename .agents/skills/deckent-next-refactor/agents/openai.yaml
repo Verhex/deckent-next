@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Next Refactor"
+  short_description: "Evidence-led Deckent Next refactor workflow"
+  default_prompt: "Use $deckent-next-refactor to advance the current admitted Deckent Next card."
+policy:
+  allow_implicit_invocation: true

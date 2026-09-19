@@ -15,3 +15,11 @@ DECKENT.md
 .gemini/
 # native build artefacts (prebuilds are shipped via CI, not committed)
 native/**/build/
+
+# Owner-authorized shared development skill links; other host-local files remain ignored.
+!.claude/
+.claude/*
+!.claude/skills
+!.codex/
+.codex/*
+!.codex/skills

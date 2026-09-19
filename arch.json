@@ -185,6 +185,9 @@
       "CLAUDE.md": 5,
       "AGENTS.md": 5
     },
-    "writerModule": "src/platform/core/docs-authority/"
+    "writerModule": "src/platform/core/docs-authority/",
+    "trackedAllowGlobs": [
+      ".agents/skills/deckent-next-refactor/*.md"
+    ]
   }
 }
