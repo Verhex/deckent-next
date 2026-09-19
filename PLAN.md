@@ -526,3 +526,5 @@ RESERVATION-DIAGNOSTIC: DONE — Fable1878/1895 PASS; exact reviewed candidate l
 WORKSPACE-VERSION-CONFLICT: DONE — Fable1902 PASS; adapter version stays pinned, bounded reason at shared error mapping; protocol params and localized detail remain follow-up.
 
 RESERVATION-CLOCK-CONDITION: DONE — Fable1915 PASS; controlled SQLite time condition proven; historical1852 cause remains open. Independent test-only slice does not depend on pending cancellation F1 behavior.
+
+RESERVATION-READABLE-DIAGNOSTIC DONE — Fable PASS 1919; EN/TR bounded detail, incomplete params retain generic text. Service protocol params and measured delay remain open.

@@ -762,6 +762,7 @@
   "error.RUN_POOL_CONFLICT": "The execution pool already has different capacity settings.",
   "error.RUN_POOL_FULL": "The execution pool has no available capacity.",
   "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order.",
+  "error.RUN_CAPACITY_OR_ORDER.detail": "Task reservation refused ({site}/{reason}): ready {readyCount}, delayed {delayedCount}, occupied execution slots {executionOccupied}/{executionSlots}.",
   "error.CANCELLATION_NOT_CONFIGURED": "Cancellation delivery limits are not configured. Missing: {missing}.",
   "remedy.RUN_STORE_CONFLICT": "Read state with run inspect --scope <id> --id <run>. For a changed cancellation command, use a new --command-id and the current --expected-revision. If the previous response was uncertain, retry the unchanged command ID and input first.",
   "error.EXECUTION_NOT_CONFIGURED": "An explicit execution profile is required to manage the recorded worker.",

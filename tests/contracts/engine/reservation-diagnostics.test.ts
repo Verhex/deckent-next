@@ -3,6 +3,7 @@ import { diagnoseReservationWave, planSchedulingWave, RunStoreError } from '#eng
 import type { ReservationDiagnostic } from '#engine/index.js';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
 import type { TaskGraph, TaskProgress } from '#domain/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 
 const graph: TaskGraph = { schemaVersion: 2, revision: 1,
   tasks: [{ id: 'a', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
@@ -39,4 +40,20 @@ it('maps only the fixed string and numeric diagnostic fields to public error par
   expect(Object.values(failure.params!).every(value => typeof value === 'string' || typeof value === 'number')).toBe(true);
   expect(failure.params).not.toHaveProperty('internalPath'); expect(failure.params).not.toHaveProperty('secret');
   expect(JSON.stringify(failure.params)).not.toContain('/private'); expect(JSON.stringify(failure.params)).not.toContain('credential-marker');
+});
+
+it('renders bounded diagnostics in both locales and preserves a complete generic fallback', () => {
+  const diagnostic = diagnoseReservationWave(wave({ ...pending, eligibleAt: 11 }), 'application-empty', 0,
+    { executionSlots: 1, inFlightSlots: 1 });
+  const detailed = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnostic));
+  expect(detailed.localize?.('en').message).toBe('Task reservation refused (application-empty/delayed): ready 0, delayed 1, occupied execution slots 0/1.');
+  expect(detailed.localize?.('tr').message).toBe('Görev rezervasyonu reddedildi (application-empty/delayed): hazır 0, gecikmeli 1, dolu yürütme kapasitesi 0/1.');
+  const generic = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER'));
+  const incomplete = ErrorRegistry.createError('RUN_CAPACITY_OR_ORDER', { params: { site: 'application-empty', reason: 'delayed' } });
+  for (const locale of ['en', 'tr'] as const) {
+    expect(incomplete.localize?.(locale).message).toBe(generic.localize?.(locale).message);
+    expect(generic.localize?.(locale).message).not.toMatch(/[{}]/);
+    expect(generic.localize?.(locale).message).not.toContain('undefined');
+    expect(generic.localize?.(locale).message).not.toContain('application-empty');
+  }
 });

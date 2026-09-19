@@ -62,7 +62,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   RUN_POOL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_REQUIRED', p, l) }) },
   RUN_POOL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_CONFLICT', p, l) }) },
   RUN_POOL_FULL: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_FULL', p, l) }) },
-  RUN_CAPACITY_OR_ORDER: { category: 'error', render: (p, l) => ({ message: t('error.RUN_CAPACITY_OR_ORDER', p, l) }) },
+  RUN_CAPACITY_OR_ORDER: { category: 'error', render: (p, l) => ({ message:
+    ['site', 'reason', 'readyCount', 'delayedCount', 'executionOccupied', 'executionSlots'].every(key => p[key] !== undefined)
+      ? t('error.RUN_CAPACITY_OR_ORDER.detail', p, l) : t('error.RUN_CAPACITY_OR_ORDER', p, l) }) },
   INVENTORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.INVENTORY_QUERY_INVALID', p, l) }) },
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },
