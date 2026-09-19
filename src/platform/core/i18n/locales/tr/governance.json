@@ -842,5 +842,11 @@
   "error.INSTALLATION_PROFILE_POOL": "Kurulum havuzu yapılandırılmış Run sınırlarını karşılayamıyor.",
   "error.INSTALLATION_PROFILE_POLICY": "Sağlanan policy bu işletim sistemi kimliğine gerekli dar havuz iznini vermiyor.",
   "error.INSTALLATION_PROFILE_SHUTDOWN": "Shutdown seçimi, servis kimliği ve açık policy izni uyuşmuyor.",
-  "error.INSTALLATION_PROFILE_PATHS": "Kurulum yolları doğrulanamadı."
+  "error.INSTALLATION_PROFILE_PATHS": "Kurulum yolları doğrulanamadı.",
+  "error.BOOTSTRAP_STATE_INVALID": "Kurulum kaydı geçersiz veya tutarsız.",
+  "error.BOOTSTRAP_STATE_UNSAFE": "Kurulum kaydı veya yolu dosya sahipliği denetimlerini karşılamıyor.",
+  "error.BOOTSTRAP_STATE_CHANGED": "Yapılandırma okunurken kurulum durumu değişti; kurtarma tamamlandıktan sonra yeniden deneyin.",
+  "error.BOOTSTRAP_INSTALLATION_INCOMPLETE": "Kurulum tamamlanmadı; proje yapılandırmasını kullanmadan önce kayıtlı işlemi kurtarın.",
+  "error.BOOTSTRAP_STATE_UNAVAILABLE": "Kurulum durumu güvenli biçimde okunamadı.",
+  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Bu platformda kurulum kaydı sahipliği denetimi desteklenmiyor."
 }

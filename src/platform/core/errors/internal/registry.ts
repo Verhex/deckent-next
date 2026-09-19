@@ -212,6 +212,12 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   INSTALLATION_PROFILE_POLICY: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_POLICY', p, l) }) },
   INSTALLATION_PROFILE_SHUTDOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_SHUTDOWN', p, l) }) },
   INSTALLATION_PROFILE_PATHS: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_PATHS', p, l) }) },
+  BOOTSTRAP_STATE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_INVALID', p, l) }) },
+  BOOTSTRAP_STATE_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_UNSAFE', p, l) }) },
+  BOOTSTRAP_STATE_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_CHANGED', p, l) }) },
+  BOOTSTRAP_INSTALLATION_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_INSTALLATION_INCOMPLETE', p, l) }) },
+  BOOTSTRAP_STATE_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_UNAVAILABLE', p, l) }) },
+  BOOTSTRAP_STATE_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_UNSUPPORTED', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 for (const definition of Object.values(definitions)) Object.freeze(definition);

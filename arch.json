@@ -633,6 +633,7 @@
     },
     "src/platform/core/config": {
       "dependencies": [
+        "src/platform/core/bootstrap-state",
         "src/platform/core/common",
         "src/platform/core/config-fields",
         "src/platform/core/errors",
@@ -779,6 +780,12 @@
         "src/platform/core/config"
       ],
       "plan": "REAL-INIT/P3A"
+    },
+    "src/platform/core/bootstrap-state": {
+      "dependencies": [
+        "src/platform/core/host"
+      ],
+      "plan": "REAL-INIT/P3B-GATE"
     }
   },
   "composition": {

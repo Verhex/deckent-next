@@ -87,9 +87,10 @@ describe('K1 review regression contracts', () => {
     expect(layers).toBe(1); expect(effective).toBe(2);
     await expect(loadConfig(f.root, { env: { ...env, ANTHROPIC_API_KEY: '' } })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
   });
-  it('uses injected Windows paths for both state path helpers on any test host', () => {
+  it('keeps project bootstrap config separate from a relocated Windows data root', () => {
     const context = { platform: 'win32', env: { DECKENT_HOME: 'D:\\state', BRAIN_HOME: 'E:\\brain' } };
-    expect(productResourcePath(resolveProductPaths('C:\\project', context), 'config')).toBe('D:\\state\\config.json');
-    expect(productResourcePath(resolveProductPaths('C:\\project', context), 'memory')).toBe('D:\\state\\brain\\memory.db');
+    const layout = resolveProductPaths('C:\\project', context);
+    expect(productResourcePath(layout, 'config')).toBe('C:\\project\\.deckent\\config.json');
+    expect(productResourcePath(layout, 'memory')).toBe('D:\\state\\brain\\memory.db');
   });
 });

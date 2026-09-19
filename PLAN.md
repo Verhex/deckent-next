@@ -563,3 +563,5 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | REAL-INIT/P3A | Supplied versioned installation profile integrity, real OS identity/policy checks, read-only SDK and CLI preview; heterogeneous pinned task profiles and shared pool budgets | No writes, no credential/config echo, separate shutdown consent, exact paths and explicit unverified package/image blockers | REVIEW |
 
 2026-09-19 REAL-INIT/P3A DONE — Fable1971 PASS; supplied profile integrity and normalized plan identity, actual OS-bound narrow policy checks, independent shutdown choice, immutable complete CLI/SDK preview. Full verify775 product/24native/18host. Package/image trust and availability remain unverified; no apply/readiness/builtin release profile claim. P3B journal/materialization and P4 acceptance remain open.
+
+| REAL-INIT/P3B-GATE | Fixed installation journal resource, private checksum-checked journal observer, generation fence before config cache and after fresh/cache reads | Pending/unsafe/corrupt/change hold; global-only independent; no installer producer/apply/readiness claim | REVIEW |

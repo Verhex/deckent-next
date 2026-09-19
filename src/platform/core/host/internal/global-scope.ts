@@ -1,5 +1,6 @@
 import { posix, win32 } from 'node:path';
 import { resolveProductLayout, productResourcePath } from './layout/resolve.js';
+import { PRODUCT_LAYOUT_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { envValue, productRootOverride, type Environment } from './env.js';
 
@@ -39,7 +40,9 @@ export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Envi
 }
 export function resolveGlobalConfigPaths(env: Environment = process.env, platform: string = process.platform) {
   const scope = resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env);
-  const layout = resolveProductLayout({ projectRoot: scope.stateDir, root: scope.stateDir, platform: platform === 'win32' ? 'win32' : 'posix' });
+  const api = pathApi(platform);
+  const layout = resolveProductLayout({ projectRoot: scope.stateDir, root: scope.stateDir,
+    bootstrapConfigPath: api.join(scope.stateDir, PRODUCT_LAYOUT_REGISTRY.resources.config), platform: platform === 'win32' ? 'win32' : 'posix' });
   return { platformPath: productResourcePath(layout, 'config') };
 }
 

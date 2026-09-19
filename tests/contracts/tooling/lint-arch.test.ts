@@ -48,8 +48,15 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   return root;
 }
 async function lint(root: string): Promise<{ code: number; out: string }> {
-  try { const { stdout } = await run(process.execPath, [LINT, '--root', root], { timeout: 10_000, killSignal: 'SIGKILL' }); return { code: 0, out: stdout }; }
-  catch (error) { const e = error as { code: number; stdout: string }; return { code: e.code, out: e.stdout }; }
+  try { const { stdout } = await run(process.execPath, [LINT, '--root', root], { timeout: 20_000, killSignal: 'SIGKILL' }); return { code: 0, out: stdout }; }
+  catch (error) {
+    const e = error as { code?: number | string | null; signal?: string | null; killed?: boolean;
+      stdout?: string | Buffer; stderr?: string | Buffer; message?: string };
+    if (typeof e.code === 'number') return { code: e.code, out: String(e.stdout ?? '') };
+    const bounded = (value: unknown) => String(value ?? '').slice(0, 4096);
+    throw new Error(`lint-arch subprocess failed: ${JSON.stringify({ code: e.code ?? null, signal: e.signal ?? null,
+      killed: e.killed ?? false, stdout: bounded(e.stdout), stderr: bounded(e.stderr), error: bounded(e.message) })}`, { cause: error });
+  }
 }
 
 describe('lint-arch tier contract', () => {

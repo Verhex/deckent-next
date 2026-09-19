@@ -842,5 +842,11 @@
   "error.INSTALLATION_PROFILE_POOL": "The installation pool cannot satisfy the configured Run limits.",
   "error.INSTALLATION_PROFILE_POLICY": "The supplied policy does not grant the required narrow pool permission to this OS identity.",
   "error.INSTALLATION_PROFILE_SHUTDOWN": "The shutdown selection, service identity and explicit policy grant do not agree.",
-  "error.INSTALLATION_PROFILE_PATHS": "The installation paths could not be validated."
+  "error.INSTALLATION_PROFILE_PATHS": "The installation paths could not be validated.",
+  "error.BOOTSTRAP_STATE_INVALID": "The installation journal is invalid or inconsistent.",
+  "error.BOOTSTRAP_STATE_UNSAFE": "The installation journal or its path does not satisfy file custody checks.",
+  "error.BOOTSTRAP_STATE_CHANGED": "Installation state changed while configuration was being read; retry after recovery settles.",
+  "error.BOOTSTRAP_INSTALLATION_INCOMPLETE": "Installation is incomplete; recover the recorded transaction before using project configuration.",
+  "error.BOOTSTRAP_STATE_UNAVAILABLE": "Installation state could not be read safely.",
+  "error.BOOTSTRAP_STATE_UNSUPPORTED": "Installation journal custody is not supported on this platform."
 }

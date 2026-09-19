@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveProductLayout, productResourcePath, type ProductResource } from '../../../src/platform/core/host/index.js';
+import { inspectProductLayout, resolveProductLayout, productResourcePath, type ProductResource } from '../../../src/platform/core/host/index.js';
 
 describe('product resource layout', () => {
   it('keeps durable resources below one root in development and installed projects', () => {
@@ -18,6 +18,22 @@ describe('product resource layout', () => {
     expect(first.revision).not.toBe(second.revision);
     expect(Object.isFrozen(first)).toBe(true); expect(Object.isFrozen(first.resources)).toBe(true);
     expect(resolveProductLayout({ projectRoot: '/project', root: '/storage/a', resources: { crashes: 'diagnostics/crashes' } }).revision).toBe(first.revision);
+  });
+  it('anchors config and the installation journal at the project bootstrap when data root relocates', () => {
+    const layout = resolveProductLayout({ projectRoot: '/project', root: '/storage/data' });
+    expect(productResourcePath(layout, 'config')).toBe('/project/.deckent/config.json');
+    expect(productResourcePath(layout, 'installationJournal')).toBe('/project/.deckent/installation/journal.json');
+    expect(productResourcePath(layout, 'memory')).toBe('/storage/data/brain/memory.db');
+    expect(inspectProductLayout(layout).resources.installationJournal).toBe('/project/.deckent/installation/journal.json');
+    const globalLayout = resolveProductLayout({ projectRoot: '/project', root: '/storage/data', bootstrapConfigPath: '/global/config.json' });
+    expect(productResourcePath(globalLayout, 'config')).toBe('/global/config.json');
+    expect(productResourcePath(globalLayout, 'installationJournal')).toBe('/global/installation/journal.json');
+  });
+  it('rejects fixed resource redirects and exact fixed-to-movable path collisions', () => {
+    expect(() => resolveProductLayout({ projectRoot: '/project', resources: { config: 'other.json' } })).toThrow('LAYOUT_RESOURCE_INVALID');
+    expect(() => resolveProductLayout({ projectRoot: '/project', resources: { installationJournal: 'other.json' } })).toThrow('LAYOUT_RESOURCE_INVALID');
+    expect(() => resolveProductLayout({ projectRoot: '/project', root: '/project/.deckent/installation', resources: { policy: 'journal.json' } }))
+      .toThrow('LAYOUT_RESOURCE_INVALID');
   });
   it('rejects traversal and platform-ambiguous resource names instead of normalizing them', () => {
     for (const crashes of ['../outside', '/absolute', 'a/../b', 'a\\b', 'C:outside', 'x\0y', 'a//b', 'CON.txt', 'a.']) {

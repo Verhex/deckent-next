@@ -321,3 +321,25 @@ Package trust, image provenance and image availability are explicit unresolved p
 no built-in release profile, default test image, installer apply, transaction recovery or readiness claim
 in P3A. P3B must place recovery discovery under the fixed bootstrap location before config cache admission;
 config-last alone cannot conceal partial state because missing config currently resolves defaults.
+
+Bootstrap admission foundation (REAL-INIT/P3B-GATE): layout registry v2 classifies config and installationJournal
+as fixed resources. Their paths remain under the bootstrap directory even when the data root moves; exact
+resolved collisions and fixed-resource overrides are rejected. The strict private journal v1 records plan/profile
+digests, publication progress and pending/committed phase without payload bytes. Its domain-separated checksum
+detects corruption, not a hostile host owner. Only complete committed records with no blockers are admissible.
+
+Project loadConfig observes the fixed journal before cache lookup and fences the same generation after all
+validators/warning callbacks, before cache insertion or return. Pending/corrupt/unsafe/changed state is a typed
+hold; there is no public installation bypass option. Explicit global-only inspection stays a separate scope.
+A secret lookup begun before a concurrent transition may finish, but its configuration is discarded when the
+fence detects the transition. Automatic config repair checks that fence inside the existing config writer lock,
+before backup/write; the future installer must acquire this same lock before publishing its anchor. Trusted
+low-level file helpers and hostile same-UID writers are not sandboxed by this read-admission boundary. POSIX
+custody checks require owned non-symlink project/bootstrap directories. When a journal is genuinely absent,
+ordinary directory modes (including group-writable projects) do not prevent config reads. A present journal
+requires private ancestor modes and private single-linked journal files. Windows journal custody remains
+unsupported, while a genuinely absent journal preserves ordinary reads.
+
+This slice supplies the observer and live config/CLI gate. The product journal writer, materialized digest-
+preserving profile, multi-resource publish/replay/recovery, and real image/package trust remain separate open
+installer work. No full init, committed installation producer, P4 acceptance or readiness is claimed here.

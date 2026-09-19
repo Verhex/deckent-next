@@ -1,8 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rootName": ".deckent",
   "resources": {
     "config": "config.json",
+    "installationJournal": "installation/journal.json",
     "brain": "brain",
     "memory": "brain/memory.db",
     "tasks": "tasks",
@@ -20,5 +21,6 @@
     "runtimeSocket": "state/runtime.sock"
   },
   "bootstrapResource": "config",
+  "fixedResources": ["config", "installationJournal"],
   "rootEnvironmentKey": "DECKENT_HOME"
 }
