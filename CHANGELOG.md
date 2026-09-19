@@ -338,3 +338,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 RUNTIME/P4 — Proved installed SDK/CLI/MCP execution, recovery and concurrent installer safety. Report setup contention distinctly and preserve the current corruption backup across clock rollback. Fable2001 PASS, three consecutive plus independent full verification.
 
 2026-09-19 PROVIDERS/A0 — Added native model declarations to SDK/CLI/MCP, explicit not-observed availability, registered section secret policy and pure writer validation. Fable2008 PASS; activation and provider invocation remain separate.
+
+2026-09-19 PROVIDERS/A1 — Added versioned native model content binding with shared strict references, deterministic semantic digest and SDK/CLI/MCP parity. Fable2018 PASS; activation and invocation remain separate.

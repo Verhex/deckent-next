@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
+import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -7,9 +7,10 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
-import type { DeclaredModelsInspection } from '#engine/index.js';
+import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
 export interface McpApplications {
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
+  inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
   createRun?(command: RunAdmission): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
@@ -39,6 +40,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, name: 'list_declared_models',
     description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),
     invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectDeclaredModels.call(applications); } });
+  const inspectModelBinding = applications.inspectModelBinding;
+  if (inspectModelBinding) definitions.push({ readOnly: true, destructive: false, name: 'inspect_model_binding',
+    description: t('mcp.tool.inspectModelBinding', {}, locale), schema: modelReferenceSchema,
+    invoke: (input: unknown) => inspectModelBinding.call(applications, modelReferenceSchema.parse(input)) });
   const createRun = applications.createRun;
   if (createRun) definitions.push({ readOnly: false, destructive: false, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });

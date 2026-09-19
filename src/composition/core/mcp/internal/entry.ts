@@ -7,13 +7,14 @@ import { loadConfig, resolveLocale } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { createMcpServer } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
+import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
   registerProviderConfig(); const config = await loadConfig(root, { heal: false });
   const locale = resolveLocale(undefined, process.env, config.language);
   const runtime = createConfiguredRuntimeClient(root);
-  return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
+  return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
+    inspectModelBinding: reference => inspectModelBinding(root, reference) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });

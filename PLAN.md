@@ -589,3 +589,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 2026-09-19 PROVIDERS/A0 writer admission — same catalog semantic authority validates config before durable writes through generic validateValue; environment-dependent validators remain in loadConfig. Deterministic duplicate-write red retained; rejection preserves prior bytes and creates no lock/temp/backup.
 
 2026-09-19 PROVIDERS/A0 DONE — Fable2008 PASS exact34files. Root and independent897product/24native/18host; declared native catalog SDK/CLI/MCP, pre-resolution secret guard and semantic writer admission. Independent first run exposed unrelated reservation delayed observation retained in review; no clock-cause claim. No activation/network/readiness.
+
+| PROVIDERS/A1 | P5; A0 PASS | Exact native model semantic binding, domain encoding + engine SHA256 + SDK/CLI/MCP read-only inspection; no activation/store/invocation | WIP |
+
+2026-09-19 PROVIDERS/A1 DONE — Fable2018 PASS exact21files; root and independent914product/24native/18host. Exact native semantic binding across SDK/CLI/MCP, no activation authority. A1-a validation placeholder and A1-b bounded repeated parsing remain nonblocking follow-ups.

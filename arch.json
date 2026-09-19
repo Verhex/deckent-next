@@ -731,6 +731,7 @@
         "src/domain/core/attempt",
         "src/domain/core/policy",
         "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
         "src/engine/core/installation",
@@ -754,6 +755,7 @@
       "dependencies": [
         "src/domain/core/attempt",
         "src/domain/core/policy",
+        "src/domain/core/provider-catalog",
         "src/engine/core/dispatch",
         "src/engine/core/provider-catalog",
         "src/engine/core/runs",
@@ -838,6 +840,7 @@
     "src/composition/core/provider-catalog": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/domain/core/provider-catalog",
         "src/engine/core/provider-catalog",
         "src/platform/core/config"
       ],

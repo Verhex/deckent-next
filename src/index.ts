@@ -34,3 +34,6 @@ export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from
 export type { InstallationProfile, InstallationPreview, InstallationEvidencePreview } from '#engine/index.js';
 export { inspectDeclaredModels } from '#composition/index.js';
 export type { DeclaredModelsInspection } from '#engine/index.js';
+export { inspectModelBinding } from '#composition/index.js';
+export type { ModelBindingInspection } from '#engine/index.js';
+export type { ModelReference, ModelBindingDefinition } from '#domain/index.js';

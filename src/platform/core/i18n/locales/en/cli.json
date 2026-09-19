@@ -569,5 +569,10 @@
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native {nativeId} · protocols {protocols}",
   "models.availabilityNotObserved": "Declarations only; availability was not observed.",
   "mcp.tool.listDeclaredModels": "List configured model declarations. This does not observe provider availability, credentials, activation, or execution readiness.",
-  "config.field.provider_catalog": "Versioned native provider and model declarations; not activation or availability."
+  "config.field.provider_catalog": "Versioned native provider and model declarations; not activation or availability.",
+  "cli.help.modelsBinding": "Usage: deckent models binding --provider ID --provider-version VERSION --model ID --model-version VERSION [--json] [--lang LOCALE] [--no-color]\nInspect the exact declared native model definition and its SHA-256 content binding. This does not activate a model or authorize execution.",
+  "models.bindingNotConfigured": "{reference}: no provider catalog is configured.",
+  "models.bindingNotDeclared": "{reference}: exact model version is not declared in catalog {revision}.",
+  "models.bindingDeclared": "{reference} | catalog {revision} | native ID {nativeId} | SHA-256 {digest}\nDeclaration content binding only; no activation or execution authority.",
+  "mcp.tool.inspectModelBinding": "Inspect one exact configured model declaration and its semantic binding digest. This does not observe availability, credentials, activation, or execution readiness."
 }

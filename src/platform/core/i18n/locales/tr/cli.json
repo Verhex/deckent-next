@@ -569,5 +569,10 @@
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native kimlik {nativeId} · protokoller {protocols}",
   "models.availabilityNotObserved": "Yalnızca beyanlar; kullanılabilirlik gözlemlenmedi.",
   "mcp.tool.listDeclaredModels": "Yapılandırılmış model beyanlarını listeler. Provider kullanılabilirliğini, kimlik bilgilerini, aktivasyonu veya yürütmeye hazır olmayı doğrulamaz.",
-  "config.field.provider_catalog": "Sürümlü native provider ve model beyanları; aktivasyon veya kullanılabilirlik değildir."
+  "config.field.provider_catalog": "Sürümlü native provider ve model beyanları; aktivasyon veya kullanılabilirlik değildir.",
+  "cli.help.modelsBinding": "Kullanım: deckent models binding --provider ID --provider-version SÜRÜM --model ID --model-version SÜRÜM [--json] [--lang DİL] [--no-color]\nTam native model tanımını ve SHA-256 içerik bağını incele. Modeli etkinleştirmez veya yürütme yetkisi vermez.",
+  "models.bindingNotConfigured": "{reference}: provider kataloğu yapılandırılmamış.",
+  "models.bindingNotDeclared": "{reference}: tam model sürümü {revision} kataloğunda beyan edilmemiş.",
+  "models.bindingDeclared": "{reference} | katalog {revision} | native kimlik {nativeId} | SHA-256 {digest}\nYalnız beyanın içerik bağıdır; aktivasyon veya yürütme yetkisi vermez.",
+  "mcp.tool.inspectModelBinding": "Yapılandırılmış tam model tanımını ve içerik bağının özetini incele. Kullanılabilirlik, kimlik bilgileri, aktivasyon veya yürütmeye hazır olma durumu gözlemlenmez."
 }
