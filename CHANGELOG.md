@@ -316,3 +316,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - Config locking preserves a replacement owner when a legacy lock changes generation during observation (Fable PASS1927).
 
 - fix(storage): handle unlinked SQLite companions with bounded re-observation (Fable PASS 1933:c2794c4444dd).
+
+- fix(diagnostics): measure earliest delayed task eligibility gap (Fable PASS 1934:060bceb9e229).

@@ -81,9 +81,26 @@ async function reserveThroughPublicSurface(mode: PublicMode, f: Awaited<ReturnTy
     if (client) await call('create_run', create);
     else if (mode === 'cli') await cliCall(f, ['run', 'create', '--scope', 's', '--id', 'r', '--command-id', 'create', '--graph', f.graphPath, '--json']);
     else await createRun(f.project, create, f.options);
-    const first = client ? (await call<PublicResult>('reserve_run_tasks', reserve)).reservation
+    const observedBeforeMs = Date.now();
+    const first = await (async () => client ? (await call<PublicResult>('reserve_run_tasks', reserve)).reservation
       : mode === 'cli' ? (await cliCall<PublicResult>(f, ['run', 'reserve', '--scope', 's', '--id', 'r', '--command-id', 'reserve', '--expected-revision', '0', '--json'])).reservation
-      : (await reserveRunTasks(f.project, reserve, f.options)).reservation;
+      : (await reserveRunTasks(f.project, reserve, f.options)).reservation)().catch(async (error: unknown) => {
+        const observedAfterMs = Date.now();
+        const failure = error as { code?: string; params?: Record<string, unknown> };
+        const diagnostic = Object.fromEntries(['site', 'reason', 'now', 'eligibilityGapMs', 'readyCount', 'delayedCount']
+          .flatMap(key => { const value = failure.params?.[key]; return typeof value === 'string' || typeof value === 'number' ? [[key, value]] : []; }));
+        let evidence: unknown;
+        try {
+          const runtime = await openConfiguredAttemptStore(f.project, f.options);
+          try {
+            const snapshot = await runtime.store.loadRun('s', 'r');
+            const receipt = await runtime.store.loadRunReceipt('s', 'create');
+            evidence = { before: receipt && { revision: receipt.snapshot.revision, progress: receipt.snapshot.progress },
+              after: snapshot && { revision: snapshot.revision, progress: snapshot.progress } };
+          } finally { runtime.store.close(); }
+        } catch { evidence = { captureFailed: true }; }
+        throw new Error(`FIRST_RESERVATION_FIXTURE_EVIDENCE ${JSON.stringify({ observedBeforeMs, observedAfterMs, code: failure.code, diagnostic, evidence })}`, { cause: error });
+      });
     const replay = client ? (await call<PublicResult>('reserve_run_tasks', reserve)).reservation
       : mode === 'cli' ? (await cliCall<PublicResult>(f, ['run', 'reserve', '--scope', 's', '--id', 'r', '--command-id', 'reserve', '--expected-revision', '0', '--json'])).reservation
       : (await reserveRunTasks(f.project, reserve, f.options)).reservation;

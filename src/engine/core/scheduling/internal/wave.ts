@@ -25,8 +25,14 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const available = Math.min(Math.max(0, capacity.executionSlots - executionOccupied), Math.max(0, capacity.inFlightSlots - inFlightOccupied));
   const ready = new Set(readiness.filter(task => task.disposition === 'ready').map(task => task.taskId));
   const ordered = ordering.filter(id => ready.has(id));
+  const delayed = new Set(readiness.filter(task => task.disposition === 'delayed').map(task => task.taskId));
+  let nextEligibleAt: number | undefined;
+  for (const task of snapshot.progress) {
+    if (delayed.has(task.taskId) && (nextEligibleAt === undefined || task.eligibleAt < nextEligibleAt)) nextEligibleAt = task.eligibleAt;
+  }
   return Object.freeze({ schemaVersion: 1 as const, graphRevision: graph.revision, observedAt: snapshot.now,
     selectedTaskIds: Object.freeze(ordered.slice(0, available)), deferredTaskIds: Object.freeze(ordered.slice(available)),
+    ...(nextEligibleAt === undefined ? {} : { eligibilityGapMs: nextEligibleAt - snapshot.now }),
     occupancy: Object.freeze({ execution: executionOccupied, inFlight: inFlightOccupied }), readiness });
 }
 

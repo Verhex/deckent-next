@@ -22,7 +22,7 @@ it('classifies every bounded reservation diagnostic reason without changing the 
   expect(diagnoseReservationWave(exhausted, 'application-empty', 0, { executionSlots: 0, inFlightSlots: 0 })).toMatchObject({ reason: 'capacity-exhausted', readyCount: 1, selectedCount: 0 });
 
   const delayed = wave({ ...pending, eligibleAt: 11 });
-  expect(diagnoseReservationWave(delayed, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 })).toMatchObject({ reason: 'delayed', delayedCount: 1, now: 10 });
+  expect(diagnoseReservationWave(delayed, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 })).toMatchObject({ reason: 'delayed', delayedCount: 1, now: 10, eligibilityGapMs: 1 });
 
   const terminal = wave({ ...pending, phase: 'accepted' });
   expect(diagnoseReservationWave(terminal, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 })).toMatchObject({ reason: 'no-ready-task', terminalCount: 1 });
@@ -56,4 +56,22 @@ it('renders bounded diagnostics in both locales and preserves a complete generic
     expect(generic.localize?.(locale).message).not.toContain('undefined');
     expect(generic.localize?.(locale).message).not.toContain('application-empty');
   }
+});
+
+
+it('measures the earliest delayed task only, excluding blocked or waiting future tasks', () => {
+  const tasks = ['a', 'b', 'c'].map(id => ({ ...graph.tasks[0]!, id, dependencies: id === 'c' ? ['a'] : [] }));
+  const scheduling = planSchedulingWave({ ...graph, tasks }, { schemaVersion: 1,
+    capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['a', 'b', 'c'],
+    snapshot: { graphRevision: 1, now: 10, progress: [
+      { ...pending, taskId: 'a', eligibleAt: 30 }, { ...pending, taskId: 'b', eligibleAt: 15 },
+      { ...pending, taskId: 'c', eligibleAt: 11 },
+    ] } });
+  const d = diagnoseReservationWave(scheduling, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 });
+  expect(d).toMatchObject({ delayedCount: 2, waitingCount: 1, eligibilityGapMs: 5 });
+  expect(queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', d)).params).toMatchObject({ eligibilityGapMs: 5 });
+  expect(scheduling.selectedTaskIds).toEqual([]);
+  const ready = diagnoseReservationWave(wave(pending), 'transaction-wave-mismatch', 1, { executionSlots: 1, inFlightSlots: 1 });
+  expect(ready).not.toHaveProperty('eligibilityGapMs');
+  expect(queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', ready)).params).not.toHaveProperty('eligibilityGapMs');
 });

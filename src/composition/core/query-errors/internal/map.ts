@@ -21,6 +21,7 @@ export function queryFailure(error: unknown): DeckentError {
     const diagnostic = error.diagnostic;
     return ErrorRegistry.createError(error.code, { params: {
       site: diagnostic.site, reason: diagnostic.reason, now: diagnostic.now,
+      ...(diagnostic.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: diagnostic.eligibilityGapMs }),
       executionSlots: diagnostic.executionSlots, inFlightSlots: diagnostic.inFlightSlots,
       executionOccupied: diagnostic.executionOccupied, inFlightOccupied: diagnostic.inFlightOccupied,
       selectedCount: diagnostic.selectedCount, requestedCount: diagnostic.requestedCount,

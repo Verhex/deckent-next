@@ -6,6 +6,7 @@ export interface ReservationDiagnostic {
   readonly site: ReservationDiagnosticSite;
   readonly reason: ReservationDiagnosticReason;
   readonly now: number;
+  readonly eligibilityGapMs?: number;
   readonly executionSlots: number;
   readonly inFlightSlots: number;
   readonly executionOccupied: number;
@@ -23,6 +24,7 @@ export interface ReservationDiagnostic {
 
 interface DiagnosticWave {
   readonly observedAt: number;
+  readonly eligibilityGapMs?: number;
   readonly selectedTaskIds: readonly string[];
   readonly deferredTaskIds: readonly string[];
   readonly occupancy: Readonly<{ execution: number; inFlight: number }>;
@@ -41,6 +43,7 @@ export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationD
     : counts.ready === 0 && counts.delayed > 0 ? 'delayed'
       : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';
   return Object.freeze({ site, reason, now: wave.observedAt,
+    ...(wave.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: wave.eligibilityGapMs }),
     executionSlots: capacity.executionSlots, inFlightSlots: capacity.inFlightSlots,
     executionOccupied: wave.occupancy.execution, inFlightOccupied: wave.occupancy.inFlight,
     selectedCount: wave.selectedTaskIds.length, requestedCount,

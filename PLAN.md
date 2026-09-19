@@ -534,3 +534,5 @@ CANCELLATION-PAGE-FAIRNESS DONE — Fable PASS 1921; unavailable records no long
 CONFIG-LOCK-GENERATION DONE — Fable PASS1927; generation replacement yields contention before file-type rejection; exact historical1907 cause unproven.
 
 MANAGED-COMPANION-UNLINK DONE — Fable PASS 1933:c2794c4444dd; exact reviewed candidate landed; historical failures remain separately qualified.
+
+RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewed candidate landed; historical failures remain separately qualified.
