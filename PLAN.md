@@ -625,3 +625,7 @@ PROVIDERS/A3A DONE — exact R6 independently reviewed; immutable invocation con
 PROVIDERS/A3B DONE — exact R8 reviewed: adapter-owned nonstream text HTTP, explicit scoped profile, current policy/composition and distinct immutable allocation conflict. Full1019/194+24native+18host. Canonical numeric loopback with per-request no-proxy transport; owned fixture only. Shared invocation surfaces follow A3C; runtime ownership remains A4. No real provider, credential, monetary or dogfood claim.
 
 PROVIDERS/A3C DONE — exact R9 Fable2064 PASS with mandatory C-a before real provider admission: full-result preclaim fit, permanent MCP overflow/recovery tests, and clear SDK/CLI recovery guidance. Full1027/197+24native+18host; owned fixture only. A3D corrective delivery card closes C-a; A4 runtime ownership remains planned.
+
+| BIN/ENTRY | Installed executable correction; shared host entry identity | Compiled CLI/MCP symlink startup and side-effect-free import, exact source proof | REVIEW |
+
+BIN/ENTRY DONE — Fable2073 PASS; shared main-module detection fixes installed symlink CLI/MCP startup. Exact R1 source, four real process regressions; Linux Node24.15 proof, older-node fallback branch only.

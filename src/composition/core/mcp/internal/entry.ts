@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
-import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
-import { loadConfig, resolveLocale } from '#platform/index.js';
+import { loadConfig, resolveLocale, isMainModule } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { createMcpServer } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -25,7 +24,7 @@ export async function main(root = process.cwd()) {
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta)) {
   void (async () => {
     const { values } = parseArgs({ options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
     if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');

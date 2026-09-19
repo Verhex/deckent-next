@@ -313,6 +313,7 @@
         "src/composition/core/runtime-service",
         "src/platform/core/config",
         "src/platform/core/config-fields",
+        "src/platform/core/host",
         "src/surfaces/core/cli"
       ],
       "plan": "S0"
@@ -361,6 +362,7 @@
         "src/composition/core/provider-catalog",
         "src/composition/core/runtime-service",
         "src/platform/core/config",
+        "src/platform/core/host",
         "src/platform/core/i18n",
         "src/surfaces/core/mcp"
       ],

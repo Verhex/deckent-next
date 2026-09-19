@@ -3,10 +3,9 @@ import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#compos
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { pathToFileURL } from 'node:url';
 import { main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
-import { getConfigFieldDefault } from '#platform/index.js';
+import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { readInstallationProfileFile } from '#adapters/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
@@ -57,6 +56,6 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     evaluateTask: (_root, input) => runtime.evaluateTask(input),
   }); } finally { if (isRuntimeServe) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta)) {
   void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });
 }

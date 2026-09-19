@@ -356,3 +356,5 @@ PROVIDERS/A3A: add bounded native invocation admission and canonical shared-ledg
 PROVIDERS/A3B: add explicit scoped native invocation profiles and a bounded text HTTP adapter; current policy, native validation, no proxy inheritance, and typed allocation conflict. Initial transport is numeric loopback only; no endpoint/model defaults, credentials or automatic resend.
 
 PROVIDERS/A3C: shared native invocation and inspection through SDK, bounded CLI file/stdin and MCP. Durable replay never resends. Known MCP full-result overflow remains mandatory corrective work before real provider admission; no paid-provider or dogfood claim.
+
+BIN/ENTRY: installed CLI/MCP entry points share main-module detection; symlink startup and import behavior covered by real process tests.
