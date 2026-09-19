@@ -920,5 +920,9 @@
   "error.OPENAI_CHAT_REDIRECT_UNKNOWN": "Native uç nokta yönlendirme döndürdü; yönlendirme izlenmedi.",
   "error.OPENAI_CHAT_HTTP_UNKNOWN": "Native uç nokta başarısız HTTP yanıtı döndürdü.",
   "error.OPENAI_CHAT_RESPONSE_INVALID": "Native yanıt geçersiz veya desteklenmiyor.",
-  "error.OPENAI_CHAT_MODEL_MISMATCH": "Native model kimliği kesin bağ ile eşleşmiyor."
+  "error.OPENAI_CHAT_MODEL_MISMATCH": "Native model kimliği kesin bağ ile eşleşmiyor.",
+  "error.CLI_INVOCATION_INPUT_LIMIT": "Model çağrısı girdisi cli.invocationInputMaxBytes sınırını aşıyor: {limit} bayt.",
+  "error.CLI_INVOCATION_INPUT_INVALID": "Model çağrısı JSON verisi veya komut şeması geçersiz.",
+  "error.CLI_INVOCATION_INPUT_TTY": "Model çağrısı JSON verisini stdin üzerinden gönderin veya normal bir dosya belirtin.",
+  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model çağrısı girdisi okunamadı."
 }

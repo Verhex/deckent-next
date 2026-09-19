@@ -920,5 +920,9 @@
   "error.OPENAI_CHAT_REDIRECT_UNKNOWN": "The native endpoint returned a redirect; it was not followed.",
   "error.OPENAI_CHAT_HTTP_UNKNOWN": "The native endpoint returned an unsuccessful HTTP response.",
   "error.OPENAI_CHAT_RESPONSE_INVALID": "The native response is invalid or unsupported.",
-  "error.OPENAI_CHAT_MODEL_MISMATCH": "The native model identity does not match the exact binding."
+  "error.OPENAI_CHAT_MODEL_MISMATCH": "The native model identity does not match the exact binding.",
+  "error.CLI_INVOCATION_INPUT_LIMIT": "Model invocation input exceeds cli.invocationInputMaxBytes: {limit} bytes.",
+  "error.CLI_INVOCATION_INPUT_INVALID": "Invalid model invocation JSON or command schema.",
+  "error.CLI_INVOCATION_INPUT_TTY": "Pipe model invocation JSON to stdin or provide a regular file.",
+  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model invocation input could not be read."
 }

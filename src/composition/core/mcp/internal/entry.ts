@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -16,6 +17,8 @@ export async function main(root = process.cwd()) {
   const runtime = createConfiguredRuntimeClient(root);
   return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
+    inspectModelInvocation: query => inspectConfiguredModelInvocation(root, query),
+    invokeModel: command => invokeConfiguredModel(root, command),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),

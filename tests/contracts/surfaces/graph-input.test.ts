@@ -46,7 +46,7 @@ it('refuses interactive stdin rather than waiting for input', async () => {
 
 it('defaults and validates the CLI graph input byte limit', () => {
   const schema = CONFIG_FIELDS.cli.schema;
-  expect(schema.parse(undefined)).toEqual({ graphInputMaxBytes: 1048576 });
-  expect(schema.parse({ graphInputMaxBytes: 7 })).toEqual({ graphInputMaxBytes: 7 });
+  expect(schema.parse(undefined)).toEqual({ graphInputMaxBytes: 1048576, invocationInputMaxBytes: 1048576 });
+  expect(schema.parse({ graphInputMaxBytes: 7 })).toEqual({ graphInputMaxBytes: 7, invocationInputMaxBytes: 1048576 });
   expect(() => schema.parse({ graphInputMaxBytes: 0 })).toThrow();
 });

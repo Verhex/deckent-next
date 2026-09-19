@@ -354,3 +354,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 PROVIDERS/A3A: add bounded native invocation admission and canonical shared-ledger claims, exact replay, atomic quota/in-flight accounting and migration14. Unknown outcomes retain capacity; no automatic resend or monetary guarantee. Native transport/surfaces follow separately.
 
 PROVIDERS/A3B: add explicit scoped native invocation profiles and a bounded text HTTP adapter; current policy, native validation, no proxy inheritance, and typed allocation conflict. Initial transport is numeric loopback only; no endpoint/model defaults, credentials or automatic resend.
+
+PROVIDERS/A3C: shared native invocation and inspection through SDK, bounded CLI file/stdin and MCP. Durable replay never resends. Known MCP full-result overflow remains mandatory corrective work before real provider admission; no paid-provider or dogfood claim.

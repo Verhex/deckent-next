@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
@@ -20,6 +21,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
     inspectDeclaredModels, inspectModelBinding,
+    invokeModel: invokeConfiguredModel, inspectModelInvocation: inspectConfiguredModelInvocation,
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation,
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,

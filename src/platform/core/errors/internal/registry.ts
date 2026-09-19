@@ -4,6 +4,10 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', p, l) }) },
+  CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', p, l) }) },
+  CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', p, l) }) },
+  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', p, l) }) },
   MODEL_INVOCATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_INVALID', p, l) }) },
   MODEL_INVOCATION_BINDING_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_BINDING_CONFLICT', p, l) }) },
   MODEL_INVOCATION_PROFILE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_PROFILE_CONFLICT', p, l) }) },
