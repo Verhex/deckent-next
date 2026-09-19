@@ -551,7 +551,12 @@
   "cli.run.cancel.deliveryExhausted": "retry limit reached; inspect unresolved effects",
   "cli.run.inspect.profile": "  Profile: {profile} v{version}; acceptance criteria: {criteria}",
   "cli.run.inspect.criterion": "Criterion {criterion}: {description} ({evaluator} v{version})",
-  "cli.help.runtime": "Usage: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nStarts the common local service in the foreground. Other CLI/MCP processes\n    connect to it. Ctrl+C requests graceful shutdown; it does not cancel\n    workers.",
+  "cli.help.runtime": "Usage: deckent runtime serve|describe [--json] [--lang en|tr]\n       deckent runtime shutdown --service <id> --instance <id> --command-id <id> --reason <text> [--json] [--lang en|tr]",
   "cli.runtime.reconciliation": "Reconciliation page completed: {count} outcomes. Task acceptance is unchanged.",
-  "cli.runtime.reconciliationFailed": "Reconciliation recovery failed: {code}."
+  "cli.runtime.reconciliationFailed": "Reconciliation recovery failed: {code}.",
+  "cli.runtime.descriptorAvailable": "Runtime service {serviceId}, instance {instanceId}; shutdown is configured and requires authorization.",
+  "cli.runtime.descriptorUnavailable": "Runtime service instance {instanceId}; client shutdown is unavailable.",
+  "cli.runtime.shutdownAdmitted": "Runtime shutdown accepted for {serviceId} instance {instanceId} (command {commandId}).",
+  "mcp.tool.runtimeServiceDescriptor": "Return the local runtime service descriptor and exact current instance identity. This grants no shutdown permission.",
+  "mcp.tool.shutdownRuntimeService": "Admit a policy-authorized shutdown for the exact service and instance. Acceptance does not mean the service has stopped."
 }

@@ -7,11 +7,11 @@ export type LocalPeerIdentity = Readonly<{ pid: number; uid: number; gid: number
 interface PeerHandoff { peer: { pid: number; uid: number; gid: number }; takeFd(): number }
 export type PeerClosure = Readonly<{ state: 'closed'; reason: 'requested' | 'poll-failed' | 'accept-failed' }>;
 interface PeerAcceptor { close(): void; removeEndpoint(): void }
-interface PeerModule { createListener(endpoint: string, backlog: number, onConnection: (handoff: PeerHandoff) => void, onLifecycle: (event: PeerClosure) => void): PeerAcceptor }
+interface PeerModule { createListener(endpoint: string, backlog: number, onConnection: (handoff: PeerHandoff) => void, onLifecycle: (event: PeerClosure) => void, retryDelayMs: number, retryLimit: number): PeerAcceptor }
 
 /** The native adapter owns accept and SO_PEERCRED; no private Node Socket fields are accessed. */
 export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
-  onConnection: (socket: Socket, peer: LocalPeerIdentity) => void) {
+  onConnection: (socket: Socket, peer: LocalPeerIdentity) => void, retryDelayMs: number, retryLimit: number) {
   let native: PeerModule;
   try { native = createRequire(import.meta.url)('../native/build/Release/peer_credentials.node') as PeerModule; }
   catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED', { cause: error }); }
@@ -37,7 +37,7 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
   }, event => {
     stopped = true; if (!clients.size) finish?.();
     settle(Object.freeze({ state: event.state, reason: event.reason }));
-  });
+  }, retryDelayMs, retryLimit);
   return Object.freeze({
     stopAccepting() { if (!stopped) { stopped = true; listener.close(); if (!clients.size) finish?.(); } },
     disconnectClients() { for (const socket of clients) socket.destroy(); },

@@ -1,5 +1,7 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
-import type { CancellationRecoveryCommand, CancellationRecoveryPageResult, RuntimeServiceDrainResult, ReconciliationRecoveryCommand, ReconciliationRecoveryPage } from '#engine/index.js';
+import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
+  type RuntimeServiceDrainResult, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
+  type ServiceShutdownAdmissionResult, type ShutdownCommand } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 export interface RuntimeServiceHost {
@@ -15,6 +17,8 @@ export interface RuntimeServiceObserver {
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
+export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
+export type RuntimeServiceShutdownHandler = (root: string, command: ShutdownCommand, options: ConfigLoadOptions) => Promise<ServiceShutdownAdmissionResult>;
 
 function waitForStop(signal: AbortSignal): Promise<void> {
   return signal.aborted ? Promise.resolve() : new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
@@ -22,25 +26,48 @@ function waitForStop(signal: AbortSignal): Promise<void> {
 /** Foreground-only local host; this never starts itself during normal CLI/MCP calls. */
 export async function runtimeCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
-  if (action !== 'serve' && action !== '--help' && action !== '-h') throw ErrorRegistry.createError('CLI_USAGE');
-  let json = false; let language: string | undefined;
+  if (!['serve', 'describe', 'shutdown', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
+  let json = false; let language: string | undefined; const shutdown: Record<string, string> = {};
   for (let i = 2; i < argv.length; i++) {
     const value = argv[i]!;
     if (value === '--json') { if (json) throw ErrorRegistry.createError('CLI_USAGE'); json = true; continue; }
     if (value === '--no-color') continue;
     if (value === '--lang') { language = argv[++i]; if (!language || language.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); continue; }
+    const field = { '--service': 'serviceId', '--instance': 'instanceId', '--command-id': 'commandId', '--reason': 'reason' }[value];
+    if (action === 'shutdown' && field) {
+      const supplied = argv[++i];
+      if (!supplied || supplied.startsWith('-') || shutdown[field] !== undefined) throw ErrorRegistry.createError('CLI_USAGE');
+      shutdown[field] = supplied; continue;
+    }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
   const locale = resolveLocale(language, context.env); context.onLocale?.(locale);
-  if (action !== 'serve') {
+  if (action === '--help' || action === '-h') {
     if (json) throw ErrorRegistry.createError('CLI_USAGE');
     emit(t('cli.help.runtime', {}, locale), { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
     return;
   }
-  if (!context.startRuntimeService || !context.signal) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const output = (value: unknown, render: () => string, level: 'info' | 'error' = 'info') => emit(value, { json, level,
     ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}), render });
+  if (action === 'describe') {
+    if (!context.describeRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+    const descriptor = await context.describeRuntimeService(root, options);
+    output(descriptor, () => descriptor.shutdownAvailable
+      ? t('cli.runtime.descriptorAvailable', { serviceId: descriptor.identity.serviceId, instanceId: descriptor.instanceId }, locale)
+      : t('cli.runtime.descriptorUnavailable', { instanceId: descriptor.instanceId }, locale));
+    return;
+  }
+  if (action === 'shutdown') {
+    if (!context.shutdownRuntimeService) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+    const command = shutdownCommandSchema.safeParse({ schemaVersion: 1, ...shutdown });
+    if (!command.success) throw ErrorRegistry.createError('CLI_USAGE');
+    const result = await context.shutdownRuntimeService(root, command.data, options);
+    output(result, () => t('cli.runtime.shutdownAdmitted', { serviceId: command.data.serviceId,
+      instanceId: command.data.instanceId, commandId: command.data.commandId }, locale));
+    return;
+  }
+  if (!context.startRuntimeService || !context.signal) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
   const host = await context.startRuntimeService(root, {
     onReconciliationPage: async (command, result) => {
       const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');

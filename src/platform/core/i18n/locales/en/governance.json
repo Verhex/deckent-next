@@ -818,5 +818,12 @@
   "error.RECONCILIATION_NOT_CONFIGURED": "Automatic reconciliation recovery is not configured.",
   "error.RECONCILIATION_RECOVERY_INVALID": "The reconciliation recovery page or limits are invalid. No new work was launched.",
   "error.RECONCILIATION_RUNTIME_LOOP_OPTIONS": "The reconciliation runtime scope or scheduling configuration is invalid.",
-  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "The reconciliation runtime loop is already running."
+  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "The reconciliation runtime loop is already running.",
+  "error.SERVICE_SHUTDOWN_INVALID": "The service shutdown request or service identity is invalid.",
+  "error.SERVICE_SHUTDOWN_CONFLICT": "This shutdown command was already admitted with different content or actor.",
+  "error.SERVICE_SHUTDOWN_INSTANCE": "This shutdown request targets another service instance.",
+  "error.SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE": "The durable shutdown record could not be confirmed. Inspect its receipt before retrying.",
+  "error.SERVICE_SHUTDOWN_CORRUPT": "The shutdown record failed integrity validation.",
+  "error.SERVICE_SHUTDOWN_NOT_ADMITTED": "No matching shutdown admission was found.",
+  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "A different final shutdown outcome is already recorded."
 }

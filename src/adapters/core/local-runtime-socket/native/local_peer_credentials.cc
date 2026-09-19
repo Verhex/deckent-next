@@ -52,11 +52,17 @@ struct Listener {
   const char* reason = "requested";
   napi_async_cleanup_hook_handle cleanup = nullptr;
   uv_poll_t poll{};
+  uv_timer_t retry{};
   int fd = -1;
+  int close_pending = 0;
+  unsigned transient_attempts = 0;
+  uint64_t transient_retry_delay_ms = 0;
+  unsigned transient_retry_limit = 0;
   bool closing = false;
   bool closed = false;
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   int fault = 0;
+  int fault_remaining = 0;
 #endif
 };
 void stop(Listener* listener, const char* reason = "requested");
@@ -67,6 +73,7 @@ void finalize(napi_env, void* data, void*) {
 }
 void closed(uv_handle_t* handle) {
   auto* listener = static_cast<Listener*>(handle->data);
+  if (--listener->close_pending > 0) return;
   if (listener->fd >= 0) { ::close(listener->fd); listener->fd = -1; }
   listener->closed = true;
   if (listener->lifecycle && std::strcmp(listener->reason, "environment-cleanup") != 0) {
@@ -97,7 +104,10 @@ void stop(Listener* listener, const char* reason) {
   listener->closing = true;
   listener->reason = reason;
   uv_poll_stop(&listener->poll);
+  uv_timer_stop(&listener->retry);
+  listener->close_pending = 2;
   uv_close(reinterpret_cast<uv_handle_t*>(&listener->poll), closed);
+  uv_close(reinterpret_cast<uv_handle_t*>(&listener->retry), closed);
 }
 void cleanup(napi_async_cleanup_hook_handle, void* data) { stop(static_cast<Listener*>(data), "environment-cleanup"); }
 napi_value close_listener(napi_env env, napi_callback_info info) {
@@ -143,11 +153,23 @@ void deliver(Listener* listener, int fd, const ucred& credential) {
   if (status == napi_pending_exception) { napi_value exception; napi_get_and_clear_last_exception(env, &exception); }
   napi_close_handle_scope(env, scope);
 }
+void readable(uv_poll_t* poll, int status, int events);
+void resume_accept(uv_timer_t* timer) {
+  auto* listener = static_cast<Listener*>(timer->data);
+  if (listener->closing) return;
+  uv_timer_stop(timer);
+  if (uv_poll_start(&listener->poll, UV_READABLE, readable) != 0) stop(listener, "poll-failed");
+}
+bool transient_accept_error(int value) {
+  return value == EMFILE || value == ENFILE || value == ENOBUFS || value == ENOMEM;
+}
 void readable(uv_poll_t* poll, int status, int events) {
   auto* listener = static_cast<Listener*>(poll->data);
   if (listener->closing) return;
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
-  const int fault = listener->fault; listener->fault = 0;
+  const int fault = listener->fault;
+  if (listener->fault_remaining > 0 && --listener->fault_remaining == 0) listener->fault = 0;
+  else if (listener->fault_remaining == 0) listener->fault = 0;
   if (fault == 1) status = UV_EBADF;
 #else
   constexpr int fault = 0;
@@ -156,13 +178,21 @@ void readable(uv_poll_t* poll, int status, int events) {
   // Bound event-loop work per readiness notification; remaining connections stay queued.
   for (int batch = 0; batch < 64 && !listener->closing; ++batch) {
     int fd;
-    if (fault == 2) { errno = EMFILE; fd = -1; }
+    if (fault >= 2 && fault <= 5) {
+      constexpr int errors[] = {EMFILE, ENFILE, ENOBUFS, ENOMEM}; errno = errors[fault - 2]; fd = -1;
+    }
+    else if (fault == 6) { errno = EINVAL; fd = -1; }
     else fd = accept4(listener->fd, nullptr, nullptr, SOCK_CLOEXEC | SOCK_NONBLOCK);
     if (fd < 0) {
       if (errno == EINTR) continue;
-      if (errno != EAGAIN && errno != EWOULDBLOCK) stop(listener, "accept-failed");
+      if (transient_accept_error(errno)) {
+        uv_poll_stop(&listener->poll);
+        if (++listener->transient_attempts > listener->transient_retry_limit
+            || uv_timer_start(&listener->retry, resume_accept, listener->transient_retry_delay_ms, 0) != 0) stop(listener, "accept-failed");
+      } else if (errno != EAGAIN && errno != EWOULDBLOCK) stop(listener, "accept-failed");
       break;
     }
+    listener->transient_attempts = 0;
     ucred credential{}; socklen_t length = sizeof(credential);
     if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credential, &length) != 0 || length != sizeof(credential)) {
       ::close(fd); continue;
@@ -174,29 +204,41 @@ void readable(uv_poll_t* poll, int status, int events) {
 napi_value fail_next_readable(napi_env env, napi_callback_info info) {
   size_t count = 1; napi_value arg, self; Listener* listener = nullptr; int32_t mode = 0;
   napi_get_cb_info(env, info, &count, &arg, &self, nullptr);
-  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 2
+  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 7
       || napi_unwrap(env, self, reinterpret_cast<void**>(&listener)) != napi_ok || !listener || listener->closing)
     return fail(env, "LOCAL_PEER_TEST_OPTIONS");
-  listener->fault = mode; napi_value result; napi_get_undefined(env, &result); return result;
+  listener->fault = mode == 7 ? 2 : mode; listener->fault_remaining = mode == 7 ? 4 : 1;
+  napi_value result; napi_get_undefined(env, &result); return result;
+}
+napi_value transient_attempts(napi_env env, napi_callback_info info) {
+  size_t count = 0; napi_value self, result; Listener* listener = nullptr;
+  napi_get_cb_info(env, info, &count, nullptr, &self, nullptr);
+  if (napi_unwrap(env, self, reinterpret_cast<void**>(&listener)) != napi_ok || !listener)
+    return fail(env, "LOCAL_PEER_TEST_OPTIONS");
+  napi_create_uint32(env, listener->transient_attempts, &result); return result;
 }
 napi_value fail_next_start(napi_env env, napi_callback_info info) {
   size_t count = 1; napi_value arg; int32_t mode = 0;
   napi_get_cb_info(env, info, &count, &arg, nullptr, nullptr);
-  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 3)
+  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 4)
     return fail(env, "LOCAL_PEER_TEST_OPTIONS");
   next_start_fault = mode; napi_value result; napi_get_undefined(env, &result); return result;
 }
 #endif
 napi_value create_listener(napi_env env, napi_callback_info info) {
-  size_t count = 4; napi_value args[4]; napi_valuetype type;
+  size_t count = 6; napi_value args[6]; napi_valuetype type;
   napi_get_cb_info(env, info, &count, args, nullptr, nullptr);
-  size_t length = 0; double backlog = 0;
-  if (count != 4 || napi_typeof(env, args[2], &type) != napi_ok || type != napi_function
+  size_t length = 0; double backlog = 0, retry_delay = 0, retry_limit = 0;
+  if (count != 6 || napi_typeof(env, args[2], &type) != napi_ok || type != napi_function
       || napi_get_value_string_utf8(env, args[0], nullptr, 0, &length) != napi_ok
       || napi_typeof(env, args[3], &type) != napi_ok || type != napi_function
       || !length || length >= sizeof(sockaddr_un::sun_path)
       || napi_get_value_double(env, args[1], &backlog) != napi_ok || !std::isfinite(backlog)
-      || backlog < 1 || backlog > INT_MAX || backlog != std::floor(backlog)) return fail(env, "LOCAL_PEER_OPTIONS");
+      || backlog < 1 || backlog > INT_MAX || backlog != std::floor(backlog)
+      || napi_get_value_double(env, args[4], &retry_delay) != napi_ok || !std::isfinite(retry_delay)
+      || retry_delay < 1 || retry_delay > INT_MAX || retry_delay != std::floor(retry_delay)
+      || napi_get_value_double(env, args[5], &retry_limit) != napi_ok || !std::isfinite(retry_limit)
+      || retry_limit < 1 || retry_limit > INT_MAX || retry_limit != std::floor(retry_limit)) return fail(env, "LOCAL_PEER_OPTIONS");
   sockaddr_un address{}; address.sun_family = AF_UNIX;
   napi_get_value_string_utf8(env, args[0], address.sun_path, sizeof(address.sun_path), &length);
   if (address.sun_path[0] != '/' || std::strlen(address.sun_path) != length) return fail(env, "LOCAL_PEER_OPTIONS");
@@ -235,10 +277,20 @@ napi_value create_listener(napi_env env, napi_callback_info info) {
   constexpr int start_fault = 0;
 #endif
   auto* listener = new Listener{env, owned}; listener->fd = fd;
+  listener->transient_retry_delay_ms = static_cast<uint64_t>(retry_delay);
+  listener->transient_retry_limit = static_cast<unsigned>(retry_limit);
   if (start_fault == 1 || start_fault == 3 || uv_poll_init_socket(loop, &listener->poll, fd) != 0) {
     remove_owned(owned); ::close(owned.identity_fd); ::close(fd); delete listener; return fail(env, "LOCAL_PEER_POLL");
   }
   listener->poll.data = listener;
+  if (start_fault == 4 || uv_timer_init(loop, &listener->retry) != 0) {
+    remove_owned(owned); ::close(listener->endpoint.identity_fd); listener->endpoint.identity_fd = -1;
+    uv_close(reinterpret_cast<uv_handle_t*>(&listener->poll), [](uv_handle_t* handle) {
+      auto* failed = static_cast<Listener*>(handle->data); ::close(failed->fd); delete failed;
+    });
+    return fail(env, "LOCAL_PEER_POLL");
+  }
+  listener->retry.data = listener;
   napi_value object; napi_create_object(env, &object);
   napi_wrap(env, object, listener, finalize, nullptr, nullptr);
   napi_create_reference(env, object, 1, &listener->self);
@@ -252,6 +304,8 @@ napi_value create_listener(napi_env env, napi_callback_info info) {
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   napi_property_descriptor injection = {"__testFailNextReadable", nullptr, fail_next_readable, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, object, 1, &injection);
+  napi_property_descriptor attempts = {"__testTransientAttempts", nullptr, transient_attempts, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, object, 1, &attempts);
 #endif
   if (start_fault == 2 || uv_poll_start(&listener->poll, UV_READABLE, readable) != 0) {
     remove_owned(owned);

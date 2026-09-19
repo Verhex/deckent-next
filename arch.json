@@ -260,6 +260,8 @@
     },
     "src/adapters/core/local-runtime-socket": {
       "dependencies": [
+        "src/adapters/core/local-principal",
+        "src/engine/core/authentication",
         "src/engine/core/runtime"
       ],
       "plan": "R1"
@@ -430,15 +432,20 @@
     },
     "src/composition/core/runtime-service": {
       "dependencies": [
+        "src/adapters/core/attempt-store",
         "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
         "src/composition/core/execution",
         "src/composition/core/inventory",
+        "src/composition/core/policy",
         "src/composition/core/query-errors",
         "src/composition/core/runs",
         "src/composition/core/runtime",
         "src/domain/core/attempt",
+        "src/domain/core/policy",
         "src/engine/core/dispatch",
+        "src/engine/core/policy",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
@@ -731,6 +738,7 @@
         "src/domain/core/policy",
         "src/engine/core/dispatch",
         "src/engine/core/runs",
+        "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
         "src/platform/core/common",
         "src/platform/core/errors",

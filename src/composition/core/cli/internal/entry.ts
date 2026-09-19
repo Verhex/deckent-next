@@ -13,6 +13,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
+    shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input),
     inspectRun: (_root, input) => runtime.inspectRun(input),
     deliverRunCancellation: (_root, input) => runtime.deliverRunCancellation(input),

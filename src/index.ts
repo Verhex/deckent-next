@@ -23,3 +23,5 @@ export { runConfiguredCancellationRuntime } from '#composition/index.js';
 export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/index.js';
 
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/index.js';
+
+export type { ShutdownCommand, RuntimeServiceDescriptor, ServiceShutdownAdmissionResult } from '#engine/index.js';

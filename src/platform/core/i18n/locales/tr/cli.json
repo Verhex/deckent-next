@@ -551,7 +551,12 @@
   "cli.run.cancel.deliveryExhausted": "tekrar sınırına ulaşıldı; belirsiz etkileri inceleyin",
   "cli.run.inspect.profile": "  Profil: {profile} v{version}; kabul kriterleri: {criteria}",
   "cli.run.inspect.criterion": "Kriter {criterion}: {description} ({evaluator} v{version})",
-  "cli.help.runtime": "Kullanım: deckent runtime serve [--json] [--lang en|tr] [--no-color]\nOrtak yerel servisi ön planda başlatır. Diğer CLI/MCP süreçleri ona bağlanır.\n    Ctrl+C kontrollü kapanış ister; worker’ları iptal etmez.",
+  "cli.help.runtime": "Kullanım: deckent runtime serve|describe [--json] [--lang en|tr]\n          deckent runtime shutdown --service <kimlik> --instance <kimlik> --command-id <kimlik> --reason <açıklama> [--json] [--lang en|tr]",
   "cli.runtime.reconciliation": "Uzlaştırma sayfası tamamlandı: {count} sonuç. Görev kabulü değişmedi.",
-  "cli.runtime.reconciliationFailed": "Uzlaştırma kurtarması başarısız: {code}."
+  "cli.runtime.reconciliationFailed": "Uzlaştırma kurtarması başarısız: {code}.",
+  "cli.runtime.descriptorAvailable": "Runtime servisi {serviceId}, örnek {instanceId}; kapatma yapılandırılmış, izin ayrıca denetlenir.",
+  "cli.runtime.descriptorUnavailable": "Runtime servisi örneği {instanceId}; istemci kapatması kullanılamıyor.",
+  "cli.runtime.shutdownAdmitted": "Runtime kapatma isteği {serviceId} örneği {instanceId} için kabul edildi (komut {commandId}).",
+  "mcp.tool.runtimeServiceDescriptor": "Yerel runtime servisi tanımlayıcısını ve mevcut örneğin kimliğini döndürür. Kapatma izni vermez.",
+  "mcp.tool.shutdownRuntimeService": "Belirtilen servis ve örnek için politika denetimli kapatma isteğini kabul eder. Kabul, servisin durduğu anlamına gelmez."
 }

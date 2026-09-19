@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
-  runAdmissionSchema, runReservationCommandSchema, type RunCommand, type RunQuery, type DispatchInventoryInput,
-  type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
+  runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema,
+  type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
+  type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 export interface McpApplications {
   createRun?(command: RunAdmission): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
@@ -16,6 +17,8 @@ export interface McpApplications {
   requestRunCancellation?(command: RunCommand): Promise<unknown>;
   inspectRun(query: RunQuery): Promise<unknown>;
   inspectInventory(query: DispatchInventoryInput): Promise<unknown>;
+  describeService?(): Promise<RuntimeServiceDescriptor>;
+  shutdownService?(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
 }
 export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number }
 /** Local protocol surface. Injected applications own identity, policy and data access.
@@ -51,6 +54,14 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const evaluateTask = applications.evaluateTask;
   if (evaluateTask) definitions.push({ readOnly: false, destructive: false, name: 'evaluate_task', description: t('mcp.tool.evaluateTask', {}, locale),
     schema: taskEvaluationCommandSchema, invoke: (input: unknown) => evaluateTask.call(applications, taskEvaluationCommandSchema.parse(input)) });
+  const describeService = applications.describeService;
+  if (describeService) definitions.push({ readOnly: true, destructive: false, name: 'runtime_service_descriptor',
+    description: t('mcp.tool.runtimeServiceDescriptor', {}, locale), schema: z.object({}).strict(),
+    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return runtimeServiceDescriptorSchema.parse(await describeService.call(applications)); } });
+  const shutdownService = applications.shutdownService;
+  if (shutdownService) definitions.push({ readOnly: false, destructive: true, name: 'shutdown_runtime_service',
+    description: t('mcp.tool.shutdownRuntimeService', {}, locale), schema: shutdownCommandSchema,
+    invoke: (input: unknown) => shutdownService.call(applications, shutdownCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,

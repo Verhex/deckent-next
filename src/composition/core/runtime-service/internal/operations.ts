@@ -43,6 +43,7 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
     deliverRunCancellation: input => operations.deliverRunCancellation(runCommandSchema.parse(input)),
     reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
-  } satisfies Record<RuntimeServiceOperation, RuntimeOperationHandler>;
-  return handlers[request.operation](request.input);
+  } satisfies Record<Exclude<RuntimeServiceOperation, 'describeService' | 'shutdownService'>, RuntimeOperationHandler>;
+  if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
+  return handlers[request.operation as keyof typeof handlers](request.input);
 }

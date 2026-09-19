@@ -1,8 +1,11 @@
 import { socketOptions } from './socket-options.js';
+import { configuredServiceShutdown } from './shutdown.js';
+import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError } from '#adapters/index.js';
-import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, type RuntimeServiceDrainResult } from '#engine/index.js';
+import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
+  serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
@@ -12,7 +15,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
 }
 
-/** Explicit local host. Client disconnects never call worker cancellation or stop this host. */
+/** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
 async function startService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}) {
   registerProviderConfig();
@@ -24,18 +27,34 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     onError: (command, error) => observer.onReconciliationError?.(command, error),
   }, options) : null;
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
+  const instanceId = randomUUID();
+  const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
+    shutdownAvailable: config.service.identity !== null, identity: config.service.identity });
+  const shutdown = config.service.identity ? configuredServiceShutdown(config,
+    serviceInstanceSchema.parse({ ...config.service.identity, instanceId })) : null;
+  const remoteShutdowns = new Map<string, Promise<void>>();
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => { controller.abort(); return recovery; }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
-  const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async request => {
+  const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async (request, peer) => {
     try {
+      if (request.operation === 'describeService') {
+        const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
+        return { schemaVersion: 2, requestId: request.requestId, ok: true, result };
+      }
+      if (request.operation === 'shutdownService') {
+        if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
+        const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
+        return { response: { schemaVersion: 2, requestId: request.requestId, ok: true, result },
+          afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
+      }
       const result = await lifecycle.admit(() => executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
-      return { schemaVersion: 1, requestId: request.requestId, ok: true, result };
+      return { schemaVersion: 2, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: 1, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      return { schemaVersion: 2, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;
@@ -57,8 +76,23 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
       return result;
     });
     // Finalization shares the grace deadline. The guard remains until admitted work and recovery settle.
-    void lifecycle.whenSettled().then(() => transportFailure ? rejectDone(transportFailure) : resolveDone(), error => rejectDone(queryFailure(error)));
+    void lifecycle.whenSettled().then(async () => {
+      await Promise.all(remoteShutdowns.values());
+      if (transportFailure) throw transportFailure;
+      resolveDone();
+    }).catch(error => rejectDone(queryFailure(error)));
     return stopping;
+  };
+  const finishRemoteShutdown = (admission: ShutdownAdmission) => {
+    if (!shutdown || remoteShutdowns.has(admission.command.commandId)) return;
+    // Register completion before stop starts. Host done must not outrun durable outcome publication.
+    const completion = Promise.resolve().then(async () => {
+      const result = await stop();
+      await shutdown.recordOutcome(admission, result);
+      if (result.state === 'incomplete') throw ErrorRegistry.createError('RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE');
+    });
+    remoteShutdowns.set(admission.command.commandId, completion);
+    void completion.catch(error => rejectDone(queryFailure(error)));
   };
   void server.termination.then(event => {
     if (event.reason !== 'requested') {

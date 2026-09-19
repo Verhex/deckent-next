@@ -7,7 +7,11 @@ import { encodeServiceFrame, ServiceFrameDecoder } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 
-export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity) => Promise<RuntimeServiceResponse>;
+export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
+  response: RuntimeServiceResponse;
+  afterResponseOrDisconnect: () => void;
+}>;
+export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
 export interface LocalRuntimeSocketServer { readonly endpoint: string; readonly termination: Promise<PeerClosure>; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
@@ -26,14 +30,35 @@ function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 }
 function transportFailure(requestId: string): RuntimeServiceResponse {
-  return { schemaVersion: 1, requestId, ok: false, error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } };
+  return { schemaVersion: 2, requestId, ok: false, error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } };
+}
+function isAfterResponseOrDisconnect(value: unknown): value is () => void { return typeof value === 'function'; }
+function reply(value: RuntimeServiceHandlerReply) {
+  if (value && typeof value === 'object' && 'response' in value && 'afterResponseOrDisconnect' in value) {
+    const wrapped = value as { response: RuntimeServiceResponse; afterResponseOrDisconnect: unknown };
+    if (!isAfterResponseOrDisconnect(wrapped.afterResponseOrDisconnect)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
+    return { response: runtimeServiceResponseSchema.parse(wrapped.response), afterResponseOrDisconnect: wrapped.afterResponseOrDisconnect };
+  }
+  return { response: runtimeServiceResponseSchema.parse(value), afterResponseOrDisconnect: undefined };
 }
 
 function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, handler: RuntimeServiceHandler, peer: LocalPeerIdentity): void {
   const decoder = new ServiceFrameDecoder(options.inputMaxBytes);
-  const timer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')),
+  const headerTimer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')),
     options.headerTimeoutMs);
-  timer.unref();
+  headerTimer.unref();
+  let responseTimer: ReturnType<typeof setTimeout> | undefined;
+  let disconnected = false;
+  let afterResponseOrDisconnect: (() => void) | undefined;
+  let handedOff = false;
+  const finishHandoff = () => {
+    if (handedOff || !afterResponseOrDisconnect) return;
+    handedOff = true;
+    try { afterResponseOrDisconnect(); } catch { /* Lifecycle ownership remains outside transport. */ }
+  };
+  const disconnectedNow = () => {
+    disconnected = true; clearTimeout(headerTimer); if (responseTimer) clearTimeout(responseTimer); finishHandoff();
+  };
   socket.on('data', chunk => {
     try {
       if (!Buffer.isBuffer(chunk)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
@@ -41,19 +66,31 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     } catch { socket.destroy(); }
   });
   socket.once('end', () => {
-    clearTimeout(timer);
+    clearTimeout(headerTimer);
     let request: RuntimeServiceRequest;
     try { request = runtimeServiceRequestSchema.parse(decoder.finish()); }
     catch { socket.destroy(); return; }
-    void Promise.resolve().then(() => handler(request, peer)).then(value => runtimeServiceResponseSchema.parse(value))
-      .catch(() => transportFailure(request.requestId))
-      .then(response => {
+    void Promise.resolve().then(() => handler(request, peer)).then(reply)
+      .then(value => {
+        let response = value.response;
+        afterResponseOrDisconnect = value.afterResponseOrDisconnect;
+        if (disconnected) { finishHandoff(); return; }
         if (response.requestId !== request.requestId) response = transportFailure(request.requestId);
-        try { socket.end(encodeServiceFrame(response, options.responseMaxBytes)); } catch { socket.destroy(); }
+        responseTimer = setTimeout(() => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')), options.responseTimeoutMs);
+        responseTimer.unref();
+        try {
+          socket.end(encodeServiceFrame(response, options.responseMaxBytes), () => {
+            if (responseTimer) clearTimeout(responseTimer); finishHandoff();
+          });
+        } catch { socket.destroy(); }
+      }, () => {
+        if (!disconnected) {
+          try { socket.end(encodeServiceFrame(transportFailure(request.requestId), options.responseMaxBytes)); } catch { socket.destroy(); }
+        }
       });
   });
-  socket.once('error', () => clearTimeout(timer));
-  socket.once('close', () => clearTimeout(timer));
+  socket.once('error', disconnectedNow);
+  socket.once('close', disconnectedNow);
 }
 
 export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketOptions,
@@ -70,7 +107,7 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
   try {
     await removeOwnedSocket(resolved.endpoint, true);
     endpoint = listenWithPeerIdentity(resolved.endpoint, resolved.maxConnections,
-      (socket, peer) => accept(socket, resolved, handler, peer));
+      (socket, peer) => accept(socket, resolved, handler, peer), resolved.acceptRetryDelayMs, resolved.acceptRetryLimit);
     await chmod(resolved.endpoint, 0o600);
   } catch (error) {
     endpoint?.stopAccepting(); endpoint?.disconnectClients();

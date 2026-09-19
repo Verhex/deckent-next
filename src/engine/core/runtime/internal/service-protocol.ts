@@ -2,13 +2,14 @@ import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
 
 export const runtimeServiceOperationSchema = z.enum(['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
-  'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations']);
-export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(1), requestId: identitySchema,
+  'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService']);
+export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
+export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(2), requestId: identitySchema,
   operation: runtimeServiceOperationSchema, input: z.unknown(),
 }).strict().refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();
-const success = z.object({ schemaVersion: z.literal(1), requestId: identitySchema, ok: z.literal(true), result: z.unknown() })
+const success = z.object({ schemaVersion: z.literal(2), requestId: identitySchema, ok: z.literal(true), result: z.unknown() })
   .strict().refine(value => Object.hasOwn(value, 'result'), { path: ['result'], message: 'RUNTIME_SERVICE_RESULT_REQUIRED' }).readonly();
-const failure = z.object({ schemaVersion: z.literal(1), requestId: identitySchema, ok: z.literal(false),
+const failure = z.object({ schemaVersion: z.literal(2), requestId: identitySchema, ok: z.literal(false),
   error: z.object({ code: identitySchema, category: z.enum(['error', 'usage', 'config']) }).strict().readonly(),
 }).strict().readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();

@@ -18,7 +18,7 @@ async function fixture(): Promise<{ root: string; options: LocalRuntimeSocketOpt
   const parent = join(root, 'private');
   await mkdir(parent, { mode: 0o700 });
   return { root, options: { endpoint: join(parent, 'runtime.sock'), maxConnections: 8, inputMaxBytes: 4096,
-    responseMaxBytes: 4096, headerTimeoutMs: 1_000 } };
+    responseMaxBytes: 4096, acceptRetryDelayMs: 25, acceptRetryLimit: 3, headerTimeoutMs: 1_000, responseTimeoutMs: 1_000 } };
 }
 afterEach(async () => { await Promise.all(owned.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 
@@ -42,11 +42,11 @@ async function terminate(child: ChildProcess): Promise<void> {
 describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
   it('serves one correlated framed request per connection with strict endpoint permissions', async () => {
     const { options } = await fixture();
-    const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+    const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: { operation: request.operation } }));
     try {
       expect((await lstat(options.endpoint)).mode & 0o777).toBe(0o600);
-      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'request-1',
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1',
         operation: 'inspectRun', input: {} })).resolves.toMatchObject({ requestId: 'request-1', ok: true,
           result: { operation: 'inspectRun' } });
     } finally { await server.dispose(); }
@@ -56,10 +56,10 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     const { options } = await fixture();
     const server = await startLocalRuntimeSocketServer(options, async (request, peer) => {
       expect(Object.isFrozen(peer)).toBe(true);
-      return { schemaVersion: 1, requestId: request.requestId, ok: true, result: peer };
+      return { schemaVersion: 2, requestId: request.requestId, ok: true, result: peer };
     });
     try {
-      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'peer-proof',
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'peer-proof',
         operation: 'inspectRun', input: { actor: { uid: 0, pid: 1 } } })).resolves.toMatchObject({
         ok: true, result: { uid: process.getuid!(), gid: process.getgid!(), pid: process.pid, assurance: 'linux-so-peercred' },
       });
@@ -68,7 +68,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
 
   it('releases the guard when endpoint cleanup is refused without deleting the replacement', async () => {
     const { options } = await fixture();
-    const handler = async (request: { requestId: string }) => ({ schemaVersion: 1 as const,
+    const handler = async (request: { requestId: string }) => ({ schemaVersion: 2 as const,
       requestId: request.requestId, ok: true as const, result: null });
     const server = await startLocalRuntimeSocketServer(options, handler);
     await rm(options.endpoint); await writeFile(options.endpoint, 'replacement', { mode: 0o600 });
@@ -81,20 +81,20 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
 
   it('holds exclusive ownership and releases it on ordered close', async () => {
     const { options } = await fixture();
-    const first = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+    const first = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: null }));
     try {
-      await expect(startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+      await expect(startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
         requestId: request.requestId, ok: true, result: null }))).rejects.toSatisfy(error => {
           expectCode(error, 'LOCAL_RUNTIME_ALREADY_RUNNING'); return true;
         });
       first.stopAccepting();
-      await expect(startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+      await expect(startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
         requestId: request.requestId, ok: true, result: null }))).rejects.toSatisfy(error => {
           expectCode(error, 'LOCAL_RUNTIME_ALREADY_RUNNING'); return true;
         });
     } finally { await first.dispose(); }
-    const restarted = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+    const restarted = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: null }));
     await restarted.dispose();
   });
@@ -121,7 +121,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
       expect(ready).toContain('READY');
       await terminate(child);
       expect((await lstat(options.endpoint)).isSocket()).toBe(true);
-      const restarted = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+      const restarted = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
         requestId: request.requestId, ok: true, result: null }));
       await restarted.dispose();
     } finally { await terminate(child); }
@@ -130,7 +130,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
   it('never deletes an unsafe endpoint file or symlink', async () => {
     const regular = await fixture();
     await writeFile(regular.options.endpoint, 'keep');
-    await expect(startLocalRuntimeSocketServer(regular.options, async request => ({ schemaVersion: 1,
+    await expect(startLocalRuntimeSocketServer(regular.options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: null }))).rejects.toSatisfy(error => {
         expectCode(error, 'LOCAL_RUNTIME_ENDPOINT_UNSAFE'); return true;
       });
@@ -140,7 +140,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     const target = join(linked.root, 'target');
     await writeFile(target, 'keep');
     await symlink(target, linked.options.endpoint);
-    await expect(startLocalRuntimeSocketServer(linked.options, async request => ({ schemaVersion: 1,
+    await expect(startLocalRuntimeSocketServer(linked.options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: null }))).rejects.toSatisfy(error => {
         expectCode(error, 'LOCAL_RUNTIME_ENDPOINT_UNSAFE'); return true;
       });
@@ -151,17 +151,19 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     const { options } = await fixture();
     let calls = 0;
     const server = await startLocalRuntimeSocketServer(options, async request => {
-      calls += 1; return { schemaVersion: 1, requestId: request.requestId, ok: true, result: null };
+      calls += 1; return { schemaVersion: 2, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const socket = await connect(options.endpoint);
-      const frame = encodeServiceFrame({ schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096);
+      const frame = encodeServiceFrame({ schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096);
       socket.end(Buffer.concat([frame, Buffer.from([0])]));
       await new Promise<void>(resolve => socket.once('close', () => resolve()));
       expect(calls).toBe(0);
     } finally { await server.dispose(); }
   });
+});
 
+describe.skipIf(process.platform !== 'linux')('local runtime socket response delivery', () => {
   it('continues an admitted handler after the client disconnects', async () => {
     const { options } = await fixture();
     let complete!: () => void;
@@ -169,13 +171,62 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     const server = await startLocalRuntimeSocketServer(options, async request => {
       await new Promise(resolve => setTimeout(resolve, 20));
       complete();
-      return { schemaVersion: 1, requestId: request.requestId, ok: true, result: null };
+      return { schemaVersion: 2, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const socket = await connect(options.endpoint);
-      socket.end(encodeServiceFrame({ schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
+      socket.end(encodeServiceFrame({ schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
       socket.destroy();
       await completed;
+    } finally { await server.dispose(); }
+  });
+
+  it('hands a wrapped reply off once after its successful response flush', async () => {
+    const { options } = await fixture(); let handoffs = 0;
+    const server = await startLocalRuntimeSocketServer(options, async request => ({ response: { schemaVersion: 2,
+      requestId: request.requestId, ok: true, result: null }, afterResponseOrDisconnect() { handoffs++; } }));
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+        .resolves.toMatchObject({ ok: true });
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(handoffs).toBe(1);
+    } finally { await server.dispose(); }
+  });
+
+  it('hands a wrapped reply off after a client disconnects before its handler resolves', async () => {
+    const { options } = await fixture(); let release!: () => void; let entered!: () => void; let handoffs = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; }); const started = new Promise<void>(resolve => { entered = resolve; });
+    const server = await startLocalRuntimeSocketServer(options, async request => {
+      entered(); await gate;
+      return { response: { schemaVersion: 2, requestId: request.requestId, ok: true, result: null }, afterResponseOrDisconnect() { handoffs++; } };
+    });
+    try {
+      const socket = await connect(options.endpoint);
+      socket.end(encodeServiceFrame({ schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
+      await started; socket.destroy(); release();
+      for (let i = 0; i < 20 && handoffs === 0; i++) await new Promise(resolve => setTimeout(resolve, 1));
+      expect(handoffs).toBe(1);
+    } finally { await server.dispose(); }
+  });
+
+  it('does not provide a handoff when the handler throws a plain transport response', async () => {
+    const { options } = await fixture(); let handlers = 0;
+    const server = await startLocalRuntimeSocketServer(options, async () => { handlers++; throw new Error('private'); });
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+        .resolves.toMatchObject({ ok: false });
+      expect(handlers).toBe(1);
+    } finally { await server.dispose(); }
+  });
+
+  it('hands a valid wrapped reply off once when response encoding disconnects the client', async () => {
+    const { options } = await fixture(); let handoffs = 0;
+    const server = await startLocalRuntimeSocketServer(options, async request => ({ response: { schemaVersion: 2,
+      requestId: request.requestId, ok: true, result: 'x'.repeat(options.responseMaxBytes) }, afterResponseOrDisconnect() { handoffs++; } }));
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} })).rejects.toBeDefined();
+      for (let i = 0; i < 20 && handoffs === 0; i++) await new Promise(resolve => setTimeout(resolve, 1));
+      expect(handoffs).toBe(1);
     } finally { await server.dispose(); }
   });
 
@@ -186,11 +237,11 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
     const started = new Promise<void>(resolve => { entered = resolve; });
     const server = await startLocalRuntimeSocketServer(options, async request => {
       entered(); await gate; completed = true;
-      return { schemaVersion: 1, requestId: request.requestId, ok: true, result: null };
+      return { schemaVersion: 2, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const socket = await connect(options.endpoint);
-      socket.end(encodeServiceFrame({ schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
+      socket.end(encodeServiceFrame({ schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }, 4096));
       await started; server.stopAccepting(); const disposed = server.dispose(); server.disconnectClients();
       await disposed; expect(completed).toBe(false); release();
       for (let i = 0; i < 20 && !completed; i++) await new Promise(resolve => setTimeout(resolve, 1));
@@ -200,11 +251,11 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket', () => {
 
   it('rejects a handler response with the wrong correlation identity', async () => {
     const { options } = await fixture();
-    const server = await startLocalRuntimeSocketServer(options, async () => ({ schemaVersion: 1,
+    const server = await startLocalRuntimeSocketServer(options, async () => ({ schemaVersion: 2,
       requestId: 'foreign-request', ok: true, result: 'private' }));
     try {
-      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }))
-        .resolves.toEqual({ schemaVersion: 1, requestId: 'request-1', ok: false,
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+        .resolves.toEqual({ schemaVersion: 2, requestId: 'request-1', ok: false,
           error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } });
     } finally { await server.dispose(); }
   });
@@ -215,8 +266,8 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
     const { options } = await fixture();
     const server = await startLocalRuntimeSocketServer(options, () => { throw new Error('private'); });
     try {
-      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }))
-        .resolves.toEqual({ schemaVersion: 1, requestId: 'request-1', ok: false,
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+        .resolves.toEqual({ schemaVersion: 2, requestId: 'request-1', ok: false,
           error: { code: 'RUNTIME_SERVICE_TRANSPORT', category: 'error' } });
     } finally { await server.dispose(); }
   });
@@ -224,7 +275,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
   it('disconnects a pre-admission half-open request while retaining the guard until disposal', async () => {
     const fixtureValue = await fixture();
     const options = { ...fixtureValue.options, headerTimeoutMs: 1_000 };
-    const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 1,
+    const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 2,
       requestId: request.requestId, ok: true, result: null }));
     const socket = await connect(options.endpoint);
     socket.write(Buffer.from([0, 0]));
@@ -247,7 +298,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket lifecycle ed
     });
     await chmod(options.endpoint, 0o600);
     try {
-      await expect(requestLocalRuntime(options, { schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+      await expect(requestLocalRuntime(options, { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: {} }))
         .rejects.toSatisfy(error => { expectCode(error, 'LOCAL_RUNTIME_TRANSPORT'); return true; });
     } finally { await new Promise<void>(resolve => raw.close(() => resolve())); }
   });

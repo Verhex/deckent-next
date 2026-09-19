@@ -552,3 +552,10 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 | SERVICE-SHUTDOWN/P2A | Instance-bound shutdown command, fresh service-specific authorization, canonical admission/audit and one-shot outcome store; no transport stop until P2B | Deny/revocation, instance/actor/replay conflicts, audit-failure rejection, SQLite v9→10 conformance; independent review | REVIEW |
 
 2026-09-19 SERVICE-SHUTDOWN/P2A DONE — Fable1961 PASS; instance-bound command, fresh service policy, SQLite ledger10 canonical admission/audit and one-shot outcome. Full verify730 product/16native/18host; transport delivery remains P2B. Remote signed identity and per-replay attempt audit are explicit later assurance work.
+
+| Slice | Responsibility | Evidence | Status |
+|---|---|---|---|
+| SERVICE-SHUTDOWN/P2B | Wire2 descriptor and exact instance-fenced shutdown via actual OS peer, fresh policy, durable admission, once-only post-response handoff and persisted outcome; shared SDK/CLI/MCP | Real socket deny/audit-failure/restart/grace/outcome failure and surface parity | REVIEW |
+| LOCAL-PEER-TRANSPORT/P1a | Bounded accept resource-pressure pause/retry with poll/timer cleanup | Fable1955 followup; native failure/recovery proof before P4 | REVIEW |
+
+2026-09-19 SERVICE-SHUTDOWN/P2B + LOCAL-PEER-TRANSPORT/P1a DONE — Fable1965 PASS; actual kernel-peer admission and durable shutdown outcome through CLI/MCP/SDK, wire2, configurable bounded native accept retries. Full verify751 product/24native/18host; real fd-pressure and P4 worker-preservation/final repeated acceptance remain open.

@@ -19,4 +19,5 @@ export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from '#a
 export { processCommandSchema, processEvidenceSchema, validateProcessEvidence, ProcessRunnerError, runNodeProcess, createScopedNodeDockerRunner } from '#adapters/core/process-runner/index.js';
 export type { ProcessCommand, ProcessEvidence } from '#adapters/core/process-runner/index.js';
 
+export { LocalPeerShutdownAuthentication } from '#adapters/core/local-runtime-socket/index.js';
 export * from '#adapters/core/local-runtime-socket/index.js';

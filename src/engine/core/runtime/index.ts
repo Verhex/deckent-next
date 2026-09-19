@@ -3,7 +3,7 @@ export type { CancellationRuntimeLoopOptions, CancellationRecoveryPageResult, Ca
 export { RuntimeServiceLifecycle, RuntimeServiceLifecycleError } from './internal/service-lifecycle.js';
 export type { RuntimeServiceDeadline, RuntimeServiceLifecycleOptions, RuntimeServiceDrainResult, RuntimeServiceWorkClass } from './internal/service-lifecycle.js';
 export { RuntimeServiceProtocolError, classifyRuntimeServiceOperation, parseRuntimeServiceResponse, runtimeServiceOperationSchema,
-  runtimeServiceRequestSchema, runtimeServiceResponseSchema } from './internal/service-protocol.js';
+  runtimeServiceRequestSchema, runtimeServiceResponseSchema, runtimeServiceDescriptionInputSchema } from './internal/service-protocol.js';
 export type { RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse } from './internal/service-protocol.js';
 
 export { ReconciliationRecoveryApplication, ReconciliationRecoveryError } from './internal/reconciliation-recovery.js';

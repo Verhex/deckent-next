@@ -3,30 +3,31 @@ import { RuntimeServiceProtocolError, parseRuntimeServiceResponse, runtimeServic
   runtimeServiceRequestSchema, runtimeServiceResponseSchema } from '../../../src/engine/core/runtime/index.js';
 
 const operations = ['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun', 'inspectInventory',
-  'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations'] as const;
+  'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService'] as const;
 
 describe('runtime service protocol', () => {
-  it('accepts exactly the v1 operation allowlist', () => {
+  it('accepts exactly the current v2 operation allowlist', () => {
     for (const operation of operations) expect(runtimeServiceOperationSchema.parse(operation)).toBe(operation);
     expect(() => runtimeServiceOperationSchema.parse('shutdown')).toThrow();
   });
 
   it('requires input to be present and rejects extra request fields', () => {
-    const request = { schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun', input: null };
+    const request = { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun', input: null };
     expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+    expect(() => runtimeServiceRequestSchema.parse({ ...request, schemaVersion: 1 })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, input: undefined })).not.toThrow();
-    const withoutInput = { schemaVersion: 1, requestId: 'request-1', operation: 'inspectRun' };
+    const withoutInput = { schemaVersion: 2, requestId: 'request-1', operation: 'inspectRun' };
     expect(() => runtimeServiceRequestSchema.parse(withoutInput)).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, extra: true })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, requestId: '' })).toThrow();
   });
 
   it('requires success results and keeps failures closed and message-free', () => {
-    const success = { schemaVersion: 1, requestId: 'request-1', ok: true, result: null };
+    const success = { schemaVersion: 2, requestId: 'request-1', ok: true, result: null };
     expect(runtimeServiceResponseSchema.parse(success)).toEqual(success);
-    const withoutResult = { schemaVersion: 1, requestId: 'request-1', ok: true };
+    const withoutResult = { schemaVersion: 2, requestId: 'request-1', ok: true };
     expect(() => runtimeServiceResponseSchema.parse(withoutResult)).toThrow();
-    const failure = { schemaVersion: 1, requestId: 'request-1', ok: false,
+    const failure = { schemaVersion: 2, requestId: 'request-1', ok: false,
       error: { code: 'RUN_NOT_FOUND', category: 'error' } };
     expect(runtimeServiceResponseSchema.parse(failure)).toEqual(failure);
     expect(() => runtimeServiceResponseSchema.parse({ ...failure,
@@ -34,7 +35,7 @@ describe('runtime service protocol', () => {
   });
 
   it('validates response correlation after validating the response envelope', () => {
-    const response = { schemaVersion: 1, requestId: 'request-1', ok: true, result: {} };
+    const response = { schemaVersion: 2, requestId: 'request-1', ok: true, result: {} };
     expect(parseRuntimeServiceResponse('request-1', response)).toEqual(response);
     expect(() => parseRuntimeServiceResponse('request-2', response)).toThrowError(RuntimeServiceProtocolError);
     expect(() => parseRuntimeServiceResponse('request-1', { ...response, result: undefined, extra: true })).toThrow();

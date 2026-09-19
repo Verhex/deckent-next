@@ -818,5 +818,12 @@
   "error.RECONCILIATION_NOT_CONFIGURED": "Otomatik uzlaştırma kurtarması yapılandırılmamış.",
   "error.RECONCILIATION_RECOVERY_INVALID": "Uzlaştırma kurtarma sayfası veya sınırları geçersiz. Yeni iş başlatılmadı.",
   "error.RECONCILIATION_RUNTIME_LOOP_OPTIONS": "Uzlaştırma runtime kapsamı veya zamanlama yapılandırması geçersiz.",
-  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "Uzlaştırma runtime döngüsü zaten çalışıyor."
+  "error.RECONCILIATION_RUNTIME_LOOP_RUNNING": "Uzlaştırma runtime döngüsü zaten çalışıyor.",
+  "error.SERVICE_SHUTDOWN_INVALID": "Servis kapatma isteği veya servis kimliği geçersiz.",
+  "error.SERVICE_SHUTDOWN_CONFLICT": "Bu kapatma komutu farklı içerik veya aktörle zaten kabul edilmiş.",
+  "error.SERVICE_SHUTDOWN_INSTANCE": "Bu kapatma isteği başka bir servis örneğine ait.",
+  "error.SERVICE_SHUTDOWN_AUDIT_UNAVAILABLE": "Kalıcı kapatma kaydı doğrulanamadı. Yeniden denemeden önce kaydı inceleyin.",
+  "error.SERVICE_SHUTDOWN_CORRUPT": "Kapatma kaydının bütünlük doğrulaması başarısız.",
+  "error.SERVICE_SHUTDOWN_NOT_ADMITTED": "Eşleşen bir kapatma kabul kaydı bulunamadı.",
+  "error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT": "Farklı bir son kapatma sonucu zaten kaydedilmiş."
 }
