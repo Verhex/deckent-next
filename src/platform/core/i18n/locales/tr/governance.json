@@ -886,5 +886,7 @@
   "error.INSTALLATION_RECOVERY_CHANGED": "Kurulum kurtarma verisi doğrulanan hazırlıktan farklı.",
   "error.INSTALLATION_PUBLICATION_INVALID": "Açık kurulum seçimleri veya kurtarma girdisi eksik ya da geçersiz.",
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Kurulum mevcut kaynaklarla veya başka bir kayıtlı işlemle çelişiyor.",
-  "error.INSTALLATION_PUBLICATION_CHANGED": "Kurulum kanıtı veya yayımlanan durum değişti; tamamlanma kabul edilmedi."
+  "error.INSTALLATION_PUBLICATION_CHANGED": "Kurulum kanıtı veya yayımlanan durum değişti; tamamlanma kabul edilmedi.",
+  "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Veritabanı dönüşümü için eksiksiz ve tutarlı Run oluşturma kanıtı gerekiyor. Veritabanı değiştirilmedi.",
+  "error.RUN_CAPACITY_OR_ORDER.delayed": "Görev rezervasyonu reddedildi ({site}/{reason}): hazır {readyCount}, gecikmeli {delayedCount}, dolu yürütme kapasitesi {executionOccupied}/{executionSlots}, uygunluk bekleme süresi {eligibilityGapMs} ms."
 }

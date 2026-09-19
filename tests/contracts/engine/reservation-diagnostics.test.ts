@@ -9,10 +9,10 @@ const graph: TaskGraph = { schemaVersion: 2, revision: 1,
   tasks: [{ id: 'a', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Exit', evaluator: { id: 'process-exit', version: 1 }, parameters: {} }] };
 function wave(progress: TaskProgress, capacity = 1, now = 10) {
-  return planSchedulingWave(graph, { schemaVersion: 1, capacity: { executionSlots: capacity, inFlightSlots: capacity }, ordering: ['a'],
+  return planSchedulingWave(graph, { schemaVersion: 2, capacity: { executionSlots: capacity, inFlightSlots: capacity }, ordering: ['a'],
     snapshot: { graphRevision: 1, progress: [progress], now } });
 }
-const pending = { taskId: 'a', phase: 'pending', unresolvedEffects: false, eligibleAt: 0 } as const;
+const pending = { taskId: 'a', phase: 'pending', unresolvedEffects: false, eligibility: { kind: 'immediate' } } as const;
 
 it('classifies every bounded reservation diagnostic reason without changing the scheduling wave', () => {
   const ready = wave(pending); expect(ready.selectedTaskIds).toEqual(['a']);
@@ -21,7 +21,7 @@ it('classifies every bounded reservation diagnostic reason without changing the 
   const exhausted = wave(pending, 0); expect(exhausted.selectedTaskIds).toEqual([]);
   expect(diagnoseReservationWave(exhausted, 'application-empty', 0, { executionSlots: 0, inFlightSlots: 0 })).toMatchObject({ reason: 'capacity-exhausted', readyCount: 1, selectedCount: 0 });
 
-  const delayed = wave({ ...pending, eligibleAt: 11 });
+  const delayed = wave({ ...pending, eligibility: { kind: 'not-before', at: 11 } });
   expect(diagnoseReservationWave(delayed, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 })).toMatchObject({ reason: 'delayed', delayedCount: 1, now: 10, eligibilityGapMs: 1 });
 
   const terminal = wave({ ...pending, phase: 'accepted' });
@@ -43,11 +43,11 @@ it('maps only the fixed string and numeric diagnostic fields to public error par
 });
 
 it('renders bounded diagnostics in both locales and preserves a complete generic fallback', () => {
-  const diagnostic = diagnoseReservationWave(wave({ ...pending, eligibleAt: 11 }), 'application-empty', 0,
+  const diagnostic = diagnoseReservationWave(wave({ ...pending, eligibility: { kind: 'not-before', at: 11 } }), 'application-empty', 0,
     { executionSlots: 1, inFlightSlots: 1 });
   const detailed = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnostic));
-  expect(detailed.localize?.('en').message).toBe('Task reservation refused (application-empty/delayed): ready 0, delayed 1, occupied execution slots 0/1.');
-  expect(detailed.localize?.('tr').message).toBe('Görev rezervasyonu reddedildi (application-empty/delayed): hazır 0, gecikmeli 1, dolu yürütme kapasitesi 0/1.');
+  expect(detailed.localize?.('en').message).toBe('Task reservation refused (application-empty/delayed): ready 0, delayed 1, occupied execution slots 0/1, eligibility gap 1 ms.');
+  expect(detailed.localize?.('tr').message).toBe('Görev rezervasyonu reddedildi (application-empty/delayed): hazır 0, gecikmeli 1, dolu yürütme kapasitesi 0/1, uygunluk bekleme süresi 1 ms.');
   const generic = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER'));
   const incomplete = ErrorRegistry.createError('RUN_CAPACITY_OR_ORDER', { params: { site: 'application-empty', reason: 'delayed' } });
   for (const locale of ['en', 'tr'] as const) {
@@ -61,15 +61,19 @@ it('renders bounded diagnostics in both locales and preserves a complete generic
 
 it('measures the earliest delayed task only, excluding blocked or waiting future tasks', () => {
   const tasks = ['a', 'b', 'c'].map(id => ({ ...graph.tasks[0]!, id, dependencies: id === 'c' ? ['a'] : [] }));
-  const scheduling = planSchedulingWave({ ...graph, tasks }, { schemaVersion: 1,
+  const scheduling = planSchedulingWave({ ...graph, tasks }, { schemaVersion: 2,
     capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['a', 'b', 'c'],
     snapshot: { graphRevision: 1, now: 10, progress: [
-      { ...pending, taskId: 'a', eligibleAt: 30 }, { ...pending, taskId: 'b', eligibleAt: 15 },
-      { ...pending, taskId: 'c', eligibleAt: 11 },
+      { ...pending, taskId: 'a', eligibility: { kind: 'not-before', at: 30 } },
+      { ...pending, taskId: 'b', eligibility: { kind: 'not-before', at: 15 } },
+      { ...pending, taskId: 'c', eligibility: { kind: 'not-before', at: 11 } },
     ] } });
   const d = diagnoseReservationWave(scheduling, 'application-empty', 0, { executionSlots: 1, inFlightSlots: 1 });
   expect(d).toMatchObject({ delayedCount: 2, waitingCount: 1, eligibilityGapMs: 5 });
   expect(queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', d)).params).toMatchObject({ eligibilityGapMs: 5 });
+  const error = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', d));
+  expect(error.localize?.('en').message).toContain('eligibility gap 5 ms');
+  expect(error.localize?.('tr').message).toContain('uygunluk bekleme süresi 5 ms');
   expect(scheduling.selectedTaskIds).toEqual([]);
   const ready = diagnoseReservationWave(wave(pending), 'transaction-wave-mismatch', 1, { executionSlots: 1, inFlightSlots: 1 });
   expect(ready).not.toHaveProperty('eligibilityGapMs');

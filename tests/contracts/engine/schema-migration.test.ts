@@ -6,6 +6,7 @@ import { expect, it } from 'vitest';
 import { openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
 import type { SupervisorProfileValidator } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
 
 const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
 const profile = { schemaVersion: 1 as const, adapterId: 'fixture-supervisor', adapterVersion: 2, parameters: { endpoint: 'unix:///fixture.sock' } };
@@ -35,13 +36,13 @@ it('rolls all earlier migration steps back when a later DDL step fails', async (
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-it('advances an empty schema-four ledger to current version eleven', async () => {
+it('advances an empty schema-four ledger to current version twelve', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-schema-v5-')); const path = join(root, 'ledger.db');
   try {
     const setup = new DatabaseSync(path); createSchemaFour(setup); setup.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(12); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -51,10 +52,13 @@ it('advances a populated current Run ledger after its version is marked four', a
     const store = await openSqliteAttemptStore(path, options);
     await admitRunAttempts(store, [{ scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]);
     store.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=4'); downgrade.close();
-    const migrated = await openSqliteAttemptStore(path, options); expect((await migrated.loadRun('s', 'r'))!.revision).toBe(1); migrated.close();
+    const downgrade = new DatabaseSync(path); downgradeRunEligibilityFixtures(downgrade);
+    downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=4'); downgrade.close();
+    const migrated = await openSqliteAttemptStore(path, options); const loaded = (await migrated.loadRun('s', 'r'))!;
+    expect(loaded.revision).toBe(1); expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(12); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -85,7 +89,7 @@ it('requires a reset when criterion definitions exist but do not cover a receipt
     setup.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
       .run('s', 'create', JSON.stringify({ action: 'create-run', commandId: 'create', actor: { id: 'operator', issuer: 'test', subject: '1' }, identity, graph, now: 0,
         policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } }), JSON.stringify(snapshot)); setup.close();
-    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
+    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
     const db = new DatabaseSync(path, { readOnly: true });
     try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(4); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -100,7 +104,7 @@ it('requires a reset when a full Run snapshot violates its progress and binding 
     const snapshot = { schemaVersion: 1, identity: { scopeId: 's', runId: 'r', layoutRevision: 'l' }, revision: 0, graph,
       progress: [{ taskId: 't', phase: 'active', unresolvedEffects: false, eligibleAt: 0 }], bindings: [], cancelRequested: false };
     setup.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?)').run('s', 'r', 0, JSON.stringify(snapshot), '{}'); setup.close();
-    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
+    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
     const db = new DatabaseSync(path, { readOnly: true });
     try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(4); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -112,8 +116,8 @@ it('rolls back the v4-to-v5 migration when a Run row revision disagrees with its
     const store = await openSqliteAttemptStore(path, options);
     await admitRunAttempts(store, [{ scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]);
     store.close();
-    const corrupt = new DatabaseSync(path); corrupt.exec('UPDATE runs SET revision=99; PRAGMA user_version=4'); corrupt.close();
-    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
+    const corrupt = new DatabaseSync(path); downgradeRunEligibilityFixtures(corrupt); corrupt.exec('UPDATE runs SET revision=99; PRAGMA user_version=4'); corrupt.close();
+    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
     const db = new DatabaseSync(path, { readOnly: true });
     try {
       expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(4);
@@ -128,7 +132,8 @@ it('requires an installed synchronous profile validator before migrating dispatc
     const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
     const seed = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles);
     await admitRunAttempts(seed, [identity]); await seed.claimDispatch({ owner: 'fixture', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['task'] }, profile }); seed.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=5'); downgrade.close();
+    const downgrade = new DatabaseSync(path); downgradeRunEligibilityFixtures(downgrade);
+    downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=5'); downgrade.close();
     await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     await expect(openSqliteAttemptStore(path, options, 'allow', incompatibleProfiles)).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     const malformed: readonly SupervisorProfileValidator[] = [
@@ -141,8 +146,10 @@ it('requires an installed synchronous profile validator before migrating dispatc
       expect(await readFile(path)).toEqual(bytes);
     }
     const before = new DatabaseSync(path, { readOnly: true }); try { expect(before.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { before.close(); }
-    const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles); migrated.close();
-    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { after.close(); }
+    const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles);
+    const loaded = (await migrated.loadRun('s', 'r'))!; expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
+    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(12); } finally { after.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -153,7 +160,8 @@ it('rejects an old Docker profile at v5-to-v6 without changing its ledger bytes'
     const oldDockerProfile = { schemaVersion: 1 as const, adapterId: 'docker', adapterVersion: 1, parameters: {} };
     const seed = await openSqliteAttemptStore(path, options, 'allow', { validate() { return undefined; } });
     await admitRunAttempts(seed, [identity]); await seed.claimDispatch({ owner: 'fixture', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['task'] }, profile: oldDockerProfile }); seed.close();
-    const downgrade = new DatabaseSync(path); downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=5'); downgrade.close();
+    const downgrade = new DatabaseSync(path); downgradeRunEligibilityFixtures(downgrade);
+    downgrade.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; PRAGMA user_version=5'); downgrade.close();
     const before = await readFile(path);
     await expect(openSqliteAttemptStore(path, options, 'allow', { validate: validateDockerSupervisorProfile })).rejects.toMatchObject({ code: 'LEDGER_RESET_REQUIRED' });
     expect(await readFile(path)).toEqual(before);

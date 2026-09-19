@@ -6,7 +6,8 @@ const criterion = (id = 'verified-result') => ({ id, version: 1, description: `V
   evaluator: { id: 'registered-evaluator', version: 1 }, parameters: {} });
 const graph = (tasks = [task('a'), task('b', ['a'])], criterionDefinitions = [criterion()]) =>
   ({ schemaVersion: 2, revision: 1, tasks, criterionDefinitions });
-const progress = (taskId: string, phase = 'pending', unresolvedEffects = false, eligibleAt = 0) => ({ taskId, phase, unresolvedEffects, eligibleAt });
+const progress = (taskId: string, phase = 'pending', unresolvedEffects = false,
+  eligibility: { kind: 'immediate' } | { kind: 'not-before'; at: number } = { kind: 'immediate' }) => ({ taskId, phase, unresolvedEffects, eligibility });
 const inspect = (states: ReturnType<typeof progress>[], tasks = graph()) => inspectTaskReadiness(tasks, { graphRevision: 1, now: 100, progress: states });
 
 describe('task graph admission and dependency eligibility', () => {
@@ -35,7 +36,7 @@ describe('task graph admission and dependency eligibility', () => {
     expect(inspect([progress('a', 'accepted'), progress('b')]).map(x => x.disposition)).toEqual(['terminal', 'ready']);
   });
   it('keeps retry timing, failed dependencies and unresolved effects distinct', () => {
-    expect(inspect([progress('a', 'pending', false, 101), progress('b')]).map(x => x.disposition)).toEqual(['delayed', 'waiting']);
+    expect(inspect([progress('a', 'pending', false, { kind: 'not-before', at: 101 }), progress('b')]).map(x => x.disposition)).toEqual(['delayed', 'waiting']);
     expect(inspect([progress('a', 'failed'), progress('b')])[1]!.disposition).toBe('blocked');
     expect(inspect([progress('a', 'pending', true), progress('b')])[0]!.disposition).toBe('reconciliation');
     expect(() => inspect([progress('a', 'accepted', true), progress('b')])).toThrow('TASK_PROGRESS_INVALID');

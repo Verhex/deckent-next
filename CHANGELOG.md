@@ -342,3 +342,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 2026-09-19 PROVIDERS/A1 — Added versioned native model content binding with shared strict references, deterministic semantic digest and SDK/CLI/MCP parity. Fable2018 PASS; activation and invocation remain separate.
 
 2026-09-19 STORE/LEDGER-OWNER — Extracted shared SQLite infrastructure ownership while preserving execution store authority, lazy imports and existing schema/path semantics. Fable2022 PASS.
+
+2026-09-19 RESERVATION/IMMEDIATE — Ordinary task admission no longer depends on wall-clock ordering. Added explicit eligibility, atomic evidence-checked history migration and migration-required readonly errors. Fable2028 PASS; no legacy alias or global clock clamp.

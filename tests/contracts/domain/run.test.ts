@@ -19,6 +19,22 @@ it('binds ready tasks to exact attempts without opening dependencies on process 
   expect(() => reserveRunTasks(observed, 2, [{ ...attemptIdentity, taskId: 'b', attemptId: 'b' }], 10)).toThrow('RUN_TASK_NOT_READY');
   expect(created.revision).toBe(0); expect(Object.isFrozen(observed.bindings[0]!.identity)).toBe(true);
 });
+it('keeps immediate admission ready across wall rollback and delays only explicit not-before work', () => {
+  const created = createRun(identity, graph, 1_000, fixtureExecution(graph));
+  expect(created).toMatchObject({ schemaVersion: 3, progress: [
+    { taskId: 'a', eligibility: { kind: 'immediate' } }, { taskId: 'b', eligibility: { kind: 'immediate' } },
+  ] });
+  expect(Object.isFrozen(created.progress[0]!.eligibility)).toBe(true);
+  expect(() => createRun(identity, graph, -1, fixtureExecution(graph))).toThrow();
+  expect(() => reserveRunTasks(created, 0, [attemptIdentity], 999)).not.toThrow();
+  const deferred = runSnapshotSchema.parse({ ...created, progress: created.progress.map(task => task.taskId === 'a'
+    ? { ...task, eligibility: { kind: 'not-before' as const, at: 1_000 } } : task) });
+  expect(inspectTaskReadiness(deferred.graph, { graphRevision: 1, now: 999, progress: deferred.progress })[0]!.disposition).toBe('delayed');
+  expect(inspectTaskReadiness(deferred.graph, { graphRevision: 1, now: 1_000, progress: deferred.progress })[0]!.disposition).toBe('ready');
+  for (const eligibility of [{ kind: 'future', at: 1_000 }, { kind: 'immediate', at: 1_000 }]) {
+    expect(() => runSnapshotSchema.parse({ ...created, progress: created.progress.map(task => ({ ...task, eligibility })) })).toThrow();
+  }
+});
 it('keeps uncertain effects held even after later exit evidence', () => {
   const reserved = reserveRunTasks(createRun(identity, graph, 0, fixtureExecution(graph)), 0, [attemptIdentity], 0);
   const unknown = applyAttemptObservation(createAttempt(attemptIdentity), { protocolVersion: 1, identity: attemptIdentity, sequence: 1, eventId: 'lost', result: { kind: 'unknown', reasonCode: 'disconnected' } }, 0);

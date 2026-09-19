@@ -4,8 +4,8 @@ import type { TaskGraph, TaskProgress } from '#domain/index.js';
 function fixture(count: number) {
   const graph: TaskGraph = { schemaVersion: 2, revision: 1, tasks: Array.from({ length: count }, (_, i) => ({ id: String(i), kind: 'custom-kind', dependencies: [], acceptanceCriteria: ['verified'] })),
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify task result', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
-  const progress: TaskProgress[] = graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibleAt: 0 }));
-  const input = { schemaVersion: 1, capacity: { executionSlots: 6, inFlightSlots: 8 }, ordering: graph.tasks.map(task => task.id), snapshot: { graphRevision: 1, now: 10, progress } };
+  const progress: TaskProgress[] = graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibility: { kind: 'immediate' } }));
+  const input = { schemaVersion: 2, capacity: { executionSlots: 6, inFlightSlots: 8 }, ordering: graph.tasks.map(task => task.id), snapshot: { graphRevision: 1, now: 10, progress } };
   return { graph, input, progress };
 }
 it('bounds a 50-task plan, follows explicit policy order and replenishes only released capacity', () => {
@@ -35,11 +35,11 @@ it('keeps dependent work closed until acceptance and retains uncertain execution
   progress[0] = { ...progress[0]!, phase: 'failed' };
   expect(planSchedulingWave(dependent, input).readiness.find(x => x.taskId === '1')!.disposition).toBe('blocked');
 });
-it('fails invalid orders/revisions and respects retry time or reduced limits', () => {
+it('fails invalid orders/revisions and respects explicit not-before eligibility or reduced limits', () => {
   const { graph, input, progress } = fixture(3);
   for (const ordering of [['0', '0', '2'], ['0', '1'], ['0', '1', 'foreign']]) expect(() => planSchedulingWave(graph, { ...input, ordering })).toThrow('SCHEDULING_ORDER_INVALID');
   expect(() => planSchedulingWave(graph, { ...input, snapshot: { ...input.snapshot, graphRevision: 2 } })).toThrow('TASK_GRAPH_REVISION_MISMATCH');
-  progress[0] = { ...progress[0]!, eligibleAt: 11 }; input.capacity = { executionSlots: 1, inFlightSlots: 1 };
+  progress[0] = { ...progress[0]!, eligibility: { kind: 'not-before', at: 11 } }; input.capacity = { executionSlots: 1, inFlightSlots: 1 };
   expect(planSchedulingWave(graph, input).selectedTaskIds).toEqual(['1']);
   progress[1] = { ...progress[1]!, phase: 'active' }; input.capacity = { executionSlots: 0, inFlightSlots: 0 };
   expect(planSchedulingWave(graph, input).selectedTaskIds).toEqual([]);

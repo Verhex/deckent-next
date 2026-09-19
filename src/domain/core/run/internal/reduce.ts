@@ -4,9 +4,9 @@ import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } fro
 import { validateTaskGraph, inspectTaskReadiness, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runIdentitySchema, runSnapshotSchema, RunError } from './contract.js';
 export function createRun(identityInput: unknown, graphInput: unknown, nowInput: unknown, execution: unknown) {
-  const identity = runIdentitySchema.parse(identityInput); const graph = validateTaskGraph(graphInput); const now = counterSchema.parse(nowInput);
-  return runSnapshotSchema.parse({ schemaVersion: 2, identity, revision: 0, graph, execution, cancelRequested: false, bindings: [],
-    progress: graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibleAt: now })) });
+  const identity = runIdentitySchema.parse(identityInput); const graph = validateTaskGraph(graphInput); counterSchema.parse(nowInput);
+  return runSnapshotSchema.parse({ schemaVersion: 3, identity, revision: 0, graph, execution, cancelRequested: false, bindings: [],
+    progress: graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibility: { kind: 'immediate' } })) });
 }
 /** Admission transition only. Application/store must atomically reserve capacity and create these
  * attempts with the Run revision. A domain result alone never grants supervisor dispatch.

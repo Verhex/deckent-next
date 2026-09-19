@@ -31,7 +31,7 @@ it('admits only a task graph while trusted composition supplies clock, policy an
   }
   expect(state.contexts).toBe(0); const result = await app.create(command);
   expect(result.run).toMatchObject({ runId: 'r', layoutRevision: 'layout', revision: 0 });
-  expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibleAt).toBe(10);
+  expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' });
   state.now = 999; expect(await app.create(command)).toEqual(result); expect(state.contexts).toBe(1);
   expect((await store.loadRun('s', 'r'))!.bindings).toHaveLength(0);
 });

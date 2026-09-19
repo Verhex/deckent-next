@@ -3,12 +3,15 @@ import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/inde
 import { requireLedgerV5Custody } from './migration-v5.js';
 import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
 import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
+import { migrateImmediateEligibility } from './migration-v12.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
-export const RUN_LEDGER_VERSION = 9;
+// Minimum readable Run shape; earlier ledgers need the explicit writer migration.
+export const RUN_LEDGER_VERSION = 12;
 export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
 export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
-export const CURRENT_LEDGER_VERSION = INSTALLATION_OWNERSHIP_LEDGER_VERSION;
+export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
+export const CURRENT_LEDGER_VERSION = IMMEDIATE_ELIGIBILITY_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -23,6 +26,7 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   10: `CREATE TABLE service_shutdown_commands(scope_id TEXT NOT NULL,service_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,service_id,command_id));
     CREATE TABLE service_shutdown_outcomes(scope_id TEXT NOT NULL,service_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,service_id,command_id)); PRAGMA user_version=10;`,
   11: `CREATE TABLE installation_ownership(singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton=1),record TEXT NOT NULL); PRAGMA user_version=11;`,
+  12: 'PRAGMA user_version=12;',
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
@@ -33,6 +37,9 @@ export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
 export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profiles?: SupervisorProfileValidator): void {
   const version = requireLedgerVersion(db, 0);
   if (mode === 'forbid' && version !== CURRENT_LEDGER_VERSION) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
+  // Older custody validators inspect the current Run shape. Prove and convert old eligibility
+  // before those validators, inside the same transaction; never skip their independent checks.
+  if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
     if (next === 5) {
       requireLedgerV5Custody(db);

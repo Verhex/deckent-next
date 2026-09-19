@@ -33,13 +33,13 @@ async function fixture() {
 }
 describe.skipIf(process.platform === 'win32')('configured SDK Run admission', () => {
   it('persists a pending Run with configured limits and real layout, and makes it visible through shared inspection', async () => {
-    const f = await fixture(); await f.policy(true, true); const before = Date.now();
+    const f = await fixture(); await f.policy(true, true);
     const result = await createRun(f.project, command, f.options);
     expect(result.admission.run).toMatchObject({ runId: 'r', layoutRevision: f.layout.revision, revision: 0 });
     expect(result.admission.run.tasks[0]!.phase).toBe('pending');
     expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(result.admission.run);
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
-    try { expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibleAt).toBeGreaterThanOrEqual(before); } finally { store.close(); }
+    try { expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' }); } finally { store.close(); }
     expect(await createRun(f.project, command, f.options)).toEqual(result);
   });
   it('requires both Run creation and pool-use policy, without creating a Run on denial', async () => {

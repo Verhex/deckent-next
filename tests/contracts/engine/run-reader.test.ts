@@ -1,3 +1,4 @@
+import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,5 +41,21 @@ it('refuses opening a schema2 reader, then reads only after the writer migrates 
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
   const migrated = new DatabaseSync(path, { readOnly: true });
-  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(11); } finally { migrated.close(); }
+  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(12); } finally { migrated.close(); }
+});
+
+it('requires migration before reading schema-eleven Run snapshots and leaves inspection bytes unchanged', async () => {
+  const path = await fixture(), db = new DatabaseSync(path);
+  downgradeRunEligibilityFixtures(db); db.exec('PRAGMA user_version=11'); db.close();
+  const before = await readFile(path), reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
+  try {
+    await expect(reader.loadRun('s', 'r')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    await expect(reader.loadRunReceipt('s', 'create-run:r')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]);
+  } finally { reader.close(); }
+  expect(await readFile(path)).toEqual(before);
+  const writer = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }); writer.close();
+  const migrated = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
+  try { expect((await migrated.loadRun('s', 'r'))?.schemaVersion).toBe(3); }
+  finally { migrated.close(); }
 });

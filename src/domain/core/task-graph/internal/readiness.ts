@@ -35,7 +35,7 @@ export function inspectTaskReadiness(graphInput: unknown, snapshotInput: unknown
     else if (state.phase === 'active' || state.phase === 'evaluating') disposition = 'occupied';
     else if (dependencies.some(id => ['failed', 'cancelled'].includes(progress.get(id)!.phase))) disposition = 'blocked';
     else if (dependencies.length) disposition = 'waiting';
-    else if (state.eligibleAt > snapshot.now) disposition = 'delayed';
+    else if (state.eligibility.kind === 'not-before' && state.eligibility.at > snapshot.now) disposition = 'delayed';
     else disposition = 'ready';
     return Object.freeze({ taskId: task.id, disposition, dependencies: Object.freeze(dependencies) });
   }));

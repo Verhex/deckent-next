@@ -34,8 +34,8 @@ async function fixture(exitCode: number, acceptedExitCodes = [0]) {
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
   const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
-  const eligibleAt = (await store.loadRun('s', 'r'))!.progress[0]!.eligibleAt;
-  await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: eligibleAt, identities: [identity] });
+  expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' });
+  await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [identity] });
   const request = { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] }; const claim = { owner: 'fixture-worker', request };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   const artifactRoot = await prepareProductDirectory(opened.layout, 'artifacts'); const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 65536 });

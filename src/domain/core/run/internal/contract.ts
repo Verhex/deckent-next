@@ -7,7 +7,7 @@ export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: iden
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown']).nullable(),
 }).strict().readonly();
-export const runSnapshotSchema = z.object({ schemaVersion: z.literal(2), identity: runIdentitySchema, revision: counterSchema,
+export const runSnapshotSchema = z.object({ schemaVersion: z.literal(3), identity: runIdentitySchema, revision: counterSchema,
   graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });

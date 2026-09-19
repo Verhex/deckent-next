@@ -1,5 +1,6 @@
+import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -52,17 +53,19 @@ it('does not free uncertain capacity because time passes or a connection reopens
   const reopened = await openSqliteAttemptStore(path, options); stores.push(reopened);
   await expect(reopened.reserveRunTasks({ ...claim('two'), now: 1_000_000_000 })).rejects.toThrow('RUN_POOL_FULL');
 });
-it('preserves schema-3 Run data but never invents pool assignment during schema-4 migration', async () => {
+it('rejects schema-3 policy without pool evidence and preserves the complete old ledger', async () => {
   const { store, path } = await fixture(); await store.createExecutionPool(pool); await store.createRun(create('s')); await store.reserveRunTasks(claim('s'));
   store.close(); stores.splice(stores.indexOf(store), 1);
-  const db = new DatabaseSync(path); db.prepare('UPDATE runs SET policy=?').run(JSON.stringify({ schemaVersion: 1, capacity: pool.capacity, ordering: ['a'] }));
+  const db = new DatabaseSync(path); downgradeRunEligibilityFixtures(db); db.prepare('UPDATE runs SET policy=?').run(JSON.stringify({ schemaVersion: 1, capacity: pool.capacity, ordering: ['a'] }));
   db.exec('DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; PRAGMA user_version=3;'); db.close();
-  const migrated = await openSqliteAttemptStore(path, options); stores.push(migrated);
-  expect((await migrated.loadRun('s', 'run'))!.revision).toBe(1);
-  await migrated.createExecutionPool(pool);
-  await expect(migrated.reserveRunTasks({ ...claim('s'), commandId: 'new-claim', expectedRevision: 1 })).rejects.toThrow('RUN_POOL_REQUIRED');
-  expect(await migrated.load('s', id('s').attemptId)).not.toBeNull();
-  await migrated.createRun(create('new'));
-  await expect(migrated.reserveRunTasks(claim('new'))).rejects.toThrow('RUN_POOL_REQUIRED');
-  expect(await migrated.load('new', id('new').attemptId)).toBeNull();
+  const before = await readFile(path);
+  await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
+  expect(await readFile(path)).toEqual(before);
+  const check = new DatabaseSync(path, { readOnly: true });
+  try {
+    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(3);
+    expect(JSON.parse(String(check.prepare('SELECT snapshot FROM runs').get()?.snapshot)).schemaVersion).toBe(2);
+    expect(check.prepare("SELECT count(*) AS count FROM sqlite_schema WHERE name='execution_pools'").get()?.count).toBe(0);
+    expect(check.prepare('SELECT count(*) AS count FROM attempts').get()?.count).toBe(1);
+  } finally { check.close(); }
 });

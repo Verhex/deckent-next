@@ -136,7 +136,7 @@ export class SqliteRunJournal {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution);
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
-      planSchedulingWave(snapshot.graph, { schemaVersion: 1, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
+      planSchedulingWave(snapshot.graph, { schemaVersion: 2, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')
         .run(scopeId, runId, snapshot.revision, JSON.stringify(snapshot), JSON.stringify(parsed.policy));
       if (row.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -155,7 +155,7 @@ export class SqliteRunJournal {
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;
-      try { wave = planSchedulingWave(current.graph, { schemaVersion: 1, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
+      try { wave = planSchedulingWave(current.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) {
         throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));

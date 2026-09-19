@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, taskProgressSchema, readinessInputSchema, validateTaskGraph, inspectTaskReadiness } from '#domain/index.js';
 const schedulingInputSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   capacity: z.object({ executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe() }).strict(),
   /** Complete ordering supplied by scheduling policy, never inferred from task kind or model name. */
   ordering: z.array(identitySchema),
@@ -28,9 +28,10 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const delayed = new Set(readiness.filter(task => task.disposition === 'delayed').map(task => task.taskId));
   let nextEligibleAt: number | undefined;
   for (const task of snapshot.progress) {
-    if (delayed.has(task.taskId) && (nextEligibleAt === undefined || task.eligibleAt < nextEligibleAt)) nextEligibleAt = task.eligibleAt;
+    if (delayed.has(task.taskId) && task.eligibility.kind === 'not-before'
+      && (nextEligibleAt === undefined || task.eligibility.at < nextEligibleAt)) nextEligibleAt = task.eligibility.at;
   }
-  return Object.freeze({ schemaVersion: 1 as const, graphRevision: graph.revision, observedAt: snapshot.now,
+  return Object.freeze({ schemaVersion: 2 as const, graphRevision: graph.revision, observedAt: snapshot.now,
     selectedTaskIds: Object.freeze(ordered.slice(0, available)), deferredTaskIds: Object.freeze(ordered.slice(available)),
     ...(nextEligibleAt === undefined ? {} : { eligibilityGapMs: nextEligibleAt - snapshot.now }),
     occupancy: Object.freeze({ execution: executionOccupied, inFlight: inFlightOccupied }), readiness });

@@ -158,10 +158,10 @@ describe('SQLite service shutdown journal', () => {
     const migrated = await open(path);
     expect(await migrated.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();
     const check = new DatabaseSync(path, { readOnly: true });
-    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(11);
+    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(12);
     expect(check.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get('preserved')?.policy).toBe('{"marker":true}'); check.close();
     migrated.close(); stores.splice(stores.indexOf(migrated), 1);
-    const future = new DatabaseSync(path); future.exec('PRAGMA user_version=12'); future.close();
+    const future = new DatabaseSync(path); future.exec('PRAGMA user_version=13'); future.close();
     await expect(openSqliteAttemptStore(path, options)).rejects.toThrow('ATTEMPT_STORE_VERSION');
   });
 });

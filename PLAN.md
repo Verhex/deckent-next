@@ -597,3 +597,7 @@ RESERVATION-ELIGIBILITY-GAP DONE — Fable PASS 1934:060bceb9e229; exact reviewe
 2026-09-19 PROVIDERS/A1 DONE — Fable2018 PASS exact21files; root and independent914product/24native/18host. Exact native semantic binding across SDK/CLI/MCP, no activation authority. A1-a validation placeholder and A1-b bounded repeated parsing remain nonblocking follow-ups.
 
 2026-09-19 STORE/LEDGER-OWNER DONE — Fable2022 PASS exact28files; root and independent915product/24native/18host. Single schema/options/open owner with lazy native import, unchanged schema11/paths and specialized installer/readonly behavior. Activation remains separate adapter/card.
+
+RESERVATION/IMMEDIATE WIP — Explicit immediate/not-before eligibility; Run snapshot3, scheduling2, receipt-proven forward ledger12 migration; Fable2016 designGO K1–K5. No clock clamp or TTL change.
+
+2026-09-19 RESERVATION/IMMEDIATE DONE — Fable2028 PASS exact38files; root and independent949product/24native/18host. Run snapshot3/scheduling2, explicit eligibility, evidence-proven ledger12 forward migration, readonly minimum12, EN/TR delay gap. K3 wall-clock inventory remains open for unrelated TTL/retry/lock behavior.

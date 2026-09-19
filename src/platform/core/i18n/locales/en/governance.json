@@ -886,5 +886,7 @@
   "error.INSTALLATION_RECOVERY_CHANGED": "Installation recovery material differs from the validated preparation.",
   "error.INSTALLATION_PUBLICATION_INVALID": "Explicit installation choices or recovery input are missing or invalid.",
   "error.INSTALLATION_PUBLICATION_CONFLICT": "Installation conflicts with existing resources or another recorded transaction.",
-  "error.INSTALLATION_PUBLICATION_CHANGED": "Installation evidence or published state changed; completion was not accepted."
+  "error.INSTALLATION_PUBLICATION_CHANGED": "Installation evidence or published state changed; completion was not accepted.",
+  "error.LEDGER_MIGRATION_EVIDENCE_REQUIRED": "Ledger migration requires complete, consistent Run creation evidence. The database was left unchanged.",
+  "error.RUN_CAPACITY_OR_ORDER.delayed": "Task reservation refused ({site}/{reason}): ready {readyCount}, delayed {delayedCount}, occupied execution slots {executionOccupied}/{executionSlots}, eligibility gap {eligibilityGapMs} ms."
 }

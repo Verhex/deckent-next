@@ -96,21 +96,12 @@ it('returns the winning generated identity to concurrent identical commands', as
   expect(results[0].identities).toHaveLength(1); expect((await second.loadRun('s', 'r'))!.revision).toBe(1);
 });
 
-it('reports delayed work without a receipt when runtime time precedes persisted admission time', async () => {
-  const f = await fixture(1000); const before = await f.store.loadRun('s', 'r');
-  let now = 999; let generated = 0;
+it('admits immediate work when the observed wall clock precedes admission, retaining the raw observation', async () => {
+  const f = await fixture(1000);
   const app = new RunReservationApplication(f.store, f.verifier, f.authorization, f.poolAuthorization,
-    { now: () => now, attemptId: () => `clock-attempt-${++generated}` });
-  await expect(app.reserve(command)).rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER', diagnostic: {
-    site: 'application-empty', reason: 'delayed', now: 999, delayedCount: 1, waitingCount: 1,
-    executionOccupied: 0, inFlightOccupied: 0, selectedCount: 0,
-  } });
-  expect(generated).toBe(0);
-  expect(await f.store.loadRunReceipt('s', command.commandId)).toBeNull();
-  expect(await f.store.loadRun('s', 'r')).toEqual(before);
-  // Controlled clock change proves this condition only; it does not identify the historical 1852 cause.
-  now = 1000;
+    { now: () => 999, attemptId: () => 'immediate-clock-attempt' });
   const reserved = await app.reserve(command);
   expect(reserved.identities.map(identity => identity.taskId)).toEqual(['a']);
-  expect(generated).toBe(1);
+  expect(JSON.parse((await f.store.loadRunReceipt('s', command.commandId))!.command).now).toBe(999);
+  expect(reserved.run.revision).toBe(1);
 });

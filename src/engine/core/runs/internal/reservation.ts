@@ -61,7 +61,7 @@ export class RunReservationApplication {
       }
       const policy = runExecutionPolicySchema.parse(await this.store.loadRunExecutionPolicy(command.scopeId, command.runId));
       const now = counterSchema.parse(this.runtime.now());
-      const wave = planSchedulingWave(run.graph, { schemaVersion: 1, capacity: policy.capacity, ordering: policy.ordering,
+      const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering,
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,
