@@ -22,6 +22,9 @@ async function observe(lock: string) {
   let owner: Owner = {};
   try {
     const info = await lstat(ownerPath);
+    // A legacy lock file can be replaced by a new owner's directory between these observations.
+    // Changed generations are contention, not malformed metadata; never reclaim the replacement.
+    if (!stat.isDirectory() && (info.ino !== stat.ino || info.dev !== stat.dev || info.birthtimeMs !== stat.birthtimeMs)) return null;
     if (!info.isFile() || info.isSymbolicLink() || info.size > 4096) throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
     const handle = await open(ownerPath, 'r');
     try {

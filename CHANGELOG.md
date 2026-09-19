@@ -312,3 +312,5 @@ OUTPUT-RECOVERY-REVIEW2 DONE — Fable1878 unconditional PASS; combined chain668
 - Reservation errors expose bounded readiness and occupancy detail in EN/TR when diagnostic params are complete (Fable PASS 1919).
 
 - Cancellation processing advances past unavailable records while preserving transport backoff (Fable PASS 1921; real Docker fairness evidence).
+
+- Config locking preserves a replacement owner when a legacy lock changes generation during observation (Fable PASS1927).
