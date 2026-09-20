@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
@@ -30,7 +31,7 @@ function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 }
 function transportFailure(requestId: string, code = 'RUNTIME_SERVICE_TRANSPORT'): RuntimeServiceResponse {
-  return { schemaVersion: 7, requestId, ok: false, error: { code, category: 'error' } };
+  return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, ok: false, error: { code, category: 'error' } };
 }
 function isAfterResponseOrDisconnect(value: unknown): value is () => void { return typeof value === 'function'; }
 function reply(value: RuntimeServiceHandlerReply) {

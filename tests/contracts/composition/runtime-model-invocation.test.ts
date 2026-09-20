@@ -1,10 +1,14 @@
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { createConnection } from 'node:net';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime } from '#adapters/index.js';
@@ -14,6 +18,8 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#pla
 
 const roots: string[] = [], httpServers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [],
   heldReleases: (() => void)[] = [];
+const execute = promisify(execFile);
+const cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 afterEach(async () => {
   for (const release of heldReleases.splice(0)) release();
@@ -108,7 +114,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
     releaseResponse() { releaseHeld?.(); } };
 }
 
-it.skipIf(process.platform !== 'linux')('owns bounded invocation through current wire7 across disconnect, replay, restart and policy change', async () => {
+it.skipIf(process.platform !== 'linux')('owns bounded invocation through current wire8 across disconnect, replay, restart and policy change', async () => {
   const f = await fixture(), observer = { async onPage() {}, async onError() {} };
   let service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const incomplete = createConnection(service.endpoint); incomplete.on('error', () => undefined);
@@ -129,7 +135,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: 8, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await observed; raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -149,7 +155,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: 8, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -161,7 +167,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: 8, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await expiryObserved; expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
@@ -289,4 +295,68 @@ it.skipIf(process.platform !== 'linux')('recovers a durable requested cancellati
     try { expect(restartedAllocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
       .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { restartedAllocation.close(); }
   } finally { f.releaseResponse(); }
+}, 20_000);
+
+it.skipIf(process.platform !== 'linux')('records and replays a held model cancellation through the compiled CLI', async () => {
+  await access(cli).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('cli-cancel-held-partial');
+  const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
+  const invocation = client.invokeModel(command, { maxResultBytes: 60_000 }); await observed;
+  const cancellation = { schemaVersion: 1 as const, commandId: 'cli-cancel-held-partial-command', scopeId: 'scope',
+    targetCommandId: command.commandId, reference: f.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+  const input = 'cli-cancel-held-partial.json'; await writeFile(join(f.project, input), JSON.stringify(cancellation), { mode: 0o600 });
+  const cancel = async () => JSON.parse((await within(execute(process.execPath, [cli, 'models', 'cancel', '--input', input, '--json'], {
+    cwd: f.project, env: f.env, timeout: 10_000, maxBuffer: 1_048_576,
+  }), 'CLI_MODEL_CANCELLATION_TIMEOUT')).stdout) as unknown;
+  try {
+    const recorded = await cancel();
+    expect(recorded).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested',
+      claim: { scopeId: 'scope', commandId: command.commandId, requestDigest: cancellation.expectedRequestDigest } } });
+    expect(await cancel()).toEqual({ ...(recorded as object), replayed: true });
+    await within(closed, 'CLI_MODEL_CANCELLATION_ABORT_NOT_OBSERVED');
+    const settled = await within(invocation, 'CLI_MODEL_CANCELLATION_ABORT_NOT_SETTLED');
+    expect(recorded).toMatchObject({ receipt: { claim: { invocationId: settled.receipt.claim.invocationId } } });
+    expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
+    const allocation = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
+      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+    expect(f.requests).toBe(1);
+  } finally { f.releaseResponse(); }
+}, 20_000);
+
+it.skipIf(process.platform !== 'linux')('records and replays a held model cancellation through real stdio MCP', async () => {
+  await access(mcp).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('mcp-cancel-held-partial');
+  const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
+  const invocation = client.invokeModel(command, { maxResultBytes: 60_000 }); await observed;
+  const cancellation = { schemaVersion: 1 as const, commandId: 'mcp-cancel-held-partial-command', scopeId: 'scope',
+    targetCommandId: command.commandId, reference: f.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+  const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
+  const mcpClient = new Client({ name: 'runtime-model-invocation-cancellation-proof', version: '1' });
+  try {
+    await within(mcpClient.connect(transport), 'MCP_MODEL_CANCELLATION_CONNECT_TIMEOUT');
+    const tool = (await within(mcpClient.listTools(), 'MCP_MODEL_CANCELLATION_LIST_TIMEOUT')).tools.find(value => value.name === 'cancel_model_invocation');
+    expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    const recorded = await within(mcpClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }), 'MCP_MODEL_CANCELLATION_TIMEOUT');
+    expect(recorded.isError).not.toBe(true);
+    expect(recorded.structuredContent).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested',
+      claim: { scopeId: 'scope', commandId: command.commandId, requestDigest: cancellation.expectedRequestDigest } } });
+    const replay = await within(mcpClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }), 'MCP_MODEL_CANCELLATION_REPLAY_TIMEOUT');
+    expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toEqual({ ...(recorded.structuredContent as object), replayed: true });
+    await within(closed, 'MCP_MODEL_CANCELLATION_ABORT_NOT_OBSERVED');
+    const settled = await within(invocation, 'MCP_MODEL_CANCELLATION_ABORT_NOT_SETTLED');
+    expect(recorded.structuredContent).toMatchObject({ receipt: { claim: { invocationId: settled.receipt.claim.invocationId } } });
+    expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
+    const allocation = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
+      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+    expect(f.requests).toBe(1);
+  } finally {
+    f.releaseResponse();
+    await mcpClient.close().catch(() => undefined); await transport.close().catch(() => undefined);
+  }
 }, 20_000);

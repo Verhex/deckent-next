@@ -31,6 +31,10 @@ function receipt(input: ModelInvocationAdmission, outcome: ModelInvocationReceip
     claim: { scopeId: input.command.scopeId, commandId: input.command.commandId, invocationId: input.invocationId,
       requestDigest: input.requestDigest, profileDigest: input.profileDigest }, claimedAtMs: input.claimedAtMs, outcome };
 }
+function inspectionReader(f: ReturnType<typeof fixture>) { return { async loadInspection() {
+  return f.stored ? { record: f.stored, control: { schemaVersion: 1 as const, claim: f.stored.receipt.claim, reference,
+    send: { state: 'permitted' as const, ownerId: 'runtime-owner', permittedAtMs: 10 }, cancellation: null } } : null;
+}, close() { f.store.close(); } }; }
 function fixture(options: { liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
   permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
@@ -299,7 +303,7 @@ describe('model invocation application after permission', () => {
     expect(modelInvocationTargetId(reference)).toMatch(/^[a-f0-9]{64}$/);
     const f = fixture(); const invoked = await f.app.invoke(command); let authorized = 0;
     const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
-      { async authorize(action) { expect(action).toBe('inspect'); authorized++; return authorization; } }, async () => f.store);
+      { async authorize(action) { expect(action).toBe('inspect'); authorized++; return authorization; } }, async () => inspectionReader(f));
     expect((await inspect.inspect({ schemaVersion: 2, scopeId: 'scope', invocationId: 'invocation-1', reference })).invocation)
       .toEqual(invoked.receipt); expect(authorized).toBe(1);
     expect(modelInvocationProfileDigest(profile)).toMatch(/^[a-f0-9]{64}$/);
@@ -316,7 +320,7 @@ describe('model invocation private evidence access', () => {
     const actions: string[] = [];
     const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
       { async authorize(action) { actions.push(action); if (action === 'inspect-content' && !rawAllowed) throw new Error('RAW_DENIED'); return authorization; } },
-      async () => { reads++; return f.store; });
+      async () => { reads++; return inspectionReader(f); });
     const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: 'invocation-1', reference };
     const ordinary = await inspect.inspect(query);
     expect(ordinary.invocation).toEqual(invoked.receipt);

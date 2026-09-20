@@ -6,6 +6,7 @@ import { createImmutableJsonObjectSchema, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
   type ModelInvocationPurgeReceipt, type ModelInvocationResponseContent } from '#domain/index.js';
 import type { ModelInvocationResult } from './application.js';
 import type { ModelInvocationInspection } from './inspection.js';
+import { verifyModelInvocationInspectionControl } from './inspection.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult } from './port.js';
 import { modelInvocationRequestDigest, verifyModelInvocationReceipt } from './evidence.js';
 import { verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
@@ -15,8 +16,8 @@ const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RE
 const statusSchema = z.enum(['retained', 'not-captured', 'purged']);
 const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(),
   contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
-const inspectionSchema = z.object({ schemaVersion: z.literal(3), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
-  invocation: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
+const inspectionSchema = z.object({ schemaVersion: z.literal(4), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
+  invocation: z.unknown().nullable(), control: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
   responseContent: z.unknown().optional() }).strict();
 const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
@@ -50,13 +51,15 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (!parsed?.success || parsed.data.scopeId !== query.scopeId || parsed.data.invocationId !== query.invocationId || !same(parsed.data.reference, query.reference)) return corrupt();
     const wantsContent = query.includeResponseContent === true;
     if (Object.hasOwn(parsed.data, 'responseContent') !== wantsContent) return corrupt();
-    const identity = { schemaVersion: 3 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 4 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
     if (parsed.data.invocation === null) {
-      if (parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
-      return Object.freeze({ ...identity, invocation: null, contentStatus: null, purge: null,
+      if (parsed.data.control !== null || parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
+      return Object.freeze({ ...identity, invocation: null, control: null, contentStatus: null, purge: null,
         ...(wantsContent ? { responseContent: null } : {}) });
     }
     const receipt = verifyModelInvocationReceipt(parsed.data.invocation);
+    if (parsed.data.control === null) return corrupt();
+    const control = verifyModelInvocationInspectionControl(receipt, parsed.data.control);
     const purge = parsed.data.purge === null ? null : verifyModelInvocationPurgeReceipt(parsed.data.purge);
     if (receipt.claim.scopeId !== query.scopeId || receipt.claim.invocationId !== query.invocationId
       || !same(receipt.request.reference, query.reference) || parsed.data.contentStatus !== expectedStatus(receipt, purge)) return corrupt();
@@ -67,7 +70,7 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     } else if (purge) {
       verifyModelInvocationRecord({ receipt, content: null, purge });
     }
-    return Object.freeze({ ...identity, invocation: receipt, contentStatus: parsed.data.contentStatus, purge,
+    return Object.freeze({ ...identity, invocation: receipt, control, contentStatus: parsed.data.contentStatus, purge,
       ...(wantsContent ? { responseContent } : {}) });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
 }

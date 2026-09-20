@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
@@ -30,7 +31,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
-        { schemaVersion: 7, requestId, operation, input, ...capacity }, signal);
+        { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, operation, input, ...capacity }, signal);
       if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand,
+import { parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
   type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationInspection } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -32,7 +32,13 @@ function parse(argv: readonly string[]): Parsed {
   if ((!result.help && !result.source) || (result.help && (result.source || result.json))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
-function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null): string {
+function renderCancellation(receipt: ModelInvocationCancellationReceipt, locale: Locale): string {
+  const parameters = { command: receipt.command.commandId, actor: receipt.actor.id };
+  if (receipt.disposition === 'prevented') return t('models.invocation.cancellationPrevented', parameters, locale);
+  if (receipt.disposition === 'requested') return t('models.invocation.cancellationRequested', parameters, locale);
+  return t('models.invocation.cancellationAlreadyTerminal', parameters, locale);
+}
+function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null, control?: ModelInvocationControlRecord | null): string {
   if (!receipt) return t('models.invocation.absent', {}, locale);
   const state = receipt.outcome === null ? t('models.invocation.claimed', {}, locale)
     : receipt.outcome.state === 'responded' ? (purge ? t('models.invocation.respondedPurged', {}, locale) : t('models.invocation.responded', {}, locale))
@@ -40,9 +46,11 @@ function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed
         : receipt.outcome.state === 'unknown' ? (purge ? t('models.invocation.unknownPurged', {}, locale) : t('models.invocation.unknown', {}, locale))
           : t('models.invocation.notSent', { command: receipt.outcome.cancellationCommandId }, locale);
   return [t('models.invocation.receipt', { id: receipt.claim.invocationId, command: receipt.claim.commandId, state }, locale),
+    ...(control?.cancellation ? [renderCancellation(control.cancellation, locale)] : []),
     ...(replayed === true ? [t('models.invocation.replayed', {}, locale)] : []),
     ...(purge ? [t('models.invocation.purged', { id: receipt.claim.invocationId }, locale), t('models.invocation.purgeNotice', {}, locale)] : []),
-    purge ? t('models.invocation.noticePurged', {}, locale) : t('models.invocation.notice', {}, locale)].join('\n');
+    receipt.outcome?.state === 'not-sent' ? t('models.invocation.noticeNotSent', {}, locale)
+      : purge ? t('models.invocation.noticePurged', {}, locale) : t('models.invocation.notice', {}, locale)].join('\n');
 }
 /** Native request JSON stays in a file/stdin, never a positional prompt or command-line log. */
 export async function modelInvocationCommand(argv: readonly string[], context: CommandContext): Promise<void> {
@@ -62,7 +70,7 @@ export async function modelInvocationCommand(argv: readonly string[], context: C
     if (!context.inspectModelInvocation) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let query; try { query = parseModelInvocationQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.inspectModelInvocation(root, query, options);
-    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge) });
+    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge, item.control) });
   } else if (args.action === 'purge-content') {
     if (!context.purgeModelInvocationContent) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationPurgeCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
@@ -73,7 +81,7 @@ export async function modelInvocationCommand(argv: readonly string[], context: C
     if (!context.cancelModelInvocation) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationCancellationCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.cancelModelInvocation(root, command, options);
-    emit(result, { ...sinks, json: args.json, render: item => [t('models.invocation.cancellationRecorded', { id: item.receipt.claim.invocationId }, locale),
+    emit(result, { ...sinks, json: args.json, render: item => [t('models.invocation.cancellationRecorded', { id: item.receipt.claim.invocationId }, locale), renderCancellation(item.receipt, locale),
       ...(item.replayed ? [t('models.invocation.replayed', {}, locale)] : []), t('models.invocation.cancellationNotice', {}, locale)].join('\n') });
   }
 }

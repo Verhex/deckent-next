@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
@@ -51,21 +52,21 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
-        return { schemaVersion: 7, requestId: request.requestId, ok: true, result };
+        return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
       }
       if (request.operation === 'shutdownService') {
         if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
         const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
-        return { response: { schemaVersion: 7, requestId: request.requestId, ok: true, result },
+        return { response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
       const result = await lifecycle.admit(() => request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
         ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost)
         : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
-      return { schemaVersion: 7, requestId: request.requestId, ok: true, result };
+      return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: 7, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;

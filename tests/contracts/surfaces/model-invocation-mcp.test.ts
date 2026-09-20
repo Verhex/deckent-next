@@ -14,7 +14,7 @@ const purge: ModelInvocationPurgeCommand = { schemaVersion: 1, commandId: 'purge
   reference, expectedContentDigest: 'a'.repeat(64) };
 const cancellation: ModelInvocationCancellationCommand = { schemaVersion: 1, commandId: 'cancel-a', scopeId: 'scope-a', targetCommandId: 'command-a',
   reference, expectedRequestDigest: 'a'.repeat(64) };
-const inspection: ModelInvocationInspection = { ...query, invocation: null, contentStatus: null };
+const inspection: ModelInvocationInspection = { ...query, schemaVersion: 4, invocation: null, control: null, contentStatus: null, purge: null };
 const result = { replayed: false, receipt: { fixture: 'native invocation is not a provider call' } } as unknown as ModelInvocationResult;
 
 const connected: { client: Client; close(): Promise<void> }[] = [];

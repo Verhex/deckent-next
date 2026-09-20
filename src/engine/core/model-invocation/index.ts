@@ -2,7 +2,7 @@ export { ModelInvocationApplication, ModelInvocationPurgeApplication } from './i
 export type { ModelInvocationAuthorizer, ModelInvocationNativePort, ModelInvocationNativeRegistry,
   ModelInvocationProfileSource, ModelInvocationResult, ModelInvocationRuntime } from './internal/application.js';
 export { ModelInvocationInspectionApplication } from './internal/inspection.js';
-export type { ModelInvocationInspection } from './internal/inspection.js';
+export type { ModelInvocationInspection, ModelInvocationInspectionReader, ModelInvocationInspectionRecord } from './internal/inspection.js';
 export { parseModelInvocationCancellationResultForCommand, parseModelInvocationInspectionForQuery, parseModelInvocationPurgeResultForCommand,
   parseModelInvocationResultForCommand } from './internal/result.js';
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
