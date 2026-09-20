@@ -10,3 +10,7 @@ export type { ModelInvocationDelivery } from './internal/delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
 export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationStore,
   ModelInvocationStoreErrorCode } from './internal/port.js';
+
+export { createModelInvocationResponseEvidence, verifyModelInvocationResponseEvidence, modelInvocationResponseEvidenceUpperBound } from './internal/response-evidence.js';
+
+export { projectModelInvocationReceipt, verifyModelInvocationReceiptView, summarizeModelInvocationResponse } from './internal/projection.js';

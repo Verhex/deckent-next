@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, createModelInvocationClaimReceipt,
-  parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand } from '#engine/core/model-invocation/index.js';
+  createModelInvocationResponseEvidence, projectModelInvocationReceipt, parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand } from '#engine/core/model-invocation/index.js';
 
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'provider', version: 1,
@@ -38,12 +38,35 @@ describe('model invocation runtime result correlation', () => {
   it('does not make a valid receipt boundary smaller by wrapping it in a runtime result', () => {
     let native: unknown = 'leaf';
     for (let depth = 0; depth < 13; depth++) native = { next: native };
-    const boundaryReceipt = { ...receipt, outcome: { schemaVersion: 1 as const, state: 'responded' as const,
+    const boundaryReceipt = { ...receipt, outcome: { schemaVersion: 2 as const, state: 'responded' as const,
       response: { schemaVersion: 1 as const, native, usage: null }, observedAtMs: 2 } };
     const boundaryResult = { replayed: false, receipt: boundaryReceipt };
     expect(parseModelInvocationResultForCommand(command, boundaryResult)).toEqual(boundaryResult);
     expect(parseModelInvocationInspectionForQuery(query, { ...query, invocation: boundaryReceipt }))
       .toEqual({ ...query, invocation: boundaryReceipt });
+  });
+
+  it('rejects unsolicited raw bytes and verifies explicitly requested evidence against its projection', () => {
+    const evidence = createModelInvocationResponseEvidence(profile.adapter, 'invalid-response', 200, Buffer.from('private echoed input'), true);
+    const stored = { ...receipt, outcome: { schemaVersion: 2 as const, state: 'rejected' as const, evidence, observedAtMs: 2 } };
+    const view = projectModelInvocationReceipt(stored);
+    expect(() => parseModelInvocationResultForCommand(command, { replayed: false, receipt: stored })).toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(parseModelInvocationResultForCommand(command, { replayed: false, receipt: view }).receipt).toEqual(view);
+    const ordinary = { ...query, invocation: view }, explicitQuery = { ...query, includeResponseEvidence: true };
+    const explicit = { ...ordinary, responseEvidence: evidence };
+    expect(parseModelInvocationInspectionForQuery(query, ordinary)).toEqual(ordinary);
+    expect(() => parseModelInvocationInspectionForQuery(query, explicit)).toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(() => parseModelInvocationInspectionForQuery(explicitQuery, ordinary)).toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(parseModelInvocationInspectionForQuery(explicitQuery, explicit)).toEqual(explicit);
+    const foreign = createModelInvocationResponseEvidence(profile.adapter, 'invalid-response', 200, Buffer.from('foreign response'), true);
+    for (const value of [foreign, { ...evidence, body: { ...evidence.body, data: foreign.body.data } }, null]) {
+      expect(() => parseModelInvocationInspectionForQuery(explicitQuery, { ...explicit, responseEvidence: value })).toThrow('MODEL_INVOCATION_CORRUPT');
+    }
+    const unknown = { ...stored, outcome: { schemaVersion: 2 as const, state: 'unknown' as const, reason: 'transport-error' as const,
+      evidence: null, observedAtMs: 2 } };
+    expect(parseModelInvocationInspectionForQuery(explicitQuery, { ...ordinary, invocation: unknown, responseEvidence: null }))
+      .toEqual({ ...ordinary, invocation: unknown, responseEvidence: null });
+    expect(() => parseModelInvocationInspectionForQuery(query, { ...ordinary, invocation: stored })).toThrow('MODEL_INVOCATION_CORRUPT');
   });
 
   it('rejects extra keys, invalid replay flags, malformed receipts and hostile descriptors', () => {

@@ -1,17 +1,19 @@
+import { projectModelInvocationReceipt } from './projection.js';
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
-  parseModelInvocationNativeResponse, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
-  type ModelInvocationNativeResponse, type ModelInvocationProfile, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
+  parseModelInvocationNativeResult, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
+  type ModelInvocationReceiptView, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelInvocationAdmission,
   sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './evidence.js';
-import { assertInvocationDeliveryFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
+import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
+import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
-  authorize(action: 'invoke' | 'inspect', target: { readonly scopeId: string; readonly reference: ModelReference },
+  authorize(action: 'invoke' | 'inspect' | 'inspect-evidence', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }
 export interface ModelInvocationProfileSource {
@@ -23,15 +25,15 @@ export interface ModelInvocationNativePort {
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
   responseBytesUpperBound?(prepared: unknown): bigint;
   /** The only external transport operation. */
-  send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResponse>;
+  send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult>;
 }
 export interface ModelInvocationNativeRegistry { resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null }
 export interface ModelInvocationRuntime { invocationId(): string; now(): number }
-export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ReturnType<typeof verifyModelInvocationReceipt> }
+export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceiptView }
 
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<typeof parseModelInvocationCommand>,
-  requestDigest: string, actor: Parameters<typeof sameModelInvocationRequest>[3], admission?: ModelInvocationAdmission): ModelInvocationResult {
+  requestDigest: string, actor: Parameters<typeof sameModelInvocationRequest>[3], admission?: ModelInvocationAdmission): ModelInvocationClaimResult {
   if (typeof result.replayed !== 'boolean' || !sameModelInvocationRequest(result.receipt, command, requestDigest, actor)) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
@@ -72,7 +74,7 @@ export class ModelInvocationApplication {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         }
         const receipt = verifyModelInvocationReceipt(prior);
-        return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt }), delivery);
+        return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt: projectModelInvocationReceipt(receipt) }), delivery);
       }
       const binding = await this.bindings.inspect(command.reference);
       if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
@@ -103,13 +105,16 @@ export class ModelInvocationApplication {
         definition: currentBinding.definition, activation, profile: currentProfile, profileDigest: modelInvocationProfileDigest(currentProfile),
         invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now() });
       const responseBound = delivery ? native.responseBytesUpperBound?.(prepared) : undefined;
-      if (delivery) assertInvocationDeliveryFit(createModelInvocationClaimReceipt(admission), responseBound, delivery);
+      const claimReceipt = createModelInvocationClaimReceipt(admission);
+      assertInvocationEvidenceStorageFit(claimReceipt);
+      if (delivery) assertInvocationDeliveryFit(claimReceipt, responseBound, delivery);
       const claimResult = checkedResult(await store.claim(admission), command, requestDigest, actor, admission);
-      if (claimResult.replayed) return checkInvocationResultDelivery(claimResult, delivery);
+      if (claimResult.replayed) return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt: projectModelInvocationReceipt(claimResult.receipt) }), delivery);
       let response;
       try {
-        response = parseModelInvocationNativeResponse(await native.send(prepared, signal));
-        if (responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
+        response = parseModelInvocationNativeResult(await native.send(prepared, signal));
+        if ('kind' in response) verifyModelInvocationResponseEvidence(response.evidence, profile);
+        if (!('kind' in response) && responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
         }
       } catch {
@@ -119,15 +124,24 @@ export class ModelInvocationApplication {
             || JSON.stringify({ ...receipt, outcome: null }) !== JSON.stringify(claimResult.receipt)) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
           }
-          return Object.freeze({ replayed: false, receipt });
+          return checkInvocationResultDelivery(Object.freeze({ replayed: false, receipt: projectModelInvocationReceipt(receipt) }), delivery);
         } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
       }
       try {
-        const receipt = verifyModelInvocationReceipt(await store.recordResponse(claimResult.receipt.claim, response, this.runtime.now()));
-        if (receipt.outcome?.state !== 'responded' || JSON.stringify(receipt.claim) !== JSON.stringify(claimResult.receipt.claim)
-          || JSON.stringify(receipt.outcome.response) !== JSON.stringify(response)
+        const observedAtMs = this.runtime.now();
+        const receipt = verifyModelInvocationReceipt('kind' in response
+          ? response.evidence.body.complete
+            ? await store.recordRejected(claimResult.receipt.claim, response.evidence, observedAtMs)
+            : await store.recordUnknown(claimResult.receipt.claim, 'transport-error', observedAtMs, response.evidence)
+          : await store.recordResponse(claimResult.receipt.claim, response, observedAtMs));
+        const expected = 'kind' in response
+          ? response.evidence.body.complete
+            ? { schemaVersion: 2, state: 'rejected', evidence: response.evidence, observedAtMs }
+            : { schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: response.evidence, observedAtMs }
+          : { schemaVersion: 2, state: 'responded', response, observedAtMs };
+        if (JSON.stringify(receipt.outcome) !== JSON.stringify(expected) || JSON.stringify(receipt.claim) !== JSON.stringify(claimResult.receipt.claim)
           || JSON.stringify({ ...receipt, outcome: null }) !== JSON.stringify(claimResult.receipt)) throw new Error('CORRUPT');
-        return Object.freeze({ replayed: false, receipt });
+        return checkInvocationResultDelivery(Object.freeze({ replayed: false, receipt: projectModelInvocationReceipt(receipt) }), delivery);
       } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
     } finally { store.close(); }
   }

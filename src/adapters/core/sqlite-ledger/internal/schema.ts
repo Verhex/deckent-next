@@ -4,6 +4,7 @@ import { requireLedgerV5Custody } from './migration-v5.js';
 import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
 import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
 import { migrateImmediateEligibility } from './migration-v12.js';
+import { migrateModelInvocationEvidence } from './migration-v15.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
@@ -12,7 +13,7 @@ export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
 export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
 export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
-export const MODEL_INVOCATION_LEDGER_VERSION = 14;
+export const MODEL_INVOCATION_LEDGER_VERSION = 15;
 export const CURRENT_LEDGER_VERSION = MODEL_INVOCATION_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
@@ -42,6 +43,7 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
     PRIMARY KEY(scope_id,invocation_id),UNIQUE(scope_id,command_id));
     CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state);
     PRAGMA user_version=14;`,
+  15: '',
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
@@ -69,6 +71,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 8) {
       requireLedgerV8ExecutionRegistry(db);
       db.exec('PRAGMA user_version=8;');
+      continue;
+    }
+    if (next === 15) {
+      migrateModelInvocationEvidence(db);
+      db.exec('PRAGMA user_version=15;');
       continue;
     }
     const sql = migrations[next];

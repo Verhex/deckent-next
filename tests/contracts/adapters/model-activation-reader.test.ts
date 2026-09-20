@@ -33,7 +33,7 @@ it('reads the current exact record and returns null for a missing key without wr
   await expect(reader.loadRecord('scope', reference)).resolves.toMatchObject({ revision: 1, state: 'active', binding });
   await expect(reader.loadRecord('other-scope', reference)).resolves.toBeNull(); reader.close();
   expect(await readFile(file)).toEqual(before);
-  const db = new DatabaseSync(file, { readOnly: true }); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(14); db.close();
+  const db = new DatabaseSync(file, { readOnly: true }); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(15); db.close();
 });
 
 it('accepts a genuine historical v13 activation ledger read-only without changing its bytes', async () => {

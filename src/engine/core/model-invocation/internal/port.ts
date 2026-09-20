@@ -1,6 +1,6 @@
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationNativeResponse, ModelInvocationProfile,
-  ModelInvocationReceipt, ModelInvocationUnknownReason } from '#domain/index.js';
+  ModelInvocationReceipt, ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
 
 export interface ModelInvocationAdmission {
   readonly command: ModelInvocationCommand;
@@ -19,7 +19,8 @@ export interface ModelInvocationStore {
   loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationReceipt | null>;
   claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult>;
   recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number): Promise<ModelInvocationReceipt>;
-  recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number): Promise<ModelInvocationReceipt>;
+  recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number): Promise<ModelInvocationReceipt>;
+  recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number, evidence?: ModelInvocationResponseEvidence | null): Promise<ModelInvocationReceipt>;
   loadInvocation(scopeId: string, invocationId: string): Promise<ModelInvocationReceipt | null>;
   close(): void;
 }

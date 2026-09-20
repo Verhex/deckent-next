@@ -1,3 +1,4 @@
+import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, encodeModelInvocationProfile, encodeModelInvocationRequest,
@@ -62,12 +63,15 @@ export function verifyModelInvocationReceipt(input: unknown): ModelInvocationRec
       && Buffer.byteLength(JSON.stringify(receipt.outcome.response.native), 'utf8') > receipt.profile.limits.responseMaxBytes) {
       throw new Error('RESPONSE_LIMIT');
     }
+    if (receipt.outcome && receipt.outcome.state !== 'responded' && receipt.outcome.evidence) {
+      verifyModelInvocationResponseEvidence(receipt.outcome.evidence, receipt.profile);
+    }
     return receipt;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
 /** One receipt shape for pre-effect delivery admission and durable claim writers. */
 export function createModelInvocationClaimReceipt(admission: ModelInvocationAdmission): ModelInvocationReceipt {
-  return verifyModelInvocationReceipt({ schemaVersion: 1,
+  return verifyModelInvocationReceipt({ schemaVersion: 2,
     request: modelInvocationRequestEvidence(admission.command, admission.requestDigest), actor: admission.actor,
     authorization: admission.authorization, definition: admission.definition, activationRevision: admission.activation.revision,
     profile: admission.profile, profileDigest: admission.profileDigest,

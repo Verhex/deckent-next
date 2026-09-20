@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { modelInvocationResponseEvidenceSchema } from './response-evidence.js';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema,
   type JsonObject } from '#domain/core/primitives/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema, modelActivationBindingSchema,
@@ -7,13 +8,22 @@ import { modelReferenceSchema, parseModelBindingDefinition,
   type ModelBindingDefinition, type ModelReference } from '#domain/core/provider-catalog/index.js';
 
 export const MODEL_INVOCATION_SCHEMA_VERSION = 1;
+export const MODEL_INVOCATION_RECEIPT_VERSION = 2;
 export const MODEL_INVOCATION_REQUEST_PREFIX = 'deckent.model-invocation-request.v1\n';
 export const MODEL_INVOCATION_PROFILE_PREFIX = 'deckent.model-invocation-profile.v1\n';
 export const MODEL_INVOCATION_NATIVE_JSON_LIMITS = Object.freeze({ maxDepth: 16, maxNodes: 262_144,
   maxCodeUnits: 8 * 1024 * 1024 });
+// A receipt composes three independently bounded fragments: static receipt, outcome metadata,
+// and native response/evidence payload. The payload is nested two levels below the receipt root.
+export const MODEL_INVOCATION_RECEIPT_JSON_LIMITS = Object.freeze({
+  maxDepth: MODEL_INVOCATION_NATIVE_JSON_LIMITS.maxDepth + 2,
+  maxNodes: MODEL_INVOCATION_NATIVE_JSON_LIMITS.maxNodes * 3,
+  maxCodeUnits: MODEL_INVOCATION_NATIVE_JSON_LIMITS.maxCodeUnits * 3,
+});
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const requestJsonSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const invocationEnvelopeSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
+const receiptEnvelopeSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_RECEIPT_JSON_LIMITS);
 const definitionSchema = z.unknown().transform((input, context): ModelBindingDefinition => {
   try { return parseModelBindingDefinition(input); }
   catch { context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_DEFINITION_INVALID' }); return z.NEVER; }
@@ -23,7 +33,7 @@ export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(
   scopeId: identitySchema, reference: modelReferenceSchema, catalogRevision: identitySchema,
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
 export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  invocationId: identitySchema, reference: modelReferenceSchema }).strict().readonly();
+  invocationId: identitySchema, reference: modelReferenceSchema, includeResponseEvidence: z.boolean().optional() }).strict().readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
 export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandSchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
@@ -41,13 +51,23 @@ export const modelInvocationClaimSchema = z.object({ scopeId: identitySchema, co
   invocationId: identitySchema, requestDigest: digest, profileDigest: digest }).strict().readonly();
 export const modelInvocationNativeResponseSchema = z.object({ schemaVersion: z.literal(1), native: requestJsonSchema,
   usage: requestJsonSchema.nullable() }).strict().readonly();
+export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeResponseSchema,
+  z.object({ kind: z.literal('rejected'), evidence: modelInvocationResponseEvidenceSchema }).strict().readonly()]);
+export type ModelInvocationNativeResult = z.infer<typeof modelInvocationNativeResultSchema>;
 export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
-  z.object({ schemaVersion: z.literal(1), state: z.literal('responded'), response: modelInvocationNativeResponseSchema,
+  z.object({ schemaVersion: z.literal(2), state: z.literal('responded'), response: modelInvocationNativeResponseSchema,
     observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(1), state: z.literal('unknown'), reason: z.literal('transport-error'),
-    observedAtMs: counterSchema }).strict(),
-]).readonly();
-export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(1), request: modelInvocationRequestEvidenceSchema,
+  z.object({ schemaVersion: z.literal(2), state: z.literal('unknown'), reason: z.literal('transport-error'),
+    evidence: modelInvocationResponseEvidenceSchema.nullable(), observedAtMs: counterSchema }).strict(),
+  z.object({ schemaVersion: z.literal(2), state: z.literal('rejected'),
+    evidence: modelInvocationResponseEvidenceSchema, observedAtMs: counterSchema }).strict(),
+]).superRefine((outcome, context) => {
+  if ((outcome.state === 'rejected' && !outcome.evidence.body.complete)
+    || (outcome.state === 'unknown' && outcome.evidence?.body.complete)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_COMPLETENESS_INVALID' });
+  }
+}).readonly();
+export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(2), request: modelInvocationRequestEvidenceSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: definitionSchema,
   activationRevision: counterSchema.positive(), profile: modelInvocationProfileSchema, profileDigest: digest,
   claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, outcome: modelInvocationOutcomeSchema.nullable(),
@@ -101,8 +121,21 @@ export const parseModelInvocationQuery = (input: unknown): ModelInvocationQuery 
 };
 export const parseModelInvocationProfile = (input: unknown): ModelInvocationProfile =>
   parse(modelInvocationProfileSchema as unknown as z.ZodType<ModelInvocationProfile>, input);
-export const parseModelInvocationReceipt = (input: unknown): ModelInvocationReceipt =>
-  parse(modelInvocationReceiptSchema as unknown as z.ZodType<ModelInvocationReceipt>, input);
+export const parseModelInvocationReceipt = (input: unknown): ModelInvocationReceipt => {
+  const copied = receiptEnvelopeSchema.safeParse(input), parsed = copied.success ? modelInvocationReceiptSchema.safeParse(copied.data) : undefined;
+  if (!parsed?.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+  const receipt = parsed.data, outcome = receipt.outcome;
+  if (!invocationEnvelopeSchema.safeParse({ ...receipt, outcome: null }).success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+  if (outcome) {
+    const payloadKey = outcome.state === 'responded' ? 'response' : 'evidence';
+    const payload = outcome.state === 'responded' ? outcome.response : outcome.evidence;
+    if (!invocationEnvelopeSchema.safeParse({ ...outcome, [payloadKey]: null }).success
+      || (payload !== null && !invocationEnvelopeSchema.safeParse(payload).success)) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+  }
+  return receipt as ModelInvocationReceipt;
+};
+export const parseModelInvocationNativeResult = (input: unknown): ModelInvocationNativeResult =>
+  parse(modelInvocationNativeResultSchema as unknown as z.ZodType<ModelInvocationNativeResult>, input);
 export const parseModelInvocationNativeResponse = (input: unknown): ModelInvocationNativeResponse =>
   parse(modelInvocationNativeResponseSchema as unknown as z.ZodType<ModelInvocationNativeResponse>, input);
 

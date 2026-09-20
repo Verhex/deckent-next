@@ -163,5 +163,6 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   await f.policy(false);
   await expect(afterExpiry.invokeModel(f.command('denied'), { maxResultBytes: 60_000 })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   expect(f.count('denied')).toBe(0); expect(f.requests).toBe(3);
+    // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
   expect((await readFile(f.ledger)).includes(Buffer.from('prompt-shared'))).toBe(false);
 }, 15_000);

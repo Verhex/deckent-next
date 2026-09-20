@@ -42,7 +42,7 @@ it('advances an empty schema-four ledger to current version fourteen', async () 
     const setup = new DatabaseSync(path); createSchemaFour(setup); setup.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(14); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(15); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -58,7 +58,7 @@ it('advances a populated current Run ledger after its version is marked four', a
     expect(loaded.revision).toBe(1); expect(loaded.schemaVersion).toBe(3);
     expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(14); } finally { db.close(); }
+    try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(15); } finally { db.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -149,7 +149,7 @@ it('requires an installed synchronous profile validator before migrating dispatc
     const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles);
     const loaded = (await migrated.loadRun('s', 'r'))!; expect(loaded.schemaVersion).toBe(3);
     expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
-    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(14); } finally { after.close(); }
+    const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(15); } finally { after.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

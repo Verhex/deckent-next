@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { identitySchema, modelInvocationClaimSchema,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
-  type ModelInvocationReceipt, type ModelInvocationUnknownReason } from '#domain/index.js';
+  type ModelInvocationReceipt, type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
 import { ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationReceipt, createModelInvocationClaimReceipt, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
@@ -66,7 +66,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         || row['in_flight'] !== record.inFlight || record.scopeId !== scopeId || record.allocationId !== allocationId
         || record.inFlight > record.lifetimeCalls || record.lifetimeCalls > record.maxCalls || record.inFlight > record.maxInFlight) throw new Error();
       const observed = this.db.prepare(`SELECT count(*) AS lifetime_calls,
-        sum(CASE WHEN state='responded' THEN 0 ELSE 1 END) AS in_flight
+        sum(CASE WHEN state IN ('responded','rejected') THEN 0 ELSE 1 END) AS in_flight
         FROM model_invocations WHERE scope_id=? AND allocation_id=?`).get(scopeId, allocationId);
       if (observed?.lifetime_calls !== record.lifetimeCalls || (observed?.in_flight ?? 0) !== record.inFlight) throw new Error();
       return record;
@@ -134,7 +134,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       }
       const receipt = verifyModelInvocationReceipt({ ...current, outcome });
       if (!allocation || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-      if (outcome.state === 'responded') {
+      if (outcome.state === 'responded' || outcome.state === 'rejected') {
         const after = allocationSchema.parse({ ...allocation, inFlight: allocation.inFlight - 1 });
         const updated = this.db.prepare(`UPDATE model_invocation_allocations SET in_flight=?,record=?
           WHERE scope_id=? AND allocation_id=? AND lifetime_calls=? AND in_flight=?`)
@@ -149,11 +149,16 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
     });
   }
   async recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number) {
-    try { return this.settle(claim, { schemaVersion: 1, state: 'responded', response, observedAtMs }); }
+    try { return this.settle(claim, { schemaVersion: 2, state: 'responded', response, observedAtMs }); }
     catch (error) { return this.fail(error); }
   }
-  async recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number) {
-    try { return this.settle(claim, { schemaVersion: 1, state: 'unknown', reason, observedAtMs }); }
+  async recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number) {
+    try { return this.settle(claim, { schemaVersion: 2, state: 'rejected', evidence, observedAtMs }); }
+    catch (error) { return this.fail(error); }
+  }
+  async recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number,
+    evidence: ModelInvocationResponseEvidence | null = null) {
+    try { return this.settle(claim, { schemaVersion: 2, state: 'unknown', reason, evidence, observedAtMs }); }
     catch (error) { return this.fail(error); }
   }
   close(): void { this.db.close(); }

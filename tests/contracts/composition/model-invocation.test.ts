@@ -95,8 +95,10 @@ describe('configured native model invocation', () => {
   it('records one bounded native response, replays without a request and exposes exact durable inspection', async () => {
     const f = await fixture(), first = await invokeConfiguredModel(f.project, f.command('one'), { env: f.env });
     expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded', response: { native: { model: 'native-model' } } } } });
+    // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect(f.bodies[0]).toContain('prompt-must-not-persist');
     expect(await invokeConfiguredModel(f.project, f.command('one'), { env: f.env })).toEqual({ replayed: true, receipt: first.receipt });
+    // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect((await readFile(f.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
     expect((await inspectConfiguredModelInvocation(f.project, { schemaVersion: 1, scopeId: 'scope',
       invocationId: first.receipt.claim.invocationId, reference }, { env: f.env })).invocation).toEqual(first.receipt);
@@ -137,6 +139,7 @@ describe('configured native model invocation', () => {
     expect(first.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(unknown.requests).toBe(1);
     expect((await invokeConfiguredModel(unknown.project, unknown.command('unknown'), { env: unknown.env })).replayed).toBe(true);
     await expect(invokeConfiguredModel(unknown.project, unknown.command('blocked'), { env: unknown.env })).rejects.toThrow();
+    // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(unknown.requests).toBe(1); expect((await readFile(unknown.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
   });
 });

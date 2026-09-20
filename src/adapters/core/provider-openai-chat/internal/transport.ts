@@ -1,7 +1,7 @@
 import { Agent, request as httpRequest } from 'node:http';
 import { z } from 'zod';
-import type { ModelInvocationNativePort } from '#engine/index.js';
-import { modelInvocationProfileSchema, parseModelBindingDefinition } from '#domain/index.js';
+import { createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationNativeResult, type ModelInvocationRejectionReason } from '#domain/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
   openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpLimits, type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
@@ -29,62 +29,89 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
   return Object.freeze({ definition, limits, request: nativeRequest, body });
 }
 
-async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatRequest, signal?: AbortSignal): Promise<OpenAiChatHttpResponse> {
+function statusOf(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
+}
+function rejected(reason: ModelInvocationRejectionReason, status: number | null,
+  body: Uint8Array, complete: boolean, observedBytes = body.byteLength): ModelInvocationNativeResult {
+  return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(
+    { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION }, reason, status, body, complete, observedBytes), });
+}
+
+async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatRequest, signal?: AbortSignal): Promise<ModelInvocationNativeResult> {
   if (signal?.aborted) throw new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED');
   const endpoint = new URL('/v1/chat/completions', prepared.definition.origin);
   return new Promise((resolve, reject) => {
     const agent = new Agent({ keepAlive: false, proxyEnv: {} });
     let settled = false; let response: import('node:http').IncomingMessage | undefined;
-    const done = (error?: OpenAiChatHttpError, value?: OpenAiChatHttpResponse) => {
+    const retained: Buffer[] = []; let retainedBytes = 0; let observedBytes = 0; let status: number | null = null;
+    const retainedBody = () => Buffer.concat(retained);
+    const done = (error?: OpenAiChatHttpError, value?: ModelInvocationNativeResult) => {
       if (settled) return; settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);
       agent.destroy();
       if (error) { response?.destroy(); req.destroy(); reject(error); } else if (value) resolve(value);
     };
-    const abort = () => done(new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED'));
+    const settleRejected = (reason: ModelInvocationRejectionReason, complete: boolean) => {
+      if (settled) return;
+      try { done(undefined, rejected(reason, status, retainedBody(), complete, observedBytes)); }
+      catch { done(new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE')); }
+    };
+    const interrupted = (error: OpenAiChatHttpError) => {
+      if (settled) return;
+      if (response && status !== null) settleRejected('interrupted', false);
+      else done(error);
+    };
+    const abort = () => interrupted(new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED'));
     const req = httpRequest(endpoint, { agent, method: 'POST', headers: { 'content-type': 'application/json',
       'content-length': String(Buffer.byteLength(prepared.body, 'utf8')), accept: 'application/json' } }, incoming => {
-      response = incoming; const status = incoming.statusCode ?? 0; const chunks: Buffer[] = []; let bytes = 0;
+      response = incoming; const currentStatus = statusOf(incoming.statusCode); status = currentStatus;
+      if (currentStatus === null) { done(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); return; }
       incoming.on('data', (chunk: Buffer) => {
-        bytes += chunk.byteLength;
-        if (bytes > prepared.limits.responseMaxBytes) done(new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE'));
-        else chunks.push(chunk);
-      });
-      incoming.on('error', () => done(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')));
-      incoming.on('end', () => {
         if (settled) return;
-        if (status >= 300 && status < 400) { done(new OpenAiChatHttpError('OPENAI_CHAT_REDIRECT_UNKNOWN', status)); return; }
-        if (status < 200 || status >= 300) { done(new OpenAiChatHttpError('OPENAI_CHAT_HTTP_UNKNOWN', status)); return; }
-        try { done(undefined, parseResponse(Buffer.concat(chunks), prepared)); } catch (error) {
-          done(error instanceof OpenAiChatHttpError ? error : new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_INVALID'));
+        observedBytes += chunk.byteLength;
+        const remaining = prepared.limits.responseMaxBytes - retainedBytes;
+        if (remaining > 0) { const prefix = chunk.subarray(0, remaining); retained.push(prefix); retainedBytes += prefix.byteLength; }
+        if (observedBytes > prepared.limits.responseMaxBytes) {
+          settleRejected('response-limit', false);
         }
       });
+      incoming.on('error', () => { if (!settled) interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); });
+      incoming.on('end', () => {
+        if (settled) return;
+        try {
+          if (currentStatus >= 300 && currentStatus < 400) { settleRejected('redirect', true); return; }
+          if (currentStatus < 200 || currentStatus >= 300) { settleRejected('http-status', true); return; }
+          const parsed = parseResponse(retainedBody(), prepared);
+          if ('reason' in parsed) settleRejected(parsed.reason, true); else done(undefined, parsed.response);
+        } catch { done(new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE')); }
+      });
     });
-    const timer = setTimeout(() => done(new OpenAiChatHttpError('OPENAI_CHAT_TIMEOUT')), prepared.limits.timeoutMs);
-    req.on('error', () => done(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')));
+    const timer = setTimeout(() => interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TIMEOUT')), prepared.limits.timeoutMs);
+    req.on('error', () => { if (!settled) interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); });
     signal?.addEventListener('abort', abort, { once: true }); req.end(prepared.body);
   });
 }
 
-function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): OpenAiChatHttpResponse {
+function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { response: OpenAiChatHttpResponse } | { reason: 'invalid-response' | 'model-mismatch' | 'response-limit' } {
   let raw: unknown;
-  try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_INVALID'); }
+  try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { return { reason: 'invalid-response' }; }
   const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success && responseSchema.safeParse(copied.data);
-  if (!parsed || !parsed.success || parsed.data.model !== prepared.request.model) throw new OpenAiChatHttpError(
-    parsed && parsed.success ? 'OPENAI_CHAT_MODEL_MISMATCH' : 'OPENAI_CHAT_RESPONSE_INVALID');
+  if (!parsed || !parsed.success) return { reason: 'invalid-response' };
+  if (parsed.data.model !== prepared.request.model) return { reason: 'model-mismatch' };
   // JSON serialization can expand numeric wire spellings. Bound the representation actually persisted/delivered too.
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > prepared.limits.responseMaxBytes) {
-    throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE');
+    return { reason: 'response-limit' };
   }
   const choice = parsed.data.choices[0]!;
   if ('tool_calls' in choice.message || 'function_call' in choice.message) {
-    throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_INVALID');
+    return { reason: 'invalid-response' };
   }
-  if (parsed.data.usage === undefined || parsed.data.usage === null) return Object.freeze({ schemaVersion: 1, native: copied.data, usage: null });
+  if (parsed.data.usage === undefined || parsed.data.usage === null) return { response: Object.freeze({ schemaVersion: 1, native: copied.data, usage: null }) };
   const usageCopied = openAiChatWireObjectSchema.safeParse(parsed.data.usage), usage = usageCopied.success && usageSchema.safeParse(usageCopied.data);
   if (!usage || !usage.success || usage.data.completion_tokens > prepared.request.max_completion_tokens) {
-    throw new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_INVALID');
+    return { reason: 'invalid-response' };
   }
-  return Object.freeze({ schemaVersion: 1, native: copied.data, usage: usageCopied.data });
+  return { response: Object.freeze({ schemaVersion: 1, native: copied.data, usage: usageCopied.data }) };
 }
 
 export const openAiChatProtocol = Object.freeze({ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION });
@@ -121,7 +148,7 @@ export function createOpenAiChatNativePort(): ModelInvocationNativePort {
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request);
       preparedTokens.add(prepared); return prepared;
     },
-    async send(prepared: unknown, signal?: AbortSignal): Promise<OpenAiChatHttpResponse> {
+    async send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult> {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
         throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       }

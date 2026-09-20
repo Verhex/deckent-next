@@ -92,7 +92,7 @@ it('migrates schema eight by adding an empty custody table without inventing rec
   const migrated = await openSqliteAttemptStore(f.path, options); stores.push(migrated);
   expect(await migrated.loadRunWorkspaceCustody('s', 'r')).toBeNull();
   const check = new DatabaseSync(f.path, { readOnly: true });
-  try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(14); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
+  try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(15); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
   finally { check.close(); }
 });
 

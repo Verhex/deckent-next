@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -158,10 +159,10 @@ describe('SQLite service shutdown journal', () => {
     const migrated = await open(path);
     expect(await migrated.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();
     const check = new DatabaseSync(path, { readOnly: true });
-    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(14);
+    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(15);
     expect(check.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get('preserved')?.policy).toBe('{"marker":true}'); check.close();
     migrated.close(); stores.splice(stores.indexOf(migrated), 1);
-    const future = new DatabaseSync(path); future.exec('PRAGMA user_version=15'); future.close();
+    const future = new DatabaseSync(path); future.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); future.close();
     await expect(openSqliteAttemptStore(path, options)).rejects.toThrow('ATTEMPT_STORE_VERSION');
   });
 });

@@ -8,3 +8,11 @@ export type { ModelInvocationActor, ModelInvocationAuthorization, ModelInvocatio
   ModelInvocationCommand, ModelInvocationErrorCode, ModelInvocationNativeResponse, ModelInvocationOutcome,
   ModelInvocationProfile, ModelInvocationReceipt, ModelInvocationRequestEvidence,
   ModelInvocationQuery, ModelInvocationUnknownReason } from './internal/contract.js';
+
+export { modelInvocationResponseEvidenceSchema, modelInvocationRejectionReasonSchema } from './internal/response-evidence.js';
+export type { ModelInvocationResponseEvidence, ModelInvocationRejectionReason } from './internal/response-evidence.js';
+export { MODEL_INVOCATION_RECEIPT_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_VERSION, modelInvocationNativeResultSchema, parseModelInvocationNativeResult } from './internal/contract.js';
+export type { ModelInvocationNativeResult } from './internal/contract.js';
+
+export { modelInvocationReceiptViewSchema, modelInvocationResponseSummarySchema } from './internal/projection.js';
+export type { ModelInvocationReceiptView, ModelInvocationResponseSummary } from './internal/projection.js';

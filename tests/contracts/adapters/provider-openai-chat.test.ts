@@ -29,6 +29,12 @@ function response(model = 'configured-model', overrides: Record<string, unknown>
   return { id: 'chatcmpl-local', object: 'chat.completion', created: 1, model, choices: [{ index: 0, finish_reason: 'stop',
     message: { role: 'assistant', content: 'native answer' } }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }, ...overrides };
 }
+function expectRejected(result: unknown, reason: string, body: Buffer, complete: boolean, httpStatus: number | null, observedBytes = body.byteLength) {
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { schemaVersion: 1, adapter: { id: 'openai-chat-http', version: 1 },
+    reason, httpStatus, body: { complete, byteLength: body.byteLength, observedBytes } } });
+  const evidence = (result as { evidence: { body: { data: string } } }).evidence;
+  expect(Buffer.from(evidence.body.data, 'base64')).toEqual(body);
+}
 
 it('uses exact native nonstream bytes and preserves full native completion evidence without credentials', async () => {
   let seen: { method?: string; url?: string; headers?: IncomingMessage['headers']; body?: string } = {};
@@ -66,7 +72,7 @@ it('rejects wire numbers whose serialized form grows beyond the declared native 
   const canonical = JSON.stringify(JSON.parse(raw)); expect(canonical.length).toBeGreaterThan(raw.length);
   const origin = await fixture((_req, res) => res.end(raw));
   const { port, prepared } = await token(origin, request, { ...limits, responseMaxBytes: Buffer.byteLength(raw, 'utf8') });
-  await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_RESPONSE_TOO_LARGE' });
+  expectRejected(await port.send(prepared), 'response-limit', Buffer.from(raw), true, 200);
 });
 
 it('bypasses inherited proxy selectors and rejects external, credential-bearing, proxy, or header definitions before transport', async () => {
@@ -110,17 +116,70 @@ it('reports cancellation and timeout after the owned fixture has observed the re
   await expect(slow.port.send(slow.prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_TIMEOUT' } satisfies Partial<OpenAiChatHttpError>);
 });
 
-it('does not follow redirects and rejects reset, oversize, malformed, non-text, empty/multiple choice, and invalid usage evidence', async () => {
-  let turn = 0; const origin = await fixture((_req, res) => {
-    turn++; if (turn === 1) { res.writeHead(307, { location: 'http://127.0.0.1:9/other' }); res.end(); return; }
-    if (turn === 2) { res.destroy(); return; } if (turn === 3) { res.end('x'.repeat(5000)); return; } if (turn === 4) { res.end('{'); return; }
-    if (turn === 5) { const value = response(); value.choices[0].message.tool_calls = []; res.end(JSON.stringify(value)); return; }
-    if (turn === 6) { res.end(JSON.stringify(response('configured-model', { choices: [] }))); return; }
-    if (turn === 7) { const value = response(); value.choices.push(value.choices[0]); res.end(JSON.stringify(value)); return; }
-    if (turn === 8) { res.end(JSON.stringify(response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 1 } }))); return; }
-    res.end(JSON.stringify(response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 13, total_tokens: 16 } })));
+it('retains partial response bytes for reset, cancellation, and deadline interruption without putting bytes in thrown errors', async () => {
+  const prefix = Buffer.from('private response prefix'); let turn = 0; let observed!: () => void;
+  const seen = new Promise<void>(resolve => { observed = resolve; });
+  const origin = await fixture((_req, res) => {
+    turn++;
+    if (turn === 1) { res.writeHead(200); res.write(prefix); setImmediate(() => res.socket?.destroy()); return; }
+    res.writeHead(200); res.write(prefix); observed();
   });
-  const codes = ['OPENAI_CHAT_REDIRECT_UNKNOWN', 'OPENAI_CHAT_TRANSPORT_UNKNOWN', 'OPENAI_CHAT_RESPONSE_TOO_LARGE', 'OPENAI_CHAT_RESPONSE_INVALID',
-    'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID', 'OPENAI_CHAT_RESPONSE_INVALID'];
-  for (const code of codes) { const { port, prepared } = await token(origin); await expect(port.send(prepared)).rejects.toMatchObject({ code }); }
+  const reset = await token(origin); expectRejected(await reset.port.send(reset.prepared), 'interrupted', prefix, false, 200);
+  const cancelling = await token(origin); const controller = new AbortController(); const cancelled = cancelling.port.send(cancelling.prepared, controller.signal);
+  await seen; await new Promise(resolve => setTimeout(resolve, 10)); controller.abort(); expectRejected(await cancelled, 'interrupted', prefix, false, 200);
+  const timeout = await token(origin, request, { ...limits, timeoutMs: 40 });
+  expectRejected(await timeout.port.send(timeout.prepared), 'interrupted', prefix, false, 200);
+  const noResponse = await fixture((_req, res) => { res.socket?.destroy(); }); const unknown = await token(noResponse);
+  try { await unknown.port.send(unknown.prepared); throw new Error('EXPECTED_TRANSPORT_FAILURE'); }
+  catch (error) { expect(error).toMatchObject({ code: 'OPENAI_CHAT_TRANSPORT_UNKNOWN' }); expect(String(error)).not.toContain(prefix.toString('utf8')); }
+});
+
+it('retains exact complete non-success response bodies', async () => {
+  const body = Buffer.from('{"private":"status body"}');
+  const origin = await fixture((_req, res) => { res.writeHead(429); res.end(body); });
+  const result = await token(origin);
+  expectRejected(await result.port.send(result.prepared), 'http-status', body, true, 429);
+});
+
+it('fails a direct oversized evidence construction as a typed body-free error', async () => {
+  const privatePrefix = 'private-evidence-boundary-';
+  const body = Buffer.from(`"${privatePrefix}${'x'.repeat(8 * 1024 * 1024)}"`);
+  const origin = await fixture((_req, res) => { res.end(body); });
+  const result = await token(origin, request, { ...limits, responseMaxBytes: 9 * 1024 * 1024 });
+  try { await result.port.send(result.prepared); throw new Error('EXPECTED_EVIDENCE_BOUNDARY'); }
+  catch (error) {
+    expect(error).toMatchObject({ code: 'OPENAI_CHAT_RESPONSE_TOO_LARGE' });
+    expect(String(error)).not.toContain(privatePrefix);
+  }
+});
+
+it('retains bounded rejection evidence for complete malformed/status/model replies and interrupted response prefixes', async () => {
+  const tool = response(); tool.choices[0].message.tool_calls = [];
+  const empty = response('configured-model', { choices: [] });
+  const multiple = response(); multiple.choices.push(multiple.choices[0]);
+  const invalidUsage = response('configured-model', { usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 1 } });
+  const toolBody = JSON.stringify(tool), emptyBody = JSON.stringify(empty), multipleBody = JSON.stringify(multiple), invalidUsageBody = JSON.stringify(invalidUsage);
+  let turn = 0; const origin = await fixture((_req, res) => {
+    turn++; if (turn === 1) { res.writeHead(307, { location: 'http://127.0.0.1:9/other' }); res.end('redirect-body'); return; }
+    if (turn === 2) { res.destroy(); return; } if (turn === 3) { res.end('x'.repeat(5000)); return; } if (turn === 4) { res.end('{'); return; }
+    if (turn === 5) { res.end(toolBody); return; }
+    if (turn === 6) { res.end(emptyBody); return; }
+    if (turn === 7) { res.end(multipleBody); return; }
+    if (turn === 8) { res.end(invalidUsageBody); return; }
+    if (turn === 9) { res.end(JSON.stringify(response('different-model'))); return; }
+    res.writeHead(200); res.write('partial-response');
+  });
+  const redirect = await token(origin); expectRejected(await redirect.port.send(redirect.prepared), 'redirect', Buffer.from('redirect-body'), true, 307);
+  const reset = await token(origin); await expect(reset.port.send(reset.prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_TRANSPORT_UNKNOWN' });
+  const oversize = await token(origin); const oversizeResult = await oversize.port.send(oversize.prepared);
+  expectRejected(oversizeResult, 'response-limit', Buffer.alloc(4096, 'x'), false, 200, 5000);
+  const malformed = await token(origin); expectRejected(await malformed.port.send(malformed.prepared), 'invalid-response', Buffer.from('{'), true, 200);
+  const toolResult = await token(origin); expectRejected(await toolResult.port.send(toolResult.prepared), 'invalid-response', Buffer.from(toolBody), true, 200);
+  const emptyResult = await token(origin); expectRejected(await emptyResult.port.send(emptyResult.prepared), 'invalid-response', Buffer.from(emptyBody), true, 200);
+  const multipleResult = await token(origin); expectRejected(await multipleResult.port.send(multipleResult.prepared), 'invalid-response', Buffer.from(multipleBody), true, 200);
+  const invalidUsageResult = await token(origin); expectRejected(await invalidUsageResult.port.send(invalidUsageResult.prepared), 'invalid-response', Buffer.from(invalidUsageBody), true, 200);
+  const mismatch = await token(origin); const mismatchResult = await mismatch.port.send(mismatch.prepared);
+  expectRejected(mismatchResult, 'model-mismatch', Buffer.from(JSON.stringify(response('different-model'))), true, 200);
+  const partial = await token(origin, request, { ...limits, timeoutMs: 40 }); const partialResult = await partial.port.send(partial.prepared);
+  expectRejected(partialResult, 'interrupted', Buffer.from('partial-response'), false, 200);
 });

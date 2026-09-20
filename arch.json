@@ -860,10 +860,12 @@
     "src/adapters/core/sqlite-ledger": {
       "dependencies": [
         "src/domain/core/attempt",
+        "src/domain/core/primitives",
         "src/domain/core/run",
         "src/domain/core/task-graph",
         "src/engine/core/attempts",
         "src/engine/core/dispatch",
+        "src/engine/core/model-invocation",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields"

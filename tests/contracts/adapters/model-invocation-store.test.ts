@@ -7,7 +7,8 @@ import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/core/model-invocation/index.js';
+import { createModelInvocationResponseEvidence, modelInvocationProfileDigest,
+  modelInvocationRequestDigest } from '#engine/core/model-invocation/index.js';
 import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-activation/index.js';
 import { openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
 
@@ -51,7 +52,7 @@ it('claims atomically, replays exact commands without storing prompts, and retai
   await expect(store.claim({ ...firstInput, actor: { ...actor, subject: '1001' } })).rejects.toThrow('MODEL_INVOCATION_COMMAND_CONFLICT');
   await expect(store.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
   const unknown = await store.recordUnknown(first.receipt.claim, 'transport-error', 11);
-  expect(unknown.outcome).toEqual({ schemaVersion: 1, state: 'unknown', reason: 'transport-error', observedAtMs: 11 });
+  expect(unknown.outcome).toEqual({ schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: null, observedAtMs: 11 });
   await expect(store.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
   store.close();
   const db = new DatabaseSync(base.path, { readOnly: true });
@@ -75,6 +76,31 @@ it('releases in-flight once for a definitive response while lifetime count never
   expect(second.receipt.outcome).toBeNull(); store.close();
   const db = new DatabaseSync(base.path, { readOnly: true });
   expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 2, in_flight: 1 }); db.close();
+});
+
+it('releases complete rejected responses while incomplete response evidence remains unknown and retains capacity', async () => {
+  const bytes = Buffer.from('{"error":"denied"}'), complete = createModelInvocationResponseEvidence(
+    { id: 'loopback-http', version: 1 }, 'http-status', 429, bytes, true);
+  const rejectedBase = await fixture(2, 1), rejectedStore = await openSqliteModelInvocationStore(rejectedBase.path, options, 'forbid');
+  const rejectedClaim = await rejectedStore.claim(admission(rejectedBase, 'rejected', 'rejected-invocation'));
+  const rejected = await rejectedStore.recordRejected(rejectedClaim.receipt.claim, complete, 30);
+  expect(rejected.outcome).toEqual({ schemaVersion: 2, state: 'rejected', evidence: complete, observedAtMs: 30 });
+  expect(await rejectedStore.recordRejected(rejectedClaim.receipt.claim, complete, 30)).toEqual(rejected);
+  await expect(rejectedStore.claim(admission(rejectedBase, 'after-rejected', 'after-rejected-invocation'))).resolves
+    .toMatchObject({ replayed: false });
+  rejectedStore.close();
+
+  const partialBase = await fixture(2, 1), partialStore = await openSqliteModelInvocationStore(partialBase.path, options, 'forbid');
+  const partialClaim = await partialStore.claim(admission(partialBase, 'partial', 'partial-invocation'));
+  const partial = createModelInvocationResponseEvidence({ id: 'loopback-http', version: 1 },
+    'interrupted', null, Buffer.alloc(0), false, 1);
+  await expect(partialStore.recordRejected(partialClaim.receipt.claim, partial, 31)).rejects.toThrow('MODEL_INVOCATION_CORRUPT');
+  expect((await partialStore.loadInvocation('scope', 'partial-invocation'))?.outcome).toBeNull();
+  const unknown = await partialStore.recordUnknown(partialClaim.receipt.claim, 'transport-error', 31, partial);
+  expect(unknown.outcome).toEqual({ schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: partial, observedAtMs: 31 });
+  await expect(partialStore.claim(admission(partialBase, 'blocked', 'blocked-invocation')))
+    .rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  partialStore.close();
 });
 
 it('reports immutable allocation ceiling conflicts without mutation and rolls all claim writes back when insertion fails', async () => {
@@ -164,7 +190,7 @@ it('rejects canonical receipt substitution and missing canonical history behind 
   missingCheck.close();
 });
 
-it('migrates schema 13 to 14 without changing activation rows and read-only access never creates or migrates', async () => {
+it('migrates schema 13 to 15 without changing activation rows and read-only access never creates or migrates', async () => {
   const path = await file(), db = new DatabaseSync(path); db.exec(`PRAGMA user_version=13;
     CREATE TABLE model_activations(scope_id TEXT NOT NULL,provider_id TEXT NOT NULL,provider_version INTEGER NOT NULL,
       model_id TEXT NOT NULL,model_version INTEGER NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,
@@ -176,7 +202,7 @@ it('migrates schema 13 to 14 without changing activation rows and read-only acce
   await expect(openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(oldBytes);
   const writer = await openSqliteModelInvocationStore(path, options, 'allow'); writer.close();
-  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(14);
+  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(15);
   expect(migrated.prepare('SELECT * FROM model_activations').all()).toEqual(before); migrated.close();
   const reader = await openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 });
   expect('claim' in reader).toBe(false); expect('recordResponse' in reader).toBe(false); reader.close();

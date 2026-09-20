@@ -41,7 +41,7 @@ it('migrates a genuine v12 execution ledger to v14 without changing existing run
   expect(before.version).toBe(12);
   const activation = await openSqliteModelActivationStore(path, options, 'allow'); activation.close();
   const after = executionEvidence(path);
-  expect(after).toEqual({ ...before, version: 14 });
+  expect(after).toEqual({ ...before, version: 15 });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('model_activations','model_activation_receipts','model_invocation_allocations','model_invocations') ORDER BY name").all())

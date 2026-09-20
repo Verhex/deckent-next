@@ -10,6 +10,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
+import type { ModelInvocationResponseEvidence } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocationInspection,
   type ModelInvocationResult } from '#engine/index.js';
@@ -93,6 +94,82 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
     await bounded(transport.close(), 'MCP_TRANSPORT_CLOSE_TIMEOUT'); expect(transport.pid).toBeNull();
   }
 }
+type A5ProofInput = Readonly<{ root: string; project: string; env: Record<string, string>; reference: Record<string, unknown>;
+  command: (commandId: string) => Record<string, unknown>; bodies: string[]; runtime: ChildProcess;
+  setResponse: (value: 'malformed' | 'status') => void; setEvidencePolicy: (allowed: boolean) => Promise<void>;
+  large: ModelInvocationResult }>;
+async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
+  const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
+  const largeBody = Buffer.from(JSON.stringify({ value: 'x'.repeat(4096) })).subarray(0, 512);
+  const expectNoRawBody = (receipt: ModelInvocationResult['receipt'], raw: Uint8Array) => {
+    const evidence = receipt.outcome?.state !== 'responded' ? receipt.outcome?.evidence : null;
+    if (evidence) expect(Object.hasOwn(evidence.body, 'data')).toBe(false);
+    expect(Object.hasOwn(receipt.request, 'nativeRequest')).toBe(false);
+    expect(JSON.stringify(receipt)).not.toContain(Buffer.from(raw).toString('base64'));
+  };
+  const largeEvidence = input.large.receipt.outcome?.state === 'unknown' ? input.large.receipt.outcome.evidence : null;
+  expect(largeEvidence?.body.observedBytes).toBeGreaterThanOrEqual(4096);
+  expect(largeEvidence?.body.byteLength).toBe(512); expectNoRawBody(input.large.receipt, largeBody);
+  expect(input.bodies).toHaveLength(4);
+  const largePath = join(input.root, 'large.json');
+  const largeReplay = await callSdk<ModelInvocationResult>(input.project, input.env, 'invoke', largePath);
+  expect(largeReplay).toEqual({ ok: true, value: { replayed: true, receipt: input.large.receipt } });
+  if (largeReplay.ok) expectNoRawBody(largeReplay.value.receipt, largeBody);
+  expect(input.bodies).toHaveLength(4);
+
+  input.setResponse('malformed'); const malformedPath = join(input.root, 'malformed.json'); await writeFile(malformedPath, JSON.stringify(input.command('malformed')), { mode: 0o600 });
+  const malformed = await callSdk<ModelInvocationResult>(input.project, input.env, 'invoke', malformedPath);
+  expect(malformed).toMatchObject({ ok: true, value: { replayed: false, receipt: { outcome: { state: 'rejected', evidence: { reason: 'invalid-response', httpStatus: 200, body: { complete: true } } } } } });
+  const malformedReceipt = (malformed as { ok: true; value: ModelInvocationResult }).value.receipt;
+  expectNoRawBody(malformedReceipt, Buffer.from(malformedBody));
+  expect(JSON.stringify(malformedReceipt)).not.toContain('prompt-malformed');
+  expect(JSON.stringify(malformedReceipt)).not.toContain('never-evidence'); expect(input.bodies).toHaveLength(5);
+  const malformedReplay = await callMcp(input.project, input.env, 'invoke_model', input.command('malformed'));
+  expect(malformedReplay.structuredContent).toEqual({ replayed: true, receipt: malformedReceipt }); expect(input.bodies).toHaveLength(5);
+  expectNoRawBody((malformedReplay.structuredContent as ModelInvocationResult).receipt, Buffer.from(malformedBody));
+
+  input.setResponse('status'); const statusPath = join(input.root, 'status.json'); await writeFile(statusPath, JSON.stringify(input.command('status')), { mode: 0o600 });
+  const status = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', statusPath, '--json'],
+    { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
+  expect(status.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: 429, body: { complete: true } } });
+  expectNoRawBody(status.receipt, Buffer.from(statusBody));
+  expect(JSON.stringify(status.receipt)).not.toContain('never-evidence'); expect(input.bodies).toHaveLength(6);
+  const statusReplay = await callSdk<ModelInvocationResult>(input.project, input.env, 'invoke', statusPath);
+  expect(statusReplay).toEqual({ ok: true, value: { replayed: true, receipt: status.receipt } });
+  if (statusReplay.ok) expectNoRawBody(statusReplay.value.receipt, Buffer.from(statusBody));
+  expect(input.bodies).toHaveLength(6);
+
+  await stopRuntime(input.runtime); runtimeProcesses.splice(runtimeProcesses.indexOf(input.runtime), 1);
+  await startRuntime(input.project, input.env);
+  const malformedQuery = { schemaVersion: 1, scopeId: 'scope', invocationId: malformedReceipt.claim.invocationId, reference: input.reference };
+  const malformedQueryPath = join(input.root, 'malformed-query.json'); await writeFile(malformedQueryPath, JSON.stringify(malformedQuery), { mode: 0o600 });
+  await input.setEvidencePolicy(false);
+  const defaultInspection = await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', malformedQueryPath);
+  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, invocation: malformedReceipt } });
+  if (defaultInspection.ok) { expect(Object.hasOwn(defaultInspection.value, 'responseEvidence')).toBe(false); expectNoRawBody(defaultInspection.value.invocation!, Buffer.from(malformedBody)); }
+  const defaultText = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
+    { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout;
+  expect(defaultText).not.toContain(malformedBody); expect(defaultText).not.toContain(Buffer.from(malformedBody).toString('base64'));
+  const rawMalformedQueryPath = join(input.root, 'malformed-raw-query.json');
+  await writeFile(rawMalformedQueryPath, JSON.stringify({ ...malformedQuery, includeResponseEvidence: true }), { mode: 0o600 });
+  expect(await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', rawMalformedQueryPath)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+  await input.setEvidencePolicy(true);
+  const malformedInspection = await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', rawMalformedQueryPath);
+  expect(malformedInspection).toMatchObject({ ok: true, value: { invocation: malformedReceipt } });
+  const malformedRaw = (malformedInspection as { ok: true; value: ModelInvocationInspection }).value.responseEvidence as ModelInvocationResponseEvidence;
+  expect(Buffer.from(malformedRaw.body.data, 'base64')).toEqual(Buffer.from(malformedBody));
+  const statusQuery = { schemaVersion: 1, scopeId: 'scope', invocationId: status.receipt.claim.invocationId, reference: input.reference };
+  const statusQueryPath = join(input.root, 'status-query.json'); await writeFile(statusQueryPath, JSON.stringify({ ...statusQuery, includeResponseEvidence: true }), { mode: 0o600 });
+  const statusInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', statusQueryPath, '--json'],
+    { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
+  expect(statusInspection.invocation).toEqual(status.receipt);
+  expect(Buffer.from(statusInspection.responseEvidence!.body.data, 'base64')).toEqual(Buffer.from(statusBody));
+  const largeInspection = await callMcp(input.project, input.env, 'inspect_model_invocation', { schemaVersion: 1, scopeId: 'scope',
+    invocationId: input.large.receipt.claim.invocationId, reference: input.reference, includeResponseEvidence: true });
+  expect(largeInspection.structuredContent).toMatchObject({ invocation: input.large.receipt });
+  expect(Buffer.from((largeInspection.structuredContent as ModelInvocationInspection).responseEvidence!.body.data, 'base64')).toEqual(largeBody);
+  expect(input.bodies).toHaveLength(6);
+}
 
 it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
@@ -102,7 +179,9 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   servers.push(proxy); await new Promise<void>((done, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', done); });
   const proxyAddress = proxy.address(); if (!proxyAddress || typeof proxyAddress === 'string') throw new Error('PROXY_FIXTURE_ADDRESS');
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', NODE_USE_ENV_PROXY: '1',
-    HTTP_PROXY: `http://127.0.0.1:${proxyAddress.port}`, NO_PROXY: '' }, bodies: string[] = []; let response: 'normal' | 'oversize' = 'normal';
+    HTTP_PROXY: `http://127.0.0.1:${proxyAddress.port}`, NO_PROXY: '' }, bodies: string[] = [];
+  const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
+  let response: 'normal' | 'oversize' | 'malformed' | 'status' = 'normal';
   let holdResponse = false, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined;
   const hold = () => {
     holdResponse = true;
@@ -115,6 +194,8 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
       if (holdResponse) {
         observeHeld?.(); await new Promise<void>(resolve => { releaseHeld = resolve; }); holdResponse = false;
       }
+      if (response === 'status') { reply.writeHead(429, { 'content-type': 'application/json', 'x-private-header': 'never-evidence' }); reply.end(statusBody); return; }
+      if (response === 'malformed') { reply.writeHead(200, { 'content-type': 'application/json', 'x-private-header': 'never-evidence' }); reply.end(malformedBody); return; }
       const native = response === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${bodies.length}`, object: 'chat.completion', created: 1,
         model: 'native-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
@@ -129,7 +210,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 1,
-      definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 5, maxInFlight: 2 },
+      definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
     storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
@@ -147,9 +228,13 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding });
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
-  const writePolicy = async (allowed: boolean) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: allowed ? 'allow' : 'deny', restrictions: [],
-    grants: allowed ? [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
-      principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : [] }), { mode: 0o600 });
+  const writePolicy = async (allowed: boolean, evidenceAllowed = allowed) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
+    revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
+      { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+      ...(evidenceAllowed ? [{ id: 'inspect-evidence', effect: 'allow', actions: ['inspect-evidence'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+    ] : [] }), { mode: 0o600 });
   await writePolicy(true);
   const command = (commandId: string, scopeId = 'scope') => ({ schemaVersion: 1, commandId, scopeId, reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
@@ -174,7 +259,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await waitFor(() => invocationCount('first') === 1, 'DISCONNECTED_CLIENT_RESULT_MISSING');
   expect(bodies).toHaveLength(1);
   await stopRuntime(runtime); runtimeProcesses.splice(runtimeProcesses.indexOf(runtime), 1);
-  await startRuntime(project, env);
+  const restartedRuntime = await startRuntime(project, env);
   const db = new DatabaseSync(ledger, { readOnly: true });
   const firstRow = db.prepare('SELECT invocation_id FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', 'first') as { invocation_id: string };
   db.close();
@@ -232,7 +317,11 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await writePolicy(true); response = 'oversize'; const largePath = join(root, 'large.json'); await writeFile(largePath, JSON.stringify(command('large')), { mode: 0o600 });
   const large = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', largePath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
-  expect(large.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(bodies).toHaveLength(4);
+  expect(large.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { reason: 'response-limit',
+    body: { complete: false, byteLength: 512, observedBytes: expect.any(Number) } } });
+  await assertA5RejectedEvidence({ root, project, env, reference, command, bodies, runtime: restartedRuntime,
+    setResponse(value) { response = value; }, setEvidencePolicy: allowed => writePolicy(true, allowed), large });
   expect(proxyRequests).toBe(0);
+  // Requests are represented by digests, not separately persisted raw prompts; rejected response evidence may itself echo one.
   expect((await readFile(ledger)).includes(Buffer.from('prompt-first'))).toBe(false);
 });
