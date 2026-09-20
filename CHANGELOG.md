@@ -390,3 +390,5 @@ PROVIDERS/A8B3: expose consistent cancellation identity/state in model inspectio
 MCP-ENVELOPE: bound complete MCP messages, preserve correlated overflow errors and reject undeliverable model operations before effects.
 
 - Provider native spending candidate: require current scoped budget and adapter-produced tariff evidence before a new model claim; preserve historical replay, metadata cancellation and fresh policy/profile checks; credential values resolve only for transport sends. Missing rates deny; responses without charge evidence remain held.
+
+- Capture native OpenRouter reported-charge evidence without floating-point loss or key-order-dependent identity. Keep reported charge separate from local tariff calculation and invoice reconciliation; missing/invalid evidence holds. Ledger settlement remains pending.

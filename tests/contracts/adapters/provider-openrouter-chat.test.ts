@@ -113,3 +113,104 @@ it('rejects structural profile/request violations and tags a mismatched response
   expect(posts).toBe(0); const prepared = await adapter.native.prepare(profile(origin), binding, request);
   await expect(adapter.native.send(prepared)).resolves.toMatchObject({ kind: 'rejected', evidence: { reason: 'model-mismatch' } }); expect(posts).toBe(1);
 });
+
+const chatResponse = (usage = '"cost":0.00021', extra = '') => `{"id":"completion","object":"chat.completion","created":1,"model":"vendor/model",
+  "choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"answer"}}],"usage":{"prompt_tokens":12,"completion_tokens":9,"total_tokens":21${usage ? `,${usage}` : ''}}${extra ? `,${extra}` : ''}}`;
+const responseWithoutUsage = () => `{"id":"completion","object":"chat.completion","created":1,"model":"vendor/model",
+  "choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"answer"}}]}`;
+
+it('captures only the successful native response as immutable provider-reported cost evidence without fetching tariff or credentials again', async () => {
+  let posts = 0, metadata = 0, credentials = 0;
+  const body = chatResponse('"cost":0.00021,"cost_details":{"upstream_inference_cost":99}');
+  const origin = await fixture((req, res) => {
+    if (req.url === metadataPath) { metadata++; return void replyMetadata(res); }
+    posts++; res.end(body);
+  });
+  let clock = 10; const observed = await observation(origin), adapter = createOpenRouterPricedNative({ currentObservation: () => observed, now: () => clock,
+    resolveCredential: async () => { credentials++; return 'synthetic-secret'; } });
+  const prepared = await adapter.native.prepare(profile(origin, { type: 'bearer', credentialRef: 'SECRET_REF' }), binding, request);
+  const response = await adapter.native.send(prepared);
+  expect(response).toMatchObject({ schemaVersion: 1, usage: { prompt_tokens: 12, completion_tokens: 9, total_tokens: 21, cost: 0.00021 } });
+  expect(metadata).toBe(1); expect(posts).toBe(1); expect(credentials).toBe(1);
+  clock = 110; // The capture must remain usable after its send-time tariff has expired.
+  const evidence = adapter.usageEvidence(prepared, response);
+  expect(evidence).toEqual({ kind: 'reported', evidence: expect.objectContaining({ schemaVersion: 1, basis: 'provider-reported', currency: 'USD',
+    exactChargeUsd: '0.00021', roundedChargeMinorUnits: 1, rounding: 'ceil-total', source: expect.objectContaining({ field: 'usage.cost',
+      numericSource: '0.00021', generationId: 'completion', modelId: 'vendor/model', bodyDigest: expect.any(String), responseDigest: expect.any(String) }),
+    context: { profileDigest: expect.stringMatching(/^[a-f0-9]{64}$/), tariffDigest: observed.tariff.tariffDigest,
+      requestBodyDigest: expect.stringMatching(/^[a-f0-9]{64}$/), selectedEndpointTag: 'provider/region' },
+    usage: { prompt_tokens: 12, completion_tokens: 9, total_tokens: 21, cost: 0.00021, cost_details: { upstream_inference_cost: 99 } } }) });
+  expect(Object.isFrozen((evidence as { evidence: { usage: object } }).evidence.usage)).toBe(true);
+  expect(metadata).toBe(1); expect(posts).toBe(1); expect(credentials).toBe(1);
+  expect(adapter.usageEvidence(prepared, { ...response, native: { ...(response as { native: object }).native } })).toEqual(evidence);
+  expect(adapter.usageEvidence(prepared, { usage: response.usage, native: response.native, schemaVersion: response.schemaVersion })).toEqual(evidence);
+  clock = 10; const foreign = await createOpenRouterPricedNative({ currentObservation: () => observed, now: () => clock }).native.prepare(profile(origin), binding, request);
+  await expect(Promise.resolve().then(() => adapter.usageEvidence(foreign, response))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(Promise.resolve().then(() => adapter.usageEvidence({}, response))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(Promise.resolve().then(() => adapter.usageEvidence(prepared, { ...response, usage: null }))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+});
+
+it('holds invalid or missing native usage.cost values, preserves decimal precision, and never reads a nested cost', async () => {
+  const replies = [
+    chatResponse('"cost":0'), responseWithoutUsage(), chatResponse(''), chatResponse('"cost":null'), chatResponse('"cost":-1'), chatResponse('"cost":"0.1"'),
+    chatResponse('"cost":1e-128'), chatResponse('"cost":1e-999'), chatResponse('"cost":0.0100000000000000000001'),
+    chatResponse('"other": {"cost": 9}', '"cost":9'),
+  ];
+  let posts = 0, metadata = 0;
+  const origin = await fixture((req, res) => {
+    if (req.url === metadataPath) { metadata++; return void replyMetadata(res); }
+    const reply = replies[posts++]; if (!reply) throw new Error('UNEXPECTED_POST'); res.end(reply);
+  });
+  const observed = await observation(origin), adapter = createOpenRouterPricedNative({ currentObservation: () => observed, now: () => 10 });
+  const collect = async () => { const prepared = await adapter.native.prepare(profile(origin), binding, request); return [prepared, await adapter.native.send(prepared)] as const; };
+  const [zeroPrepared, zero] = await collect();
+  expect(adapter.usageEvidence(zeroPrepared, zero)).toMatchObject({ kind: 'reported', evidence: { exactChargeUsd: '0', roundedChargeMinorUnits: 0 } });
+  const [missingUsagePrepared, missingUsage] = await collect();
+  expect(adapter.usageEvidence(missingUsagePrepared, missingUsage)).toEqual({ kind: 'hold', reason: 'missing-usage' });
+  for (const reason of ['missing-cost', 'invalid-cost', 'invalid-cost', 'invalid-cost'] as const) {
+    const [prepared, response] = await collect(); expect(adapter.usageEvidence(prepared, response)).toEqual({ kind: 'hold', reason });
+  }
+  const [tinyPrepared, tiny] = await collect();
+  expect(adapter.usageEvidence(tinyPrepared, tiny)).toMatchObject({ kind: 'reported', evidence: { roundedChargeMinorUnits: 1,
+    source: { numericSource: '1e-128' } } });
+  const [underflowPrepared, underflow] = await collect();
+  expect(adapter.usageEvidence(underflowPrepared, underflow)).toEqual({ kind: 'hold', reason: 'invalid-cost' });
+  const [precisePrepared, precise] = await collect();
+  expect(adapter.usageEvidence(precisePrepared, precise)).toMatchObject({ kind: 'reported', evidence: { exactChargeUsd: '0.0100000000000000000001', roundedChargeMinorUnits: 2 } });
+  const [nestedPrepared, nested] = await collect();
+  expect(adapter.usageEvidence(nestedPrepared, nested)).toEqual({ kind: 'hold', reason: 'missing-cost' });
+  expect(metadata).toBe(1); expect(posts).toBe(replies.length);
+});
+
+it('refuses evidence for pre-send tokens and a credential-echo response', async () => {
+  let credentials = 0;
+  const origin = await fixture((req, res) => {
+    if (req.url === metadataPath) return void replyMetadata(res);
+    res.end('synthetic-secret');
+  });
+  const observed = await observation(origin), adapter = createOpenRouterPricedNative({ currentObservation: () => observed, now: () => 10,
+    resolveCredential: async () => { credentials++; return 'synthetic-secret'; } });
+  const unsent = await adapter.native.prepare(profile(origin, { type: 'bearer', credentialRef: 'SECRET_REF' }), binding, request);
+  await expect(Promise.resolve().then(() => adapter.usageEvidence(unsent, {}))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await expect(adapter.native.send(unsent)).rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_CREDENTIAL_ECHO' });
+  await expect(Promise.resolve().then(() => adapter.usageEvidence(unsent, {}))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  expect(credentials).toBe(1);
+});
+
+it('does not publish reported cost from an HTTP rejection or a broken transport', async () => {
+  let posts = 0;
+  const origin = await fixture((req, res) => {
+    if (req.url === metadataPath) return void replyMetadata(res);
+    if (++posts === 1) { res.writeHead(429); res.end(chatResponse('"cost":0')); }
+    else req.socket.destroy();
+  });
+  const observed = await observation(origin), adapter = createOpenRouterPricedNative({ currentObservation: () => observed, now: () => 10 });
+  const rejected = await adapter.native.prepare(profile(origin), binding, request);
+  const rejection = await adapter.native.send(rejected);
+  expect(rejection).toMatchObject({ kind: 'rejected', evidence: { reason: 'http-status', body: { complete: true } } });
+  expect(() => adapter.usageEvidence(rejected, rejection)).toThrowError(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  const interrupted = await adapter.native.prepare(profile(origin), binding, request);
+  await expect(adapter.native.send(interrupted)).rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN' });
+  expect(() => adapter.usageEvidence(interrupted, {})).toThrowError(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+  expect(posts).toBe(2);
+});

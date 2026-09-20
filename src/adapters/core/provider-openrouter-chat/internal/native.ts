@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote,
-  type ModelBindingDefinition, type ModelInvocationProfile, type ProviderSpendQuote } from '#domain/index.js';
+  type ModelBindingDefinition, type ModelInvocationProfile, type ModelInvocationNativeResponse, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
   type ModelInvocationNativePort, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { parseNativeJsonHttpLimits, sendNativeJsonHttp, type NativeJsonHttpRequest } from '#adapters/core/provider-http-json/index.js';
@@ -10,6 +10,7 @@ import { requireOpenRouterMetadataObservation, parseOpenRouterTextRequest, quote
 import { OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, OPENROUTER_CHAT_PROTOCOL,
   OpenRouterChatError, openRouterChatJsonSchema, parseOpenRouterChatDefinition } from './contract.js';
 import { parseOpenRouterChatResponse } from './response.js';
+import { observeOpenRouterUsage, openRouterResponseDigest, type OpenRouterUsageObservation } from './usage.js';
 
 export interface OpenRouterNativeOptions {
   /** Pure access to a previously completed metadata acquisition; never fetch from this callback. */
@@ -21,6 +22,8 @@ export interface OpenRouterPricedNative {
   readonly native: ModelInvocationNativePort;
   /** Pure quote of the exact adapter-recognized prepared request. Budget authority remains in composition/engine. */
   quote(input: ModelInvocationSpendingInput): ProviderSpendQuote;
+  /** Captured from this exact successful send. Pure observation; no settlement or invoice authority. */
+  usageEvidence(prepared: unknown, response: ModelInvocationNativeResponse): OpenRouterUsageObservation;
 }
 interface Prepared {
   readonly profile: ModelInvocationProfile; readonly binding: ModelBindingDefinition;
@@ -33,6 +36,7 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
   if (typeof currentObservation !== 'function' || typeof now !== 'function'
     || resolveCredential !== undefined && typeof resolveCredential !== 'function') throw new OpenRouterChatError('INVALID_PROFILE');
   const tokens = new WeakMap<object, Prepared>();
+  const completed = new WeakMap<object, Readonly<{ responseDigest: string; observation: OpenRouterUsageObservation }>>();
   const read = (token: unknown) => {
     if (!token || typeof token !== 'object') throw new OpenRouterChatError('INVALID_REQUEST');
     const value = tokens.get(token);
@@ -74,13 +78,32 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
     },
     async send(token: unknown, signal?: AbortSignal) {
       const value = read(token); tokens.delete(token as object); fresh(value);
-      return sendNativeJsonHttp(value.wire, {
+      let observation: OpenRouterUsageObservation | undefined;
+      const result = await sendNativeJsonHttp(value.wire, {
         ...(resolveCredential ? { resolveCredential } : {}),
-        parseResponse: body => parseOpenRouterChatResponse(body, value.request.model, value.wire.limits.responseMaxBytes),
+        parseResponse: body => {
+          const parsed = parseOpenRouterChatResponse(body, value.request.model, value.wire.limits.responseMaxBytes);
+          if ('response' in parsed) observation = observeOpenRouterUsage(body, parsed.response, {
+            profileDigest: modelInvocationProfileDigest(value.profile), tariffDigest: value.observation.tariff.tariffDigest,
+            requestBodyDigest: createHash('sha256').update(value.wire.body).digest('hex'),
+            selectedEndpointTag: value.observation.tariff.selection.endpointTag,
+          });
+          return parsed;
+        },
       }, signal);
+      // Publish only after transport returns success, including all credential-echo and response checks.
+      if (!('kind' in result) && observation) completed.set(token as object,
+        Object.freeze({ responseDigest: openRouterResponseDigest(result), observation }));
+      return result;
     },
   });
-  return Object.freeze({ native, quote(input: ModelInvocationSpendingInput): ProviderSpendQuote {
+  return Object.freeze({ native, usageEvidence(prepared: unknown, response: ModelInvocationNativeResponse): OpenRouterUsageObservation {
+    const captured = prepared && typeof prepared === 'object' ? completed.get(prepared) : undefined;
+    if (!captured || captured.responseDigest !== openRouterResponseDigest(response)) {
+      throw new OpenRouterChatError('INVALID_REQUEST');
+    }
+    return captured.observation;
+  }, quote(input: ModelInvocationSpendingInput): ProviderSpendQuote {
     const value = read(input.prepared); fresh(value);
     if (!isDeepStrictEqual(input.profile, value.profile) || !isDeepStrictEqual(input.definition, value.binding)
       || !isDeepStrictEqual(parseOpenRouterTextRequest(input.command.nativeRequest), value.request)
