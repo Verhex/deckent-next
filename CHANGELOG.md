@@ -372,3 +372,5 @@ PROVIDERS/A6: configure exact provider endpoint paths in versioned adapter profi
 PROVIDERS/A7A: store model response content separately from immutable receipts; require explicit permission to inspect content and validate atomic forward migration.
 
 PROVIDERS/A7B: authorize logical model response-content purge with an immutable audit and explicit purged status across SDK, CLI and MCP; preserve invocation outcomes and quota.
+
+CANCEL/FAIRNESS-DIAG: capture bounded execution, workspace and owned Docker state/log evidence on readiness or cancellation failure; preserve existing assertions and timing. Fable2124 PASS covers diagnostics only.

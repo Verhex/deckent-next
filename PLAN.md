@@ -657,3 +657,5 @@ PROVIDERS/A7A DONE — Fable2108 PASS; receipt3/ledger16 separate retained nativ
 PROVIDERS/A7B REVIEW — authorized logical content purge with durable actor/audit and distinct tombstone; preserves receipt, quota and no-resend. Runtime wire5; inspection3/query2; ledger17 forward migration. SDK/CLI/MCP through shared runtime. No physical WAL/media/backup erasure, real provider or dogfood claim.
 
 PROVIDERS/A7B DONE — Fable2120 PASS closes authorized logical retention/purge gate; atomic digest-bound actor/audit and stable tombstone preserve outcome/counters/no-resend. Shared runtime SDK/CLI/MCP; full1089/204+24native+18host, architecture0, lint clean. No physical WAL/media/backup erasure claim; cancellation and real-provider credential/spend admission remain open.
+
+CANCEL/FAIRNESS-DIAG instrumentation: PASS Fable2124; one test-only slice, full1089+24native+18host. Original worker-ready root cause remains OPEN; no timeout/retry/assertion changes.

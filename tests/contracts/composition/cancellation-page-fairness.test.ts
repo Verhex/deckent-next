@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,6 +17,12 @@ import { admitRunAttempts } from '../support/admission.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const exec = promisify(execFile);
 const pause = (milliseconds: number) => new Promise(resolveWait => setTimeout(resolveWait, milliseconds));
+type CapturedOutcome = Readonly<{ status: 'pending' | 'fulfilled' | 'rejected'; code?: string; message?: string }>;
+const bounded = (value: string, maximum = 1024) => value.length <= maximum ? value : `${value.slice(0, maximum)}…`;
+function capturedError(error: unknown): Readonly<{ code?: string; message: string }> {
+  const record = error instanceof Error ? error as Error & { code?: unknown } : null;
+  return Object.freeze({ ...(typeof record?.code === 'string' ? { code: record.code } : {}), message: bounded(record?.message ?? String(error)) });
+}
 
 it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancellation page when the first recorded Docker endpoint is unavailable', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancellation-fairness-'));
@@ -42,7 +48,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancel
     argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/ready','yes');setInterval(()=>{},1000)"] }));
   const supervisor = new DockerSupervisor({ ...docker, workspaceRoot, uid: userInfo().uid, gid: userInfo().gid });
   const controller = new AbortController(); let running: Promise<void> | undefined;
-  const executions: Promise<unknown>[] = [];
+  const executions: Promise<void>[] = [], executionOutcomes: CapturedOutcome[] = requests.map(() => ({ status: 'pending' }));
   try {
     for (const request of requests) await mkdir(request.workspace, { recursive: true, mode: 0o700 });
     await admitRunAttempts(opened.store, identities);
@@ -62,14 +68,42 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancel
     const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 65536 });
     const applications = [new DispatchApplication(opened.store, firstSupervisor, verifier, authorization, 'fixture', artifacts),
       new DispatchApplication(opened.store, supervisor, verifier, authorization, 'fixture', artifacts)];
-    requests.forEach((request, index) => executions.push(applications[index]!.execute(request).catch(error => error)));
-    for (const request of requests) {
+    requests.forEach((request, index) => executions.push(applications[index]!.execute(request).then(
+      () => { executionOutcomes[index] = { status: 'fulfilled' }; },
+      error => { executionOutcomes[index] = { status: 'rejected', ...capturedError(error) }; },
+    )));
+    const snapshot = async () => Promise.all(identities.map(async identity => {
+      try {
+        const record = await opened.store.load(identity.scopeId, identity.attemptId);
+        return { attemptId: identity.attemptId, record: record == null ? null : bounded(JSON.stringify(record), 2048) };
+      } catch (error) { return { attemptId: identity.attemptId, storeError: capturedError(error) }; }
+    }));
+    const workspaceFiles = async (index: number) => {
+      try { return (await readdir(requests[index]!.workspace)).slice(0, 32).map(name => bounded(name, 128)); }
+      catch (error) { return { workspaceError: capturedError(error) }; }
+    };
+    const dockerState = async (index: number) => {
+      const handle = identifyDockerRequest(requests[index]!, { ...docker, workspaceRoot, uid: userInfo().uid, gid: userInfo().gid }).handle;
+      try {
+        const output = await exec('/usr/bin/docker', ['inspect', '--format', '{{json .State}}', handle], { timeout: docker.controlTimeoutMs, maxBuffer: 4096 });
+        const state = JSON.parse(output.stdout) as { Status?: unknown; Running?: unknown; Error?: unknown; ExitCode?: unknown; OOMKilled?: unknown; Dead?: unknown };
+        let stderr = '';
+        try {
+          const logs = await exec('/usr/bin/docker', ['logs', '--tail', '20', handle], { timeout: docker.controlTimeoutMs, maxBuffer: docker.outputBytes });
+          stderr = bounded(`${logs.stdout}${logs.stderr}`, docker.outputBytes);
+        } catch (error) { stderr = `docker logs unavailable: ${capturedError(error).message}`; }
+        return { handle, status: state.Status, running: state.Running, error: state.Error, exitCode: state.ExitCode, oomKilled: state.OOMKilled, dead: state.Dead, stderr };
+      } catch (error) { return { handle, inspectError: capturedError(error) }; }
+    };
+    for (const [index, request] of requests.entries()) {
       let ready = false;
       for (let attempt = 0; attempt < 500; attempt++) {
         try { ready = await readFile(join(request.workspace, 'ready'), 'utf8') === 'yes'; } catch { /* starting */ }
         if (ready) break;
         await pause(10);
       }
+      if (!ready) console.error('cancellation-page-fairness worker-ready diagnostic', JSON.stringify({ index, identity: request.identity,
+        execution: executionOutcomes[index], workspaceFiles: await workspaceFiles(index), store: await snapshot(), docker: await dockerState(index) }));
       expect(ready).toBe(true);
     }
     const principal = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -80,10 +114,10 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancel
     ] }), { mode: 0o600 });
     await requestRunCancellation(project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, options);
     clearConfigCache();
-    const pages: Array<{ after: string | null; statuses: readonly string[] }> = [];
+    const pages: Array<{ after: string | null; statuses: readonly string[] }> = [], runtimeErrors: Array<{ after: string | null; code?: string; message: string }> = [];
     const runtime = await prepareConfiguredCancellationRuntime(project, {
       onPage(command, result) { pages.push({ after: command.afterAttemptId, statuses: result.outcomes?.map(value => value.outcome.status) ?? [] }); },
-      onError() {},
+      onError(command, error) { runtimeErrors.push({ after: command.afterAttemptId, ...capturedError(error) }); },
     }, options);
     running = runtime.run(controller.signal);
     let secondStopped = false;
@@ -93,6 +127,8 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancel
       await pause(20);
     }
     controller.abort(); await running; running = undefined;
+    if (!secondStopped) console.error('cancellation-page-fairness second-stopped diagnostic', JSON.stringify({ pages, runtimeErrors,
+      executions: executionOutcomes, store: await snapshot() }));
     expect(secondStopped).toBe(true);
     expect(pages).toEqual(expect.arrayContaining([
       { after: null, statuses: ['unavailable'] },
