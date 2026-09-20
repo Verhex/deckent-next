@@ -16,11 +16,12 @@ import {
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
-import type { ModelInvocationHandler, ModelInvocationInspectionHandler } from './model-invocation.js';
+import type { ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
 
 export interface CommandContext {
   invokeModel?: ModelInvocationHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;
+  purgeModelInvocationContent?: ModelInvocationPurgeHandler;
   inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
   inspectModelBinding?: (root: string, reference: ModelReference, options: ConfigLoadOptions) => Promise<ModelBindingInspection>;
   inspectModelActivation?: ModelActivationInspectionHandler;

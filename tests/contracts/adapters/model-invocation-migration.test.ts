@@ -34,7 +34,7 @@ async function seedV13(path: string) {
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); }
   finally { activation.close(); }
   const db = new DatabaseSync(path);
-  try { db.exec(`DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents;
+  try { db.exec(`DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
     DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; PRAGMA user_version=13`); }
   finally { db.close(); }
 }
@@ -74,7 +74,7 @@ async function seedV14(path: string, corrupt?: 'receipt' | 'allocation') {
       if (corrupt === 'receipt' && row.invocation_id === 'unknown-invocation') old.unexpected = true;
       downgrade.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(old), String(row.invocation_id));
     }
-    downgrade.exec(`DROP TABLE model_invocation_contents; DROP INDEX model_invocations_allocation_state;
+    downgrade.exec(`DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP INDEX model_invocations_allocation_state;
       ALTER TABLE model_invocations RENAME TO model_invocations_current;
       CREATE TABLE model_invocations(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,invocation_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
         state TEXT NOT NULL CHECK(state IN ('claimed','responded','unknown')),record TEXT NOT NULL,
@@ -126,7 +126,7 @@ async function seedV15(path: string, corrupt?: 'state' | 'identity' | 'count') {
       }
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify({ ...receipt, schemaVersion: 2, outcome: oldOutcome }), String(row.invocation_id));
     }
-    db.exec('DROP TABLE model_invocation_contents; PRAGMA user_version=15;');
+    db.exec('DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; PRAGMA user_version=15;');
     if (corrupt === 'state') db.prepare("UPDATE model_invocations SET state='claimed' WHERE invocation_id='rejected-id'").run();
     if (corrupt === 'identity') {
       const row = db.prepare("SELECT record FROM model_invocations WHERE invocation_id='responded-id'").get() as { record: string };
@@ -150,10 +150,10 @@ function evidence(path: string) {
   finally { db.close(); }
 }
 
-it('migrates v13 activation and execution records to ledger16 without changing their payloads', async () => workspace(async path => {
+it('migrates v13 activation and execution records to ledger17 without changing their payloads', async () => workspace(async path => {
   await seedV13(path); const before = evidence(path);
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
-  expect(evidence(path)).toEqual({ ...before, version: 16 });
+  expect(evidence(path)).toEqual({ ...before, version: 17 });
   const db = new DatabaseSync(path, { readOnly: true });
   expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('model_invocations','model_invocation_contents') ORDER BY name").all())
     .toEqual([{ name: 'model_invocation_contents' }, { name: 'model_invocations' }]);
@@ -177,7 +177,7 @@ it('chains genuine receipt1 v14 through receipt2 into separated receipt3/content
     await seedV14(path);
     const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(16);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(17);
     const rows = db.prepare(`SELECT i.state,i.record,c.record AS content_record FROM model_invocations i
       LEFT JOIN model_invocation_contents c ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id ORDER BY i.state`).all() as Array<Record<string, unknown>>;
     const responded = rows.find(row => row.state === 'responded')!, unknown = rows.find(row => row.state === 'unknown')!;
@@ -209,7 +209,7 @@ it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown
     await seedV15(path);
     const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
     const db = new DatabaseSync(path, { readOnly: true });
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(16);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(17);
     const rows = db.prepare(`SELECT i.state,i.record,c.record AS content_record FROM model_invocations i
       LEFT JOIN model_invocation_contents c ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id ORDER BY i.state`).all() as Array<Record<string, unknown>>;
     expect(rows.map(row => row.state)).toEqual(['rejected', 'responded', 'unknown', 'unknown']);

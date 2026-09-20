@@ -653,3 +653,7 @@ PROVIDERS/A6 DONE — independent Fable PASS: sole current adapter2 uses explici
 PROVIDERS/A7A REVIEW — current receipt/outcome3 and ledger16 atomically separate immutable settlement from retained native response+usage/raw bytes; query2 explicit includeResponseContent and inspect-content authorization, wire4. Metadata inspection and exact content recovery proven through common runtime. Authorized purge/tombstone remains A7B and is not implemented here.
 
 PROVIDERS/A7A DONE — Fable2108 PASS; receipt3/ledger16 separate retained native/usage and rejected/partial content atomically, default metadata inspection with explicit inspect-content grant, query2 and wire4; full1078/202+24native+18host. A7B purge remains mandatory and incomplete.
+
+PROVIDERS/A7B REVIEW — authorized logical content purge with durable actor/audit and distinct tombstone; preserves receipt, quota and no-resend. Runtime wire5; inspection3/query2; ledger17 forward migration. SDK/CLI/MCP through shared runtime. No physical WAL/media/backup erasure, real provider or dogfood claim.
+
+PROVIDERS/A7B DONE — Fable2120 PASS closes authorized logical retention/purge gate; atomic digest-bound actor/audit and stable tombstone preserve outcome/counters/no-resend. Shared runtime SDK/CLI/MCP; full1089/204+24native+18host, architecture0, lint clean. No physical WAL/media/backup erasure claim; cancellation and real-provider credential/spend admission remain open.

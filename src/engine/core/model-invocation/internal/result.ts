@@ -1,23 +1,29 @@
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
-  modelInvocationRequestEvidence, modelInvocationResponseContentSchema, parseModelInvocationCommand, parseModelInvocationNativeResponse, parseModelInvocationQuery,
-  type ModelInvocationResponseContent } from '#domain/index.js';
+  modelInvocationRequestEvidence, modelInvocationResponseContentSchema, parseModelInvocationCommand, parseModelInvocationNativeResponse,
+  parseModelInvocationPurgeCommand, parseModelInvocationQuery,
+  type ModelInvocationPurgeReceipt, type ModelInvocationResponseContent } from '#domain/index.js';
 import type { ModelInvocationResult } from './application.js';
 import type { ModelInvocationInspection } from './inspection.js';
+import type { ModelInvocationPurgeResult } from './port.js';
 import { modelInvocationRequestDigest, verifyModelInvocationReceipt } from './evidence.js';
-import { verifyModelInvocationRecord } from './content.js';
+import { verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
 import { ModelInvocationStoreError } from './port.js';
-const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxDepth + 1,
-  maxNodes: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxNodes * 2, maxCodeUnits: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxCodeUnits * 2 });
-const statusSchema = z.enum(['retained', 'not-captured']);
-const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(), contentStatus: statusSchema }).strict();
-const inspectionSchema = z.object({ schemaVersion: z.literal(2), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
-  invocation: z.unknown().nullable(), contentStatus: statusSchema.nullable(), responseContent: z.unknown().optional() }).strict();
+const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxDepth + 2,
+  maxNodes: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxNodes * 3, maxCodeUnits: MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxCodeUnits * 3 });
+const statusSchema = z.enum(['retained', 'not-captured', 'purged']);
+const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(),
+  contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
+const inspectionSchema = z.object({ schemaVersion: z.literal(3), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
+  invocation: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
+  responseContent: z.unknown().optional() }).strict();
+const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 function corrupt(): never { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
-function expectedStatus(receipt: ReturnType<typeof verifyModelInvocationReceipt>) {
-  return receipt.outcome === null || (receipt.outcome.state === 'unknown' && receipt.outcome.content === null) ? 'not-captured' : 'retained';
+function expectedStatus(receipt: ReturnType<typeof verifyModelInvocationReceipt>, purge: ModelInvocationPurgeReceipt | null) {
+  return purge ? 'purged' : receipt.outcome === null
+    || (receipt.outcome.state === 'unknown' && receipt.outcome.content === null) ? 'not-captured' : 'retained';
 }
 export function parseModelInvocationResultForCommand(commandInput: unknown, input: unknown): ModelInvocationResult {
   try {
@@ -25,14 +31,17 @@ export function parseModelInvocationResultForCommand(commandInput: unknown, inpu
     const parsed = copied.success ? resultSchema.safeParse(copied.data) : undefined;
     if (!parsed?.success) return corrupt();
     const receipt = verifyModelInvocationReceipt(parsed.data.receipt), expected = modelInvocationRequestEvidence(command, modelInvocationRequestDigest(command));
-    if (!same(receipt.request, expected) || parsed.data.contentStatus !== expectedStatus(receipt)) return corrupt();
+    const purge = parsed.data.purge === null ? null : verifyModelInvocationPurgeReceipt(parsed.data.purge);
+    if (!same(receipt.request, expected) || parsed.data.contentStatus !== expectedStatus(receipt, purge)) return corrupt();
     let response = null;
     if (parsed.data.response !== null) {
       response = parseModelInvocationNativeResponse(parsed.data.response);
       if (receipt.outcome?.state !== 'responded') return corrupt();
-      verifyModelInvocationRecord({ receipt, content: { schemaVersion: 1, kind: 'native-response', descriptor: receipt.outcome.content, response } });
-    } else if (receipt.outcome?.state === 'responded') return corrupt();
-    return Object.freeze({ replayed: parsed.data.replayed, receipt, response, contentStatus: parsed.data.contentStatus });
+      verifyModelInvocationRecord({ receipt, content: { schemaVersion: 1, kind: 'native-response', descriptor: receipt.outcome.content, response }, purge: null });
+    } else if (receipt.outcome?.state === 'responded' && purge === null) return corrupt();
+    if (purge) verifyModelInvocationRecord({ receipt, content: null, purge });
+    else if (parsed.data.contentStatus === 'not-captured') verifyModelInvocationRecord({ receipt, content: null, purge: null });
+    return Object.freeze({ replayed: parsed.data.replayed, receipt, response, contentStatus: parsed.data.contentStatus, purge });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
 }
 export function parseModelInvocationInspectionForQuery(queryInput: unknown, input: unknown): ModelInvocationInspection {
@@ -42,19 +51,34 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (!parsed?.success || parsed.data.scopeId !== query.scopeId || parsed.data.invocationId !== query.invocationId || !same(parsed.data.reference, query.reference)) return corrupt();
     const wantsContent = query.includeResponseContent === true;
     if (Object.hasOwn(parsed.data, 'responseContent') !== wantsContent) return corrupt();
-    const identity = { schemaVersion: query.schemaVersion, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 3 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
     if (parsed.data.invocation === null) {
-      if (parsed.data.contentStatus !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
-      return Object.freeze({ ...identity, invocation: null, contentStatus: null, ...(wantsContent ? { responseContent: null } : {}) });
+      if (parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
+      return Object.freeze({ ...identity, invocation: null, contentStatus: null, purge: null,
+        ...(wantsContent ? { responseContent: null } : {}) });
     }
     const receipt = verifyModelInvocationReceipt(parsed.data.invocation);
+    const purge = parsed.data.purge === null ? null : verifyModelInvocationPurgeReceipt(parsed.data.purge);
     if (receipt.claim.scopeId !== query.scopeId || receipt.claim.invocationId !== query.invocationId
-      || !same(receipt.request.reference, query.reference) || parsed.data.contentStatus !== expectedStatus(receipt)) return corrupt();
+      || !same(receipt.request.reference, query.reference) || parsed.data.contentStatus !== expectedStatus(receipt, purge)) return corrupt();
     let responseContent: ModelInvocationResponseContent | null = null;
     if (wantsContent) {
       responseContent = parsed.data.responseContent === null ? null : modelInvocationResponseContentSchema.parse(parsed.data.responseContent);
-      verifyModelInvocationRecord({ receipt, content: responseContent });
+      verifyModelInvocationRecord({ receipt, content: responseContent, purge });
+    } else if (purge) {
+      verifyModelInvocationRecord({ receipt, content: null, purge });
     }
-    return Object.freeze({ ...identity, invocation: receipt, contentStatus: parsed.data.contentStatus, ...(wantsContent ? { responseContent } : {}) });
+    return Object.freeze({ ...identity, invocation: receipt, contentStatus: parsed.data.contentStatus, purge,
+      ...(wantsContent ? { responseContent } : {}) });
+  } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
+}
+export function parseModelInvocationPurgeResultForCommand(commandInput: unknown, input: unknown): ModelInvocationPurgeResult {
+  try {
+    const command = parseModelInvocationPurgeCommand(commandInput), copied = envelope.safeParse(input);
+    const parsed = copied.success ? purgeResultSchema.safeParse(copied.data) : undefined;
+    if (!parsed?.success) return corrupt();
+    const receipt = verifyModelInvocationPurgeReceipt(parsed.data.receipt);
+    if (!same(receipt.command, command)) return corrupt();
+    return Object.freeze({ replayed: parsed.data.replayed, receipt });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
 }

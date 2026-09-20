@@ -21,20 +21,32 @@ export function decodeInvocationRecord(row: InvocationRow | undefined, scopeId: 
     const raw = row['content_record'];
     if (raw !== null && typeof raw !== 'string') throw new Error();
     const content = raw === null ? null : JSON.parse(raw as string);
-    return verifyModelInvocationRecord({ receipt, content });
+    const purgeValue = row['purge_record'], purgeCommandId = row['purge_command_id'];
+    if (purgeValue !== null && typeof purgeValue !== 'string') throw new Error();
+    const purge = purgeValue === null ? null : JSON.parse(purgeValue as string);
+    if ((purgeCommandId !== null) !== (purge !== null)) throw new Error();
+    if (purge && (row['purge_scope_id'] !== scopeId || row['purge_invocation_id'] !== receipt.claim.invocationId
+      || row['purge_id'] !== purgeCommandId || purge.command.commandId !== purgeCommandId)) throw new Error();
+    return verifyModelInvocationRecord({ receipt, content, purge });
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
 export function invocationRow(db: DatabaseSync, scopeId: string, invocationId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record
+  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record,
+      c.purge_command_id,p.record AS purge_record,p.scope_id AS purge_scope_id,
+      p.command_id AS purge_id,p.invocation_id AS purge_invocation_id
     FROM model_invocations i LEFT JOIN model_invocation_contents c
     ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
+    LEFT JOIN model_invocation_content_purges p ON p.scope_id=c.scope_id AND p.command_id=c.purge_command_id
     WHERE i.scope_id=? AND i.invocation_id=?`)
     .get(scopeId, invocationId) as InvocationRow | undefined;
 }
 export function invocationCommandRow(db: DatabaseSync, scopeId: string, commandId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record
+  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record,
+      c.purge_command_id,p.record AS purge_record,p.scope_id AS purge_scope_id,
+      p.command_id AS purge_id,p.invocation_id AS purge_invocation_id
     FROM model_invocations i LEFT JOIN model_invocation_contents c
     ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
+    LEFT JOIN model_invocation_content_purges p ON p.scope_id=c.scope_id AND p.command_id=c.purge_command_id
     WHERE i.scope_id=? AND i.command_id=?`)
     .get(scopeId, commandId) as InvocationRow | undefined;
 }

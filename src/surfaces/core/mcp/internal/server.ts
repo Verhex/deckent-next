@@ -1,6 +1,6 @@
-import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCommandSchema, modelInvocationQuerySchema,
-  type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCommand, type ModelInvocationQuery } from '#domain/index.js';
-import type { ModelActivationInspection, ModelActivationResult, ModelInvocationInspection, ModelInvocationResult } from '#engine/index.js';
+import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema,
+  type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery } from '#domain/index.js';
+import type { ModelActivationInspection, ModelActivationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ export interface McpApplications {
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelInvocation?(query: ModelInvocationQuery): Promise<ModelInvocationInspection>;
   invokeModel?(command: ModelInvocationCommand): Promise<ModelInvocationResult>;
+  purgeModelInvocationContent?(command: ModelInvocationPurgeCommand): Promise<ModelInvocationPurgeResult>;
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
   createRun?(command: RunAdmission): Promise<unknown>;
@@ -96,6 +97,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (invokeModel) definitions.push({ readOnly: false, destructive: true, openWorld: true, name: 'invoke_model',
     description: t('mcp.tool.invokeModel', {}, locale), schema: modelInvocationCommandSchema,
     invoke: input => invokeModel.call(applications, modelInvocationCommandSchema.parse(input)) });
+  const purgeContent = applications.purgeModelInvocationContent;
+  if (purgeContent) definitions.push({ readOnly: false, destructive: true, openWorld: false, name: 'purge_model_invocation_content',
+    description: t('mcp.tool.purgeModelInvocationContent', {}, locale), schema: modelInvocationPurgeCommandSchema,
+    invoke: input => purgeContent.call(applications, modelInvocationPurgeCommandSchema.parse(input)) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text',

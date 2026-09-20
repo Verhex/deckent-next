@@ -18,7 +18,7 @@ async function seed(path: string, version = 11) {
   const expected = await store.loadRun('s', 'r'); store.close();
   const db = new DatabaseSync(path);
   downgradeRunEligibilityFixtures(db);
-  if (version < 14) db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations');
+  if (version < 14) db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations');
   if (version < 13) db.exec('DROP TABLE model_activation_receipts; DROP TABLE model_activations');
   if (version < 11) db.exec('DROP TABLE installation_ownership');
   if (version < 10) db.exec('DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes');

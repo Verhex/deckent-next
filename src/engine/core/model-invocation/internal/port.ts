@@ -1,6 +1,7 @@
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationNativeResponse, ModelInvocationProfile,
-  ModelInvocationReceipt, ModelInvocationResponseContent, ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
+  ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationResponseContent,
+  ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
 
 export interface ModelInvocationAdmission {
   readonly command: ModelInvocationCommand;
@@ -14,8 +15,13 @@ export interface ModelInvocationAdmission {
   readonly invocationId: string;
   readonly claimedAtMs: number;
 }
-export interface ModelInvocationRecord { readonly receipt: ModelInvocationReceipt; readonly content: ModelInvocationResponseContent | null }
+export interface ModelInvocationRecord { readonly receipt: ModelInvocationReceipt; readonly content: ModelInvocationResponseContent | null;
+  readonly purge: ModelInvocationPurgeReceipt | null }
 export interface ModelInvocationClaimResult { readonly replayed: boolean; readonly record: ModelInvocationRecord }
+export interface ModelInvocationPurgeAdmission { readonly command: ModelInvocationPurgeCommand; readonly actor: ModelInvocationActor;
+  readonly authorization: ModelInvocationAuthorization; readonly purgedAtMs: number }
+export interface ModelInvocationPurgeResult { readonly replayed: boolean; readonly receipt: ModelInvocationPurgeReceipt }
+export interface ModelInvocationPurgeStore { purgeContent(input: ModelInvocationPurgeAdmission): Promise<ModelInvocationPurgeResult>; close(): void }
 export interface ModelInvocationStore {
   loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult>;

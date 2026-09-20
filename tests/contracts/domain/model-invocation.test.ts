@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeModelInvocationProfile, encodeModelInvocationRequest, MODEL_INVOCATION_NATIVE_JSON_LIMITS,
   modelInvocationRequestEvidence, parseModelInvocationCommand, parseModelInvocationProfile,
-  parseModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
+  parseModelInvocationPurgeCommand, parseModelInvocationPurgeReceipt, parseModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
 
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'p', version: 1,
@@ -43,5 +43,18 @@ describe('model invocation domain contract', () => {
     expect(() => parseModelInvocationReceipt({ ...receipt, schemaVersion: 2 })).toThrow('MODEL_INVOCATION_INVALID');
     expect(() => parseModelInvocationReceipt({ ...receipt, profile: { ...profile, protocol: { family: 'other', version: '1' } } }))
       .toThrow('MODEL_INVOCATION_INVALID');
+  });
+
+  it('validates immutable purge commands and audit receipts through descriptor-safe ingress', () => {
+    const purgeCommand = { schemaVersion: 1 as const, commandId: 'purge', scopeId: 's', invocationId: 'i', reference,
+      expectedContentDigest: 'a'.repeat(64) };
+    const purgeReceipt = { schemaVersion: 1 as const, command: purgeCommand,
+      actor: { id: 'actor', issuer: 'os', subject: '1', assurance: 'os-user' as const },
+      authorization: { revision: 'policy', ruleId: 'purge-content' }, purgedAtMs: 3 };
+    expect(parseModelInvocationPurgeCommand(purgeCommand)).toEqual(purgeCommand);
+    expect(parseModelInvocationPurgeReceipt(purgeReceipt)).toEqual(purgeReceipt);
+    expect(() => parseModelInvocationPurgeCommand({ ...purgeCommand, extra: true })).toThrow('MODEL_INVOCATION_INVALID');
+    const getter = Object.defineProperty({}, 'commandId', { enumerable: true, get() { throw new Error('CALLED'); } });
+    expect(() => parseModelInvocationPurgeCommand(getter)).toThrow('MODEL_INVOCATION_INVALID');
   });
 });

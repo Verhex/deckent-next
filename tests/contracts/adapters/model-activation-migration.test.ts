@@ -21,7 +21,7 @@ async function seedVersionTwelve(path: string) {
   const db = new DatabaseSync(path);
   try {
     db.exec(`DROP INDEX model_invocations_allocation_state;
-      DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
+      DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
       DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=12`);
   } finally { db.close(); }
 }

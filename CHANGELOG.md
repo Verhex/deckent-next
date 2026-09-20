@@ -370,3 +370,5 @@ PROVIDERS/A5: retain exact rejected and partial model response evidence, hide ra
 PROVIDERS/A6: configure exact provider endpoint paths in versioned adapter profiles without default routes or legacy execution aliases.
 
 PROVIDERS/A7A: store model response content separately from immutable receipts; require explicit permission to inspect content and validate atomic forward migration.
+
+PROVIDERS/A7B: authorize logical model response-content purge with an immutable audit and explicit purged status across SDK, CLI and MCP; preserve invocation outcomes and quota.

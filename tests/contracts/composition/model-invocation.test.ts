@@ -103,7 +103,7 @@ describe('configured native model invocation', () => {
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect(f.paths).toEqual(['/customer/gateway/native-chat']); expect(f.bodies[0]).toContain('prompt-must-not-persist');
     expect(await invokeConfiguredModel(f.project, f.command('one'), { env: f.env })).toEqual({ replayed: true, receipt: first.receipt,
-      response: first.response, contentStatus: 'retained' });
+      response: first.response, contentStatus: 'retained', purge: null });
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect((await readFile(f.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
     const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference };
@@ -174,7 +174,7 @@ describe('native endpoint version and historical receipt boundaries', () => {
     const encodedBefore = JSON.stringify(claim.record.receipt);
     f.setProfile({ ...f.profile, adapter: { ...f.profile.adapter, version: 1 } }); await f.writeConfig();
     expect(await invokeConfiguredModel(f.project, command, { env: f.env })).toEqual({ replayed: true, receipt: claim.record.receipt,
-      response: null, contentStatus: 'not-captured' });
+      response: null, contentStatus: 'not-captured', purge: null });
     const inspected = await inspectConfiguredModelInvocation(f.project,
       { schemaVersion: 2, scopeId: 'scope', invocationId: 'historical-invocation', reference }, { env: f.env });
     expect(JSON.stringify(inspected.invocation)).toBe(encodedBefore); expect(f.requests).toBe(0);

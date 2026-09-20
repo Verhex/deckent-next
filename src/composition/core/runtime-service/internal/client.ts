@@ -4,13 +4,14 @@ import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions
 import { registerProviderConfig, requestLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, ModelInvocationError,
-  type ModelInvocationCommand, type ModelInvocationQuery } from '#domain/index.js';
-import { runtimeServiceResultCapacity, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
+import { modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
+  type ModelInvocationPurgeCommand, type ModelInvocationCommand, type ModelInvocationQuery } from '#domain/index.js';
+import { runtimeServiceResultCapacity, parseModelInvocationPurgeResultForCommand, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
 
 export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
+  purgeModelInvocationContent(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
   describeService(): Promise<RuntimeServiceDescriptor>;
   shutdownService(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
   invokeModel(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal): Promise<ModelInvocationResult>;
@@ -25,19 +26,27 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const config = await loadConfig(projectRoot, { ...options, heal: false });
       const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false);
       const requestId = randomUUID();
-      const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation'
+      const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
-        { schemaVersion: 4, requestId, operation, input, ...capacity }, signal);
+        { schemaVersion: 5, requestId, operation, input, ...capacity }, signal);
       if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }
   };
   // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
-    && operation !== 'invokeModel' && operation !== 'inspectModelInvocation').map(operation =>
+    && operation !== 'invokeModel' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent').map(operation =>
     [operation, (input: unknown) => call(operation, input)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
+    async purgeModelInvocationContent(input: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery) {
+      try {
+        const parsed = modelInvocationPurgeCommandInputSchema.safeParse(input);
+        if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+        const command = parsed.data as ModelInvocationPurgeCommand;
+        return parseModelInvocationPurgeResultForCommand(command, await call('purgeModelInvocationContent', command, delivery));
+      } catch (error) { throw queryFailure(error); }
+    },
     async invokeModel(input: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal) {
       try {
         const parsed = modelInvocationCommandInputSchema.safeParse(input);

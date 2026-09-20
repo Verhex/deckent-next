@@ -34,9 +34,16 @@ export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
 export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2), scopeId: identitySchema,
   invocationId: identitySchema, reference: modelReferenceSchema, includeResponseContent: z.boolean().optional() }).strict().readonly();
+export const modelInvocationPurgeCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
+  scopeId: identitySchema, invocationId: identitySchema, reference: modelReferenceSchema,
+  expectedContentDigest: digest }).strict().readonly();
+export const modelInvocationPurgeReceiptSchema = z.object({ schemaVersion: z.literal(1),
+  command: modelInvocationPurgeCommandSchema, actor: modelActivationActorSchema,
+  authorization: modelActivationAuthorizationSchema, purgedAtMs: counterSchema }).strict().readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
 export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandSchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
+export const modelInvocationPurgeCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationPurgeCommandSchema);
 export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(1), id: identitySchema,
   version: counterSchema.positive(), scopeId: identitySchema, reference: modelReferenceSchema, bindingDigest: digest,
   protocol: z.object({ family: identitySchema, version: identitySchema }).strict().readonly(),
@@ -107,6 +114,8 @@ export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(
 
 export type ModelInvocationCommand = Readonly<z.infer<typeof modelInvocationCommandSchema>>;
 export type ModelInvocationQuery = Readonly<z.infer<typeof modelInvocationQuerySchema>>;
+export type ModelInvocationPurgeCommand = Readonly<z.infer<typeof modelInvocationPurgeCommandSchema>>;
+export type ModelInvocationPurgeReceipt = Readonly<z.infer<typeof modelInvocationPurgeReceiptSchema>>;
 export type ModelInvocationProfile = Readonly<z.infer<typeof modelInvocationProfileSchema>>;
 export type ModelInvocationRequestEvidence = Readonly<z.infer<typeof modelInvocationRequestEvidenceSchema>>;
 export type ModelInvocationClaim = Readonly<z.infer<typeof modelInvocationClaimSchema>>;
@@ -141,6 +150,13 @@ export const parseModelInvocationQuery = (input: unknown): ModelInvocationQuery 
   if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return parsed.data as ModelInvocationQuery;
 };
+export const parseModelInvocationPurgeCommand = (input: unknown): ModelInvocationPurgeCommand => {
+  const parsed = modelInvocationPurgeCommandInputSchema.safeParse(input);
+  if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+  return parsed.data as ModelInvocationPurgeCommand;
+};
+export const parseModelInvocationPurgeReceipt = (input: unknown): ModelInvocationPurgeReceipt =>
+  parse(modelInvocationPurgeReceiptSchema as unknown as z.ZodType<ModelInvocationPurgeReceipt>, input);
 export const parseModelInvocationProfile = (input: unknown): ModelInvocationProfile =>
   parse(modelInvocationProfileSchema as unknown as z.ZodType<ModelInvocationProfile>, input);
 export const parseModelInvocationReceipt = (input: unknown): ModelInvocationReceipt => {

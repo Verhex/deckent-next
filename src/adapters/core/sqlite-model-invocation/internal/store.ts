@@ -1,3 +1,4 @@
+import { purgeInvocationContent } from './purge.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { identitySchema, modelInvocationClaimSchema,
   type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
 import { ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
-  createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, type ModelInvocationAdmission, type ModelInvocationClaimResult,
+  createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
@@ -118,7 +119,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         const record = encoded(receipt);
         this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
           .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record);
-        return Object.freeze({ replayed: false, record: verifyModelInvocationRecord({ receipt, content: null }) });
+        return Object.freeze({ replayed: false, record: verifyModelInvocationRecord({ receipt, content: null, purge: null }) });
       });
     } catch (error) { return this.fail(error); }
   }
@@ -171,6 +172,11 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         ? createModelInvocationUnknownRecord({ ...record.receipt, outcome: null }, observedAtMs)
         : createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs));
     } catch (error) { return this.fail(error); }
+  }
+  async purgeContent(input: ModelInvocationPurgeAdmission) {
+    try { const admission = parseModelInvocationPurgeAdmission(input);
+      return this.transaction(() => purgeInvocationContent(this.db, admission)); }
+    catch (error) { return this.fail(error); }
   }
   close(): void { this.db.close(); }
 }

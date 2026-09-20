@@ -259,7 +259,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
   await expect(openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(oldBytes);
   const writer = await openSqliteModelInvocationStore(path, options, 'allow'); writer.close();
-  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(16);
+  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(17);
   expect(migrated.prepare('SELECT * FROM model_activations').all()).toEqual(before); migrated.close();
   const reader = await openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 });
   expect('claim' in reader).toBe(false); expect('recordResponse' in reader).toBe(false); reader.close();

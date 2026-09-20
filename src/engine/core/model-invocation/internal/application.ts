@@ -1,7 +1,7 @@
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
-  parseModelInvocationNativeResult, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
+  parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
   type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
-  type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
+  type ModelInvocationPurgeReceipt, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
@@ -9,13 +9,14 @@ import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelI
   sameModelInvocationRequest, createModelInvocationClaimReceipt } from './evidence.js';
 import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
 import { createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
-  verifyModelInvocationRecord } from './content.js';
+  parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationRecord, type ModelInvocationStore } from './port.js';
+import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
-  authorize(action: 'invoke' | 'inspect' | 'inspect-content', target: { readonly scopeId: string; readonly reference: ModelReference },
+  authorize(action: 'invoke' | 'inspect' | 'inspect-content' | 'purge-content', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }
 export interface ModelInvocationProfileSource {
@@ -32,7 +33,8 @@ export interface ModelInvocationNativePort {
 export interface ModelInvocationNativeRegistry { resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null }
 export interface ModelInvocationRuntime { invocationId(): string; now(): number }
 export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceipt;
-  readonly response: ModelInvocationNativeResponse | null; readonly contentStatus: 'retained' | 'not-captured' }
+  readonly response: ModelInvocationNativeResponse | null; readonly contentStatus: 'retained' | 'not-captured' | 'purged';
+  readonly purge: ModelInvocationPurgeReceipt | null }
 
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<typeof parseModelInvocationCommand>,
@@ -59,7 +61,36 @@ function publicResult(replayed: boolean, recordInput: ModelInvocationRecord): Mo
   const record = verifyModelInvocationRecord(recordInput), content = record.content;
   return Object.freeze({ replayed, receipt: record.receipt,
     response: content?.kind === 'native-response' ? content.response : null,
-    contentStatus: content === null ? 'not-captured' : 'retained' });
+    contentStatus: record.purge ? 'purged' : content === null ? 'not-captured' : 'retained', purge: record.purge });
+}
+
+export class ModelInvocationPurgeApplication {
+  constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelInvocationAuthorizer,
+    private readonly openStore: () => Promise<ModelInvocationPurgeStore>, private readonly runtime: Pick<ModelInvocationRuntime, 'now'>) {}
+  async purge(input: unknown, credential?: unknown, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult> {
+    validateInvocationDelivery(delivery);
+    const command = parseModelInvocationPurgeCommand(input);
+    const principal = await authenticate(this.verifier, credential, command.scopeId);
+    const actor = modelActivationActorSchema.parse({ id: principal.id, issuer: principal.issuer,
+      subject: principal.subject, assurance: principal.assurance });
+    await this.authorization.authorize('purge-content', { scopeId: command.scopeId, reference: command.reference }, principal);
+    const store = await this.openStore();
+    try {
+      const authorization = modelActivationAuthorizationSchema.parse(await this.authorization.authorize('purge-content',
+        { scopeId: command.scopeId, reference: command.reference }, principal));
+      const admission = parseModelInvocationPurgeAdmission({ command, actor, authorization, purgedAtMs: this.runtime.now() });
+      const expectedReceipt = verifyModelInvocationPurgeReceipt({ schemaVersion: 1, ...admission });
+      checkInvocationResultDelivery({ replayed: false, receipt: expectedReceipt }, delivery);
+      const result = await store.purgeContent(admission);
+      if (typeof result.replayed !== 'boolean') throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      const receipt = verifyModelInvocationPurgeReceipt(result.receipt);
+      if (!isDeepStrictEqual(receipt.command, command) || !isDeepStrictEqual(receipt.actor, actor)
+        || (!result.replayed && !isDeepStrictEqual(receipt, expectedReceipt))) {
+        throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      }
+      return checkInvocationResultDelivery(Object.freeze({ replayed: result.replayed, receipt }), delivery);
+    } finally { store.close(); }
+  }
 }
 
 export class ModelInvocationApplication {

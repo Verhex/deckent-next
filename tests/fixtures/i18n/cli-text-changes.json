@@ -46,17 +46,20 @@
     },
     "cli.help.models": {
       "before": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <file|-> [--json]",
-      "after": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <file|-> [--json]\nInvoke and invocation require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
+      "after": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content --input <file|-> [--json]\nInvoke, invocation, and purge-content require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON.",
       "after": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON. Both require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
     },
     "models.invocation.responded": { "before": "models.invocation.responded", "after": "native response content retained separately from the receipt" },
+    "models.invocation.respondedPurged": { "before": "models.invocation.respondedPurged", "after": "native response received; response content has been purged" },
     "models.invocation.rejected": {
       "before": "models.invocation.rejected",
       "after": "rejection content retained separately from the receipt; counts toward the total call quota"
     },
+    "models.invocation.rejectedPurged": { "before": "models.invocation.rejectedPurged", "after": "rejection received; response content has been purged; counts toward the total call quota" },
+    "models.invocation.unknownPurged": { "before": "models.invocation.unknownPurged", "after": "outcome unknown; response content has been purged" },
     "models.invocation.notice": {
       "before": "Provider evidence only; this does not accept a task or confirm cost. Inspect native output with --json.",
       "after": "A received native response or rejection is evidence only; it is neither task acceptance nor a billing determination. This invocation counts toward the total call quota; retry the same command identity to return its receipt without resending. Response content, if captured, is retained separately from the receipt and withheld by default. JSON includeResponseContent additionally requires inspect-content permission; human output never shows retained response content."
@@ -65,7 +68,12 @@
       "before": "Inspect a persisted model invocation with current authorization.",
       "after": "Inspect a persisted model invocation with current authorization. It requires an explicitly started local `deckent runtime serve`; a runtime-owned invocation continues if the client disconnects. Response content is withheld by default; JSON includeResponseContent additionally requires inspect-content permission, and human output never shows retained response content."
     },
-    "mcp.tool.invokeModel": {
+        "cli.help.modelsPurgeContent": { "before": "cli.help.modelsPurgeContent", "after": "deckent models purge-content --input <file|-> [--json] [--lang en|tr]\nPurges active retained native, usage, or raw response content after separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity." },
+    "models.invocation.purged": { "before": "models.invocation.purged", "after": "Invocation content purged: {id}." },
+    "models.invocation.purgeNotice": { "before": "models.invocation.purgeNotice", "after": "Logical purge does not erase write-ahead logs, media, or backups." },
+    "models.invocation.noticePurged": { "before": "models.invocation.noticePurged", "after": "A received native response or rejection is evidence only; it is neither task acceptance nor a billing determination. This invocation counts toward the total call quota; retry the same command identity to return its receipt without resending. Response content has been logically purged; human output never shows response content." },
+    "mcp.tool.purgeModelInvocationContent": { "before": "mcp.tool.purgeModelInvocationContent", "after": "Purge active retained native, usage, or raw response content by exact command identity and expected content digest. Requires the local runtime service and separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity; logical purge does not erase write-ahead logs, media, or backups." },
+"mcp.tool.invokeModel": {
       "before": "Submit one native model request using the configured profile and durable command identity. Complete result capacity is checked before a new call. A response is provider evidence, not task acceptance.",
       "after": "Submit one native model request using the configured profile and durable command identity. It requires an explicitly started local `deckent runtime serve`; a runtime-owned invocation continues if the client disconnects. Retrying the same command identity returns its receipt and does not resend the native request. Complete result capacity is checked before a new call. A received native response or rejection is evidence only, neither task acceptance nor a billing determination; the lifetime call is consumed."
     },
@@ -233,17 +241,20 @@
     },
     "cli.help.models": {
       "before": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <dosya|-> [--json]",
-      "after": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <dosya|-> [--json]\nInvoke ve invocation, açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
+      "after": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content --input <dosya|-> [--json]\nInvoke, invocation ve purge-content açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi.",
       "after": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi. Her ikisi de açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
     },
     "models.invocation.responded": { "before": "models.invocation.responded", "after": "native yanıt içeriği kayıttan ayrı saklandı" },
+    "models.invocation.respondedPurged": { "before": "models.invocation.respondedPurged", "after": "native yanıt alındı; yanıt içeriği silindi" },
     "models.invocation.rejected": {
       "before": "models.invocation.rejected",
       "after": "ret içeriği kayıttan ayrı saklandı; çağrı kotasından düşüldü"
     },
+    "models.invocation.rejectedPurged": { "before": "models.invocation.rejectedPurged", "after": "ret alındı; yanıt içeriği silindi; çağrı kotasından düşüldü" },
+    "models.invocation.unknownPurged": { "before": "models.invocation.unknownPurged", "after": "sonuç belirsiz; yanıt içeriği silindi" },
     "models.invocation.notice": {
       "before": "Yalnız sağlayıcı kanıtıdır; görev kabulü veya maliyet doğrulaması değildir. Native çıktıyı --json ile inceleyin.",
       "after": "Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Yakalanmışsa yanıt içeriği kayıttan ayrı tutulur ve varsayılan olarak gizlidir. JSON includeResponseContent ayrıca inspect-content izni gerektirir; insan çıktısı saklanan yanıt içeriğini asla göstermez."
@@ -252,7 +263,12 @@
       "before": "Güncel yetkiyle kalıcı model çağrısını incele.",
       "after": "Güncel yetkiyle kalıcı model çağrısını incele. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Yanıt içeriği varsayılan olarak gizlidir; JSON includeResponseContent ayrıca inspect-content izni gerektirir ve insan çıktısı saklanan yanıt içeriğini asla göstermez."
     },
-    "mcp.tool.invokeModel": {
+        "cli.help.modelsPurgeContent": { "before": "cli.help.modelsPurgeContent", "after": "deckent models purge-content --input <dosya|-> [--json] [--lang en|tr]\nAyrı purge-content policy yetkisiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur." },
+    "models.invocation.purged": { "before": "models.invocation.purged", "after": "Çağrı içeriği silindi: {id}." },
+    "models.invocation.purgeNotice": { "before": "models.invocation.purgeNotice", "after": "Mantıksal silme, write-ahead log, ortam veya yedekleri silmez." },
+    "models.invocation.noticePurged": { "before": "models.invocation.noticePurged", "after": "Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Yanıt içeriği mantıksal olarak silinmiştir; insan çıktısı yanıt içeriğini asla göstermez." },
+    "mcp.tool.purgeModelInvocationContent": { "before": "mcp.tool.purgeModelInvocationContent", "after": "Tam komut kimliği ve beklenen içerik özetiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Yerel runtime servisi ve ayrı purge-content policy yetkisi gerekir. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur; mantıksal silme write-ahead log, ortam veya yedekleri silmez." },
+"mcp.tool.invokeModel": {
       "before": "Yapılandırılmış profil ve kalıcı komut kimliğiyle bir native model isteği gönder. Yeni çağrıdan önce tam sonuç kapasitesi denetlenir. Yanıt sağlayıcı kanıtıdır; görev kabulü değildir.",
       "after": "Yapılandırılmış profil ve kalıcı komut kimliğiyle bir native model isteği gönder. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Aynı komut kimliğiyle tekrar kaydını döndürür ve native isteği yeniden göndermez. Yeni çağrıdan önce tam sonuç kapasitesi denetlenir. Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir; ömür boyu çağrı kullanılmıştır."
     },

@@ -35,20 +35,20 @@ export function assertInvocationDeliveryFit(receipt: ModelInvocationReceipt, res
     byteLength: Number.MAX_SAFE_INTEGER };
   const responded = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
     state: 'responded', content: nativeDescriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null,
-    contentStatus: 'retained' }) - bytes(null) + responseBytes;
+    contentStatus: 'retained', purge: null }) - bytes(null) + responseBytes;
   const unknown = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
     state: 'unknown', reason: 'transport-error', evidence: null, content: null, observedAtMs: Number.MAX_SAFE_INTEGER } },
-    response: null, contentStatus: 'not-captured' });
+    response: null, contentStatus: 'not-captured', purge: null });
   const responseBodyDescriptor = { ...nativeDescriptor, kind: 'response-body', encoding: 'base64' };
   const summary = { schemaVersion: 1, adapter: receipt.profile.adapter, reason: 'response-limit', httpStatus: null,
     body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
       complete: false, digest: 'f'.repeat(64) } };
   const rejected = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
     state: 'rejected', evidence: { ...summary, reason: 'invalid-response', body: { ...summary.body, complete: true } },
-    content: responseBodyDescriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained' });
+    content: responseBodyDescriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null });
   const partial = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
     state: 'unknown', reason: 'transport-error', evidence: summary, content: responseBodyDescriptor,
-    observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained' });
+    observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null });
   if (rejected > BigInt(delivery.maxResultBytes) || partial > BigInt(delivery.maxResultBytes) || responded > BigInt(delivery.maxResultBytes) || unknown > BigInt(delivery.maxResultBytes)) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
   }

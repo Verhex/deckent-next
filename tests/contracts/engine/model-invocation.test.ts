@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationRequestEvidence, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
-import { ModelInvocationApplication, ModelInvocationInspectionApplication, modelInvocationProfileDigest,
+import { ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
   createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
-  type ModelInvocationRecord, type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
+  type ModelInvocationPurgeAdmission, type ModelInvocationPurgeResult, type ModelInvocationRecord,
+  type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
 
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'p', version: 1,
@@ -42,7 +43,7 @@ function fixture(options: { nativeResult?: ModelInvocationNativeResult; profileP
       if (options.concurrentBarrier && found === null && ++waitingLoads <= 2) { if (waitingLoads === 2) releaseLoads?.(); await loadBarrier; }
       return found; }, async loadInvocation() { return stored; },
     async claim(input) { calls.claims++; if (stored) return { replayed: true, record: stored };
-      stored = { receipt: receipt(input), content: null }; return { replayed: false, record: stored }; },
+      stored = { receipt: receipt(input), content: null, purge: null }; return { replayed: false, record: stored }; },
     async recordResponse(_claim, response, observedAtMs) { if (options.responseWriteError) throw new Error('SQL');
       const base = stored!.receipt; stored = createModelInvocationResponseRecord(base,
         options.substituteOutcome ? { ...response, native: { substituted: true } } : response, observedAtMs); return stored; },
@@ -134,14 +135,14 @@ describe('model invocation application', () => {
       byteLength: Number.MAX_SAFE_INTEGER };
     const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
       state: 'responded', content: descriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null,
-      contentStatus: 'retained' }), 'utf8') - 4 + 100;
+      contentStatus: 'retained', purge: null }), 'utf8') - 4 + 100;
     const evidenceDescriptor = { ...descriptor, kind: 'response-body', encoding: 'base64' };
     const summary = { schemaVersion: 1, adapter: profile.adapter, reason: 'response-limit', httpStatus: null,
       body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
         complete: false, digest: 'f'.repeat(64) } };
     const partial = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
       state: 'unknown', reason: 'transport-error', evidence: summary, content: evidenceDescriptor,
-      observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained' }), 'utf8');
+      observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null }), 'utf8');
     const required = Math.max(responded, partial), small = fixture({ responseBound: 100n });
     await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: required - 1 }))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
@@ -168,7 +169,8 @@ describe('model invocation application', () => {
       claim: { ...first.receipt.claim, profileDigest: digest } };
     f.store.loadReceipt = async () => null;
     f.store.claim = async () => ({ replayed: true, record: { receipt: historical, content: first.response ? {
-      schemaVersion: 1, kind: 'native-response', descriptor: historical.outcome!.content, response: first.response } : null } });
+      schemaVersion: 1, kind: 'native-response', descriptor: historical.outcome!.content, response: first.response } : null,
+    purge: null } });
     await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 }))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
     expect(f.calls.sends).toBe(1);
@@ -254,6 +256,51 @@ describe('model invocation private evidence access', () => {
     expect((await inspect.inspect({ ...query, includeResponseContent: false }))).not.toHaveProperty('responseContent');
   });
 
+});
+
+describe('model invocation content purge application', () => {
+  const purgeCommand = { schemaVersion: 1 as const, commandId: 'purge-command', scopeId: 'scope', invocationId: 'invocation-1',
+    reference, expectedContentDigest: 'a'.repeat(64) };
+  function purgeFixture(options: { replayed?: boolean; deny?: boolean; substituteActor?: boolean } = {}) {
+    let opens = 0, mutations = 0, closes = 0; const actions: string[] = [];
+    const original = { schemaVersion: 1 as const, command: purgeCommand,
+      actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance },
+      authorization: { revision: 'historical', ruleId: 'purge-content' }, purgedAtMs: 4 };
+    const app = new ModelInvocationPurgeApplication({ async verify() { return principal; } },
+      { async authorize(action) { actions.push(action); if (options.deny) throw new Error('DENIED');
+        return { revision: 'current', ruleId: 'purge-content' }; } }, async () => { opens++; return {
+        async purgeContent(input: ModelInvocationPurgeAdmission): Promise<ModelInvocationPurgeResult> {
+          mutations++;
+          if (options.replayed) return { replayed: true, receipt: options.substituteActor
+            ? { ...original, actor: { ...original.actor, id: 'foreign' } } : original };
+          return { replayed: false, receipt: { schemaVersion: 1, ...input } };
+        }, close() { closes++; },
+      }; }, { now: () => 5 });
+    return { app, actions, counts: () => ({ opens, mutations, closes }) };
+  }
+
+  it('authorizes before opening, reauthorizes before mutation, and exact-checks fresh and replayed audit receipts', async () => {
+    const fresh = purgeFixture();
+    expect(await fresh.app.purge(purgeCommand)).toMatchObject({ replayed: false,
+      receipt: { command: purgeCommand, authorization: { revision: 'current' }, purgedAtMs: 5 } });
+    expect(fresh.actions).toEqual(['purge-content', 'purge-content']);
+    expect(fresh.counts()).toEqual({ opens: 1, mutations: 1, closes: 1 });
+    const replay = purgeFixture({ replayed: true });
+    expect(await replay.app.purge(purgeCommand)).toMatchObject({ replayed: true,
+      receipt: { authorization: { revision: 'historical' }, purgedAtMs: 4 } });
+    const forged = purgeFixture({ replayed: true, substituteActor: true });
+    await expect(forged.app.purge(purgeCommand)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+  });
+
+  it('performs no store effect when policy or delivery capacity rejects the command', async () => {
+    const denied = purgeFixture({ deny: true });
+    await expect(denied.app.purge(purgeCommand)).rejects.toThrow('DENIED');
+    expect(denied.counts()).toEqual({ opens: 0, mutations: 0, closes: 0 });
+    const bounded = purgeFixture();
+    await expect(bounded.app.purge(purgeCommand, undefined, { maxResultBytes: 1 }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(bounded.counts()).toEqual({ opens: 1, mutations: 0, closes: 1 });
+  });
 });
 
 describe('model invocation composed receipt bounds', () => {

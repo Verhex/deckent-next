@@ -1,12 +1,13 @@
 export { MODEL_INVOCATION_SCHEMA_VERSION, MODEL_INVOCATION_NATIVE_JSON_LIMITS, MODEL_INVOCATION_PROFILE_PREFIX, MODEL_INVOCATION_REQUEST_PREFIX,
   encodeModelInvocationProfile, encodeModelInvocationRequest, modelInvocationClaimSchema, modelInvocationCommandInputSchema, modelInvocationCommandSchema,
   modelInvocationNativeResponseSchema, modelInvocationOutcomeSchema, modelInvocationProfileSchema,
+  modelInvocationPurgeCommandInputSchema, modelInvocationPurgeCommandSchema, modelInvocationPurgeReceiptSchema,
   modelInvocationQueryInputSchema, modelInvocationQuerySchema, modelInvocationReceiptSchema, modelInvocationRequestEvidence, modelInvocationRequestEvidenceSchema,
   parseModelInvocationCommand, parseModelInvocationNativeResponse, parseModelInvocationProfile,
-  parseModelInvocationQuery, parseModelInvocationReceipt, ModelInvocationError } from './internal/contract.js';
+  parseModelInvocationPurgeCommand, parseModelInvocationPurgeReceipt, parseModelInvocationQuery, parseModelInvocationReceipt, ModelInvocationError } from './internal/contract.js';
 export type { ModelInvocationActor, ModelInvocationAuthorization, ModelInvocationBinding, ModelInvocationClaim,
   ModelInvocationCommand, ModelInvocationContentDescriptor, ModelInvocationErrorCode, ModelInvocationNativeResponse, ModelInvocationOutcome,
-  ModelInvocationProfile, ModelInvocationReceipt, ModelInvocationRequestEvidence,
+  ModelInvocationProfile, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationRequestEvidence,
   ModelInvocationQuery, ModelInvocationResponseContent, ModelInvocationUnknownReason } from './internal/contract.js';
 
 export { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema, modelInvocationRejectionReasonSchema } from './internal/response-evidence.js';
