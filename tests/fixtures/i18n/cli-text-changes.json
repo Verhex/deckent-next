@@ -46,7 +46,7 @@
     },
     "cli.help.models": {
       "before": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <file|-> [--json]",
-      "after": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <file|-> [--json]\nInvoke, invocation, purge-content, and spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
+      "after": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <file|-> [--json]\nInvoke, invocation, purge-content, spending, and audit-spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON.",
@@ -268,7 +268,7 @@
     },
     "cli.help.models": {
       "before": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <dosya|-> [--json]",
-      "after": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content ve spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
+      "after": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content, spending ve audit-spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi.",

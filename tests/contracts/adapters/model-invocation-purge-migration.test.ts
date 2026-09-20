@@ -57,7 +57,7 @@ async function seedV16(path: string) {
       if (receipt.outcome) receipt.outcome.schemaVersion = 3;
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(receipt), row.invocation_id);
     }
-    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
       ALTER TABLE model_invocation_contents RENAME TO model_invocation_contents_v17;
       DROP TABLE model_invocation_content_purges;

@@ -22,7 +22,8 @@ export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
 export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
-export const CURRENT_LEDGER_VERSION = PROVIDER_SPEND_LEDGER_VERSION;
+export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
+export const CURRENT_LEDGER_VERSION = PROVIDER_SPEND_AUDIT_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -58,6 +59,12 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   19: '',
   20: '',
   21: '',
+  22: `CREATE TABLE provider_spend_audits(sequence INTEGER PRIMARY KEY AUTOINCREMENT,scope_id TEXT NOT NULL,
+    budget_id TEXT NOT NULL,budget_revision INTEGER NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,digest TEXT NOT NULL,
+    UNIQUE(scope_id,command_id));
+    CREATE INDEX provider_spend_audits_budget_latest
+      ON provider_spend_audits(scope_id,budget_id,budget_revision,sequence DESC);
+    PRAGMA user_version=22;`,
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;

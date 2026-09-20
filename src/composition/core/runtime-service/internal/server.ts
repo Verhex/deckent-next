@@ -61,7 +61,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
         return { response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => request.operation === 'inspectProviderSpendAccount'
+      const result = await lifecycle.admit(() => request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost)

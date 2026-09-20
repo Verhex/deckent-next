@@ -398,3 +398,5 @@ Provider reported settlement: preserve exact fractional minor-unit totals, atomi
 PROVIDER-SPEND/ACCOUNT-SNAPSHOT: add separately authorized account inspection through SDK inspectProviderSpendAccount, CLI models spending, and MCP inspect_provider_spending; runtime wire9. Preserve exact totals, explicit missing checkpoint and not-recorded history audit, bounded result delivery, and read-only ledger access.
 
 ACCOUNT-SNAPSHOT: make absent source subtotals and held-reason details explicit in EN/TR output, help, MCP descriptions and SDK documentation; add compiled two-locale acceptance proof.
+
+PROVIDER-SPEND/DURABLE-AUDIT: add explicit bounded account consistency checks and immutable receipts through SDK, CLI models audit-spending and MCP audit_provider_spending. Separate audit permission, pre-record delivery capacity, forward ledger22 migration, runtime10 and strict inspection2 showing absent/current/stale evidence. Provider calls, invoice verification, periodic scheduling and financial corrections are outside this slice.

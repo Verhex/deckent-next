@@ -563,7 +563,7 @@
   "cli.init.previewOnly": "Yalnız önizleme: paket/imaj güveni ve kullanılabilirliği doğrulanmadı; hiçbir şey kurulmadı.",
   "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı.",
   "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):",
-  "cli.help.models": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content ve spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
+  "cli.help.models": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content, spending ve audit-spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
   "models.notConfigured": "Model kataloğu yapılandırılmamış; kullanılabilirlik gözlemlenmedi.",
   "models.declaredHeader": "Beyan edilen model kataloğu {revision}:",
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native kimlik {nativeId} · protokoller {protocols}",
@@ -588,6 +588,7 @@
   "models.activation.notice": "Yalnız kayıtlı aktivasyon; sağlayıcı kullanılabilirliği ve çağrı yetkisi doğrulanmış değil.",
   "config.field.provider_invocation_profiles": "Native çağrı profilleri ve açık istek tahsisleri",
   "config.field.provider_spending": "Kapsama özel model harcama bütçeleri ve rezervasyon sınırları",
+  "config.field.provider_spend_audit": "İsteğe bağlı sınırlı sağlayıcı-harcama denetimi sayfa, rezervasyon ve zaman sınırları",
   "cli.help.modelsInvocation": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi. Her ikisi de açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <dosya|-> [--json] [--lang en|tr]\nAyrı purge-content policy yetkisiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <dosya|-> [--json] [--lang en|tr]\nTam çağrı komut kimliğiyle iptal isteğini kaydeder. Gönderim izninden önce dağıtımı engelleyebilir; izin sonrasında uzaktan iptal veya tamamlama kanıtı değildir.",
@@ -639,5 +640,13 @@
   "models.spending.frozenYes": "evet",
   "models.spending.frozenNo": "hayır",
   "models.spending.historyNotRecorded": "Bu hesap anlık görüntüsü için kalıcı tam geçmiş denetim sonucu kaydedilmemiştir.",
-  "mcp.tool.inspectProviderSpending": "Tam kapsamlı bir sağlayıcı-harcama hesap anlık görüntüsünü inceleyin. Bekletmeler dahil, ancak bekletme nedenleri olmadan kaydedilmiş yerel rezervasyonları ve yuvarlanmış gösterimiyle kesinleşmiş tam tutarı döndürür. Kesinleşmiş toplam yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir; kaynak alt toplamları dahil değildir. Sağlayıcı faturasını veya tam harcama geçmişi denetimini doğrulamaz."
+  "cli.help.modelsAuditSpending": "deckent models audit-spending --input <dosya|-> [--json] [--lang en|tr]\nAçıkça başlatılmış yerel `deckent runtime serve` üzerinden tam sağlayıcı-harcama kontrol noktası için sınırlı bir bütünlük denetimi kaydeder. Girdi şema 1'dir: commandId, scopeId, budgetId, budgetRevision ve expectedCheckpointDigest. Değişmez bir denetim makbuzu kaydeder; mali kayıtları düzeltmez, faturayı doğrulamaz ve tam bir çağrı denetimini kanıtlamaz.",
+  "models.spending.historyConsistent": "Kayıtlı {command} denetimi bu kontrol noktası anlık görüntüsüyle eşleşiyor. Sağlayıcı faturasını veya tam bir çağrı denetimini doğrulamaz.",
+  "models.spending.historyStale": "Kayıtlı {command} denetimi farklı bir kontrol noktasını incelemiş. Bu hesap anlık görüntüsü denetime göre eskidir; sağlayıcı faturasını veya tam bir çağrı denetimini doğrulamaz.",
+  "models.spending.auditRecorded": "{replayed}: harcama denetimi {command}, kontrol noktası {checkpoint} için kaydedildi.",
+  "models.spending.auditNew": "Denetim kaydedildi",
+  "models.spending.auditReplayed": "Mevcut denetim makbuzu döndürüldü",
+  "models.spending.auditNotice": "Bu denetim makbuzu sınırlı bütünlük kanıtını kaydeder. Mali kayıtları düzeltmez, sağlayıcı faturasını doğrulamaz ve tam bir çağrı denetimini kanıtlamaz.",
+  "mcp.tool.inspectProviderSpending": "Tam kapsamlı bir sağlayıcı-harcama hesap anlık görüntüsünü inceleyin. Bekletmeler dahil, ancak bekletme nedenleri olmadan kaydedilmiş yerel rezervasyonları ve yuvarlanmış gösterimiyle kesinleşmiş tam tutarı döndürür. Kesinleşmiş toplam yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir; kaynak alt toplamları dahil değildir. Sağlayıcı faturasını veya tam harcama geçmişi denetimini doğrulamaz.",
+  "mcp.tool.auditProviderSpending": "Tam bir sağlayıcı-harcama kontrol noktası için sınırlı bütünlük denetimi kaydedin. Değişmez denetim makbuzu oluşturur veya tekrar oynatır; mali kayıtları düzeltmez, sağlayıcı faturasını doğrulamaz ve tam bir çağrı denetimini kanıtlamaz."
 }

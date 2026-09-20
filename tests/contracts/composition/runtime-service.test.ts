@@ -47,6 +47,15 @@ it('rejects an invalid spending account query before connecting to an absent run
   expect(await readFile(f.ledgerPath)).toEqual(before);
 });
 
+it('rejects an invalid spending audit command before connecting to an absent runtime', async () => {
+  const f = await fixture(), before = await readFile(f.ledgerPath);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+  await expect(client.auditProviderSpendAccount({ schemaVersion: 1, commandId: 'audit', scopeId: 's', budgetId: 'budget',
+    budgetRevision: 0, expectedCheckpointDigest: 'a'.repeat(64) }))
+    .rejects.toMatchObject({ code: 'PROVIDER_SPEND_INVALID' });
+  expect(await readFile(f.ledgerPath)).toEqual(before);
+});
+
 it('bounds half-open client cleanup by the service grace and releases ownership after disconnect', async () => {
   const f = await fixture(true, 25, 10000);
   const observer = { async onPage() {}, async onError() {} };

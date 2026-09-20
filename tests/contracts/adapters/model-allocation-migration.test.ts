@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { createModelAllocationCheckpoint, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
@@ -41,7 +42,7 @@ async function seed18(path: string) {
   store.close();
   const db = new DatabaseSync(path); db.exec('PRAGMA foreign_keys=OFF');
   try {
-    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
+    db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
       DROP INDEX model_invocations_allocation_identity;
       PRAGMA user_version=18;`);
   } finally { db.close(); }
@@ -57,7 +58,7 @@ function snapshot(path: string) {
 it('migrates a real ledger18 allocation inventory through revision-one checkpoints without changing receipts', async () => {
   const path = await file(); await seed18(path); const before = snapshot(path);
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
-  const after = snapshot(path); expect(after).toEqual({ ...before, version: 21 });
+  const after = snapshot(path); expect(after).toEqual({ ...before, version: CURRENT_LEDGER_VERSION });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     const allocationRow = db.prepare('SELECT record FROM model_invocation_allocations').get() as { record: string };

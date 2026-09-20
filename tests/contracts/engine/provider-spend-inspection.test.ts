@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createProviderSpendAccount, createProviderSpendCheckpoint, ProviderSpendAccountInspectionApplication,
+import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, ProviderSpendAccountInspectionApplication,
   parseProviderSpendAccountInspectionForQuery, type ProviderSpendAccountReader } from '#engine/index.js';
 
 const principal = { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'token-verified', scopeIds: ['scope'] };
@@ -8,12 +8,18 @@ const budget = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget'
   currency: 'USD', limitMinorUnits: 100 };
 const checkpoint = createProviderSpendCheckpoint({ ...createProviderSpendAccount(budget), reservedMinorUnits: 7,
   settledMinorUnits: 1, settledExactMinorUnits: '0.5' }, 4, 1);
+const actor = { ...principal };
+function audit(examinedCheckpoint = checkpoint) {
+  return createProviderSpendAuditReceipt({ command: { ...query, commandId: 'audit',
+    expectedCheckpointDigest: examinedCheckpoint.digest }, principal: actor,
+  authorization: { revision: 'policy', ruleId: 'audit' }, examinedCheckpoint, startedAtMs: 1, completedAtMs: 2 });
+}
 
-function fixture(snapshot: unknown = checkpoint) {
+function fixture(snapshot: unknown = { checkpoint, audit: null }) {
   const calls = { opens: 0, loads: 0, closes: 0, authorizations: 0 };
   const openReader = async (): Promise<ProviderSpendAccountReader> => {
     calls.opens++;
-    return { async loadSnapshot(scopeId) { calls.loads++; expect(scopeId).toBe(query.scopeId); return snapshot as never; },
+    return { async loadSnapshot(observed) { calls.loads++; expect(observed).toEqual(query); return snapshot as never; },
       close() { calls.closes++; } };
   };
   const authorization = { async authorize(action: 'inspect', target: typeof query, observed: typeof principal) {
@@ -42,7 +48,7 @@ describe('provider spending account inspection', () => {
 
   it('returns an immutable exact aggregate snapshot without inventing held detail', async () => {
     const f = fixture(), result = await f.app.inspect(query);
-    expect(result).toEqual({ ...query, checkpoint, spendingHistoryIntegrity: 'not-recorded' });
+    expect(result).toEqual({ ...query, schemaVersion: 2, checkpoint, audit: null, spendingHistoryIntegrity: 'not-recorded' });
     expect(result.checkpoint?.account).toMatchObject({ reservedMinorUnits: 7, settledMinorUnits: 1,
       settledExactMinorUnits: '0.5', frozen: false, budget: { currency: 'USD' } });
     expect(result.checkpoint?.account).not.toHaveProperty('heldMinorUnits');
@@ -52,15 +58,15 @@ describe('provider spending account inspection', () => {
   });
 
   it('returns an explicit null checkpoint without fabricating a balance or currency', async () => {
-    const result = await fixture(null).app.inspect(query);
-    expect(result).toEqual({ ...query, checkpoint: null, spendingHistoryIntegrity: 'not-recorded' });
+    const result = await fixture({ checkpoint: null, audit: null }).app.inspect(query);
+    expect(result).toEqual({ ...query, schemaVersion: 2, checkpoint: null, audit: null, spendingHistoryIntegrity: 'not-recorded' });
     expect(result).not.toHaveProperty('currency'); expect(result).not.toHaveProperty('account');
   });
 
   it('rejects cross-scope, wrong-budget and stale-revision checkpoints as typed conflicts', async () => {
     for (const changed of [{ scopeId: 'other' }, { budgetId: 'other' }, { revision: 4 }]) {
       const changedBudget = { ...budget, ...changed };
-      await expect(fixture(createProviderSpendCheckpoint(createProviderSpendAccount(changedBudget), 1, 0)).app.inspect(query))
+      await expect(fixture({ checkpoint: createProviderSpendCheckpoint(createProviderSpendAccount(changedBudget), 1, 0), audit: null }).app.inspect(query))
         .rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
     }
   });
@@ -75,13 +81,46 @@ describe('provider spending account inspection', () => {
   });
 
   it('rejects corrupt checkpoints and mismatched result envelopes with typed errors', async () => {
-    await expect(fixture({ ...checkpoint, digest: '0'.repeat(64) }).app.inspect(query))
+    await expect(fixture({ checkpoint: { ...checkpoint, digest: '0'.repeat(64) }, audit: null }).app.inspect(query))
       .rejects.toMatchObject({ code: 'PROVIDER_SPEND_INVALID' });
     expect(() => parseProviderSpendAccountInspectionForQuery(query,
-      { ...query, budgetId: 'other', checkpoint: null, spendingHistoryIntegrity: 'not-recorded' }))
+      { ...query, schemaVersion: 2, budgetId: 'other', checkpoint: null, audit: null, spendingHistoryIntegrity: 'not-recorded' }))
       .toThrow('PROVIDER_SPEND_CONFLICT');
     expect(() => parseProviderSpendAccountInspectionForQuery(query,
-      { ...query, checkpoint: null, spendingHistoryIntegrity: 'verified' })).toThrow('PROVIDER_SPEND_INVALID');
+      { ...query, schemaVersion: 2, checkpoint: null, audit: null, spendingHistoryIntegrity: 'verified' })).toThrow('PROVIDER_SPEND_INVALID');
+  });
+
+  it('derives consistent and stale only from the latest exact audit checkpoint digest', async () => {
+    const consistentAudit = audit(), consistent = await fixture({ checkpoint, audit: consistentAudit }).app.inspect(query);
+    expect(consistent).toMatchObject({ schemaVersion: 2, audit: consistentAudit, spendingHistoryIntegrity: 'consistent' });
+    const oldCheckpoint = createProviderSpendCheckpoint(checkpoint.account, 3, 1), staleAudit = audit(oldCheckpoint);
+    const stale = await fixture({ checkpoint, audit: staleAudit }).app.inspect(query);
+    expect(stale).toMatchObject({ audit: staleAudit, spendingHistoryIntegrity: 'stale' });
+  });
+
+  it('rejects wrong audit identity, corruption, and impossible derived status combinations', () => {
+    const validAudit = audit(), base = { ...query, schemaVersion: 2 as const, checkpoint, audit: validAudit };
+    expect(() => parseProviderSpendAccountInspectionForQuery(query,
+      { ...base, spendingHistoryIntegrity: 'stale' })).toThrow('PROVIDER_SPEND_INVALID');
+    expect(() => parseProviderSpendAccountInspectionForQuery(query,
+      { ...base, audit: null, spendingHistoryIntegrity: 'consistent' })).toThrow('PROVIDER_SPEND_INVALID');
+    expect(() => parseProviderSpendAccountInspectionForQuery(query,
+      { ...base, checkpoint: null, spendingHistoryIntegrity: 'consistent' })).toThrow('PROVIDER_SPEND_INVALID');
+    expect(() => parseProviderSpendAccountInspectionForQuery(query,
+      { ...base, audit: { ...validAudit, digest: '0'.repeat(64) }, spendingHistoryIntegrity: 'consistent' }))
+      .toThrow('PROVIDER_SPEND_INVALID');
+    for (const changed of [{ budgetId: 'other' }, { scopeId: 'other' }]) {
+      const foreignBudget = { ...budget, ...changed }, foreignCheckpoint = createProviderSpendCheckpoint(
+        createProviderSpendAccount(foreignBudget), 1, 0);
+      const foreignPrincipal = { ...principal, scopeIds: [foreignBudget.scopeId] };
+      const foreign = createProviderSpendAuditReceipt({ command: { schemaVersion: 1, commandId: 'foreign',
+        scopeId: foreignBudget.scopeId, budgetId: foreignBudget.budgetId, budgetRevision: foreignBudget.revision,
+        expectedCheckpointDigest: foreignCheckpoint.digest }, principal: foreignPrincipal,
+      authorization: { revision: 'policy', ruleId: 'audit' }, examinedCheckpoint: foreignCheckpoint,
+      startedAtMs: 1, completedAtMs: 2 });
+      expect(() => parseProviderSpendAccountInspectionForQuery(query,
+        { ...base, audit: foreign, spendingHistoryIntegrity: 'stale' })).toThrow('PROVIDER_SPEND_CONFLICT');
+    }
   });
 
   it('redacts backend failures, closes an opened reader, and preserves typed storage failures', async () => {

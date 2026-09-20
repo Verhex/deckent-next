@@ -14,7 +14,7 @@ import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/inde
 import type { ModelInvocationResponseContent } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocationInspection,
-  type ModelInvocationResult, type ModelInvocationPurgeResult, type ProviderSpendAccountInspection } from '#engine/index.js';
+  type ModelInvocationResult, type ModelInvocationPurgeResult, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
@@ -72,10 +72,10 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
 const sdkProgram = `
 import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url';
 const [entry,operation,project,inputPath]=process.argv.slice(1),api=await import(pathToFileURL(entry).href),input=JSON.parse(await readFile(inputPath,'utf8'));
-try { const value=operation==='spending'?await api.inspectProviderSpendAccount(project,input,{env:process.env}):operation==='purge'?await api.purgeModelInvocationContent(project,input,{env:process.env}):operation==='invoke'?await api.invokeModel(project,input,{env:process.env}):await api.inspectModelInvocation(project,input,{env:process.env});
+try { const value=operation==='audit-spending'?await api.auditProviderSpendAccount(project,input,{env:process.env}):operation==='spending'?await api.inspectProviderSpendAccount(project,input,{env:process.env}):operation==='purge'?await api.purgeModelInvocationContent(project,input,{env:process.env}):operation==='invoke'?await api.invokeModel(project,input,{env:process.env}):await api.inspectModelInvocation(project,input,{env:process.env});
 process.stdout.write(JSON.stringify({ok:true,value})); } catch(error){ process.stdout.write(JSON.stringify({ok:false,code:error?.code??'UNKNOWN'})); }
 `;
-async function callSdk<T>(project: string, env: Record<string, string>, operation: 'invoke' | 'inspect' | 'purge' | 'spending', inputPath: string) {
+async function callSdk<T>(project: string, env: Record<string, string>, operation: 'invoke' | 'inspect' | 'purge' | 'spending' | 'audit-spending', inputPath: string) {
   const output = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, operation, project, inputPath],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
   return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
@@ -90,7 +90,7 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
     const tool = (await bounded(client.listTools(), 'MCP_LIST_TIMEOUT')).tools.find(value => value.name === name);
     expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation' || name === 'inspect_provider_spending'
       ? { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-      : { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: name === 'invoke_model' });
+      : { readOnlyHint: false, destructiveHint: name !== 'audit_provider_spending', idempotentHint: true, openWorldHint: name === 'invoke_model' });
     }
     return await bounded(client.callTool({ name, arguments: args }), `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
   } finally {
@@ -241,6 +241,22 @@ function invocationId(ledger: string, commandId: string): string {
   try { return String(db.prepare('SELECT invocation_id FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.invocation_id); }
   finally { db.close(); }
 }
+function writeProcessPolicy(policyPath: string, identity: ReturnType<typeof readLocalOsIdentity>, target: string,
+  allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false, accountAllowed = false, auditAllowed = false) {
+  return writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
+    revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
+      { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+      ...(accountAllowed ? [{ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+      ...(auditAllowed ? [{ id: 'account-audit', effect: 'allow', actions: ['audit'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+      ...(purgeAllowed ? [{ id: 'purge-content', effect: 'allow', actions: ['purge-content'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+      ...(evidenceAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+    ] : [] }), { mode: 0o600 });
+}
 async function assertAccountSurfaces(project: string, root: string, env: Record<string, string>, ledger: string,
   allowAccount: () => Promise<void>, bodies: readonly string[]): Promise<void> {
   const query = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 }, path = join(root, 'account-query.json');
@@ -248,7 +264,7 @@ async function assertAccountSurfaces(project: string, root: string, env: Record<
   expect(await callSdk(project, env, 'spending', path)).toEqual({ ok: false, code: 'POLICY_DENIED' });
   await allowAccount(); const before = await readFile(ledger), count = bodies.length;
   const result = await callSdk<ProviderSpendAccountInspection>(project, env, 'spending', path);
-  expect(result).toMatchObject({ ok: true, value: { ...query, spendingHistoryIntegrity: 'not-recorded', checkpoint: {
+  expect(result).toMatchObject({ ok: true, value: { ...query, schemaVersion: 2, spendingHistoryIntegrity: 'not-recorded', checkpoint: {
     reservationCount: 3, account: { reservedMinorUnits: 0, settledExactMinorUnits: '0.06', settledMinorUnits: 1, frozen: false },
   } } });
   if (!result.ok) throw new Error('ACCOUNT_INSPECTION_FAILED');
@@ -271,6 +287,37 @@ async function assertAccountSurfaces(project: string, root: string, env: Record<
   await writeFile(wrong, JSON.stringify({ ...query, scopeId: 'foreign' }));
   expect(await callSdk(project, env, 'spending', wrong)).toEqual({ ok: false, code: 'POLICY_DENIED' });
   expect(await readFile(ledger)).toEqual(before); expect(bodies).toHaveLength(count);
+}
+async function assertAuditSurfaces(input: { project: string; root: string; env: Record<string, string>; ledger: string;
+  bodies: string[]; allow(): Promise<void>; writeConfig(maxResponseBytes?: number): Promise<void> }): Promise<void> {
+  const { project, root, env, ledger } = input, queryPath = join(root, 'account-query.json');
+  const inspected = await callSdk<ProviderSpendAccountInspection>(project, env, 'spending', queryPath);
+  if (!inspected.ok || !inspected.value.checkpoint) throw new Error('ACCOUNT_REQUIRED');
+  const command = { schemaVersion: 1, commandId: 'audit-process', scopeId: 'scope', budgetId: 'budget', budgetRevision: 1,
+    expectedCheckpointDigest: inspected.value.checkpoint.digest }, path = join(root, 'audit-command.json');
+  await writeFile(path, JSON.stringify(command));
+  const before = await readFile(ledger), posts = input.bodies.length;
+  expect(await callSdk(project, env, 'audit-spending', path)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+  await input.allow(); await input.writeConfig(1024);
+  const limited = await callMcp(project, env, 'audit_provider_spending', command, false);
+  expect(limited.isError).toBe(true);
+  expect(JSON.stringify(limited)).toContain('MCP_RESPONSE_LIMIT');
+  expect(await readFile(ledger)).toEqual(before);
+  await input.writeConfig();
+  const result = await callSdk<ProviderSpendAuditResult>(project, env, 'audit-spending', path);
+  if (!result.ok) throw new Error(`AUDIT_FAILED:${result.code}`);
+  expect(result.value).toMatchObject({ schemaVersion: 1, replayed: false, receipt: { command,
+    authorization: { ruleId: 'account-audit' }, examinedCheckpoint: inspected.value.checkpoint } });
+  const cliReplay = JSON.parse((await execute(process.execPath, [cli, 'models', 'audit-spending', '--input', path, '--json'],
+    { cwd: project, env, timeout: 10_000 })).stdout);
+  expect(cliReplay).toEqual({ ...result.value, replayed: true });
+  const mcpReplay = await callMcp(project, env, 'audit_provider_spending', command);
+  expect(mcpReplay.isError).not.toBe(true); expect(mcpReplay.structuredContent).toEqual(cliReplay);
+  expect(await callSdk(project, env, 'spending', queryPath)).toMatchObject({ ok: true, value: {
+    schemaVersion: 2, checkpoint: inspected.value.checkpoint, audit: result.value.receipt, spendingHistoryIntegrity: 'consistent',
+  } });
+  expect(input.bodies).toHaveLength(posts);
+  expect(JSON.stringify(result.value)).not.toMatch(/prompt-first|retained-sensitive-usage|completion-/);
 }
 async function assertPurgedContent(input: { project: string; root: string; env: Record<string, string>; ledger: string;
   reference: Record<string, unknown>; bodies: string[]; allow(): Promise<void> }): Promise<void> {
@@ -377,6 +424,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
     storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
+    provider_spend_audit: { schemaVersion: 1, pageSize: 2, maxReservations: 100, timeoutMs: 2000 },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 1_048_576, maxConnections: 8, maxConcurrentRequests: 4,
@@ -391,17 +439,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding });
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
-  const writePolicy = async (allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false, accountAllowed = false) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
-    revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
-      { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
-      ...(accountAllowed ? [{ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
-      ...(purgeAllowed ? [{ id: 'purge-content', effect: 'allow', actions: ['purge-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
-      ...(evidenceAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
-    ] : [] }), { mode: 0o600 });
+  const writePolicy = (...args: [boolean, boolean?, boolean?, boolean?, boolean?]) => writeProcessPolicy(policyPath, identity, target, ...args);
   await writePolicy(true);
   const command = (commandId: string, scopeId = 'scope') => ({ schemaVersion: 1, commandId, scopeId, reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
@@ -474,6 +512,8 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     invocationId: cliSecond.receipt.claim.invocationId, reference });
   expect(inspectSecond.isError).not.toBe(true); expect((inspectSecond.structuredContent as ModelInvocationInspection).invocation).toEqual(cliSecond.receipt);
   await assertAccountSurfaces(project, root, env, ledger, () => writePolicy(true, true, false, true), bodies);
+  await assertAuditSurfaces({ project, root, env, ledger, bodies,
+    allow: () => writePolicy(true, true, false, true, true), writeConfig });
 
   await writePolicy(false); const deniedPath = join(root, 'denied.json'); await writeFile(deniedPath, JSON.stringify(command('denied')), { mode: 0o600 });
   expect(await callSdk(project, env, 'invoke', deniedPath)).toEqual({ ok: false, code: 'POLICY_DENIED' }); expect(bodies).toHaveLength(3);
@@ -485,6 +525,9 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
   expect(large.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { reason: 'response-limit',
     body: { complete: false, byteLength: 512, observedBytes: expect.any(Number) } } });
+  await writePolicy(true, true, false, true);
+  expect(await callSdk(project, env, 'spending', join(root, 'account-query.json')))
+    .toMatchObject({ ok: true, value: { spendingHistoryIntegrity: 'stale', audit: { command: { commandId: 'audit-process' } } } });
   await assertA5RejectedEvidence({ root, project, env, reference, command, bodies, runtime: restartedRuntime,
     setResponse(value) { response = value; }, setContentPolicy: allowed => writePolicy(true, allowed), large });
   await assertRetainedNativeContent(project, root, env, ledger, queryOne, bodies);

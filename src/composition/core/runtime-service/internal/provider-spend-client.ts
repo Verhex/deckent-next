@@ -1,4 +1,4 @@
-import type { ProviderSpendAccountQuery } from '#domain/index.js';
+import type { ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -8,4 +8,10 @@ import { createConfiguredRuntimeClient } from './client.js';
 export function inspectRuntimeProviderSpendAccount(projectRoot: string, query: ProviderSpendAccountQuery,
   options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).inspectProviderSpendAccount(query);
+}
+
+/** Records one bounded account-history audit through the authenticated runtime owner. */
+export function auditRuntimeProviderSpendAccount(projectRoot: string, command: ProviderSpendAuditCommand,
+  options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).auditProviderSpendAccount(command);
 }

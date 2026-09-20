@@ -1,18 +1,18 @@
 import { z } from 'zod';
 import { identitySchema, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
-  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery } from '#domain/index.js';
+  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 9 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 10 as const;
 
 export const runtimeServiceOperationSchema = z.enum(['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
-  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount']);
+  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
-  || operation === 'inspectProviderSpendAccount';
+  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount';
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
 export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
@@ -24,6 +24,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
     }
     try {
       if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
+      else if (value.operation === 'auditProviderSpendAccount') parseProviderSpendAuditCommand(value.input);
       else if (value.operation === 'invokeModel') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
       else if (value.operation === 'purgeModelInvocationContent') parseModelInvocationPurgeCommand(value.input);

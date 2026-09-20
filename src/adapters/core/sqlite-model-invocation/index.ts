@@ -30,3 +30,9 @@ export async function openSqliteModelAllocationIntegrityReader(path: string,
   const implementation = await import('./internal/allocation-integrity.js');
   return implementation.openSqliteModelAllocationIntegrityReader(path, options);
 }
+
+export async function openSqliteProviderSpendAuditStore(path: string, options: SqliteLedgerOptions,
+  migrationMode: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator) {
+  const implementation = await import('./internal/spend-audit-store.js');
+  return implementation.openSqliteProviderSpendAuditStore(path, options, migrationMode, profiles);
+}

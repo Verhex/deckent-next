@@ -699,3 +699,7 @@ PROVIDER-REPORTED/SETTLEMENT REVIEW — Native reported charge joins outcome/con
 PROVIDER-SPEND/ACCOUNT-SNAPSHOT — REVIEW: separate scoped account-inspect authority; read-only exact/reserved/frozen checkpoint via runtime wire9 and shared SDK/CLI/MCP. Query1 pins budget identity/revision. Native HTTPS producer and compiled public readers share one proof; no audit/adjustment mutation. spendingHistoryIntegrity remains not-recorded. Frozen fullverify and independent review required before DONE.
 
 ACCOUNT-SNAPSHOT clarification (Fable2208): no quota/reserved/settled conflation; totals may combine local calculation and provider reports. Source subtotals and held reasons are not supplied and are explicitly disclosed in CLI/MCP and SDK contract. Full breakdown is later checkpoint work; this snapshot does not imply it.
+
+| PROVIDER-SPEND/DURABLE-AUDIT | ACCOUNT-SNAPSHOT; ledger21 | Explicit separately authorized bounded consistency audit, immutable actor/policy/checkpoint receipt, ledger22 migration, runtime10 SDK/CLI/MCP delivery, inspection2 current/stale projection | REVIEW |
+
+Audit limits come from optional versioned provider_spend_audit config; a child cannot expand parent ceilings. No defaults grant audit authority. This slice does not schedule audits, correct settled charges or verify vendor invoices. Current/stale refers to checkpoint identity, not general invocation history. Independent review is required before completion.

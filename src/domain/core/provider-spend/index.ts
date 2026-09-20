@@ -4,4 +4,7 @@ export { parseProviderSpendBudget, parseProviderSpendQuote, parseProviderSpendRe
   providerSpendQuoteSchema, providerSpendReservationDescriptorSchema } from './internal/contract.js';
 export type { ProviderSpendAccountQuery, ProviderSpendBudget, ProviderSpendQuote,
   ProviderSpendReservationDescriptor } from './internal/contract.js';
+export { parseProviderSpendAuditCommand, providerSpendAuditCommandInputSchema,
+  providerSpendAuditCommandSchema } from './internal/audit.js';
+export type { ProviderSpendAuditCommand } from './internal/audit.js';
 export { providerSpendAccountQueryInputSchema } from './internal/contract.js';

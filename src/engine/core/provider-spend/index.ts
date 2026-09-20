@@ -15,3 +15,10 @@ export { providerSpendOutcomeDigest, verifyInvocationSpendReservation } from './
 export { ProviderSpendAccountInspectionApplication, parseProviderSpendAccountInspectionForQuery } from './internal/inspection.js';
 export type { ProviderSpendAccountAuthorizer, ProviderSpendAccountInspection,
   ProviderSpendAccountReader } from './internal/inspection.js';
+export { createProviderSpendAuditReceipt, parseProviderSpendAuditReceipt } from './internal/audit-receipt.js';
+export type { ProviderSpendAuditReceipt, ProviderSpendAuditReceiptInput } from './internal/audit-receipt.js';
+export { ProviderSpendAuditApplication, providerSpendAuditWorkLimitsSchema } from './internal/audit-application.js';
+export { parseProviderSpendAuditResultForCommand } from './internal/audit-result.js';
+export type { ProviderSpendAuditResult } from './internal/audit-result.js';
+export type { ProviderSpendAuditAuthorization, ProviderSpendAuditLimits,
+  ProviderSpendAuditStore } from './internal/audit-application.js';

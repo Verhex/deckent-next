@@ -930,5 +930,6 @@
   "error.PROVIDER_SPEND_INVALID": "The local spending record is invalid. No new spending was admitted.",
   "error.PROVIDER_SPEND_CONFLICT": "The budget or quote conflicts with its recorded identity. Existing reservations were preserved.",
   "error.PROVIDER_SPEND_EXHAUSTED": "The shared scope budget cannot cover this reservation. Reserved or uncertain amounts remain held; this is not a provider invoice.",
-  "error.PROVIDER_SPEND_FROZEN": "The local spending account is frozen after an unresolved overrun. No new reservation was admitted."
+  "error.PROVIDER_SPEND_FROZEN": "The local spending account is frozen after an unresolved overrun. No new reservation was admitted.",
+  "error.PROVIDER_SPEND_RESULT_LIMIT": "The complete provider-spending audit receipt exceeds this surface's configured capacity. No audit receipt was recorded."
 }

@@ -12,7 +12,7 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'model-activation')!.actions).toEqual(['activate', 'deactivate', 'inspect']);
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'provider-spend-account')!.actions).toEqual(['inspect']);
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'provider-spend-account')!.actions).toEqual(['inspect', 'audit']);
 });
 it('catalog metadata cannot be mutated and never grants authority', () => {
   const catalog = getPolicyVocabulary(); expect(Object.isFrozen(catalog.resources)).toBe(true);

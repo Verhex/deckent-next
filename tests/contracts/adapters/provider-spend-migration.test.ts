@@ -49,7 +49,8 @@ async function seedLedger18(file: string) {
   const db = new DatabaseSync(file);
   try {
     db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
-      DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; PRAGMA user_version=18;`);
+      DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
+      DROP TABLE provider_spend_audits; PRAGMA user_version=18;`);
   } finally { db.close(); }
 }
 function historicalHash(prefix: string, value: unknown) {
@@ -134,7 +135,7 @@ async function seedLedger20(file: string) {
     const reservation = { ...withoutMeasurement, schemaVersion: 1 };
     db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=?')
       .run(JSON.stringify(reservation), historicalHash('deckent.provider-spend-reservation.v1', reservation), reservationRow.scope_id, reservationRow.invocation_id);
-    db.exec('PRAGMA user_version=20');
+    db.exec('DROP TABLE provider_spend_audits; PRAGMA user_version=20');
   } finally { db.close(); }
 }
 async function seedLedger19(file: string) {
@@ -144,6 +145,7 @@ async function seedLedger19(file: string) {
   try {
     db.exec(`DROP TABLE model_invocation_spend_reservations;
       DROP TABLE provider_spend_accounts;
+      DROP TABLE provider_spend_audits;
       PRAGMA user_version=19;`);
   } finally { db.close(); }
 }
@@ -169,7 +171,7 @@ it('migrates a genuine ledger18 through allocation19 and spend21 without fabrica
   const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
   const after = inventory(file);
   expect(MODEL_ALLOCATION_LEDGER_VERSION).toBe(19); expect(PROVIDER_SPEND_LEDGER_VERSION).toBe(21);
-  expect(after.version).toBe(21); expect(after.invocations).toEqual(before.invocations); expect(after.controls).toEqual(before.controls);
+  expect(after.version).toBe(CURRENT_LEDGER_VERSION); expect(after.invocations).toEqual(before.invocations); expect(after.controls).toEqual(before.controls);
   expect(after.tables).toEqual([{ name: 'model_invocation_spend_reservations' }, { name: 'provider_spend_accounts' }]);
   expect(after.accounts).toEqual([]); expect(after.reservations).toEqual([]);
   const db = new DatabaseSync(file, { readOnly: true });
@@ -192,7 +194,7 @@ it('migrates a genuine allocation-only ledger19 to spend21 without changing its 
   expect(before.version).toBe(19); expect(before.tables).toEqual([]);
   const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
   const after = inventory(file);
-  expect(after.version).toBe(21); expect(after.invocations).toEqual(before.invocations); expect(after.controls).toEqual(before.controls);
+  expect(after.version).toBe(CURRENT_LEDGER_VERSION); expect(after.invocations).toEqual(before.invocations); expect(after.controls).toEqual(before.controls);
   expect(after.accounts).toEqual([]); expect(after.reservations).toEqual([]);
   const db = new DatabaseSync(file, { readOnly: true });
   try { expect(db.prepare('SELECT * FROM model_invocation_allocation_checkpoints').all()).toEqual(checkpoints); }
@@ -242,7 +244,7 @@ it('validates and translates a genuine ledger20 reservation without inferring a 
   const file = await path(); await seedLedger20(file);
   const before = inventory(file); expect(before.version).toBe(20);
   const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
-  const after = inventory(file); expect(after.version).toBe(21);
+  const after = inventory(file); expect(after.version).toBe(CURRENT_LEDGER_VERSION);
   expect(JSON.parse(String(after.accounts[0]!.record))).toMatchObject({ schemaVersion: 2, settledMinorUnits: 0,
     settledExactMinorUnits: '0', reservedMinorUnits: 4 });
   expect(JSON.parse(String(after.reservations[0]!.record))).toMatchObject({ schemaVersion: 2, measurement: null,
@@ -265,7 +267,7 @@ it.each(['settled-local', 'released-not-sent', 'held-unknown', 'held-overrun'] a
       'held-overrun': { account: { reservedMinorUnits: 4, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: true },
         disposition: { state: 'held', reason: 'overrun', observedMinorUnits: 5 } },
     }[state];
-    expect(after.version).toBe(21);
+    expect(after.version).toBe(CURRENT_LEDGER_VERSION);
     expect(account).toMatchObject({ schemaVersion: 2, ...expected.account });
     expect(reservation).toMatchObject({ schemaVersion: 2, measurement: null, disposition: expected.disposition });
   });
@@ -293,7 +295,7 @@ it('rolls back an earlier translated account when a later account update fails',
   expect(JSON.parse(String(secondAccount!.record))).toMatchObject({ schemaVersion: 1, budget: { scopeId: 'scope-z' } });
   const retry = new DatabaseSync(file); retry.exec('DROP TRIGGER reject_second_account'); retry.close();
   const migrated = await openSqliteModelInvocationStore(file, options, 'allow'); migrated.close();
-  const completed = inventory(file); expect(completed.version).toBe(21);
+  const completed = inventory(file); expect(completed.version).toBe(CURRENT_LEDGER_VERSION);
   expect(completed.accounts.map(row => JSON.parse(String(row.record)).schemaVersion)).toEqual([2, 2]);
 });
 
@@ -326,10 +328,10 @@ it('does not hide a genuine ledger20 monetary reservation from invocation inspec
   expect(await readFile(file)).toEqual(before);
 });
 
-it('creates ledger21 spend metadata empty on a fresh writer', async () => {
+it('creates current spend metadata empty on a fresh writer', async () => {
   const file = await path(); const store = await openSqliteModelInvocationStore(file, options, 'allow'); store.close();
   const state = inventory(file);
-  expect(CURRENT_LEDGER_VERSION).toBe(21); expect(state.version).toBe(21);
+  expect(state.version).toBe(CURRENT_LEDGER_VERSION);
   expect(state.tables).toEqual([{ name: 'model_invocation_spend_reservations' }, { name: 'provider_spend_accounts' }]);
   expect(state.accounts).toEqual([]); expect(state.reservations).toEqual([]);
 });

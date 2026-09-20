@@ -20,6 +20,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_INVOCATION_RESULT_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_RESULT_LIMIT', p, l) }) },
   MODEL_INVOCATION_DELIVERY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_DELIVERY_UNAVAILABLE', p, l) }) },
   PROVIDER_SPEND_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_INVALID', p, l) }) },
+  PROVIDER_SPEND_RESULT_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_RESULT_LIMIT', p, l) }) },
   PROVIDER_SPEND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_UNAVAILABLE', p, l) }) },
   PROVIDER_SPEND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_CONFLICT', p, l) }) },
   PROVIDER_SPEND_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_EXHAUSTED', p, l) }) },

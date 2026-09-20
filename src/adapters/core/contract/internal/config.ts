@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
 import { registerProviderSpendingConfig } from './spending.js';
+import { registerProviderSpendAuditConfig } from './spend-audit.js';
 import { isDeepStrictEqual } from 'node:util';
 import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
 const units = z.enum(['percent', 'requests', 'tokens', 'credits', 'usd']);
@@ -54,6 +55,8 @@ export function registerProviderConfig(): void {
   registerProviderCatalogConfig();
   registerInvocationProfileConfig();
   registerProviderSpendingConfig();
+  registerProviderSpendAuditConfig();
   registered = true;
 }
 export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
+export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';

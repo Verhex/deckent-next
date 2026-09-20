@@ -563,7 +563,7 @@
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
   "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):",
-  "cli.help.models": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <file|-> [--json]\nInvoke, invocation, purge-content, and spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
+  "cli.help.models": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <file|-> [--json]\nInvoke, invocation, purge-content, spending, and audit-spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
   "models.notConfigured": "Model catalog is not configured; availability was not observed.",
   "models.declaredHeader": "Declared model catalog {revision}:",
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native {nativeId} · protocols {protocols}",
@@ -588,6 +588,7 @@
   "models.activation.notice": "Recorded activation only; provider availability and invocation permission are not established.",
   "config.field.provider_invocation_profiles": "Native invocation profiles and explicit request allocations",
   "config.field.provider_spending": "Scope-specific model spending budgets and reservation limits",
+  "config.field.provider_spend_audit": "Optional bounded provider-spending audit page, reservation, and time limits",
   "cli.help.modelsInvocation": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON. Both require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <file|-> [--json] [--lang en|tr]\nPurges active retained native, usage, or raw response content after separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <file|-> [--json] [--lang en|tr]\nRecords a cancellation request by exact invocation command identity. It can prevent dispatch before send permission; after permission it does not prove remote cancellation or completion.",
@@ -639,5 +640,13 @@
   "models.spending.frozenYes": "yes",
   "models.spending.frozenNo": "no",
   "models.spending.historyNotRecorded": "No persisted full-history audit result is recorded for this account snapshot.",
-  "mcp.tool.inspectProviderSpending": "Inspect one exact scoped provider-spending account snapshot. It returns recorded local reservations, including holds but not hold reasons, and exact settlement with its rounded projection. The settled total may combine local calculations and provider-reported charges; source subtotals are not included. It does not verify a provider invoice or a full spending-history audit."
+  "cli.help.modelsAuditSpending": "deckent models audit-spending --input <file|-> [--json] [--lang en|tr]\nRecord a bounded integrity audit for one exact provider-spending checkpoint through the explicitly started local `deckent runtime serve`. Input is schema 1: commandId, scopeId, budgetId, budgetRevision, and expectedCheckpointDigest. It records an immutable audit receipt; it does not correct financial records, verify an invoice, or prove a complete invocation audit.",
+  "models.spending.historyConsistent": "Recorded audit {command} matches this checkpoint snapshot. It does not verify a provider invoice or a complete invocation audit.",
+  "models.spending.historyStale": "Recorded audit {command} examined a different checkpoint. This account snapshot is stale relative to that audit; it does not verify a provider invoice or a complete invocation audit.",
+  "models.spending.auditRecorded": "{replayed}: spending audit {command} recorded for checkpoint {checkpoint}.",
+  "models.spending.auditNew": "Audit recorded",
+  "models.spending.auditReplayed": "Existing audit receipt returned",
+  "models.spending.auditNotice": "This audit receipt records bounded integrity evidence. It does not correct financial records, verify a provider invoice, or prove a complete invocation audit.",
+  "mcp.tool.inspectProviderSpending": "Inspect one exact scoped provider-spending account snapshot. It returns recorded local reservations, including holds but not hold reasons, and exact settlement with its rounded projection. The settled total may combine local calculations and provider-reported charges; source subtotals are not included. It does not verify a provider invoice or a full spending-history audit.",
+  "mcp.tool.auditProviderSpending": "Record one bounded integrity audit for an exact provider-spending checkpoint. It creates or replays an immutable audit receipt; it does not correct financial records, verify a provider invoice, or prove a complete invocation audit."
 }

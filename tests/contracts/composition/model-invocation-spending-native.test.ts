@@ -8,12 +8,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
-import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { auditConfiguredProviderSpendAccount, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import * as adapters from '#adapters/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore,
-  openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, ModelInvocationPurgeApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
+  openSqliteProviderSpendIntegrityReader, openSqliteProviderSpendAuditStore, readLocalOsIdentity } from '#adapters/index.js';
+import { ProviderSpendAuditApplication, ModelActivationApplication, ModelBindingApplication, ModelInvocationPurgeApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [];
@@ -211,7 +211,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
     resource: { kind: 'provider-spend-account', ids: ['budget'] } });
   await writeFile(f.policyPath, JSON.stringify(policy), { mode: 0o600 });
   const accountView = await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env });
-  expect(accountView).toMatchObject({ ...accountQuery, spendingHistoryIntegrity: 'not-recorded', checkpoint: account?.checkpoint });
+  expect(accountView).toMatchObject({ ...accountQuery, schemaVersion: 2, spendingHistoryIntegrity: 'not-recorded', checkpoint: account?.checkpoint });
   expect(JSON.stringify(accountView)).not.toMatch(/private prompt|sensitive-usage-payload|responseContent/);
   await expect(inspectConfiguredProviderSpendAccount(f.project, { ...accountQuery, budgetRevision: 2 }, { env: f.env }))
     .rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
@@ -245,4 +245,73 @@ it('keeps a reported overrun and freezes admission instead of capping or discard
     checkpoint: { account: { settledExactMinorUnits: '0', frozen: true } } });
   await expect(invokeConfiguredModel(f.project, { ...f.command, commandId: 'after-overrun' }, { env: f.env })).rejects.toThrow();
   expect(f.posts).toBe(1);
+});
+
+
+it('audits native-produced reservations across real pages and reopens one immutable audit receipt', async () => {
+  const f = await fixture();
+  f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002 });
+  await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  await invokeConfiguredModel(f.project, { ...f.command, commandId: 'audit-second' }, { env: f.env });
+  const before = await inspectAccount(f); if (!before) throw new Error('ACCOUNT_REQUIRED');
+  let authorizations = 0, pages = 0;
+  const app = new ProviderSpendAuditApplication({ async verify() { return f.principal; } },
+    { async authorize(action, target, principal) {
+      expect(action).toBe('audit'); expect(target).toEqual({ scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 });
+      expect(principal.id).toBe(f.principal.id); authorizations++;
+      return { revision: 'test-audit-policy', ruleId: 'test-account-audit' };
+    } }, () => openSqliteProviderSpendAuditStore(f.ledger, sqlite, 'forbid'), async () => {
+      const reader = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
+      return { readPage: async query => { pages++; return reader.readPage(query); }, close: () => reader.close() };
+    }, { pageSize: 1, maxReservations: 10, timeoutMs: 1000, maxResultBytes: 64_000 });
+  const command = { schemaVersion: 1 as const, commandId: 'audit-native', scopeId: 'scope', budgetId: 'budget',
+    budgetRevision: 1, expectedCheckpointDigest: before.checkpoint.digest };
+  const result = await app.audit(command);
+  expect(result).toMatchObject({ replayed: false, receipt: { command, examinedCheckpoint: {
+    reservationCount: 2, account: { settledExactMinorUnits: '0.04', settledMinorUnits: 1, reservedMinorUnits: 0 },
+  } } });
+  expect([authorizations, pages]).toEqual([2, 2]);
+  expect(await app.audit(command)).toEqual({ ...result, replayed: true });
+  expect([authorizations, pages]).toEqual([3, 2]);
+  const store = await openSqliteProviderSpendAuditStore(f.ledger, sqlite, 'forbid');
+  try { expect(await store.find('scope', command.commandId)).toEqual(result.receipt); } finally { store.close(); }
+  expect(await inspectAccount(f)).toEqual(before); expect(f.posts).toBe(2);
+});
+
+it('uses configured work bounds and distinct live policy to audit native spend, replay and expose staleness', async () => {
+  const f = await fixture(), options = { env: f.env };
+  f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002 });
+  await invokeConfiguredModel(f.project, f.command, options);
+  const query = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
+  const writeAccountPolicy = async (audit: boolean) => {
+    const policy = f.policy(true);
+    policy.grants.push({ ...policy.grants[0]!, id: 'account', actions: audit ? ['inspect', 'audit'] : ['inspect'],
+      resource: { kind: 'provider-spend-account', ids: ['budget'] } });
+    await writeFile(f.policyPath, JSON.stringify(policy), { mode: 0o600 });
+  };
+  await writeAccountPolicy(false);
+  const before = await inspectConfiguredProviderSpendAccount(f.project, query, options);
+  const command = { ...query, commandId: 'configured-audit', expectedCheckpointDigest: before.checkpoint!.digest };
+  await expect(auditConfiguredProviderSpendAccount(f.project, command, 64_000, options))
+    .rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE' });
+  f.config['provider_spend_audit'] = { schemaVersion: 1, pageSize: 1, maxReservations: 10, timeoutMs: 1000 };
+  await writeFile(f.configPath, JSON.stringify(f.config), { mode: 0o600 }); clearConfigCache();
+  const bytes = await readFile(f.ledger);
+  await expect(auditConfiguredProviderSpendAccount(f.project, command, 64_000, options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  await writeAccountPolicy(true);
+  await expect(auditConfiguredProviderSpendAccount(f.project, command, 1, options)).rejects.toMatchObject({ code: 'PROVIDER_SPEND_RESULT_LIMIT' });
+  expect(await readFile(f.ledger)).toEqual(bytes);
+  const result = await auditConfiguredProviderSpendAccount(f.project, command, 64_000, options);
+  expect(result).toMatchObject({ replayed: false, receipt: { actor: { id: f.principal.id }, authorization: { ruleId: 'account' } } });
+  expect(await inspectConfiguredProviderSpendAccount(f.project, query, options))
+    .toMatchObject({ schemaVersion: 2, audit: result.receipt, spendingHistoryIntegrity: 'consistent' });
+  expect(await auditConfiguredProviderSpendAccount(f.project, command, 64_000, options)).toEqual({ ...result, replayed: true });
+  await invokeConfiguredModel(f.project, { ...f.command, commandId: 'after-audit' }, options);
+  expect(await inspectConfiguredProviderSpendAccount(f.project, query, options))
+    .toMatchObject({ audit: result.receipt, spendingHistoryIntegrity: 'stale' });
+  await expect(auditConfiguredProviderSpendAccount(f.project, { ...command, commandId: 'stale-input' }, 64_000, options))
+    .rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
+  await writeAccountPolicy(false);
+  await expect(auditConfiguredProviderSpendAccount(f.project, command, 64_000, options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  expect(f.posts).toBe(2);
 });

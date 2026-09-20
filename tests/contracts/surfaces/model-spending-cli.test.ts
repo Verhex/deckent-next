@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
-import { createProviderSpendAccount, createProviderSpendCheckpoint, type ProviderSpendAccountInspection } from '#engine/index.js';
+import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -18,7 +18,14 @@ async function fixture() {
 function inspection(): ProviderSpendAccountInspection {
   const account = createProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 100 });
   const checkpoint = createProviderSpendCheckpoint({ ...account, reservedMinorUnits: 10, settledExactMinorUnits: '0.02', settledMinorUnits: 1 }, 2, 1);
-  return { ...query, checkpoint, spendingHistoryIntegrity: 'not-recorded' };
+  return { ...query, schemaVersion: 2, checkpoint, audit: null, spendingHistoryIntegrity: 'not-recorded' };
+}
+function auditResult(): ProviderSpendAuditResult {
+  const checkpoint = inspection().checkpoint!;
+  const command = { schemaVersion: 1 as const, commandId: 'audit', ...query, expectedCheckpointDigest: checkpoint.digest };
+  return { schemaVersion: 1, replayed: false, receipt: createProviderSpendAuditReceipt({ command,
+    principal: { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'os-user', scopeIds: ['scope'] },
+    authorization: { revision: 'policy', ruleId: 'audit' }, examinedCheckpoint: checkpoint, startedAtMs: 1, completedAtMs: 2 }) };
 }
 
 it('routes strict account input and truthfully renders held reservations and exact settlement in both locales', async () => {
@@ -46,12 +53,23 @@ it('rejects extended input and explains that a missing account is not zero', asy
   expect(await main(['models', 'spending', '--input', bad], { ...f, inspectProviderSpendAccount: async () => { calls++; return inspection(); } })).toBe(2);
   let output = '';
   expect(await main(['models', 'spending', '--input', absent], { ...f, stdout: { write(value) { output += value; } },
-    inspectProviderSpendAccount: async (_root, input) => ({ ...input, checkpoint: null, spendingHistoryIntegrity: 'not-recorded' }) })).toBe(0);
+    inspectProviderSpendAccount: async (_root, input) => ({ ...input, schemaVersion: 2, checkpoint: null, audit: null, spendingHistoryIntegrity: 'not-recorded' }) })).toBe(0);
   expect(calls).toBe(0); expect(output).toContain('Scope scope, budget budget revision 1'); expect(output).toContain('does not mean zero spend');
 });
 
 it('advertises the spending route from models help', async () => {
   let output = '';
   expect(await main(['models', '--help'], { stdout: { write(value) { output += value; } } })).toBe(0);
-  expect(output).toContain('invoke|invocation|purge-content|spending');
+  expect(output).toContain('invoke|invocation|purge-content|spending|audit-spending');
+});
+
+it('routes a strict audit command and presents its durable receipt without a billing or correction claim', async () => {
+  const f = await fixture(), result = auditResult(), path = join(f.root, 'audit.json'); await writeFile(path, JSON.stringify(result.receipt.command));
+  for (const [language, expected] of [['en', 'spending audit audit recorded for checkpoint 2'], ['tr', 'harcama denetimi audit, kontrol noktası 2 için kaydedildi']] as const) {
+    let output = '';
+    expect(await main(['models', 'audit-spending', '--input', path, '--lang', language], { ...f, stdout: { write(value) { output += value; } },
+      auditProviderSpendAccount: async (_root, command) => { expect(command).toEqual(result.receipt.command); return result; } })).toBe(0);
+    expect(output).toContain(expected); expect(output).toContain(language === 'en' ? 'does not correct financial records' : 'Mali kayıtları düzeltmez');
+    expect(output).toContain(language === 'en' ? 'provider invoice' : 'sağlayıcı faturasını');
+  }
 });

@@ -1,11 +1,11 @@
 import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
-import type { ProviderSpendAccountAuthorizer } from '#engine/core/provider-spend/index.js';
+import type { ProviderSpendAccountAuthorizer, ProviderSpendAuditAuthorization } from '#engine/core/provider-spend/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 
 /** A model-invocation grant never implies access to the shared account of its scope. */
-export class ProviderSpendAccountPolicyAuthorization implements ProviderSpendAccountAuthorizer {
+export class ProviderSpendAccountPolicyAuthorization implements ProviderSpendAccountAuthorizer, ProviderSpendAuditAuthorization {
   constructor(private readonly source: PolicySource) {}
-  async authorize(action: Parameters<ProviderSpendAccountAuthorizer['authorize']>[0],
+  async authorize(action: 'inspect' | 'audit',
     target: Parameters<ProviderSpendAccountAuthorizer['authorize']>[1], principal: VerifiedPrincipal) {
     let decision;
     try {

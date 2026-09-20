@@ -46,5 +46,6 @@ export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationRecei
   ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationContentDescriptor, ModelInvocationResponseContent, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt } from '#domain/index.js';
 export type { ModelInvocationCancellationResult, ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ProviderSpendReservation } from '#engine/index.js';
 export { inspectRuntimeProviderSpendAccount as inspectProviderSpendAccount } from '#composition/index.js';
-export type { ProviderSpendAccountQuery } from '#domain/index.js';
-export type { ProviderSpendAccountInspection } from '#engine/index.js';
+export { auditRuntimeProviderSpendAccount as auditProviderSpendAccount } from '#composition/index.js';
+export type { ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
+export type { ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';

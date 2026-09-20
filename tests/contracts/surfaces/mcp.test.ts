@@ -60,7 +60,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
     const tools = (await client.listTools()).tools;
-    expect(tools.filter(t => !['create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+    expect(tools.filter(t => !['create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'audit_provider_spending'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(tools.find(t => t.name === 'cancel_model_invocation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'purge_model_invocation_content')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'invoke_model')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
@@ -71,6 +71,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     expect(tools.find(t => t.name === 'runtime_service_descriptor')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(tools.find(t => t.name === 'shutdown_runtime_service')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
     expect(tools.find(t => t.name === 'request_run_cancellation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    expect(tools.find(t => t.name === 'audit_provider_spending')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   } finally { await client.close(); await transport.close(); await stopTestRuntimeService(runtime); await rm(root, { recursive: true, force: true }); }
 }, 15000);
 

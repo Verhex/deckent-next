@@ -6,11 +6,12 @@ import { registerProviderConfig, requestLocalRuntime } from '#adapters/index.js'
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
-  providerSpendAccountQueryInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
-  type ModelInvocationQuery, type ProviderSpendAccountQuery } from '#domain/index.js';
+  providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
+  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
-import { parseProviderSpendAccountInspectionForQuery, ProviderSpendError, type ProviderSpendAccountInspection } from '#engine/index.js';
+import { parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
+  type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
 
 export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
@@ -21,6 +22,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   invokeModel(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal): Promise<ModelInvocationResult>;
   inspectModelInvocation(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   inspectProviderSpendAccount(query: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAccountInspection>;
+  auditProviderSpendAccount(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
 }>;
 
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
@@ -32,7 +34,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false);
       const requestId = randomUUID();
       const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
-        || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount'
+        || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
         { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, operation, input, ...capacity }, signal);
@@ -43,7 +45,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
     && operation !== 'invokeModel' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
-    && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount').map(operation =>
+    && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount').map(operation =>
     [operation, (input: unknown) => call(operation, input)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
@@ -84,6 +86,14 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         try { query = providerSpendAccountQueryInputSchema.parse(input); }
         catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
         return parseProviderSpendAccountInspectionForQuery(query, await call('inspectProviderSpendAccount', query, delivery));
+      } catch (error) { throw queryFailure(error); }
+    },
+    async auditProviderSpendAccount(input: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery) {
+      try {
+        let command: ProviderSpendAuditCommand;
+        try { command = providerSpendAuditCommandInputSchema.parse(input); }
+        catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
+        return parseProviderSpendAuditResultForCommand(command, await call('auditProviderSpendAccount', command, delivery));
       } catch (error) { throw queryFailure(error); }
     },
     async describeService() {

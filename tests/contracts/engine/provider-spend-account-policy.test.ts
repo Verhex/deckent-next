@@ -31,3 +31,16 @@ it('does not expose policy backend errors or grant access when policy cannot loa
   const authorization = new ProviderSpendAccountPolicyAuthorization({ async load() { throw new Error('private policy path'); } });
   await expect(authorization.authorize('inspect', target, principal)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE', message: 'POLICY_UNAVAILABLE' });
 });
+
+it('requires a separate audit action and rechecks revocation without changing inspect grants', async () => {
+  let grants = [grant];
+  const authorization = new ProviderSpendAccountPolicyAuthorization({ async load() {
+    return { schemaVersion: 1, revision: 'current-policy', restrictions: [], grants };
+  } });
+  await expect(authorization.authorize('audit', target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [{ ...grant, id: 'audit-rule', actions: ['audit'] }];
+  await expect(authorization.authorize('audit', target, principal)).resolves.toEqual({ revision: 'current-policy', ruleId: 'audit-rule' });
+  await expect(authorization.authorize('inspect', target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [];
+  await expect(authorization.authorize('audit', target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+});
