@@ -34,3 +34,5 @@ export { initializeInstallationLedger, verifyInstallationLedger, InstallationLed
 export { openSqliteModelActivationStore, openSqliteModelActivationReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';
 export * from '#adapters/core/provider-openai-chat/index.js';
+
+export { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js';

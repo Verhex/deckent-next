@@ -74,6 +74,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: nativeTimeoutMs } };
   const config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog,
     provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
+    mcp: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConcurrentCalls: 8 },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -82,6 +83,11 @@ async function fixture(nativeTimeoutMs = 2_000) {
   const setServiceResponseMaxBytes = async (responseMaxBytes: number) => {
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ ...config,
       service: { ...config.service, responseMaxBytes } }), { mode: 0o600 });
+    clearConfigCache();
+  };
+  const setMcpResponseMaxBytes = async (responseMaxBytes: number) => {
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ ...config,
+      mcp: { ...config.mcp, responseMaxBytes } }), { mode: 0o600 });
     clearConfigCache();
   };
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
@@ -105,7 +111,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
   const totalCount = () => { const db = new DatabaseSync(ledger, { readOnly: true });
     try { return Number(db.prepare('SELECT count(*) AS count FROM model_invocations').get()?.count); } finally { db.close(); } };
   return { project, data, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, ledger, reference, command, count, policy,
-    setServiceResponseMaxBytes,
+    setServiceResponseMaxBytes, setMcpResponseMaxBytes,
     totalCount, serviceOptions: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8,
       headerTimeoutMs: 1000, responseTimeoutMs: 1000, acceptRetryDelayMs: 10, acceptRetryLimit: 2 },
     get requests() { return requests; }, holdResponse() { hold = true; return heldObserved(); },
@@ -358,5 +364,63 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
   } finally {
     f.releaseResponse();
     await mcpClient.close().catch(() => undefined); await transport.close().catch(() => undefined);
+  }
+}, 20_000);
+
+it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effect when its full response cannot fit', async () => {
+  await access(mcp).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('mcp-bounded-cancel-held-partial');
+  const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
+  let invocationSettled = false;
+  const invocation = client.invokeModel(command, { maxResultBytes: 60_000 });
+  void invocation.then(() => { invocationSettled = true; }, () => { invocationSettled = true; });
+  await observed;
+  const cancellation = { schemaVersion: 1 as const, commandId: 'mcp-bounded-cancel-command', scopeId: 'scope',
+    targetCommandId: command.commandId, reference: f.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+  await f.setMcpResponseMaxBytes(1_024);
+  const boundedTransport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
+  const boundedClient = new Client({ name: 'runtime-model-invocation-bounded-cancellation-proof', version: '1' });
+  try {
+    await within(boundedClient.connect(boundedTransport), 'MCP_BOUNDED_CANCELLATION_CONNECT_TIMEOUT');
+    const rejected = await within(boundedClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }),
+      'MCP_BOUNDED_CANCELLATION_TIMEOUT');
+    expect(rejected.isError).toBe(true);
+    expect(rejected.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'text',
+      text: expect.stringContaining('MODEL_INVOCATION_RESULT_LIMIT') })]));
+    const audit = new DatabaseSync(f.ledger, { readOnly: true });
+    try {
+      const row = audit.prepare(`SELECT control.record AS control_record,
+        (SELECT count(*) FROM model_invocation_cancellations cancellation
+          WHERE cancellation.scope_id=invocation.scope_id AND cancellation.invocation_id=invocation.invocation_id) AS cancellation_count
+        FROM model_invocations invocation JOIN model_invocation_controls control
+          ON control.scope_id=invocation.scope_id AND control.invocation_id=invocation.invocation_id
+        WHERE invocation.command_id=?`).get(command.commandId) as { control_record: string; cancellation_count: number } | undefined;
+      expect(row).toBeDefined();
+      expect(JSON.parse(row!.control_record)).toMatchObject({ send: { state: 'permitted' }, cancellation: null });
+      expect(row!.cancellation_count).toBe(0);
+    } finally { audit.close(); }
+    expect(invocationSettled).toBe(false);
+  } finally {
+    await boundedClient.close().catch(() => undefined); await boundedTransport.close().catch(() => undefined);
+  }
+
+  await f.setMcpResponseMaxBytes(65_536);
+  const normalTransport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', f.project], env: f.env, stderr: 'pipe' });
+  const normalClient = new Client({ name: 'runtime-model-invocation-normal-cancellation-proof', version: '1' });
+  try {
+    await within(normalClient.connect(normalTransport), 'MCP_NORMAL_CANCELLATION_CONNECT_TIMEOUT');
+    const recorded = await within(normalClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }),
+      'MCP_NORMAL_CANCELLATION_TIMEOUT');
+    expect(recorded.isError).not.toBe(true);
+    expect(recorded.structuredContent).toMatchObject({ replayed: false,
+      receipt: { command: cancellation, disposition: 'requested' } });
+    await within(closed, 'MCP_NORMAL_CANCELLATION_ABORT_NOT_OBSERVED');
+    const settled = await within(invocation, 'MCP_NORMAL_CANCELLATION_ABORT_NOT_SETTLED');
+    expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
+  } finally {
+    f.releaseResponse();
+    await normalClient.close().catch(() => undefined); await normalTransport.close().catch(() => undefined);
   }
 }, 20_000);

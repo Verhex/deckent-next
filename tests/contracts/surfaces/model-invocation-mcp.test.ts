@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/index.js';
 import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationPurgeCommand, ModelInvocationQuery } from '#domain/index.js';
-import type { ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult } from '#engine/index.js';
+import type { ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery } from '#engine/index.js';
 
 const reference = { providerId: 'provider-a', providerVersion: 1, modelId: 'model-a', modelVersion: 1 };
 const query: ModelInvocationQuery = { schemaVersion: 2, scopeId: 'scope-a', invocationId: 'invocation-a', reference };
@@ -21,15 +21,16 @@ const connected: { client: Client; close(): Promise<void> }[] = [];
 afterEach(async () => { await Promise.all(connected.splice(0).map(value => value.close())); });
 
 async function fixture(include = true) {
+  const deliveries: (ModelInvocationDelivery | undefined)[] = [];
   const calls: { invoke: unknown[]; inspect: unknown[]; purge: unknown[]; cancel: unknown[] } = { invoke: [], inspect: [], purge: [], cancel: [] };
   const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; },
     ...(include ? {
-      async invokeModel(input: ModelInvocationCommand) { calls.invoke.push(input); return result; },
-      async inspectModelInvocation(input: ModelInvocationQuery) { calls.inspect.push(input); return inspection; },
-      async purgeModelInvocationContent(input: ModelInvocationPurgeCommand): Promise<ModelInvocationPurgeResult> { calls.purge.push(input); return { replayed: false,
+      async invokeModel(input: ModelInvocationCommand, delivery?: ModelInvocationDelivery) { deliveries.push(delivery); calls.invoke.push(input); return result; },
+      async inspectModelInvocation(input: ModelInvocationQuery, delivery?: ModelInvocationDelivery) { deliveries.push(delivery); calls.inspect.push(input); return inspection; },
+      async purgeModelInvocationContent(input: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult> { deliveries.push(delivery); calls.purge.push(input); return { replayed: false,
         receipt: { schemaVersion: 1, command: input, actor: { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'os-user' },
           authorization: { revision: 'allow', ruleId: 'purge-content' }, purgedAtMs: 1 } }; },
-      async cancelModelInvocation(input: ModelInvocationCancellationCommand): Promise<ModelInvocationCancellationResult> { calls.cancel.push(input); return { replayed: false,
+      async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult> { deliveries.push(delivery); calls.cancel.push(input); return { replayed: false,
         receipt: { schemaVersion: 1, command: input, claim: { scopeId: 'scope-a', commandId: 'command-a', invocationId: 'invocation-a',
           requestDigest: input.expectedRequestDigest, profileDigest: 'b'.repeat(64) }, actor: { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'os-user' },
         authorization: { revision: 'allow', ruleId: 'cancel-invocation' }, requestedAtMs: 1, disposition: 'requested' } }; },
@@ -40,7 +41,7 @@ async function fixture(include = true) {
   const client = new Client({ name: 'model-invocation-mcp-test', version: '1' });
   await client.connect(clientTransport);
   connected.push({ client, async close() { await client.close(); await server.close(); } });
-  return { client, calls };
+  return { client, calls, deliveries };
 }
 
 it('advertises injected native invocation as an explicit open-world mutator and inspection as a strict reader', async () => {
@@ -77,6 +78,8 @@ it('forwards only parsed command and query objects to injected applications', as
   expect(purged.structuredContent).toMatchObject({ replayed: false, receipt: { command: purge, purgedAtMs: 1 } });
   expect(cancelled.structuredContent).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested' } });
   expect(f.calls).toEqual({ invoke: [command], inspect: [query], purge: [purge], cancel: [cancellation] });
+  expect(f.deliveries).toHaveLength(4);
+  for (const delivery of f.deliveries) { expect(delivery?.maxResultBytes).toBeGreaterThan(0); expect(delivery?.maxResultBytes).toBeLessThan(65536 / 3); }
 });
 
 it('rejects malformed or extended invocation input before either application is called', async () => {

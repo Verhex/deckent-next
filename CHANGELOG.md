@@ -382,3 +382,5 @@ PROVIDERS/A8B1: route explicit SDK/CLI/MCP cancellation through the shared runti
 PROVIDERS/A8B2: recover durable model cancellation intent with bounded scoped scanning; retain honest unknown outcomes when no live transport exists.
 
 PROVIDERS/A8B3: expose consistent cancellation identity/state in model inspection and CLI, with real CLI/MCP live-cancellation proofs and one current runtime protocol version.
+
+MCP-ENVELOPE: bound complete MCP messages, preserve correlated overflow errors and reject undeliverable model operations before effects.

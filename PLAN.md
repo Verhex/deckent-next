@@ -675,3 +675,7 @@ PROVIDERS/A8B2 DONE — Fable2144 PASS: read-only scoped cancellation inventory,
 PROVIDERS/A8B3 REVIEW — atomic read-only receipt/control inspection snapshot, sole inspection4/runtime8; CLI EN/TR distinguish prevented/requested/already-terminal with actor and local quota meaning. Actual compiled CLI and stdio MCP cancellation producers exercise held native HTTP, retained partial evidence, replay and unknown quota. Socket tests grouped by admission versus peer/custody responsibility with unchanged150 budget. Full MCP JSON-RPC envelope, remote terminal proof, real providers, Brain and dogfood remain separate open work.
 
 PROVIDERS/A8B3 DONE — Fable2148 PASS: atomic read-only inspection4/control snapshot, single runtime8, real compiled CLI and stdio MCP cancellation producers, EN/TR cancellation and local quota semantics. Full1140/213+24native+18host, arch0/lint0warnings. G-a stale test titles to fix in next slice; MCP full envelope separate.
+
+| MCP-ENVELOPE | P5; PROVIDERS/A8 | Bound full MCP JSON-RPC UTF8/newline and pre-effect model results; actual codec/ID/error tests | REVIEW |
+
+MCP-ENVELOPE DONE — Fable2152 PASS closes C-b/A4-2: final UTF8/newline JSON-RPC transport bound and actual-ID model preflight, legacy and2026 codecs, no-effect oversized requests. Full1153/216+24native+18host, architecture0/lint0warnings. Non-model effects may precede delivery overflow; no rollback claim.

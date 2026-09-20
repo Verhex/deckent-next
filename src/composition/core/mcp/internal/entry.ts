@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { loadConfig, resolveLocale, isMainModule } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import { createBoundedMcpTransport, registerProviderConfig } from '#adapters/index.js';
 import { createMcpServer } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -15,13 +15,14 @@ export async function main(root = process.cwd()) {
   const runtime = createConfiguredRuntimeClient(root);
   return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
-    inspectModelInvocation: query => runtime.inspectModelInvocation(query, { maxResultBytes: config.mcp.responseMaxBytes }),
-    purgeModelInvocationContent: command => runtime.purgeModelInvocationContent(command, { maxResultBytes: config.mcp.responseMaxBytes }),
-    cancelModelInvocation: command => runtime.cancelModelInvocation(command, { maxResultBytes: config.mcp.responseMaxBytes }),
-    invokeModel: command => runtime.invokeModel(command, { maxResultBytes: config.mcp.responseMaxBytes }),
+    inspectModelInvocation: (query, delivery) => runtime.inspectModelInvocation(query, delivery),
+    purgeModelInvocationContent: (command, delivery) => runtime.purgeModelInvocationContent(command, delivery),
+    cancelModelInvocation: (command, delivery) => runtime.cancelModelInvocation(command, delivery),
+    invokeModel: (command, delivery) => runtime.invokeModel(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
-    transport: new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
+    transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
+      { responseMaxBytes: config.mcp.responseMaxBytes }),
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },
   });
 }

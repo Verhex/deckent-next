@@ -1,6 +1,7 @@
+import { completeToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery } from '#domain/index.js';
-import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult } from '#engine/index.js';
+import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -14,10 +15,10 @@ import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/i
 export interface McpApplications {
   inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
-  inspectModelInvocation?(query: ModelInvocationQuery): Promise<ModelInvocationInspection>;
-  invokeModel?(command: ModelInvocationCommand): Promise<ModelInvocationResult>;
-  purgeModelInvocationContent?(command: ModelInvocationPurgeCommand): Promise<ModelInvocationPurgeResult>;
-  cancelModelInvocation?(command: ModelInvocationCancellationCommand): Promise<ModelInvocationCancellationResult>;
+  inspectModelInvocation?(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
+  invokeModel?(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult>;
+  purgeModelInvocationContent?(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
+  cancelModelInvocation?(command: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult>;
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
   createRun?(command: RunAdmission): Promise<unknown>;
@@ -37,7 +38,7 @@ export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: numbe
  * Mutators are advertised only when composition explicitly supplies their application handler. */
 export function createMcpServer(applications: McpApplications, limits: McpLimits, locale: Locale) {
   z.object({ maxConcurrentCalls: z.number().int().positive().safe(), responseMaxBytes: z.number().int().positive().safe() }).strict().parse(limits);
-  const definitions: { readOnly: boolean; destructive: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; invoke(input: unknown): Promise<unknown> }[] = [
+  const definitions: { readOnly: boolean; destructive: boolean; openWorld?: boolean; name: string; description: string; schema: z.ZodTypeAny; modelDelivery?: boolean; invoke(input: unknown, delivery?: ModelInvocationDelivery): Promise<unknown> }[] = [
     { readOnly: true, destructive: false, name: 'inspect_run', description: t('mcp.tool.inspectRun', {}, locale), schema: runQuerySchema,
       invoke: (input: unknown) => applications.inspectRun(runQuerySchema.parse(input)) },
     { readOnly: true, destructive: false, name: 'inspect_inventory', description: t('mcp.tool.inspectInventory', {}, locale), schema: dispatchInventoryInputSchema,
@@ -92,39 +93,41 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     invoke: input => admitActivation.call(applications, modelActivationCommandSchema.parse(input)) });
   const inspectInvocation = applications.inspectModelInvocation;
   if (inspectInvocation) definitions.push({ readOnly: true, destructive: false, name: 'inspect_model_invocation',
-    description: t('mcp.tool.inspectModelInvocation', {}, locale), schema: modelInvocationQuerySchema,
-    invoke: input => inspectInvocation.call(applications, modelInvocationQuerySchema.parse(input)) });
+    description: t('mcp.tool.inspectModelInvocation', {}, locale), schema: modelInvocationQuerySchema, modelDelivery: true,
+    invoke: (input, delivery) => inspectInvocation.call(applications, modelInvocationQuerySchema.parse(input), delivery) });
   const invokeModel = applications.invokeModel;
   if (invokeModel) definitions.push({ readOnly: false, destructive: true, openWorld: true, name: 'invoke_model',
-    description: t('mcp.tool.invokeModel', {}, locale), schema: modelInvocationCommandSchema,
-    invoke: input => invokeModel.call(applications, modelInvocationCommandSchema.parse(input)) });
+    description: t('mcp.tool.invokeModel', {}, locale), schema: modelInvocationCommandSchema, modelDelivery: true,
+    invoke: (input, delivery) => invokeModel.call(applications, modelInvocationCommandSchema.parse(input), delivery) });
   const purgeContent = applications.purgeModelInvocationContent;
   if (purgeContent) definitions.push({ readOnly: false, destructive: true, openWorld: false, name: 'purge_model_invocation_content',
-    description: t('mcp.tool.purgeModelInvocationContent', {}, locale), schema: modelInvocationPurgeCommandSchema,
-    invoke: input => purgeContent.call(applications, modelInvocationPurgeCommandSchema.parse(input)) });
+    description: t('mcp.tool.purgeModelInvocationContent', {}, locale), schema: modelInvocationPurgeCommandSchema, modelDelivery: true,
+    invoke: (input, delivery) => purgeContent.call(applications, modelInvocationPurgeCommandSchema.parse(input), delivery) });
   const cancelInvocation = applications.cancelModelInvocation;
   if (cancelInvocation) definitions.push({ readOnly: false, destructive: true, openWorld: false, name: 'cancel_model_invocation',
-    description: t('mcp.tool.cancelModelInvocation', {}, locale), schema: modelInvocationCancellationCommandSchema,
-    invoke: input => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input)) });
+    description: t('mcp.tool.cancelModelInvocation', {}, locale), schema: modelInvocationCancellationCommandSchema, modelDelivery: true,
+    invoke: (input, delivery) => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input), delivery) });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
-  const failure = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
-  const invocationLimit = (code: string): CallToolResult => ({ isError: true, content: [{ type: 'text',
+  const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
+  const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
   server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
     // MCP requires an object root even when a native command is an object-only discriminated union.
     inputSchema: { ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' } as Tool['inputSchema'],
     annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: true, openWorldHint: tool.openWorld ?? false },
   })) }));
-  server.setRequestHandler('tools/call', async request => {
+  server.setRequestHandler('tools/call', async (request, context) => {
     const tool = definitions.find(value => value.name === request.params.name);
     if (!tool) return failure('MCP_TOOL_UNKNOWN');
     if (active >= limits.maxConcurrentCalls) return failure('MCP_BUSY');
     active++;
     try {
-      const value = await tool.invoke(request.params.arguments ?? {}); const encoded = JSON.stringify(value);
-      if (Buffer.byteLength(encoded, 'utf8') > limits.responseMaxBytes) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
+      const delivery = tool.modelDelivery ? modelToolDelivery(context.mcpReq.id, limits.responseMaxBytes) : undefined;
+      const value = await tool.invoke(request.params.arguments ?? {}, delivery); const encoded = JSON.stringify(value);
+      const result = completeToolResult({ content: [{ type: 'text', text: encoded }], structuredContent: JSON.parse(encoded) as Record<string, unknown> });
+      if (!toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes)) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
         ? invocationLimit('MCP_RESPONSE_LIMIT') : failure('MCP_RESPONSE_LIMIT');
-      return { content: [{ type: 'text', text: encoded }], structuredContent: JSON.parse(encoded) as Record<string, unknown> };
+      return result;
     } catch (error) {
       if (error instanceof DeckentError && error.code === 'MODEL_INVOCATION_RESULT_LIMIT') return invocationLimit(error.code);
       return failure(error instanceof DeckentError ? error.code : error instanceof z.ZodError ? 'MCP_INPUT_INVALID' : 'MCP_TOOL_FAILED');

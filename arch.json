@@ -356,6 +356,7 @@
     "src/composition/core/mcp": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/adapters/core/mcp-transport",
         "src/composition/core/model-activation",
         "src/composition/core/provider-catalog",
         "src/composition/core/runtime-service",
@@ -989,6 +990,10 @@
         "src/platform/core/config"
       ],
       "plan": "PROVIDERS/A3B"
+    },
+    "src/adapters/core/mcp-transport": {
+      "dependencies": [],
+      "plan": "MCP-ENVELOPE"
     }
   },
   "composition": {

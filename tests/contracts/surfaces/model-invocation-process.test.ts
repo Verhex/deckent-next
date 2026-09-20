@@ -78,16 +78,18 @@ async function callSdk<T>(project: string, env: Record<string, string>, operatio
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
   return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
 }
-async function callMcp(project: string, env: Record<string, string>, name: string, args: Record<string, unknown>) {
+async function callMcp(project: string, env: Record<string, string>, name: string, args: Record<string, unknown>, inspectTools = true) {
   const transport = new StdioClientTransport({ command: process.execPath, args: [mcp, '--project', project], env, stderr: 'pipe' });
   const diagnostics: Buffer[] = []; transport.stderr?.on('data', chunk => diagnostics.push(Buffer.from(chunk)));
   const client = new Client({ name: 'model-invocation-process', version: '1' });
   try {
     await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT');
+    if (inspectTools) {
     const tool = (await bounded(client.listTools(), 'MCP_LIST_TIMEOUT')).tools.find(value => value.name === name);
     expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation'
       ? { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
       : { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: name === 'invoke_model' });
+    }
     return await bounded(client.callTool({ name, arguments: args }), `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
   } finally {
     await bounded(client.close(), `MCP_CLOSE_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
@@ -377,24 +379,28 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     contentStatus: 'retained', response: { native: { model: 'native-model' } } }); expect(bodies).toHaveLength(1);
 
   const capCommand = command('mcp-result-cap'); const capPath = join(root, 'mcp-result-cap.json');
-  await writeFile(capPath, JSON.stringify(capCommand), { mode: 0o600 }); await writeConfig(1024);
-  const rejectedBeforeClaim = await callMcp(project, env, 'invoke_model', capCommand);
+  await writeFile(capPath, JSON.stringify(capCommand), { mode: 0o600 });
+  // The inner result fits this limit; duplicated text/structured JSON-RPC does not.
+  const innerBytes = Buffer.byteLength(JSON.stringify(replay.structuredContent), 'utf8'), outerCap = innerBytes + 16;
+  expect(Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: 1, result: replay }) + '\n', 'utf8')).toBeGreaterThan(outerCap);
+  await writeConfig(outerCap);
+  const rejectedBeforeClaim = await callMcp(project, env, 'invoke_model', capCommand, false);
   expect(rejectedBeforeClaim.isError).toBe(true);
   expect(JSON.parse((rejectedBeforeClaim.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
     code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
   expect(invocationCount(capCommand.commandId)).toBe(0); expect(bodies).toHaveLength(1);
   await writeConfig();
-  const capAccepted = await callMcp(project, env, 'invoke_model', capCommand);
+  const capAccepted = await callMcp(project, env, 'invoke_model', capCommand, false);
   expect(capAccepted.isError).not.toBe(true);
   expect(capAccepted.structuredContent).toMatchObject({ replayed: false }); expect(bodies).toHaveLength(2);
   const capReceipt = (capAccepted.structuredContent as ModelInvocationResult).receipt;
   await writeConfig(1024);
-  const cappedReplay = await callMcp(project, env, 'invoke_model', capCommand);
+  const cappedReplay = await callMcp(project, env, 'invoke_model', capCommand, false);
   expect(cappedReplay.isError).toBe(true);
   expect(JSON.parse((cappedReplay.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
     code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
   const cappedInspection = await callMcp(project, env, 'inspect_model_invocation', { schemaVersion: 2, scopeId: 'scope',
-    invocationId: capReceipt.claim.invocationId, reference });
+    invocationId: capReceipt.claim.invocationId, reference }, false);
   expect(cappedInspection.isError).toBe(true);
   expect(JSON.parse((cappedInspection.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
     code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
