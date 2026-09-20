@@ -1,4 +1,3 @@
-import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefinition, encodeModelInvocationProfile, encodeModelInvocationRequest,
@@ -59,19 +58,22 @@ export function verifyModelInvocationReceipt(input: unknown): ModelInvocationRec
     if (modelInvocationProfileDigest(receipt.profile) !== receipt.profileDigest) throw new Error('PROFILE');
     const definitionDigest = createHash('sha256').update(encodeModelBindingDefinition(receipt.definition), 'utf8').digest('hex');
     if (definitionDigest !== receipt.request.expectedBinding.digest) throw new Error('BINDING');
-    if (receipt.outcome?.state === 'responded'
-      && Buffer.byteLength(JSON.stringify(receipt.outcome.response.native), 'utf8') > receipt.profile.limits.responseMaxBytes) {
-      throw new Error('RESPONSE_LIMIT');
-    }
-    if (receipt.outcome && receipt.outcome.state !== 'responded' && receipt.outcome.evidence) {
-      verifyModelInvocationResponseEvidence(receipt.outcome.evidence, receipt.profile);
+    const outcome = receipt.outcome;
+    if (outcome && outcome.state !== 'responded' && outcome.evidence) {
+      const summary = outcome.evidence, descriptor = outcome.content;
+      if (!descriptor || summary.adapter.id !== receipt.profile.adapter.id
+        || summary.adapter.version !== receipt.profile.adapter.version
+        || summary.body.byteLength > receipt.profile.limits.responseMaxBytes
+        || summary.body.digest !== descriptor.digest || summary.body.byteLength !== descriptor.byteLength) {
+        throw new Error('RESPONSE_CONTENT');
+      }
     }
     return receipt;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
 /** One receipt shape for pre-effect delivery admission and durable claim writers. */
 export function createModelInvocationClaimReceipt(admission: ModelInvocationAdmission): ModelInvocationReceipt {
-  return verifyModelInvocationReceipt({ schemaVersion: 2,
+  return verifyModelInvocationReceipt({ schemaVersion: 3,
     request: modelInvocationRequestEvidence(admission.command, admission.requestDigest), actor: admission.actor,
     authorization: admission.authorization, definition: admission.definition, activationRevision: admission.activation.revision,
     profile: admission.profile, profileDigest: admission.profileDigest,

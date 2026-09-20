@@ -1,19 +1,21 @@
-import { projectModelInvocationReceipt } from './projection.js';
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
   parseModelInvocationNativeResult, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
-  type ModelInvocationReceiptView, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
+  type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
+  type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelInvocationAdmission,
-  sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './evidence.js';
+  sameModelInvocationRequest, createModelInvocationClaimReceipt } from './evidence.js';
 import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
+import { createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
+  verifyModelInvocationRecord } from './content.js';
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
-  type ModelInvocationStore } from './port.js';
+  type ModelInvocationRecord, type ModelInvocationStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
-  authorize(action: 'invoke' | 'inspect' | 'inspect-evidence', target: { readonly scopeId: string; readonly reference: ModelReference },
+  authorize(action: 'invoke' | 'inspect' | 'inspect-content', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }
 export interface ModelInvocationProfileSource {
@@ -29,15 +31,17 @@ export interface ModelInvocationNativePort {
 }
 export interface ModelInvocationNativeRegistry { resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null }
 export interface ModelInvocationRuntime { invocationId(): string; now(): number }
-export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceiptView }
+export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceipt;
+  readonly response: ModelInvocationNativeResponse | null; readonly contentStatus: 'retained' | 'not-captured' }
 
 function exactReference(left: ModelReference, right: ModelReference): boolean { return JSON.stringify(left) === JSON.stringify(right); }
 function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<typeof parseModelInvocationCommand>,
   requestDigest: string, actor: Parameters<typeof sameModelInvocationRequest>[3], admission?: ModelInvocationAdmission): ModelInvocationClaimResult {
-  if (typeof result.replayed !== 'boolean' || !sameModelInvocationRequest(result.receipt, command, requestDigest, actor)) {
+  const record = verifyModelInvocationRecord(result.record);
+  if (typeof result.replayed !== 'boolean' || !sameModelInvocationRequest(record.receipt, command, requestDigest, actor)) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
-  const receipt = verifyModelInvocationReceipt(result.receipt);
+  const receipt = record.receipt;
   if (!result.replayed && receipt.outcome !== null) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
@@ -49,7 +53,13 @@ function checkedResult(result: ModelInvocationClaimResult, command: ReturnType<t
     || JSON.stringify(receipt.definition) !== JSON.stringify(admission.definition))) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
-  return Object.freeze({ replayed: result.replayed, receipt });
+  return Object.freeze({ replayed: result.replayed, record });
+}
+function publicResult(replayed: boolean, recordInput: ModelInvocationRecord): ModelInvocationResult {
+  const record = verifyModelInvocationRecord(recordInput), content = record.content;
+  return Object.freeze({ replayed, receipt: record.receipt,
+    response: content?.kind === 'native-response' ? content.response : null,
+    contentStatus: content === null ? 'not-captured' : 'retained' });
 }
 
 export class ModelInvocationApplication {
@@ -70,11 +80,10 @@ export class ModelInvocationApplication {
     try {
       const prior = await store.loadReceipt(command.scopeId, command.commandId);
       if (prior) {
-        if (!sameModelInvocationRequest(prior, command, requestDigest, actor)) {
+        if (!sameModelInvocationRequest(prior.receipt, command, requestDigest, actor)) {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         }
-        const receipt = verifyModelInvocationReceipt(prior);
-        return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt: projectModelInvocationReceipt(receipt) }), delivery);
+        return checkInvocationResultDelivery(publicResult(true, prior), delivery);
       }
       const binding = await this.bindings.inspect(command.reference);
       if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
@@ -105,11 +114,12 @@ export class ModelInvocationApplication {
         definition: currentBinding.definition, activation, profile: currentProfile, profileDigest: modelInvocationProfileDigest(currentProfile),
         invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now() });
       const responseBound = delivery ? native.responseBytesUpperBound?.(prepared) : undefined;
-      const claimReceipt = createModelInvocationClaimReceipt(admission);
-      assertInvocationEvidenceStorageFit(claimReceipt);
-      if (delivery) assertInvocationDeliveryFit(claimReceipt, responseBound, delivery);
+      const prospectiveReceipt = createModelInvocationClaimReceipt(admission);
+      assertInvocationEvidenceStorageFit(prospectiveReceipt);
+      if (delivery) assertInvocationDeliveryFit(prospectiveReceipt, responseBound, delivery);
       const claimResult = checkedResult(await store.claim(admission), command, requestDigest, actor, admission);
-      if (claimResult.replayed) return checkInvocationResultDelivery(Object.freeze({ replayed: true, receipt: projectModelInvocationReceipt(claimResult.receipt) }), delivery);
+      if (claimResult.replayed) return checkInvocationResultDelivery(publicResult(true, claimResult.record), delivery);
+      const claimReceipt = claimResult.record.receipt;
       let response;
       try {
         response = parseModelInvocationNativeResult(await native.send(prepared, signal));
@@ -119,30 +129,28 @@ export class ModelInvocationApplication {
         }
       } catch {
         try {
-          const receipt = verifyModelInvocationReceipt(await store.recordUnknown(claimResult.receipt.claim, 'transport-error', this.runtime.now()));
-          if (receipt.outcome?.state !== 'unknown' || JSON.stringify(receipt.claim) !== JSON.stringify(claimResult.receipt.claim)
-            || JSON.stringify({ ...receipt, outcome: null }) !== JSON.stringify(claimResult.receipt)) {
+          const observedAtMs = this.runtime.now();
+          const record = verifyModelInvocationRecord(await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs));
+          if (!isDeepStrictEqual(record, createModelInvocationUnknownRecord(claimReceipt, observedAtMs))) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
           }
-          return checkInvocationResultDelivery(Object.freeze({ replayed: false, receipt: projectModelInvocationReceipt(receipt) }), delivery);
+          return checkInvocationResultDelivery(publicResult(false, record), delivery);
         } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
       }
       try {
         const observedAtMs = this.runtime.now();
-        const receipt = verifyModelInvocationReceipt('kind' in response
+        const record = verifyModelInvocationRecord('kind' in response
           ? response.evidence.body.complete
-            ? await store.recordRejected(claimResult.receipt.claim, response.evidence, observedAtMs)
-            : await store.recordUnknown(claimResult.receipt.claim, 'transport-error', observedAtMs, response.evidence)
-          : await store.recordResponse(claimResult.receipt.claim, response, observedAtMs));
+            ? await store.recordRejected(claimReceipt.claim, response.evidence, observedAtMs)
+            : await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, response.evidence)
+          : await store.recordResponse(claimReceipt.claim, response, observedAtMs));
         const expected = 'kind' in response
-          ? response.evidence.body.complete
-            ? { schemaVersion: 2, state: 'rejected', evidence: response.evidence, observedAtMs }
-            : { schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: response.evidence, observedAtMs }
-          : { schemaVersion: 2, state: 'responded', response, observedAtMs };
-        if (JSON.stringify(receipt.outcome) !== JSON.stringify(expected) || JSON.stringify(receipt.claim) !== JSON.stringify(claimResult.receipt.claim)
-          || JSON.stringify({ ...receipt, outcome: null }) !== JSON.stringify(claimResult.receipt)) throw new Error('CORRUPT');
-        return checkInvocationResultDelivery(Object.freeze({ replayed: false, receipt: projectModelInvocationReceipt(receipt) }), delivery);
+          ? createModelInvocationEvidenceRecord(claimReceipt, response.evidence, observedAtMs)
+          : createModelInvocationResponseRecord(claimReceipt, response, observedAtMs);
+        if (!isDeepStrictEqual(record, expected)) throw new Error('CORRUPT');
+        return checkInvocationResultDelivery(publicResult(false, record), delivery);
       } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_OUTCOME_UNKNOWN'); }
     } finally { store.close(); }
   }
 }
+import { isDeepStrictEqual } from 'node:util';

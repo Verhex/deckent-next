@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationRequestEvidence, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
 import { ModelInvocationApplication, ModelInvocationInspectionApplication, modelInvocationProfileDigest,
-  summarizeModelInvocationResponse, createModelInvocationResponseEvidence, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
-  type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
+  createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
+  createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
+  type ModelInvocationRecord, type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
 
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'p', version: 1,
@@ -23,14 +24,14 @@ const authorization = { revision: 'policy', ruleId: 'invoke' };
 
 function receipt(input: ModelInvocationAdmission, outcome: ModelInvocationReceipt['outcome'] = null): ModelInvocationReceipt {
   const request = modelInvocationRequestEvidence(input.command, input.requestDigest);
-  return { schemaVersion: 2, request, actor: input.actor, authorization: input.authorization, definition: input.definition,
+  return { schemaVersion: 3, request, actor: input.actor, authorization: input.authorization, definition: input.definition,
     activationRevision: input.activation.revision, profile: input.profile, profileDigest: input.profileDigest,
     claim: { scopeId: input.command.scopeId, commandId: input.command.commandId, invocationId: input.invocationId,
       requestDigest: input.requestDigest, profileDigest: input.profileDigest }, claimedAtMs: input.claimedAtMs, outcome };
 }
 function fixture(options: { nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
-  denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint } = {}) {
-  let stored: ModelInvocationReceipt | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
+  substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint } = {}) {
+  let stored: ModelInvocationRecord | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
   if (options.profilePadding) selectedProfile = { ...selectedProfile, adapter: { ...selectedProfile.adapter,
     definition: { padding: Array.from({ length: options.profilePadding }, () => null) } } };
   let waitingLoads = 0, releaseLoads: (() => void) | undefined;
@@ -40,12 +41,16 @@ function fixture(options: { nativeResult?: ModelInvocationNativeResult; profileP
     async loadReceipt() { const found = stored;
       if (options.concurrentBarrier && found === null && ++waitingLoads <= 2) { if (waitingLoads === 2) releaseLoads?.(); await loadBarrier; }
       return found; }, async loadInvocation() { return stored; },
-    async claim(input) { calls.claims++; if (stored) return { replayed: true, receipt: stored };
-      stored = receipt(input); return { replayed: false, receipt: stored }; },
+    async claim(input) { calls.claims++; if (stored) return { replayed: true, record: stored };
+      stored = { receipt: receipt(input), content: null }; return { replayed: false, record: stored }; },
     async recordResponse(_claim, response, observedAtMs) { if (options.responseWriteError) throw new Error('SQL');
-      stored = { ...stored!, outcome: { schemaVersion: 2, state: 'responded', response, observedAtMs } }; return stored; },
-    async recordUnknown(_claim, reason, observedAtMs, evidence = null) { stored = { ...stored!, outcome: { schemaVersion: 2, state: 'unknown', reason, evidence, observedAtMs } }; return stored; },
-    async recordRejected(_claim, evidence, observedAtMs) { if (options.responseWriteError) throw new Error('SQL'); stored = { ...stored!, outcome: { schemaVersion: 2, state: 'rejected', evidence, observedAtMs } }; return stored; },
+      const base = stored!.receipt; stored = createModelInvocationResponseRecord(base,
+        options.substituteOutcome ? { ...response, native: { substituted: true } } : response, observedAtMs); return stored; },
+    async recordUnknown(_claim, _reason, observedAtMs, evidence = null) { stored = evidence
+      ? createModelInvocationEvidenceRecord(stored!.receipt, evidence, observedAtMs)
+      : createModelInvocationUnknownRecord(stored!.receipt, observedAtMs); return stored; },
+    async recordRejected(_claim, evidence, observedAtMs) { if (options.responseWriteError) throw new Error('SQL');
+      stored = createModelInvocationEvidenceRecord(stored!.receipt, evidence, observedAtMs); return stored; },
     close() { calls.closes++; },
   };
   const app = new ModelInvocationApplication({ async verify() { return principal; } },
@@ -75,9 +80,10 @@ describe('model invocation application', () => {
         Buffer.from('{malformed useful response'), complete);
       const f = fixture({ nativeResult: { kind: 'rejected', evidence }, responseBound: 100n });
       const result = await f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 });
-      expect(result.receipt.outcome).toMatchObject({ schemaVersion: 2, state: complete ? 'rejected' : 'unknown', evidence: summarizeModelInvocationResponse(evidence) });
+      expect(result.receipt.outcome).toMatchObject({ schemaVersion: 3, state: complete ? 'rejected' : 'unknown',
+        evidence: { body: { digest: evidence.body.digest, byteLength: evidence.body.byteLength } } });
       expect(JSON.stringify(result)).not.toContain(evidence.body.data);
-      expect(f.stored?.outcome).toMatchObject({ evidence });
+      expect(f.stored?.content).toMatchObject({ kind: 'response-body', data: evidence.body.data });
       expect(await f.app.invoke(command)).toEqual({ ...result, replayed: true });
       expect(f.calls.sends).toBe(1);
     }
@@ -86,8 +92,14 @@ describe('model invocation application', () => {
     const evidence = createModelInvocationResponseEvidence(profile.adapter, 'http-status', 429, Buffer.from('limited'), true);
     const f = fixture({ nativeResult: { kind: 'rejected', evidence }, responseWriteError: true });
     await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_OUTCOME_UNKNOWN' });
-    expect(f.stored?.outcome).toBeNull(); expect(f.calls.sends).toBe(1);
+    expect(f.stored?.receipt.outcome).toBeNull(); expect(f.calls.sends).toBe(1);
     expect((await f.app.invoke(command)).replayed).toBe(true); expect(f.calls.sends).toBe(1);
+  });
+  it('rejects a store-substituted settled response after the native effect', async () => {
+    const f = fixture({ substituteOutcome: true });
+    await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_OUTCOME_UNKNOWN' });
+    expect(f.calls).toMatchObject({ claims: 1, sends: 1 });
+    expect(f.stored?.content).toMatchObject({ kind: 'native-response', response: { native: { substituted: true } } });
   });
 
   it('rejects unsupported and insufficient delivery before any durable claim or native effect', async () => {
@@ -117,17 +129,20 @@ describe('model invocation application', () => {
   });
 
   it('accepts the exact proven preclaim capacity and rejects one byte less without effects', async () => {
-    const probe = await fixture().app.invoke(command);
-    const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...probe.receipt,
-      outcome: { schemaVersion: 2, state: 'responded', response: null, observedAtMs: Number.MAX_SAFE_INTEGER } } }), 'utf8') - 4 + 100;
-    const unknown = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...probe.receipt,
-      outcome: { schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: null, observedAtMs: Number.MAX_SAFE_INTEGER } } }), 'utf8');
-    const evidence = { schemaVersion: 1, adapter: { id: profile.adapter.id, version: profile.adapter.version },
-      reason: 'invalid-response', httpStatus: null, body: { encoding: 'base64', data: Buffer.alloc(100).toString('base64'),
-        byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER, complete: false, digest: 'f'.repeat(64) } };
-    const partial = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...probe.receipt,
-      outcome: { schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence, observedAtMs: Number.MAX_SAFE_INTEGER } } }), 'utf8');
-    const required = Math.max(responded, unknown, partial), small = fixture({ responseBound: 100n });
+    const probe = await fixture().app.invoke(command), receipt = { ...probe.receipt, outcome: null };
+    const descriptor = { schemaVersion: 1, kind: 'native-response', encoding: 'canonical-json', digest: 'f'.repeat(64),
+      byteLength: Number.MAX_SAFE_INTEGER };
+    const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
+      state: 'responded', content: descriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null,
+      contentStatus: 'retained' }), 'utf8') - 4 + 100;
+    const evidenceDescriptor = { ...descriptor, kind: 'response-body', encoding: 'base64' };
+    const summary = { schemaVersion: 1, adapter: profile.adapter, reason: 'response-limit', httpStatus: null,
+      body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
+        complete: false, digest: 'f'.repeat(64) } };
+    const partial = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
+      state: 'unknown', reason: 'transport-error', evidence: summary, content: evidenceDescriptor,
+      observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained' }), 'utf8');
+    const required = Math.max(responded, partial), small = fixture({ responseBound: 100n });
     await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: required - 1 }))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
     expect(small.calls).toMatchObject({ claims: 0, sends: 0 });
@@ -152,7 +167,8 @@ describe('model invocation application', () => {
     const historical = { ...first.receipt, profile: historicalProfile, profileDigest: digest,
       claim: { ...first.receipt.claim, profileDigest: digest } };
     f.store.loadReceipt = async () => null;
-    f.store.claim = async () => ({ replayed: true, receipt: historical });
+    f.store.claim = async () => ({ replayed: true, record: { receipt: historical, content: first.response ? {
+      schemaVersion: 1, kind: 'native-response', descriptor: historical.outcome!.content, response: first.response } : null } });
     await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 }))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
     expect(f.calls.sends).toBe(1);
@@ -163,7 +179,7 @@ describe('model invocation application', () => {
     const f = fixture(), first = await f.app.invoke(command);
     expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded' } } });
     expect(JSON.stringify(first)).not.toContain('private'); expect(f.calls).toMatchObject({ claims: 1, sends: 1, bindings: 2, profiles: 2 });
-    const replay = await f.app.invoke(command); expect(replay).toEqual({ replayed: true, receipt: first.receipt });
+    const replay = await f.app.invoke(command); expect(replay).toEqual({ ...first, replayed: true });
     expect(f.calls).toMatchObject({ claims: 1, sends: 1, bindings: 2, profiles: 2 });
   });
 
@@ -195,7 +211,7 @@ describe('model invocation application', () => {
   it('reports honest outcome uncertainty when response persistence fails after a send', async () => {
     const f = fixture({ responseWriteError: true });
     await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_OUTCOME_UNKNOWN' });
-    expect(f.calls).toMatchObject({ claims: 1, sends: 1 }); expect(f.stored?.outcome).toBeNull();
+    expect(f.calls).toMatchObject({ claims: 1, sends: 1 }); expect(f.stored?.receipt.outcome).toBeNull();
   });
 
   it('uses a distinct stable invocation policy target and inspects only exact stored identity after fresh policy', async () => {
@@ -203,7 +219,7 @@ describe('model invocation application', () => {
     const f = fixture(); const invoked = await f.app.invoke(command); let authorized = 0;
     const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
       { async authorize(action) { expect(action).toBe('inspect'); authorized++; return authorization; } }, async () => f.store);
-    expect((await inspect.inspect({ schemaVersion: 1, scopeId: 'scope', invocationId: 'invocation-1', reference })).invocation)
+    expect((await inspect.inspect({ schemaVersion: 2, scopeId: 'scope', invocationId: 'invocation-1', reference })).invocation)
       .toEqual(invoked.receipt); expect(authorized).toBe(1);
     expect(modelInvocationProfileDigest(profile)).toMatch(/^[a-f0-9]{64}$/);
     expect(modelInvocationRequestDigest(command)).toMatch(/^[a-f0-9]{64}$/);
@@ -218,24 +234,24 @@ describe('model invocation private evidence access', () => {
     const invoked = await f.app.invoke(command); let rawAllowed = false, reads = 0;
     const actions: string[] = [];
     const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
-      { async authorize(action) { actions.push(action); if (action === 'inspect-evidence' && !rawAllowed) throw new Error('RAW_DENIED'); return authorization; } },
+      { async authorize(action) { actions.push(action); if (action === 'inspect-content' && !rawAllowed) throw new Error('RAW_DENIED'); return authorization; } },
       async () => { reads++; return f.store; });
-    const query = { schemaVersion: 1 as const, scopeId: 'scope', invocationId: 'invocation-1', reference };
+    const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: 'invocation-1', reference };
     const ordinary = await inspect.inspect(query);
     expect(ordinary.invocation).toEqual(invoked.receipt);
-    expect(ordinary).not.toHaveProperty('responseEvidence');
+    expect(ordinary).not.toHaveProperty('responseContent');
     expect(JSON.stringify(ordinary)).not.toContain(evidence.body.data);
-    expect(f.stored?.outcome).toMatchObject({ evidence });
-    await expect(inspect.inspect({ ...query, includeResponseEvidence: true })).rejects.toThrow('RAW_DENIED');
-    expect(reads).toBe(1); expect(actions).toEqual(['inspect', 'inspect', 'inspect-evidence']);
+    expect(f.stored?.content).toMatchObject({ data: evidence.body.data });
+    await expect(inspect.inspect({ ...query, includeResponseContent: true })).rejects.toThrow('RAW_DENIED');
+    expect(reads).toBe(1); expect(actions).toEqual(['inspect', 'inspect', 'inspect-content']);
     rawAllowed = true;
-    const explicit = await inspect.inspect({ ...query, includeResponseEvidence: true });
-    expect(explicit.responseEvidence).toEqual(evidence);
+    const explicit = await inspect.inspect({ ...query, includeResponseContent: true });
+    expect(explicit.responseContent).toEqual(f.stored?.content);
     expect(explicit.invocation).toEqual(ordinary.invocation);
     rawAllowed = false;
-    await expect(inspect.inspect({ ...query, includeResponseEvidence: true })).rejects.toThrow('RAW_DENIED');
+    await expect(inspect.inspect({ ...query, includeResponseContent: true })).rejects.toThrow('RAW_DENIED');
     expect(reads).toBe(2); expect(f.calls.sends).toBe(1);
-    expect((await inspect.inspect({ ...query, includeResponseEvidence: false }))).not.toHaveProperty('responseEvidence');
+    expect((await inspect.inspect({ ...query, includeResponseContent: false }))).not.toHaveProperty('responseContent');
   });
 
 });
@@ -246,7 +262,8 @@ describe('model invocation composed receipt bounds', () => {
     for (let depth = 0; depth < 14; depth++) native = { next: native };
     const f = fixture({ responseLimit: 4096, nativeResult: { schemaVersion: 1, native, usage: null } as ModelInvocationNativeResult });
     const result = await f.app.invoke(command);
-    expect(result.receipt.outcome).toMatchObject({ state: 'responded', response: { native } });
+    expect(result.receipt.outcome).toMatchObject({ state: 'responded', content: { kind: 'native-response' } });
+    expect(result.response?.native).toEqual(native);
     expect(f.calls).toMatchObject({ claims: 1, sends: 1 });
     expect(await f.app.invoke(command)).toEqual({ ...result, replayed: true });
   });

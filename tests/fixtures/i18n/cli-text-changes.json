@@ -52,17 +52,18 @@
       "before": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON.",
       "after": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON. Both require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request."
     },
+    "models.invocation.responded": { "before": "models.invocation.responded", "after": "native response content retained separately from the receipt" },
     "models.invocation.rejected": {
       "before": "models.invocation.rejected",
-      "after": "response received but not accepted; counts toward the total call quota"
+      "after": "rejection content retained separately from the receipt; counts toward the total call quota"
     },
     "models.invocation.notice": {
       "before": "Provider evidence only; this does not accept a task or confirm cost. Inspect native output with --json.",
-      "after": "A received native response or rejection is evidence only; it is neither task acceptance nor a billing determination. This invocation counts toward the total call quota; retry the same command identity to return its receipt without resending. Inspect raw response evidence only through JSON with includeResponseEvidence and inspect-evidence permission; human output never shows raw response evidence."
+      "after": "A received native response or rejection is evidence only; it is neither task acceptance nor a billing determination. This invocation counts toward the total call quota; retry the same command identity to return its receipt without resending. Response content, if captured, is retained separately from the receipt and withheld by default. JSON includeResponseContent additionally requires inspect-content permission; human output never shows retained response content."
     },
     "mcp.tool.inspectModelInvocation": {
       "before": "Inspect a persisted model invocation with current authorization.",
-      "after": "Inspect a persisted model invocation with current authorization. It requires an explicitly started local `deckent runtime serve`; a runtime-owned invocation continues if the client disconnects. Raw response evidence is withheld by default; JSON includeResponseEvidence additionally requires inspect-evidence permission, and human output never shows it."
+      "after": "Inspect a persisted model invocation with current authorization. It requires an explicitly started local `deckent runtime serve`; a runtime-owned invocation continues if the client disconnects. Response content is withheld by default; JSON includeResponseContent additionally requires inspect-content permission, and human output never shows retained response content."
     },
     "mcp.tool.invokeModel": {
       "before": "Submit one native model request using the configured profile and durable command identity. Complete result capacity is checked before a new call. A response is provider evidence, not task acceptance.",
@@ -238,17 +239,18 @@
       "before": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi.",
       "after": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi. Her ikisi de açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez."
     },
+    "models.invocation.responded": { "before": "models.invocation.responded", "after": "native yanıt içeriği kayıttan ayrı saklandı" },
     "models.invocation.rejected": {
       "before": "models.invocation.rejected",
-      "after": "yanıt alındı ancak kabul edilmedi; çağrı kotasından düşüldü"
+      "after": "ret içeriği kayıttan ayrı saklandı; çağrı kotasından düşüldü"
     },
     "models.invocation.notice": {
       "before": "Yalnız sağlayıcı kanıtıdır; görev kabulü veya maliyet doğrulaması değildir. Native çıktıyı --json ile inceleyin.",
-      "after": "Alınan yanıt, kabul edilmemiş olsa da saklanır; görevin tamamlandığını veya ücret oluşup oluşmadığını göstermez. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Ham yanıt kanıtını yalnız JSON'da includeResponseEvidence ve inspect-evidence izniyle inceleyin; insan çıktısı ham yanıt kanıtını asla göstermez."
+      "after": "Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Yakalanmışsa yanıt içeriği kayıttan ayrı tutulur ve varsayılan olarak gizlidir. JSON includeResponseContent ayrıca inspect-content izni gerektirir; insan çıktısı saklanan yanıt içeriğini asla göstermez."
     },
     "mcp.tool.inspectModelInvocation": {
       "before": "Güncel yetkiyle kalıcı model çağrısını incele.",
-      "after": "Güncel yetkiyle kalıcı model çağrısını incele. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Ham yanıt kanıtı varsayılan olarak gizlidir; JSON includeResponseEvidence ayrıca inspect-evidence izni gerektirir ve insan çıktısı bunu asla göstermez."
+      "after": "Güncel yetkiyle kalıcı model çağrısını incele. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Yanıt içeriği varsayılan olarak gizlidir; JSON includeResponseContent ayrıca inspect-content izni gerektirir ve insan çıktısı saklanan yanıt içeriğini asla göstermez."
     },
     "mcp.tool.invokeModel": {
       "before": "Yapılandırılmış profil ve kalıcı komut kimliğiyle bir native model isteği gönder. Yeni çağrıdan önce tam sonuç kapasitesi denetlenir. Yanıt sağlayıcı kanıtıdır; görev kabulü değildir.",

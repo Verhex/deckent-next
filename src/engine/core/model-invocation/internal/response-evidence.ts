@@ -5,14 +5,14 @@ import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, m
 import { ModelInvocationStoreError } from './port.js';
 const envelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const prefix = 'deckent.model-invocation-response-bytes.v1\n';
-const digest = (body: Uint8Array) => createHash('sha256').update(prefix, 'utf8').update(body).digest('hex');
+export const modelInvocationResponseBodyDigest = (body: Uint8Array) => createHash('sha256').update(prefix, 'utf8').update(body).digest('hex');
 
 export function verifyModelInvocationResponseEvidence(input: unknown, profile?: ModelInvocationProfile): ModelInvocationResponseEvidence {
   try {
     const copied = envelope.safeParse(input), parsed = copied.success ? modelInvocationResponseEvidenceSchema.safeParse(copied.data) : undefined;
     if (!parsed?.success) throw new Error();
     const evidence = parsed.data, body = Buffer.from(evidence.body.data, 'base64');
-    if (body.toString('base64') !== evidence.body.data || body.byteLength !== evidence.body.byteLength || digest(body) !== evidence.body.digest
+    if (body.toString('base64') !== evidence.body.data || body.byteLength !== evidence.body.byteLength || modelInvocationResponseBodyDigest(body) !== evidence.body.digest
       || (profile && (body.byteLength > profile.limits.responseMaxBytes || evidence.adapter.id !== profile.adapter.id
         || evidence.adapter.version !== profile.adapter.version))) throw new Error();
     return evidence;
@@ -23,7 +23,7 @@ export function createModelInvocationResponseEvidence(adapter: ModelInvocationRe
   httpStatus: number | null, body: Uint8Array, complete: boolean, observedBytes = body.byteLength): ModelInvocationResponseEvidence {
   return verifyModelInvocationResponseEvidence({ schemaVersion: 1, adapter: { id: adapter.id, version: adapter.version }, reason, httpStatus,
     body: { encoding: 'base64', data: Buffer.from(body).toString('base64'), byteLength: body.byteLength,
-      observedBytes, complete, digest: digest(body) } });
+      observedBytes, complete, digest: modelInvocationResponseBodyDigest(body) } });
 }
 /** Encoded content is ASCII base64; use arithmetic, never allocate a configured maximum-sized payload. */
 export function modelInvocationResponseEvidenceUpperBound(profile: ModelInvocationProfile): bigint {

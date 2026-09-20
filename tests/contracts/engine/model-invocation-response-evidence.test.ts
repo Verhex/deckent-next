@@ -36,10 +36,14 @@ describe('private native response evidence', () => {
   });
   it('does not turn a retained prefix into complete evidence or release-worthy rejection', () => {
     const prefix = createModelInvocationResponseEvidence(profile.adapter, 'response-limit', 200, body, false, 4096);
+    const prefixBody = { encoding: prefix.body.encoding, byteLength: prefix.body.byteLength,
+      observedBytes: prefix.body.observedBytes, complete: prefix.body.complete, digest: prefix.body.digest };
+    const summary = { ...prefix, body: prefixBody };
+    const content = { schemaVersion: 1, kind: 'response-body', encoding: 'base64', digest: prefix.body.digest, byteLength: body.length };
     expect(prefix.body).toMatchObject({ complete: false, byteLength: body.length, observedBytes: 4096 });
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 2, state: 'rejected', evidence: prefix, observedAtMs: 1 }).success).toBe(false);
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: prefix, observedAtMs: 1 }).success).toBe(true);
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 2, state: 'unknown', reason: 'transport-error', evidence: evidence(), observedAtMs: 1 }).success).toBe(false);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'rejected', evidence: summary, content, observedAtMs: 1 }).success).toBe(false);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'unknown', reason: 'transport-error', evidence: summary, content, observedAtMs: 1 }).success).toBe(true);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'unknown', reason: 'transport-error', evidence: null, content, observedAtMs: 1 }).success).toBe(false);
     expect(() => createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null, body, true)).toThrow('MODEL_INVOCATION_CORRUPT');
     expect(createModelInvocationResponseEvidence(profile.adapter, 'invalid-response', null, body, true).httpStatus).toBeNull();
   });

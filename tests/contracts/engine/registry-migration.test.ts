@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,7 +40,7 @@ it('advances an empty version-seven ledger to current version fourteen', async (
     const db = new DatabaseSync(path); createSchemaSeven(db); db.close();
     const store = await openSqliteAttemptStore(path, options); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
-    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(15); } finally { check.close(); }
+    try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { check.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -70,7 +71,7 @@ it('accepts a complete current Run and create receipt with selected registry evi
     const store = await openSqliteAttemptStore(path, options); expect(await store.loadRun('s', 'r')).toEqual(snapshot); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
     try {
-      expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(15);
+      expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION);
       expect(check.prepare('SELECT command FROM run_receipts WHERE scope_id=? AND command_id=?').get('s', 'create')!.command).toBe(command);
     } finally { check.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }

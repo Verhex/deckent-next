@@ -6,11 +6,11 @@ import type { ModelInvocationCommand, ModelInvocationQuery } from '#domain/index
 import type { ModelInvocationInspection, ModelInvocationResult } from '#engine/index.js';
 
 const reference = { providerId: 'provider-a', providerVersion: 1, modelId: 'model-a', modelVersion: 1 };
-const query: ModelInvocationQuery = { schemaVersion: 1, scopeId: 'scope-a', invocationId: 'invocation-a', reference };
+const query: ModelInvocationQuery = { schemaVersion: 2, scopeId: 'scope-a', invocationId: 'invocation-a', reference };
 const command: ModelInvocationCommand = { schemaVersion: 1, commandId: 'command-a', scopeId: 'scope-a', reference,
   catalogRevision: 'catalog-a', expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) },
   nativeRequest: { model: 'native-a', messages: [{ role: 'user', content: 'bounded fixture' }] } };
-const inspection: ModelInvocationInspection = { ...query, invocation: null };
+const inspection: ModelInvocationInspection = { ...query, invocation: null, contentStatus: null };
 const result = { replayed: false, receipt: { fixture: 'native invocation is not a provider call' } } as unknown as ModelInvocationResult;
 
 const connected: { client: Client; close(): Promise<void> }[] = [];
@@ -62,6 +62,7 @@ it('rejects malformed or extended invocation input before either application is 
     ['invoke_model', { ...command, untrusted: 'field' }],
     ['invoke_model', { ...command, expectedBinding: { ...command.expectedBinding, digest: 'not-a-digest' } }],
     ['inspect_model_invocation', { ...query, invocationId: '' }],
+    ['inspect_model_invocation', { ...query, schemaVersion: 1 }],
     ['inspect_model_invocation', { ...query, provider: 'forged' }],
   ] as const) {
     expect(JSON.stringify(await f.client.callTool({ name, arguments: input }))).toContain('MCP_INPUT_INVALID');

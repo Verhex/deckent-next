@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { identitySchema, type ModelInvocationReceipt } from '#domain/index.js';
-import { ModelInvocationStoreError, verifyModelInvocationReceipt } from '#engine/index.js';
+import { identitySchema } from '#domain/index.js';
+import { ModelInvocationStoreError, verifyModelInvocationReceipt, verifyModelInvocationRecord, type ModelInvocationRecord } from '#engine/index.js';
 
 export type InvocationRow = Readonly<Record<string, unknown>>;
 export function invocationIdentity(input: unknown): string {
@@ -8,8 +8,8 @@ export function invocationIdentity(input: unknown): string {
   if (!parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   return parsed.data;
 }
-export function decodeInvocationReceipt(row: InvocationRow | undefined, scopeId: string, id: string,
-  key: 'command_id' | 'invocation_id'): ModelInvocationReceipt | null {
+export function decodeInvocationRecord(row: InvocationRow | undefined, scopeId: string, id: string,
+  key: 'command_id' | 'invocation_id'): ModelInvocationRecord | null {
   if (!row) return null;
   try {
     if (row['scope_id'] !== scopeId || row[key] !== id || typeof row['record'] !== 'string') throw new Error();
@@ -18,20 +18,27 @@ export function decodeInvocationReceipt(row: InvocationRow | undefined, scopeId:
     if (row['command_id'] !== receipt.request.commandId || row['invocation_id'] !== receipt.claim.invocationId) throw new Error();
     const state = receipt.outcome?.state ?? 'claimed';
     if (row['allocation_id'] !== receipt.profile.allocation.id || row['state'] !== state) throw new Error();
-    return receipt;
+    const raw = row['content_record'];
+    if (raw !== null && typeof raw !== 'string') throw new Error();
+    const content = raw === null ? null : JSON.parse(raw as string);
+    return verifyModelInvocationRecord({ receipt, content });
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
 export function invocationRow(db: DatabaseSync, scopeId: string, invocationId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations
-    WHERE scope_id=? AND invocation_id=?`)
+  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record
+    FROM model_invocations i LEFT JOIN model_invocation_contents c
+    ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
+    WHERE i.scope_id=? AND i.invocation_id=?`)
     .get(scopeId, invocationId) as InvocationRow | undefined;
 }
 export function invocationCommandRow(db: DatabaseSync, scopeId: string, commandId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT scope_id,command_id,invocation_id,allocation_id,state,record FROM model_invocations
-    WHERE scope_id=? AND command_id=?`)
+  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record
+    FROM model_invocations i LEFT JOIN model_invocation_contents c
+    ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
+    WHERE i.scope_id=? AND i.command_id=?`)
     .get(scopeId, commandId) as InvocationRow | undefined;
 }
-export function loadInvocationReceipt(db: DatabaseSync, scopeInput: unknown, invocationInput: unknown): ModelInvocationReceipt | null {
+export function loadInvocationRecord(db: DatabaseSync, scopeInput: unknown, invocationInput: unknown): ModelInvocationRecord | null {
   const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);
-  return decodeInvocationReceipt(invocationRow(db, scopeId, invocationId), scopeId, invocationId, 'invocation_id');
+  return decodeInvocationRecord(invocationRow(db, scopeId, invocationId), scopeId, invocationId, 'invocation_id');
 }

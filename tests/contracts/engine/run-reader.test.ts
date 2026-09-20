@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,7 +33,7 @@ it('rejects column/snapshot revision divergence in both read-only and writable r
   } finally { reader.close(); writer.close(); }
 });
 it('refuses opening a schema2 reader, then reads only after the writer migrates to current schema', async () => {
-  const path = await fixture(); const db = new DatabaseSync(path); db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; DROP TABLE runs; DROP TABLE run_receipts; DROP TABLE execution_pools; PRAGMA user_version=2'); db.close();
+  const path = await fixture(); const db = new DatabaseSync(path); db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; DROP TABLE runs; DROP TABLE run_receipts; DROP TABLE execution_pools; PRAGMA user_version=2'); db.close();
   const before = await readFile(path);
   await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(before);
@@ -41,12 +42,12 @@ it('refuses opening a schema2 reader, then reads only after the writer migrates 
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
   const migrated = new DatabaseSync(path, { readOnly: true });
-  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(15); } finally { migrated.close(); }
+  try { expect(migrated.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { migrated.close(); }
 });
 
 it('requires migration before reading schema-eleven Run snapshots and leaves inspection bytes unchanged', async () => {
   const path = await fixture(), db = new DatabaseSync(path);
-  downgradeRunEligibilityFixtures(db); db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=11'); db.close();
+  downgradeRunEligibilityFixtures(db); db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=11'); db.close();
   const before = await readFile(path), reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try {
     await expect(reader.loadRun('s', 'r')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });

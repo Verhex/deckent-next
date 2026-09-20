@@ -6,11 +6,11 @@ export type { ModelInvocationInspection } from './internal/inspection.js';
 export { parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand } from './internal/result.js';
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
   parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './internal/evidence.js';
+export { createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
+  verifyModelInvocationRecord } from './internal/content.js';
 export type { ModelInvocationDelivery } from './internal/delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
-export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationStore,
+export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationRecord, ModelInvocationStore,
   ModelInvocationStoreErrorCode } from './internal/port.js';
 
 export { createModelInvocationResponseEvidence, verifyModelInvocationResponseEvidence, modelInvocationResponseEvidenceUpperBound } from './internal/response-evidence.js';
-
-export { projectModelInvocationReceipt, verifyModelInvocationReceiptView, summarizeModelInvocationResponse } from './internal/projection.js';

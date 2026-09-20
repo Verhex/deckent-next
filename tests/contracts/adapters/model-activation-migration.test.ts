@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +21,7 @@ async function seedVersionTwelve(path: string) {
   const db = new DatabaseSync(path);
   try {
     db.exec(`DROP INDEX model_invocations_allocation_state;
-      DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
+      DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
       DROP TABLE model_activation_receipts; DROP TABLE model_activations; PRAGMA user_version=12`);
   } finally { db.close(); }
 }
@@ -41,7 +42,7 @@ it('migrates a genuine v12 execution ledger to v14 without changing existing run
   expect(before.version).toBe(12);
   const activation = await openSqliteModelActivationStore(path, options, 'allow'); activation.close();
   const after = executionEvidence(path);
-  expect(after).toEqual({ ...before, version: 15 });
+  expect(after).toEqual({ ...before, version: CURRENT_LEDGER_VERSION });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     expect(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('model_activations','model_activation_receipts','model_invocation_allocations','model_invocations') ORDER BY name").all())

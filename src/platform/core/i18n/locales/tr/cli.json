@@ -590,13 +590,13 @@
   "cli.help.modelsInvocation": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi. Her ikisi de açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
   "models.invocation.absent": "Çağrı kaydı bulunamadı.",
   "models.invocation.claimed": "başlatma hakkı kaydedildi; gönderim/sonuç doğrulanmadı",
-  "models.invocation.responded": "native yanıt kaydedildi",
-  "models.invocation.rejected": "yanıt alındı ancak kabul edilmedi; çağrı kotasından düşüldü",
+  "models.invocation.responded": "native yanıt içeriği kayıttan ayrı saklandı",
+  "models.invocation.rejected": "ret içeriği kayıttan ayrı saklandı; çağrı kotasından düşüldü",
   "models.invocation.unknown": "sonuç belirsiz; kapasite korunuyor",
   "models.invocation.receipt": "Çağrı {id}, komut {command}: {state}.",
   "models.invocation.replayed": "Mevcut kayıt döndürüldü; istek tekrar gönderilmedi.",
-  "models.invocation.notice": "Alınan yanıt, kabul edilmemiş olsa da saklanır; görevin tamamlandığını veya ücret oluşup oluşmadığını göstermez. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Ham yanıt kanıtını yalnız JSON'da includeResponseEvidence ve inspect-evidence izniyle inceleyin; insan çıktısı ham yanıt kanıtını asla göstermez.",
-  "mcp.tool.inspectModelInvocation": "Güncel yetkiyle kalıcı model çağrısını incele. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Ham yanıt kanıtı varsayılan olarak gizlidir; JSON includeResponseEvidence ayrıca inspect-evidence izni gerektirir ve insan çıktısı bunu asla göstermez.",
+  "models.invocation.notice": "Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir. Bu çağrı, toplam çağrı kotasından düşülmüştür; aynı komut kimliğiyle tekrar, yeniden göndermeden kaydını döndürür. Yakalanmışsa yanıt içeriği kayıttan ayrı tutulur ve varsayılan olarak gizlidir. JSON includeResponseContent ayrıca inspect-content izni gerektirir; insan çıktısı saklanan yanıt içeriğini asla göstermez.",
+  "mcp.tool.inspectModelInvocation": "Güncel yetkiyle kalıcı model çağrısını incele. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Yanıt içeriği varsayılan olarak gizlidir; JSON includeResponseContent ayrıca inspect-content izni gerektirir ve insan çıktısı saklanan yanıt içeriğini asla göstermez.",
   "mcp.tool.invokeModel": "Yapılandırılmış profil ve kalıcı komut kimliğiyle bir native model isteği gönder. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Aynı komut kimliğiyle tekrar kaydını döndürür ve native isteği yeniden göndermez. Yeni çağrıdan önce tam sonuç kapasitesi denetlenir. Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir; ömür boyu çağrı kullanılmıştır.",
   "mcp.error.modelInvocationResultLimit": "Tam sonuç bu MCP yüzeyine sığmıyor. Yapılandırılmış yanıt kapasitesini artırın. Mevcut çağrının kayıtlı sonucunu SDK veya CLI incelemesiyle alın; model çağrısını tekrarlamak için yeni komut göndermeyin."
 }

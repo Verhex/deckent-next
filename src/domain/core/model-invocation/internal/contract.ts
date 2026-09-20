@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { modelInvocationResponseEvidenceSchema } from './response-evidence.js';
+import { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema } from './response-evidence.js';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema,
   type JsonObject } from '#domain/core/primitives/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema, modelActivationBindingSchema,
@@ -8,7 +8,7 @@ import { modelReferenceSchema, parseModelBindingDefinition,
   type ModelBindingDefinition, type ModelReference } from '#domain/core/provider-catalog/index.js';
 
 export const MODEL_INVOCATION_SCHEMA_VERSION = 1;
-export const MODEL_INVOCATION_RECEIPT_VERSION = 2;
+export const MODEL_INVOCATION_RECEIPT_VERSION = 3;
 export const MODEL_INVOCATION_REQUEST_PREFIX = 'deckent.model-invocation-request.v1\n';
 export const MODEL_INVOCATION_PROFILE_PREFIX = 'deckent.model-invocation-profile.v1\n';
 export const MODEL_INVOCATION_NATIVE_JSON_LIMITS = Object.freeze({ maxDepth: 16, maxNodes: 262_144,
@@ -32,8 +32,8 @@ const definitionSchema = z.unknown().transform((input, context): ModelBindingDef
 export const modelInvocationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
   scopeId: identitySchema, reference: modelReferenceSchema, catalogRevision: identitySchema,
   expectedBinding: modelActivationBindingSchema, nativeRequest: requestJsonSchema }).strict().readonly();
-export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  invocationId: identitySchema, reference: modelReferenceSchema, includeResponseEvidence: z.boolean().optional() }).strict().readonly();
+export const modelInvocationQuerySchema = z.object({ schemaVersion: z.literal(2), scopeId: identitySchema,
+  invocationId: identitySchema, reference: modelReferenceSchema, includeResponseContent: z.boolean().optional() }).strict().readonly();
 /** Descriptor-safe wire ingress. Raw object schemas remain available for closed-world JSON-schema generation. */
 export const modelInvocationCommandInputSchema = invocationEnvelopeSchema.pipe(modelInvocationCommandSchema);
 export const modelInvocationQueryInputSchema = invocationEnvelopeSchema.pipe(modelInvocationQuerySchema);
@@ -51,23 +51,43 @@ export const modelInvocationClaimSchema = z.object({ scopeId: identitySchema, co
   invocationId: identitySchema, requestDigest: digest, profileDigest: digest }).strict().readonly();
 export const modelInvocationNativeResponseSchema = z.object({ schemaVersion: z.literal(1), native: requestJsonSchema,
   usage: requestJsonSchema.nullable() }).strict().readonly();
+export const modelInvocationContentDescriptorSchema = z.discriminatedUnion('kind', [
+  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-response'), encoding: z.literal('canonical-json'),
+    digest, byteLength: counterSchema }).strict(),
+  z.object({ schemaVersion: z.literal(1), kind: z.literal('response-body'), encoding: z.literal('base64'),
+    digest, byteLength: counterSchema }).strict(),
+]).readonly();
+export const modelInvocationResponseContentSchema = z.discriminatedUnion('kind', [
+  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-response'), descriptor: modelInvocationContentDescriptorSchema,
+    response: modelInvocationNativeResponseSchema }).strict(),
+  z.object({ schemaVersion: z.literal(1), kind: z.literal('response-body'), descriptor: modelInvocationContentDescriptorSchema,
+    data: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }).strict(),
+]).superRefine((value, context) => {
+  const padding = value.kind === 'response-body' ? value.data.endsWith('==') ? 2 : value.data.endsWith('=') ? 1 : 0 : 0;
+  if (value.descriptor.kind !== value.kind || (value.kind === 'response-body'
+    && value.data.length / 4 * 3 - padding !== value.descriptor.byteLength)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_CONTENT_INVALID' });
+  }
+}).readonly();
 export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeResponseSchema,
   z.object({ kind: z.literal('rejected'), evidence: modelInvocationResponseEvidenceSchema }).strict().readonly()]);
 export type ModelInvocationNativeResult = z.infer<typeof modelInvocationNativeResultSchema>;
 export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
-  z.object({ schemaVersion: z.literal(2), state: z.literal('responded'), response: modelInvocationNativeResponseSchema,
+  z.object({ schemaVersion: z.literal(3), state: z.literal('responded'), content: modelInvocationContentDescriptorSchema,
     observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(2), state: z.literal('unknown'), reason: z.literal('transport-error'),
-    evidence: modelInvocationResponseEvidenceSchema.nullable(), observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(2), state: z.literal('rejected'),
-    evidence: modelInvocationResponseEvidenceSchema, observedAtMs: counterSchema }).strict(),
+  z.object({ schemaVersion: z.literal(3), state: z.literal('unknown'), reason: z.literal('transport-error'),
+    evidence: modelInvocationResponseSummarySchema.nullable(), content: modelInvocationContentDescriptorSchema.nullable(), observedAtMs: counterSchema }).strict(),
+  z.object({ schemaVersion: z.literal(3), state: z.literal('rejected'),
+    evidence: modelInvocationResponseSummarySchema, content: modelInvocationContentDescriptorSchema, observedAtMs: counterSchema }).strict(),
 ]).superRefine((outcome, context) => {
-  if ((outcome.state === 'rejected' && !outcome.evidence.body.complete)
-    || (outcome.state === 'unknown' && outcome.evidence?.body.complete)) {
+  const invalidKind = outcome.content && (outcome.state === 'responded'
+    ? outcome.content.kind !== 'native-response' : outcome.content.kind !== 'response-body');
+  if (invalidKind || (outcome.state === 'rejected' && !outcome.evidence.body.complete)
+    || (outcome.state === 'unknown' && (outcome.evidence?.body.complete || (outcome.evidence === null) !== (outcome.content === null)))) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_COMPLETENESS_INVALID' });
   }
 }).readonly();
-export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(2), request: modelInvocationRequestEvidenceSchema,
+export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(3), request: modelInvocationRequestEvidenceSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: definitionSchema,
   activationRevision: counterSchema.positive(), profile: modelInvocationProfileSchema, profileDigest: digest,
   claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, outcome: modelInvocationOutcomeSchema.nullable(),
@@ -91,6 +111,8 @@ export type ModelInvocationProfile = Readonly<z.infer<typeof modelInvocationProf
 export type ModelInvocationRequestEvidence = Readonly<z.infer<typeof modelInvocationRequestEvidenceSchema>>;
 export type ModelInvocationClaim = Readonly<z.infer<typeof modelInvocationClaimSchema>>;
 export type ModelInvocationNativeResponse = Readonly<z.infer<typeof modelInvocationNativeResponseSchema>>;
+export type ModelInvocationContentDescriptor = Readonly<z.infer<typeof modelInvocationContentDescriptorSchema>>;
+export type ModelInvocationResponseContent = Readonly<z.infer<typeof modelInvocationResponseContentSchema>>;
 export type ModelInvocationOutcome = Readonly<z.infer<typeof modelInvocationOutcomeSchema>>;
 export type ModelInvocationReceipt = Readonly<z.infer<typeof modelInvocationReceiptSchema>>;
 export type ModelInvocationActor = ModelActivationActor;
@@ -126,12 +148,7 @@ export const parseModelInvocationReceipt = (input: unknown): ModelInvocationRece
   if (!parsed?.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   const receipt = parsed.data, outcome = receipt.outcome;
   if (!invocationEnvelopeSchema.safeParse({ ...receipt, outcome: null }).success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-  if (outcome) {
-    const payloadKey = outcome.state === 'responded' ? 'response' : 'evidence';
-    const payload = outcome.state === 'responded' ? outcome.response : outcome.evidence;
-    if (!invocationEnvelopeSchema.safeParse({ ...outcome, [payloadKey]: null }).success
-      || (payload !== null && !invocationEnvelopeSchema.safeParse(payload).success)) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-  }
+  if (outcome && !invocationEnvelopeSchema.safeParse(outcome).success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
   return receipt as ModelInvocationReceipt;
 };
 export const parseModelInvocationNativeResult = (input: unknown): ModelInvocationNativeResult =>

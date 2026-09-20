@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
-import { AttemptStoreError, verifyModelInvocationReceipt } from '#engine/index.js';
+import { AttemptStoreError } from '#engine/index.js';
+import { migrateInvocationReceiptContent } from './migration-invocation-content.js';
 
 type Row = Readonly<Record<string, unknown>>;
 function invalid(): never { throw new AttemptStoreError('LEDGER_MIGRATION_EVIDENCE_REQUIRED'); }
@@ -47,7 +48,12 @@ function receiptV2(input: unknown) {
       outcome = { ...old, schemaVersion: 2, evidence: null };
     } else invalid();
   }
-  try { return verifyModelInvocationReceipt({ ...receipt, schemaVersion: 2, outcome }); }
+  try {
+    const historical = { ...receipt, schemaVersion: 2, outcome };
+    // Validate through the migration-only converter; this intermediate persisted shape is still v15.
+    const verified = migrateInvocationReceiptContent(historical).receipt;
+    return { ...verified, schemaVersion: 2, outcome };
+  }
   catch { return invalid(); }
 }
 
@@ -56,7 +62,7 @@ export function migrateModelInvocationEvidence(db: DatabaseSync): void {
   const rows = db.prepare(`SELECT scope_id,command_id,invocation_id,allocation_id,state,record
     FROM model_invocations ORDER BY scope_id,invocation_id`).all() as Row[];
   const converted = rows.map(row => {
-    const receipt = receiptV2(row.record), state = receipt.outcome?.state ?? 'claimed';
+    const receipt = receiptV2(row.record), state = receipt.outcome === null ? 'claimed' : object(receipt.outcome).state;
     if (row.scope_id !== receipt.request.scopeId || row.command_id !== receipt.request.commandId
       || row.invocation_id !== receipt.claim.invocationId || row.allocation_id !== receipt.profile.allocation.id
       || row.state !== state || (state !== 'claimed' && state !== 'responded' && state !== 'unknown')) invalid();

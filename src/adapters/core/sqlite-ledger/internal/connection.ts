@@ -16,7 +16,7 @@ export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
   let db: DatabaseSync;
   try {
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    db = new NativeDatabase(path, { timeout: parsed.data.busyTimeoutMs });
+    db = new NativeDatabase(path, { timeout: parsed.data.busyTimeoutMs, enableForeignKeyConstraints: true });
   }
   catch (error) { throw sqliteFailure(error); }
   try {

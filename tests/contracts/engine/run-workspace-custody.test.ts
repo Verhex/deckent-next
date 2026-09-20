@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -88,11 +89,11 @@ it('rolls back a failed first insert without creating custody', async () => {
 it('migrates schema eight by adding an empty custody table without inventing records', async () => {
   const f = await fixture(); f.store.close(); stores.splice(stores.indexOf(f.store), 1); const db = new DatabaseSync(f.path);
   downgradeRunEligibilityFixtures(db);
-  db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; PRAGMA user_version=8'); db.close();
+  db.exec('DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; PRAGMA user_version=8'); db.close();
   const migrated = await openSqliteAttemptStore(f.path, options); stores.push(migrated);
   expect(await migrated.loadRunWorkspaceCustody('s', 'r')).toBeNull();
   const check = new DatabaseSync(f.path, { readOnly: true });
-  try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(15); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
+  try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
   finally { check.close(); }
 });
 

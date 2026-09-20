@@ -649,3 +649,7 @@ PROVIDERS/A5 DONE — Fable2098 PASS closes B-b/D-a: receipt2/ledger15 preserve 
 PROVIDERS/A6 REVIEW — current native HTTP adapter2 requires explicit canonical endpoint data; no origin/default-route alias. Custom/root routes supported within existing loopback trust. Historical pinned profile evidence unchanged; incompatible new sends denied before claim/HTTP. No HTTPS/auth/remote provider claim.
 
 PROVIDERS/A6 DONE — independent Fable PASS: sole current adapter2 uses explicit canonical endpoint; historic profiles remain read-only evidence. Numeric-loopback scope; full1072/201+24native+18host. No real provider or retention completion claim.
+
+PROVIDERS/A7A REVIEW — current receipt/outcome3 and ledger16 atomically separate immutable settlement from retained native response+usage/raw bytes; query2 explicit includeResponseContent and inspect-content authorization, wire4. Metadata inspection and exact content recovery proven through common runtime. Authorized purge/tombstone remains A7B and is not implemented here.
+
+PROVIDERS/A7A DONE — Fable2108 PASS; receipt3/ledger16 separate retained native/usage and rejected/partial content atomically, default metadata inspection with explicit inspect-content grant, query2 and wire4; full1078/202+24native+18host. A7B purge remains mandatory and incomplete.

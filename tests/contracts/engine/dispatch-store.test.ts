@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -123,7 +124,7 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   db.prepare('INSERT INTO attempt_receipts VALUES(?,?,?,?)').run('s','create','admission',JSON.stringify(snapshot)); db.close();
   const store = await f.open(); expect(await store.load('s','a')).toEqual(snapshot);
   expect((await store.receipt('s','create'))?.command).toBe('admission'); await expect(store.claimDispatch(dispatchAdmission(claim))).rejects.toThrow('DISPATCH_NOT_ADMITTED');
-  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(15); check.close();
+  const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); check.close();
 });
 
 it('atomically rolls back terminal projection with journal failure, then preserves cancellation intent on settlement', async () => {

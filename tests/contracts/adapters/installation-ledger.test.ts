@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,7 +20,7 @@ it('atomically initializes schema ownership and pool, then replays the exact tra
   await expect(initializeInstallationLedger(file, options, ownership, pool)).resolves.toEqual({ ownership, pool });
   const db = new DatabaseSync(file, { readOnly: true });
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(15);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
     expect(db.prepare('SELECT count(*) AS count FROM installation_ownership').get()?.count).toBe(1);
     expect(db.prepare('SELECT policy FROM execution_pools').get()?.policy).toBe(JSON.stringify(pool));
   } finally { db.close(); }

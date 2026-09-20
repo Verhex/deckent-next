@@ -106,13 +106,13 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   expect([first.replayed, second.replayed].sort()).toEqual([false, true]); expect(first.receipt.claim).toEqual(second.receipt.claim);
   const fresh = first.replayed ? second : first;
   expect(f.requests).toBe(1); expect(f.count('shared')).toBe(1);
-  const sharedQuery = { schemaVersion: 1 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.reference };
+  const sharedQuery = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.reference };
   expect((await firstClient.inspectModelInvocation(sharedQuery, { maxResultBytes: 60_000 })).invocation).toEqual(fresh.receipt);
 
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 3, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: 4, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await observed; raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -123,7 +123,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   services.splice(services.indexOf(service), 1); service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const restarted = createConfiguredRuntimeClient(f.project, { env: f.env });
   const db = new DatabaseSync(f.ledger, { readOnly: true }); const row = db.prepare('SELECT invocation_id FROM model_invocations WHERE command_id=?').get('disconnect') as { invocation_id: string }; db.close();
-  const disconnectedQuery = { schemaVersion: 1 as const, scopeId: 'scope', invocationId: row.invocation_id, reference: f.reference };
+  const disconnectedQuery = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: row.invocation_id, reference: f.reference };
   expect((await restarted.inspectModelInvocation(disconnectedQuery, { maxResultBytes: 60_000 })).invocation?.outcome).toMatchObject({ state: 'responded' });
   expect(f.requests).toBe(2);
 
@@ -132,7 +132,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 3, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: 4, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -144,7 +144,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 3, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: 4, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await expiryObserved; expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
@@ -154,7 +154,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const expiryRow = expiryDb.prepare('SELECT invocation_id FROM model_invocations WHERE command_id=?').get('grace-expiry') as { invocation_id: string };
   expiryDb.close();
   const afterExpiry = createConfiguredRuntimeClient(f.project, { env: f.env });
-  expect((await afterExpiry.inspectModelInvocation({ schemaVersion: 1, scopeId: 'scope', invocationId: expiryRow.invocation_id,
+  expect((await afterExpiry.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: expiryRow.invocation_id,
     reference: f.reference }, { maxResultBytes: 60_000 })).invocation?.outcome).toMatchObject({ state: 'responded' });
   expect(f.requests).toBe(3);
 

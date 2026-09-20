@@ -368,3 +368,5 @@ PROVIDERS/A4B: SDK/CLI/MCP model invocation and inspection use the shared runtim
 PROVIDERS/A5: retain exact rejected and partial model response evidence, hide raw content by default, and preserve incomplete-outcome capacity without resending.
 
 PROVIDERS/A6: configure exact provider endpoint paths in versioned adapter profiles without default routes or legacy execution aliases.
+
+PROVIDERS/A7A: store model response content separately from immutable receipts; require explicit permission to inspect content and validate atomic forward migration.

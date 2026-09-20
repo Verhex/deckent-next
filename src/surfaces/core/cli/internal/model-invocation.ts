@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseModelInvocationCommand, parseModelInvocationQuery, type ModelInvocationCommand, type ModelInvocationQuery,
-  type ModelInvocationReceiptView } from '#domain/index.js';
+  type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationResult, ModelInvocationInspection } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { readJsonInput } from './json-input.js';
@@ -28,7 +28,7 @@ function parse(argv: readonly string[]): Parsed {
   if ((!result.help && !result.source) || (result.help && (result.source || result.json))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
-function render(receipt: ModelInvocationReceiptView | null, locale: Locale, replayed?: boolean): string {
+function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean): string {
   if (!receipt) return t('models.invocation.absent', {}, locale);
   const state = receipt.outcome === null ? t('models.invocation.claimed', {}, locale)
     : receipt.outcome.state === 'responded' ? t('models.invocation.responded', {}, locale)

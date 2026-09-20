@@ -8,7 +8,7 @@ import { clearConfigCache } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
-const query = { schemaVersion: 1, scopeId: 'scope', invocationId: 'call', reference };
+const query = { schemaVersion: 2, scopeId: 'scope', invocationId: 'call', reference };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-invocation-cli-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home); await mkdir(join(root, '.deckent'));
@@ -21,7 +21,7 @@ it('reads file and stdin queries through one inspection contract and renders EN/
     let output = '', calls = 0;
     const code = await main(['models', 'invocation', '--input', language === 'en' ? path : '-', '--lang', language], {
       ...f, stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, invocation: null }; },
+      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, invocation: null, contentStatus: null }; },
     });
     expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain(language === 'en' ? 'No invocation receipt' : 'Çağrı kaydı bulunamadı');
   }

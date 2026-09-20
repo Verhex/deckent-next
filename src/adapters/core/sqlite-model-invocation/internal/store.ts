@@ -3,12 +3,13 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { identitySchema, modelInvocationClaimSchema,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
-  type ModelInvocationReceipt, type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
+  type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
 import { ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
-  verifyModelInvocationReceipt, createModelInvocationClaimReceipt, type ModelInvocationAdmission, type ModelInvocationClaimResult,
+  verifyModelInvocationRecord, createModelInvocationClaimReceipt,
+  createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationReceipt, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationReceipt } from './read.js';
+import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
 const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
@@ -40,13 +41,13 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       return this.fail(error);
     }
   }
-  async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelInvocationReceipt | null> {
+  async loadReceipt(scopeInput: string, commandInput: string): Promise<ModelInvocationRecord | null> {
     try { const scopeId = invocationIdentity(scopeInput), commandId = invocationIdentity(commandInput);
-      return decodeInvocationReceipt(invocationCommandRow(this.db, scopeId, commandId), scopeId, commandId, 'command_id'); }
+      return decodeInvocationRecord(invocationCommandRow(this.db, scopeId, commandId), scopeId, commandId, 'command_id'); }
     catch (error) { return this.fail(error); }
   }
-  async loadInvocation(scopeInput: string, invocationInput: string): Promise<ModelInvocationReceipt | null> {
-    try { return loadInvocationReceipt(this.db, scopeInput, invocationInput); }
+  async loadInvocation(scopeInput: string, invocationInput: string): Promise<ModelInvocationRecord | null> {
+    try { return loadInvocationRecord(this.db, scopeInput, invocationInput); }
     catch (error) { return this.fail(error); }
   }
   private allocation(scopeId: string, allocationId: string): Allocation | null {
@@ -76,12 +77,12 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
     try {
       const admission = parseModelInvocationAdmission(input), { command, profile } = admission;
       return this.transaction(() => {
-        const prior = decodeInvocationReceipt(invocationCommandRow(this.db, command.scopeId, command.commandId), command.scopeId, command.commandId, 'command_id');
+        const prior = decodeInvocationRecord(invocationCommandRow(this.db, command.scopeId, command.commandId), command.scopeId, command.commandId, 'command_id');
         if (prior) {
-          if (!sameModelInvocationRequest(prior, command, admission.requestDigest, admission.actor)) {
+          if (!sameModelInvocationRequest(prior.receipt, command, admission.requestDigest, admission.actor)) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
           }
-          return Object.freeze({ replayed: true, receipt: prior });
+          return Object.freeze({ replayed: true, record: prior });
         }
         if (invocationRow(this.db, command.scopeId, admission.invocationId)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         const activationRow = this.db.prepare(`SELECT scope_id,provider_id,provider_version,model_id,model_version,revision,record
@@ -117,23 +118,26 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         const record = encoded(receipt);
         this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
           .run(command.scopeId, command.commandId, admission.invocationId, profile.allocation.id, 'claimed', record);
-        return Object.freeze({ replayed: false, receipt });
+        return Object.freeze({ replayed: false, record: verifyModelInvocationRecord({ receipt, content: null }) });
       });
     } catch (error) { return this.fail(error); }
   }
-  private settle(claimInput: ModelInvocationClaim, outcome: NonNullable<ModelInvocationReceipt['outcome']>): ModelInvocationReceipt {
+  private settle(claimInput: ModelInvocationClaim, build: (record: ModelInvocationRecord) => ModelInvocationRecord): ModelInvocationRecord {
     const parsed = modelInvocationClaimSchema.parse(claimInput);
     return this.transaction(() => {
-      const current = decodeInvocationReceipt(invocationRow(this.db, parsed.scopeId, parsed.invocationId), parsed.scopeId, parsed.invocationId, 'invocation_id');
-      if (!current) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
-      if (!same(current.claim, parsed)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
-      const allocation = this.allocation(current.request.scopeId, current.profile.allocation.id);
-      if (current.outcome) {
-        if (!same(current.outcome, outcome)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
+      const current = decodeInvocationRecord(invocationRow(this.db, parsed.scopeId, parsed.invocationId), parsed.scopeId, parsed.invocationId, 'invocation_id');
+      if (!current || !same(current.receipt.claim, parsed)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
+      const allocation = this.allocation(current.receipt.request.scopeId, current.receipt.profile.allocation.id);
+      const next = verifyModelInvocationRecord(build(current));
+      if (current.receipt.outcome) {
+        if (!same(current, next)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         return current;
       }
-      const receipt = verifyModelInvocationReceipt({ ...current, outcome });
+      if (!next.receipt.outcome || !same({ ...next.receipt, outcome: null }, current.receipt)) {
+        throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      }
       if (!allocation || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      const outcome = next.receipt.outcome;
       if (outcome.state === 'responded' || outcome.state === 'rejected') {
         const after = allocationSchema.parse({ ...allocation, inFlight: allocation.inFlight - 1 });
         const updated = this.db.prepare(`UPDATE model_invocation_allocations SET in_flight=?,record=?
@@ -141,25 +145,32 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
           .run(after.inFlight, encoded(after), allocation.scopeId, allocation.allocationId, allocation.lifetimeCalls, allocation.inFlight);
         if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       }
-      const record = encoded(receipt);
-      const invocation = this.db.prepare('UPDATE model_invocations SET state=?,record=? WHERE scope_id=? AND invocation_id=?')
-        .run(outcome.state, record, parsed.scopeId, parsed.invocationId);
-      if (invocation.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-      return receipt;
+      if (next.content) this.db.prepare(`INSERT INTO model_invocation_contents(scope_id,invocation_id,record) VALUES(?,?,?)`)
+        .run(parsed.scopeId, parsed.invocationId, encoded(next.content));
+      const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
+        .run(outcome.state, encoded(next.receipt), parsed.scopeId, parsed.invocationId);
+      if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      return next;
     });
   }
   async recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number) {
-    try { return this.settle(claim, { schemaVersion: 2, state: 'responded', response, observedAtMs }); }
+    try { return this.settle(claim, record => createModelInvocationResponseRecord({ ...record.receipt, outcome: null }, response, observedAtMs)); }
     catch (error) { return this.fail(error); }
   }
   async recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number) {
-    try { return this.settle(claim, { schemaVersion: 2, state: 'rejected', evidence, observedAtMs }); }
-    catch (error) { return this.fail(error); }
+    try {
+      if (!evidence.body.complete) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      return this.settle(claim, record => createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs));
+    } catch (error) { return this.fail(error); }
   }
   async recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number,
     evidence: ModelInvocationResponseEvidence | null = null) {
-    try { return this.settle(claim, { schemaVersion: 2, state: 'unknown', reason, evidence, observedAtMs }); }
-    catch (error) { return this.fail(error); }
+    try {
+      if (reason !== 'transport-error' || evidence?.body.complete) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      return this.settle(claim, record => evidence === null
+        ? createModelInvocationUnknownRecord({ ...record.receipt, outcome: null }, observedAtMs)
+        : createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs));
+    } catch (error) { return this.fail(error); }
   }
   close(): void { this.db.close(); }
 }

@@ -8,7 +8,7 @@ import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConf
   inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, ModelInvocationStoreError, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
+import { ModelActivationApplication, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
   verifyModelInvocationReceipt } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -54,9 +54,13 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding };
   await activation.admit(activate);
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
-  const policy = async (allow: boolean) => { await writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [],
-    grants: allow ? [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
-      principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : [] }), { mode: 0o600 }); };
+  const policy = async (allow: boolean, contentAllowed = false) => { await writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
+    revision: allow ? (contentAllowed ? 'allow-content' : 'allow') : 'deny', restrictions: [], grants: allow ? [
+      { id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
+        principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+      ...(contentAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
+        principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+    ] : [] }), { mode: 0o600 }); };
   await policy(true); const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
@@ -74,7 +78,7 @@ describe('configured native model invocation', () => {
     for (const invalid of [undefined, { ...peer, uid: peer.uid + 1 }, { ...peer, assurance: 'wire-actor' }]) {
       await expect(invokePeerConfiguredModel(f.project, input, invalid as never, { env: f.env }))
         .rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
-      await expect(inspectPeerConfiguredModelInvocation(f.project, { schemaVersion: 1, scopeId: 'scope',
+      await expect(inspectPeerConfiguredModelInvocation(f.project, { schemaVersion: 2, scopeId: 'scope',
         invocationId: 'absent', reference }, invalid as never, { env: f.env }))
         .rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
     }
@@ -84,7 +88,7 @@ describe('configured native model invocation', () => {
     expect(f.requests).toBe(0); expect(await readFile(f.ledger)).toEqual(before);
     const result = await invokePeerConfiguredModel(f.project, input, peer, { env: f.env }, { maxResultBytes: 100_000 });
     expect(result.receipt.actor).toEqual(identity); expect(f.requests).toBe(1);
-    const query = { schemaVersion: 1 as const, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference };
+    const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference };
     expect((await inspectPeerConfiguredModelInvocation(f.project, query, peer, { env: f.env })).invocation).toEqual(result.receipt);
     await f.policy(false);
     await expect(invokePeerConfiguredModel(f.project, input, peer, { env: f.env })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -94,14 +98,21 @@ describe('configured native model invocation', () => {
 
   it('records one bounded native response, replays without a request and exposes exact durable inspection', async () => {
     const f = await fixture(), first = await invokeConfiguredModel(f.project, f.command('one'), { env: f.env });
-    expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded', response: { native: { model: 'native-model' } } } } });
+    expect(first).toMatchObject({ replayed: false, contentStatus: 'retained', response: { native: { model: 'native-model' } },
+      receipt: { outcome: { state: 'responded', content: { kind: 'native-response' } } } });
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect(f.paths).toEqual(['/customer/gateway/native-chat']); expect(f.bodies[0]).toContain('prompt-must-not-persist');
-    expect(await invokeConfiguredModel(f.project, f.command('one'), { env: f.env })).toEqual({ replayed: true, receipt: first.receipt });
+    expect(await invokeConfiguredModel(f.project, f.command('one'), { env: f.env })).toEqual({ replayed: true, receipt: first.receipt,
+      response: first.response, contentStatus: 'retained' });
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect((await readFile(f.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
-    expect((await inspectConfiguredModelInvocation(f.project, { schemaVersion: 1, scopeId: 'scope',
-      invocationId: first.receipt.claim.invocationId, reference }, { env: f.env })).invocation).toEqual(first.receipt);
+    const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference };
+    const defaultInspection = await inspectConfiguredModelInvocation(f.project, query, { env: f.env });
+    expect(defaultInspection).toMatchObject({ invocation: first.receipt, contentStatus: 'retained' });
+    expect(Object.hasOwn(defaultInspection, 'responseContent')).toBe(false);
+    await f.policy(true, true);
+    expect(await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env }))
+      .toMatchObject({ invocation: first.receipt, contentStatus: 'retained', responseContent: { kind: 'native-response', response: first.response } });
   });
 
   it('rejects accessors at the public boundary and validates persisted response limits without imposing clock ordering', async () => {
@@ -117,7 +128,7 @@ describe('configured native model invocation', () => {
       limitedDigest = modelInvocationProfileDigest(limitedProfile);
     const oversized = { ...receipt, profile: limitedProfile, profileDigest: limitedDigest,
       claim: { ...receipt.claim, profileDigest: limitedDigest } };
-    expect(() => verifyModelInvocationReceipt(oversized)).toThrow(ModelInvocationStoreError);
+    expect(verifyModelInvocationReceipt(oversized).outcome).toMatchObject({ state: 'responded' });
   });
 
   it('denies before transport for current policy, inactive activation and changed profile binding', async () => {
@@ -160,16 +171,17 @@ describe('native endpoint version and historical receipt boundaries', () => {
         profile: historicalProfile, profileDigest: modelInvocationProfileDigest(historicalProfile), invocationId: 'historical-invocation', claimedAtMs: 1 });
     } finally { store.close(); }
     // Synthetic historical claim, not evidence that an old provider operation actually ran.
-    const encodedBefore = JSON.stringify(claim.receipt);
+    const encodedBefore = JSON.stringify(claim.record.receipt);
     f.setProfile({ ...f.profile, adapter: { ...f.profile.adapter, version: 1 } }); await f.writeConfig();
-    expect(await invokeConfiguredModel(f.project, command, { env: f.env })).toEqual({ replayed: true, receipt: claim.receipt });
+    expect(await invokeConfiguredModel(f.project, command, { env: f.env })).toEqual({ replayed: true, receipt: claim.record.receipt,
+      response: null, contentStatus: 'not-captured' });
     const inspected = await inspectConfiguredModelInvocation(f.project,
-      { schemaVersion: 1, scopeId: 'scope', invocationId: 'historical-invocation', reference }, { env: f.env });
+      { schemaVersion: 2, scopeId: 'scope', invocationId: 'historical-invocation', reference }, { env: f.env });
     expect(JSON.stringify(inspected.invocation)).toBe(encodedBefore); expect(f.requests).toBe(0);
     await expect(invokeConfiguredModel(f.project, f.command('new'), { env: f.env }))
       .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });
     const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
-    try { expect(await reader.loadReceipt('scope', 'new')).toBeNull(); expect(await reader.loadReceipt('scope', 'historical')).toEqual(claim.receipt); }
+    try { expect(await reader.loadReceipt('scope', 'new')).toBeNull(); expect((await reader.loadReceipt('scope', 'historical'))?.receipt).toEqual(claim.record.receipt); }
     finally { reader.close(); }
     expect(f.requests).toBe(0);
   });

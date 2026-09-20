@@ -30,7 +30,7 @@ function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 }
 function transportFailure(requestId: string, code = 'RUNTIME_SERVICE_TRANSPORT'): RuntimeServiceResponse {
-  return { schemaVersion: 3, requestId, ok: false, error: { code, category: 'error' } };
+  return { schemaVersion: 4, requestId, ok: false, error: { code, category: 'error' } };
 }
 function isAfterResponseOrDisconnect(value: unknown): value is () => void { return typeof value === 'function'; }
 function reply(value: RuntimeServiceHandlerReply) {

@@ -41,5 +41,6 @@ export { admitConfiguredModelActivation as admitModelActivation, inspectConfigur
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
 export type { ModelActivationResult, ModelActivationInspection } from '#engine/index.js';
 export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation } from '#composition/index.js';
-export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationReceipt } from '#domain/index.js';
+export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationReceipt,
+  ModelInvocationContentDescriptor, ModelInvocationResponseContent } from '#domain/index.js';
 export type { ModelInvocationResult, ModelInvocationInspection } from '#engine/index.js';

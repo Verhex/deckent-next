@@ -22,3 +22,15 @@ export const modelInvocationResponseEvidenceSchema = z.object({ schemaVersion: z
 }).readonly();
 export type ModelInvocationResponseEvidence = z.infer<typeof modelInvocationResponseEvidenceSchema>;
 export type ModelInvocationRejectionReason = z.infer<typeof modelInvocationRejectionReasonSchema>;
+/** Durable/public evidence metadata. Raw bytes live in the separately verified response content record. */
+export const modelInvocationResponseSummarySchema = modelInvocationResponseEvidenceSchema.unwrap().innerType()
+  .omit({ body: true }).extend({ body: modelInvocationResponseEvidenceSchema.unwrap().innerType().shape.body
+    .unwrap().omit({ data: true }).strict().readonly() }).strict().superRefine((value, context) => {
+    const body = value.body;
+    if (body.observedBytes < body.byteLength
+      || (body.complete && (body.observedBytes !== body.byteLength || value.reason === 'interrupted'))
+      || (!body.complete && value.reason !== 'interrupted' && value.reason !== 'response-limit')) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_EVIDENCE_INVALID' });
+    }
+  }).readonly();
+export type ModelInvocationResponseSummary = z.infer<typeof modelInvocationResponseSummarySchema>;

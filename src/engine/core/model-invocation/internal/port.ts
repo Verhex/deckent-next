@@ -1,6 +1,6 @@
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationNativeResponse, ModelInvocationProfile,
-  ModelInvocationReceipt, ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
+  ModelInvocationReceipt, ModelInvocationResponseContent, ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
 
 export interface ModelInvocationAdmission {
   readonly command: ModelInvocationCommand;
@@ -14,14 +14,15 @@ export interface ModelInvocationAdmission {
   readonly invocationId: string;
   readonly claimedAtMs: number;
 }
-export interface ModelInvocationClaimResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceipt }
+export interface ModelInvocationRecord { readonly receipt: ModelInvocationReceipt; readonly content: ModelInvocationResponseContent | null }
+export interface ModelInvocationClaimResult { readonly replayed: boolean; readonly record: ModelInvocationRecord }
 export interface ModelInvocationStore {
-  loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationReceipt | null>;
+  loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult>;
-  recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number): Promise<ModelInvocationReceipt>;
-  recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number): Promise<ModelInvocationReceipt>;
-  recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number, evidence?: ModelInvocationResponseEvidence | null): Promise<ModelInvocationReceipt>;
-  loadInvocation(scopeId: string, invocationId: string): Promise<ModelInvocationReceipt | null>;
+  recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number): Promise<ModelInvocationRecord>;
+  recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number): Promise<ModelInvocationRecord>;
+  recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number, evidence?: ModelInvocationResponseEvidence | null): Promise<ModelInvocationRecord>;
+  loadInvocation(scopeId: string, invocationId: string): Promise<ModelInvocationRecord | null>;
   close(): void;
 }
 export type ModelInvocationStoreErrorCode = 'MODEL_INVOCATION_COMMAND_CONFLICT' | 'MODEL_INVOCATION_CORRUPT'

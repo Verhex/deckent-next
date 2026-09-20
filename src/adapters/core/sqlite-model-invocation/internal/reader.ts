@@ -3,13 +3,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ModelInvocationStoreError, type ModelInvocationStore } from '#engine/index.js';
 import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
-import { loadInvocationReceipt } from './read.js';
+import { loadInvocationRecord } from './read.js';
 
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
 export type ModelInvocationReader = Pick<ModelInvocationStore, 'loadInvocation' | 'close'>;
 class SqliteModelInvocationReader implements ModelInvocationReader {
   constructor(private readonly db: DatabaseSync) {}
-  async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationReceipt(this.db, scopeId, invocationId); }
+  async loadInvocation(scopeId: string, invocationId: string) { return loadInvocationRecord(this.db, scopeId, invocationId); }
   close() { this.db.close(); }
 }
 export function openSqliteModelInvocationReader(path: string, options: { readonly busyTimeoutMs: number }): ModelInvocationReader {

@@ -9,7 +9,7 @@ const store = await openSqliteModelInvocationStore(process.argv[2],
   { journalMode: 'delete', durability: 'full', busyTimeoutMs: 5_000 }, 'forbid');
 try {
   const result = await store.claim(admission);
-  process.stdout.write(`${JSON.stringify({ ok: true, replayed: result.replayed, invocationId: result.receipt.claim.invocationId })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, replayed: result.replayed, invocationId: result.record.receipt.claim.invocationId })}\n`);
 } catch (error) {
   process.stdout.write(`${JSON.stringify({ ok: false, code: error?.code ?? 'UNKNOWN' })}\n`);
 } finally { store.close(); }
