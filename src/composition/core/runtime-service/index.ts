@@ -1,5 +1,6 @@
 export { createConfiguredRuntimeClient } from './internal/client.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from './internal/model-client.js';
+export { inspectRuntimeProviderSpendAccount } from './internal/provider-spend-client.js';
 export { startConfiguredRuntimeService } from './internal/server.js';
 export type { ConfiguredRuntimeOperations } from './internal/operations.js';
 

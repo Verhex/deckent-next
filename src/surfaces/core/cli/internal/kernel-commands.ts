@@ -17,12 +17,14 @@ import {
 } from '#platform/index.js';
 
 import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
+import type { ProviderSpendAccountInspectionHandler } from './model-spending.js';
 
 export interface CommandContext {
   invokeModel?: ModelInvocationHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;
   purgeModelInvocationContent?: ModelInvocationPurgeHandler;
   cancelModelInvocation?: ModelInvocationCancellationHandler;
+  inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
   inspectModelBinding?: (root: string, reference: ModelReference, options: ConfigLoadOptions) => Promise<ModelBindingInspection>;
   inspectModelActivation?: ModelActivationInspectionHandler;

@@ -1,26 +1,30 @@
 import { z } from 'zod';
-import { identitySchema, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery, parseModelInvocationPurgeCommand } from '#domain/index.js';
+import { identitySchema, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
+  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 8 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 9 as const;
 
 export const runtimeServiceOperationSchema = z.enum(['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
-  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation']);
+  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
+const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
+  || operation === 'inspectProviderSpendAccount';
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
 export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
   operation: runtimeServiceOperationSchema, input: z.unknown(), delivery: runtimeServiceDeliverySchema.optional(),
 }).strict().refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).superRefine((value, context) => {
-  if (invocationOperation(value.operation)) {
+  if (boundedResultOperation(value.operation)) {
     if (!Object.hasOwn(value, 'delivery') || value.delivery === undefined) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_REQUIRED' });
     }
     try {
-      if (value.operation === 'invokeModel') parseModelInvocationCommand(value.input);
+      if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
+      else if (value.operation === 'invokeModel') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
       else if (value.operation === 'purgeModelInvocationContent') parseModelInvocationPurgeCommand(value.input);
       else parseModelInvocationCancellationCommand(value.input);
@@ -67,6 +71,7 @@ export function runtimeServiceResultCapacity(requestId: string, responseMaxBytes
   return Number(capacity);
 }
 export type RuntimeServiceOperation = z.infer<typeof runtimeServiceOperationSchema>;
+export type RuntimeServiceDelivery = z.infer<typeof runtimeServiceDeliverySchema>;
 export function classifyRuntimeServiceOperation(operation: RuntimeServiceOperation): 'execution' | 'control' {
   return operation === 'executeTask' || operation === 'invokeModel' ? 'execution' : 'control';
 }

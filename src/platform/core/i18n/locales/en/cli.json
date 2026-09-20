@@ -563,7 +563,7 @@
   "cli.init.previewOnly": "Preview only: package/image trust and availability remain unverified; nothing was installed.",
   "cli.init.evidenceOnly": "Read-only observations: package bytes and local image availability measured; no operator approval, publisher verification or installation.",
   "cli.init.applied": "Installation result (explicit local trust; publisher verification remains unavailable):",
-  "cli.help.models": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content --input <file|-> [--json]\nInvoke, invocation, and purge-content require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
+  "cli.help.models": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <file|-> [--json]\nInvoke, invocation, purge-content, and spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
   "models.notConfigured": "Model catalog is not configured; availability was not observed.",
   "models.declaredHeader": "Declared model catalog {revision}:",
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native {nativeId} · protocols {protocols}",
@@ -628,5 +628,16 @@
   "models.invocation.spendingReason.missingUsage": "usage is missing",
   "models.invocation.spendingReason.invalidUsage": "usage is invalid",
   "models.invocation.spendingReason.priceUnavailable": "price is unavailable",
-  "models.invocation.historyIntegrityNotRecorded": "No persisted full-history audit result is available; this view validates the queried records."
+  "models.invocation.historyIntegrityNotRecorded": "No persisted full-history audit result is available; this view validates the queried records.",
+  "cli.help.modelsSpending": "deckent models spending --input <file|-> [--json] [--lang en|tr]\nRead the exact scoped provider-spending account snapshot from the explicitly started local `deckent runtime serve`. Input is schema 1: scopeId, budgetId, and budgetRevision. Reserved amounts include held reservations, but this view does not show hold reasons. The settled total may combine local calculations and provider-reported charges; source subtotals are not included. This is local recorded accounting evidence, not a provider invoice or an audited spending history.",
+  "models.spending.absent": "Scope {scope}, budget {budget} revision {revision}: no account snapshot is recorded. This does not mean zero spend, zero reservations, or a free provider account.",
+  "models.spending.account": "Scope {scope}, budget {budget} revision {revision}: checkpoint {checkpoint}, {reservations} reservations; limit {limit} minor units ({currency}).",
+  "models.spending.reserved": "Reserved: {amount} minor units ({currency}), including held reservations. Hold reasons are not shown in this view. This is not settled spend or a provider invoice.",
+  "models.spending.settledExact": "Settled exact total: {amount} minor units ({currency}). It may combine local calculations and provider-reported charges; source subtotals are not included.",
+  "models.spending.settledRounded": "Settled rounded projection: {amount} minor units ({currency}), the ceiling of the exact total; it is not an invoice.",
+  "models.spending.frozen": "Account frozen: {value}.",
+  "models.spending.frozenYes": "yes",
+  "models.spending.frozenNo": "no",
+  "models.spending.historyNotRecorded": "No persisted full-history audit result is recorded for this account snapshot.",
+  "mcp.tool.inspectProviderSpending": "Inspect one exact scoped provider-spending account snapshot. It returns recorded local reservations, including holds but not hold reasons, and exact settlement with its rounded projection. The settled total may combine local calculations and provider-reported charges; source subtotals are not included. It does not verify a provider invoice or a full spending-history audit."
 }

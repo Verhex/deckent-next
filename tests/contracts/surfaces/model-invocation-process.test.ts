@@ -14,7 +14,7 @@ import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/inde
 import type { ModelInvocationResponseContent } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocationInspection,
-  type ModelInvocationResult, type ModelInvocationPurgeResult } from '#engine/index.js';
+  type ModelInvocationResult, type ModelInvocationPurgeResult, type ProviderSpendAccountInspection } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
@@ -72,10 +72,10 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
 const sdkProgram = `
 import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url';
 const [entry,operation,project,inputPath]=process.argv.slice(1),api=await import(pathToFileURL(entry).href),input=JSON.parse(await readFile(inputPath,'utf8'));
-try { const value=operation==='purge'?await api.purgeModelInvocationContent(project,input,{env:process.env}):operation==='invoke'?await api.invokeModel(project,input,{env:process.env}):await api.inspectModelInvocation(project,input,{env:process.env});
+try { const value=operation==='spending'?await api.inspectProviderSpendAccount(project,input,{env:process.env}):operation==='purge'?await api.purgeModelInvocationContent(project,input,{env:process.env}):operation==='invoke'?await api.invokeModel(project,input,{env:process.env}):await api.inspectModelInvocation(project,input,{env:process.env});
 process.stdout.write(JSON.stringify({ok:true,value})); } catch(error){ process.stdout.write(JSON.stringify({ok:false,code:error?.code??'UNKNOWN'})); }
 `;
-async function callSdk<T>(project: string, env: Record<string, string>, operation: 'invoke' | 'inspect' | 'purge', inputPath: string) {
+async function callSdk<T>(project: string, env: Record<string, string>, operation: 'invoke' | 'inspect' | 'purge' | 'spending', inputPath: string) {
   const output = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, operation, project, inputPath],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
   return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
@@ -88,7 +88,7 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
     await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT');
     if (inspectTools) {
     const tool = (await bounded(client.listTools(), 'MCP_LIST_TIMEOUT')).tools.find(value => value.name === name);
-    expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation'
+    expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation' || name === 'inspect_provider_spending'
       ? { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
       : { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: name === 'invoke_model' });
     }
@@ -241,6 +241,37 @@ function invocationId(ledger: string, commandId: string): string {
   try { return String(db.prepare('SELECT invocation_id FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.invocation_id); }
   finally { db.close(); }
 }
+async function assertAccountSurfaces(project: string, root: string, env: Record<string, string>, ledger: string,
+  allowAccount: () => Promise<void>, bodies: readonly string[]): Promise<void> {
+  const query = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 }, path = join(root, 'account-query.json');
+  await writeFile(path, JSON.stringify(query));
+  expect(await callSdk(project, env, 'spending', path)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+  await allowAccount(); const before = await readFile(ledger), count = bodies.length;
+  const result = await callSdk<ProviderSpendAccountInspection>(project, env, 'spending', path);
+  expect(result).toMatchObject({ ok: true, value: { ...query, spendingHistoryIntegrity: 'not-recorded', checkpoint: {
+    reservationCount: 3, account: { reservedMinorUnits: 0, settledExactMinorUnits: '0.06', settledMinorUnits: 1, frozen: false },
+  } } });
+  if (!result.ok) throw new Error('ACCOUNT_INSPECTION_FAILED');
+  const cliResult = JSON.parse((await execute(process.execPath, [cli, 'models', 'spending', '--input', path, '--json'],
+    { cwd: project, env, timeout: 10_000 })).stdout);
+  expect(cliResult).toEqual(result.value);
+  for (const [locale, held, sources] of [
+    ['en', 'Hold reasons are not shown', 'may combine local calculations and provider-reported charges'],
+    ['tr', 'bekletme nedenlerini göstermez', 'Yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir'],
+  ]) {
+    const human = (await execute(process.execPath, [cli, 'models', 'spending', '--input', path, '--lang', locale!],
+      { cwd: project, env, timeout: 10_000 })).stdout;
+    expect(human).toContain(held); expect(human).toContain(sources);
+  }
+  const mcpResult = await callMcp(project, env, 'inspect_provider_spending', query);
+  expect(mcpResult.isError).not.toBe(true); expect(mcpResult.structuredContent).toEqual(result.value);
+  expect(JSON.stringify(result.value)).not.toMatch(/prompt-first|retained-sensitive-usage|completion-/);
+  const wrong = join(root, 'account-wrong.json'); await writeFile(wrong, JSON.stringify({ ...query, budgetRevision: 2 }));
+  expect(await callSdk(project, env, 'spending', wrong)).toEqual({ ok: false, code: 'PROVIDER_SPEND_CONFLICT' });
+  await writeFile(wrong, JSON.stringify({ ...query, scopeId: 'foreign' }));
+  expect(await callSdk(project, env, 'spending', wrong)).toEqual({ ok: false, code: 'POLICY_DENIED' });
+  expect(await readFile(ledger)).toEqual(before); expect(bodies).toHaveLength(count);
+}
 async function assertPurgedContent(input: { project: string; root: string; env: Record<string, string>; ledger: string;
   reference: Record<string, unknown>; bodies: string[]; allow(): Promise<void> }): Promise<void> {
   const { project, root, env, ledger, reference } = input, count = input.bodies.length;
@@ -300,15 +331,20 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
   expect(input.bodies).toHaveLength(count); expect(snapshot()).toEqual(before);
 }
 
+async function hostileProxyEnvironment(home: string) {
+  let requests = 0;
+  const proxy = createHttpServer((_request, reply) => { requests++; reply.writeHead(502); reply.end('proxy trap'); });
+  servers.push(proxy); await new Promise<void>((done, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', done); });
+  const address = proxy.address(); if (!address || typeof address === 'string') throw new Error('PROXY_FIXTURE_ADDRESS');
+  return { requests: () => requests, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', NODE_USE_ENV_PROXY: '1',
+    HTTP_PROXY: `http://127.0.0.1:${address.port}`, NO_PROXY: '' } };
+}
+
 it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  let proxyRequests = 0; const proxy = createHttpServer((_request, reply) => { proxyRequests++; reply.writeHead(502); reply.end('proxy trap'); });
-  servers.push(proxy); await new Promise<void>((done, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', done); });
-  const proxyAddress = proxy.address(); if (!proxyAddress || typeof proxyAddress === 'string') throw new Error('PROXY_FIXTURE_ADDRESS');
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', NODE_USE_ENV_PROXY: '1',
-    HTTP_PROXY: `http://127.0.0.1:${proxyAddress.port}`, NO_PROXY: '' }, bodies: string[] = [];
+  const { env, requests: proxyRequests } = await hostileProxyEnvironment(home), bodies: string[] = [];
   const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
   let response: 'normal' | 'oversize' | 'malformed' | 'status' = 'normal';
   let holdResponse = false, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined;
@@ -355,10 +391,12 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding });
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
-  const writePolicy = async (allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
+  const writePolicy = async (allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false, accountAllowed = false) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
     revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
       { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
         principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+      ...(accountAllowed ? [{ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
+        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
       ...(purgeAllowed ? [{ id: 'purge-content', effect: 'allow', actions: ['purge-content'], scopes: ['scope'],
         principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
       ...(evidenceAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
@@ -435,6 +473,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const inspectSecond = await callMcp(project, env, 'inspect_model_invocation', { schemaVersion: 2, scopeId: 'scope',
     invocationId: cliSecond.receipt.claim.invocationId, reference });
   expect(inspectSecond.isError).not.toBe(true); expect((inspectSecond.structuredContent as ModelInvocationInspection).invocation).toEqual(cliSecond.receipt);
+  await assertAccountSurfaces(project, root, env, ledger, () => writePolicy(true, true, false, true), bodies);
 
   await writePolicy(false); const deniedPath = join(root, 'denied.json'); await writeFile(deniedPath, JSON.stringify(command('denied')), { mode: 0o600 });
   expect(await callSdk(project, env, 'invoke', deniedPath)).toEqual({ ok: false, code: 'POLICY_DENIED' }); expect(bodies).toHaveLength(3);
@@ -450,7 +489,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     setResponse(value) { response = value; }, setContentPolicy: allowed => writePolicy(true, allowed), large });
   await assertRetainedNativeContent(project, root, env, ledger, queryOne, bodies);
   await assertPurgedContent({ project, root, env, ledger, reference, bodies, allow: () => writePolicy(true, true, true) });
-  expect(proxyRequests).toBe(0);
+  expect(proxyRequests()).toBe(0);
   // Requests are represented by digests, not separately persisted raw prompts; rejected response evidence may itself echo one.
   expect((await readFile(ledger)).includes(Buffer.from('prompt-first'))).toBe(false);
 });

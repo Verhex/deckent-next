@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import * as adapters from '#adapters/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore,
@@ -203,6 +204,17 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   const account = await inspectAccount(f);
   expect(account).toMatchObject({ reservationCount: 2, reservedMinorUnits: 0, settledMinorUnits: 1,
     checkpoint: { account: { schemaVersion: 2, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } });
+  const accountQuery = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
+  await expect(inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env }))
+    .rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  policy.grants.push({ ...policy.grants[0]!, id: 'account-inspect', actions: ['inspect'],
+    resource: { kind: 'provider-spend-account', ids: ['budget'] } });
+  await writeFile(f.policyPath, JSON.stringify(policy), { mode: 0o600 });
+  const accountView = await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env });
+  expect(accountView).toMatchObject({ ...accountQuery, spendingHistoryIntegrity: 'not-recorded', checkpoint: account?.checkpoint });
+  expect(JSON.stringify(accountView)).not.toMatch(/private prompt|sensitive-usage-payload|responseContent/);
+  await expect(inspectConfiguredProviderSpendAccount(f.project, { ...accountQuery, budgetRevision: 2 }, { env: f.env }))
+    .rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
   expect((await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env })).responseContent)
     .toMatchObject({ response: { usage: { debug_prompt: 'sensitive-usage-payload' } } });
   const purge = new ModelInvocationPurgeApplication({ async verify() { return f.principal; } },
@@ -214,6 +226,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(after).toMatchObject({ contentStatus: 'purged', responseContent: null, spending: inspected.spending });
   expect(JSON.stringify(after)).not.toContain('sensitive-usage-payload');
   expect(await inspectAccount(f)).toEqual(account);
+  expect(await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env })).toEqual(accountView);
   const replay = await invokeConfiguredModel(f.project, f.command, { env: f.env });
   expect(replay).toMatchObject({ replayed: true, response: null, contentStatus: 'purged' });
   expect([f.metadataGets, f.posts]).toEqual([2, 2]); expect(await inspectAccount(f)).toEqual(account);

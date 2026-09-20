@@ -563,7 +563,7 @@
   "cli.init.previewOnly": "Yalnız önizleme: paket/imaj güveni ve kullanılabilirliği doğrulanmadı; hiçbir şey kurulmadı.",
   "cli.init.evidenceOnly": "Yazmasız gözlem: paket dosyaları ve yerel imaj varlığı ölçüldü; operatör onayı, yayıncı doğrulaması veya kurulum yapılmadı.",
   "cli.init.applied": "Kurulum sonucu (açık yerel güven; yayıncı doğrulaması mevcut değil):",
-  "cli.help.models": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content --input <dosya|-> [--json]\nInvoke, invocation ve purge-content açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
+  "cli.help.models": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content ve spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
   "models.notConfigured": "Model kataloğu yapılandırılmamış; kullanılabilirlik gözlemlenmedi.",
   "models.declaredHeader": "Beyan edilen model kataloğu {revision}:",
   "models.declaredRow": "- {provider}@{providerVersion} · {model}@{modelVersion} · native kimlik {nativeId} · protokoller {protocols}",
@@ -628,5 +628,16 @@
   "models.invocation.spendingReason.missingUsage": "kullanım bilgisi eksik",
   "models.invocation.spendingReason.invalidUsage": "kullanım bilgisi geçersiz",
   "models.invocation.spendingReason.priceUnavailable": "fiyat bilgisi yok",
-  "models.invocation.historyIntegrityNotRecorded": "Kalıcı bir tam geçmiş denetim sonucu yok; bu görünüm sorgulanan kayıtları doğrular."
+  "models.invocation.historyIntegrityNotRecorded": "Kalıcı bir tam geçmiş denetim sonucu yok; bu görünüm sorgulanan kayıtları doğrular.",
+  "cli.help.modelsSpending": "deckent models spending --input <dosya|-> [--json] [--lang en|tr]\nAçıkça başlatılmış yerel `deckent runtime serve` içinden tam kapsamlı sağlayıcı-harcama hesap anlık görüntüsünü okur. Girdi şema 1'dir: scopeId, budgetId ve budgetRevision. Rezerve tutarlar bekletilen rezervasyonları içerir, ancak bu görünüm bekletme nedenlerini göstermez. Kesinleşmiş toplam yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir; kaynak alt toplamları dahil değildir. Bu, yerel kaydedilmiş hesap kanıtıdır; sağlayıcı faturası veya denetlenmiş tam harcama geçmişi değildir.",
+  "models.spending.absent": "Kapsam {scope}, bütçe {budget} revizyon {revision}: kaydedilmiş hesap anlık görüntüsü yok. Bu, sıfır harcama, sıfır rezervasyon veya ücretsiz sağlayıcı hesabı demek değildir.",
+  "models.spending.account": "Kapsam {scope}, bütçe {budget} revizyon {revision}: kontrol noktası {checkpoint}, {reservations} rezervasyon; limit {limit} alt birim ({currency}).",
+  "models.spending.reserved": "Rezerve: {amount} alt birim ({currency}); bekletilen rezervasyonlar da dahildir. Bu görünüm bekletme nedenlerini göstermez. Bu, gerçekleşmiş harcama veya sağlayıcı faturası değildir.",
+  "models.spending.settledExact": "Kesinleşmiş tam toplam: {amount} alt birim ({currency}). Yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir; kaynak alt toplamları dahil değildir.",
+  "models.spending.settledRounded": "Kesinleşmiş yuvarlanmış gösterim: {amount} alt birim ({currency}); tam toplamın yukarı yuvarlanmış halidir ve fatura değildir.",
+  "models.spending.frozen": "Hesap dondurulmuş: {value}.",
+  "models.spending.frozenYes": "evet",
+  "models.spending.frozenNo": "hayır",
+  "models.spending.historyNotRecorded": "Bu hesap anlık görüntüsü için kalıcı tam geçmiş denetim sonucu kaydedilmemiştir.",
+  "mcp.tool.inspectProviderSpending": "Tam kapsamlı bir sağlayıcı-harcama hesap anlık görüntüsünü inceleyin. Bekletmeler dahil, ancak bekletme nedenleri olmadan kaydedilmiş yerel rezervasyonları ve yuvarlanmış gösterimiyle kesinleşmiş tam tutarı döndürür. Kesinleşmiş toplam yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir; kaynak alt toplamları dahil değildir. Sağlayıcı faturasını veya tam harcama geçmişi denetimini doğrulamaz."
 }

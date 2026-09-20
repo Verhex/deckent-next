@@ -3,6 +3,7 @@ import { parseModelReference } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
 import { modelInvocationCommand } from './model-invocation.js';
 import { modelActivationCommand } from './model-activation.js';
+import { modelSpendingCommand } from './model-spending.js';
 
 interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string;
   providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number }
@@ -59,6 +60,7 @@ function renderBinding(result: import('#engine/index.js').ModelBindingInspection
 }
 
 export async function modelsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+  if (argv[1] === 'spending') return modelSpendingCommand(argv, context);
   if (argv[1] === 'invoke' || argv[1] === 'invocation' || argv[1] === 'purge-content' || argv[1] === 'cancel') return modelInvocationCommand(argv, context);
   if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = resolveLocale(parsed.language, env);

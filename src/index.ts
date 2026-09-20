@@ -45,3 +45,6 @@ export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as ins
 export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationReceipt,
   ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationContentDescriptor, ModelInvocationResponseContent, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt } from '#domain/index.js';
 export type { ModelInvocationCancellationResult, ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ProviderSpendReservation } from '#engine/index.js';
+export { inspectRuntimeProviderSpendAccount as inspectProviderSpendAccount } from '#composition/index.js';
+export type { ProviderSpendAccountQuery } from '#domain/index.js';
+export type { ProviderSpendAccountInspection } from '#engine/index.js';

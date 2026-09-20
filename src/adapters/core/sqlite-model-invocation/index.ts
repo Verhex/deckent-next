@@ -21,6 +21,10 @@ export async function openSqliteProviderSpendIntegrityReader(path: string, optio
   const implementation = await import('./internal/spend-integrity.js');
   return implementation.openSqliteProviderSpendIntegrityReader(path, options);
 }
+export async function openSqliteProviderSpendAccountReader(path: string, options: { readonly busyTimeoutMs: number }) {
+  const implementation = await import('./internal/spend-account-reader.js');
+  return implementation.openSqliteProviderSpendAccountReader(path, options);
+}
 export async function openSqliteModelAllocationIntegrityReader(path: string,
   options: { readonly busyTimeoutMs: number }): Promise<ModelAllocationIntegrityReader> {
   const implementation = await import('./internal/allocation-integrity.js');

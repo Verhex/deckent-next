@@ -39,6 +39,14 @@ async function admit(client: ReturnType<typeof createConfiguredRuntimeClient>) {
   return { command, created, reserved };
 }
 
+it('rejects an invalid spending account query before connecting to an absent runtime', async () => {
+  const f = await fixture(), before = await readFile(f.ledgerPath);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+  await expect(client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 's', budgetId: 'budget', budgetRevision: 0 }))
+    .rejects.toMatchObject({ code: 'PROVIDER_SPEND_INVALID' });
+  expect(await readFile(f.ledgerPath)).toEqual(before);
+});
+
 it('bounds half-open client cleanup by the service grace and releases ownership after disconnect', async () => {
   const f = await fixture(true, 25, 10000);
   const observer = { async onPage() {}, async onError() {} };

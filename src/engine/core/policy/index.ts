@@ -9,3 +9,4 @@ export { ServicePolicyAuthorization } from './internal/service.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';
 export { ModelActivationPolicyAuthorization } from './internal/model-activation.js';
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
+export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';

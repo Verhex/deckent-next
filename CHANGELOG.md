@@ -394,3 +394,7 @@ MCP-ENVELOPE: bound complete MCP messages, preserve correlated overflow errors a
 - Capture native OpenRouter reported-charge evidence without floating-point loss or key-order-dependent identity. Keep reported charge separate from local tariff calculation and invoice reconciliation; missing/invalid evidence holds. Ledger settlement remains pending.
 
 Provider reported settlement: preserve exact fractional minor-unit totals, atomic response/content/money, minimal charge evidence after authorized content purge, validated ledger21 migration and inspection7 across SDK/CLI/MCP. Missing/invalid charge retains reservation; overrun freezes account. This is reported charge, not external invoice verification.
+
+PROVIDER-SPEND/ACCOUNT-SNAPSHOT: add separately authorized account inspection through SDK inspectProviderSpendAccount, CLI models spending, and MCP inspect_provider_spending; runtime wire9. Preserve exact totals, explicit missing checkpoint and not-recorded history audit, bounded result delivery, and read-only ledger access.
+
+ACCOUNT-SNAPSHOT: make absent source subtotals and held-reason details explicit in EN/TR output, help, MCP descriptions and SDK documentation; add compiled two-locale acceptance proof.

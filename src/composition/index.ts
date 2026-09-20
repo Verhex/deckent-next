@@ -20,3 +20,4 @@ export { inspectModelBinding } from '#composition/core/provider-catalog/index.js
 export { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 export * from '#composition/core/model-invocation/index.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';
+export { inspectRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';

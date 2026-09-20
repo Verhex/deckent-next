@@ -36,5 +36,6 @@ export * from '#engine/core/model-activation/index.js';
 export * from '#engine/core/model-invocation/index.js';
 export { ModelActivationPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
+export { ProviderSpendAccountPolicyAuthorization } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';

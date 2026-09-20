@@ -12,3 +12,6 @@ export type { ProviderSpendCheckpoint } from './internal/checkpoint.js';
 export { verifyProviderSpendIntegrity, validateProviderSpendIntegrityPageSize, PROVIDER_SPEND_INTEGRITY_PAGE_MAX } from './internal/integrity.js';
 export type { ProviderSpendIntegrityPageQuery, ProviderSpendIntegrityPage, ProviderSpendIntegrityReader } from './internal/integrity.js';
 export { providerSpendOutcomeDigest, verifyInvocationSpendReservation } from './internal/invocation.js';
+export { ProviderSpendAccountInspectionApplication, parseProviderSpendAccountInspectionForQuery } from './internal/inspection.js';
+export type { ProviderSpendAccountAuthorizer, ProviderSpendAccountInspection,
+  ProviderSpendAccountReader } from './internal/inspection.js';
