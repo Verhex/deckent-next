@@ -13,7 +13,7 @@ export function readSpendCheckpoint(db: DatabaseSync, scopeId: string): Provider
     return null;
   }
   if (typeof row.record !== 'string') throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-  const checkpoint = parseProviderSpendCheckpoint({ schemaVersion: 1, revision: row.revision,
+  const checkpoint = parseProviderSpendCheckpoint({ schemaVersion: 2, revision: row.revision,
     reservationCount: row.reservation_count, digest: row.digest, account: JSON.parse(row.record) });
   if (checkpoint.account.budget.scopeId !== scopeId) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return checkpoint;

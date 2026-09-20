@@ -13,7 +13,7 @@ export interface ModelInvocationInspectionReader {
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
   close(): void;
 }
-export type ModelInvocationInspection = Readonly<{ schemaVersion: 6; scopeId: string; invocationId: string;
+export type ModelInvocationInspection = Readonly<{ schemaVersion: 7; scopeId: string; invocationId: string;
   reference: ModelInvocationQuery['reference']; historyIntegrity: 'not-recorded'; invocation: ModelInvocationReceipt | null;
   control: ModelInvocationControlRecord | null;
   spending: ProviderSpendReservation | null;
@@ -29,7 +29,7 @@ export class ModelInvocationInspectionApplication {
     if (query.includeResponseContent === true) await this.authorization.authorize('inspect-content',
       { scopeId: query.scopeId, reference: query.reference }, principal);
     // No durable full-history audit producer is connected: record checks must not imply historical verification.
-    const identity = { schemaVersion: 6 as const, historyIntegrity: 'not-recorded' as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 7 as const, historyIntegrity: 'not-recorded' as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
     const reader = await this.openReader();
     try {
       const stored = await reader.loadInspection(query.scopeId, query.invocationId);

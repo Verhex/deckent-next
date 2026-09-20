@@ -3,9 +3,10 @@ import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote,
   type ModelBindingDefinition, type ModelInvocationProfile, type ModelInvocationNativeResponse, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
+  providerSpendQuoteDigest, parseProviderSpendReportedMeasurement, modelInvocationResponseContentDescriptor,
   type ModelInvocationNativePort, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { parseNativeJsonHttpLimits, sendNativeJsonHttp, type NativeJsonHttpRequest } from '#adapters/core/provider-http-json/index.js';
-import { requireOpenRouterMetadataObservation, parseOpenRouterTextRequest, quoteOpenRouterText,
+import { requireOpenRouterMetadataObservation, parseOpenRouterTextRequest, quoteOpenRouterText, openRouterReportedExactMinorUnits,
   type OpenRouterMetadataObservation, type OpenRouterTextReservation } from '#adapters/core/provider-openrouter-pricing/index.js';
 import { OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, OPENROUTER_CHAT_PROTOCOL,
   OpenRouterChatError, openRouterChatJsonSchema, parseOpenRouterChatDefinition } from './contract.js';
@@ -37,6 +38,12 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
     || resolveCredential !== undefined && typeof resolveCredential !== 'function') throw new OpenRouterChatError('INVALID_PROFILE');
   const tokens = new WeakMap<object, Prepared>();
   const completed = new WeakMap<object, Readonly<{ responseDigest: string; observation: OpenRouterUsageObservation }>>();
+  const quotes = new WeakMap<object, ProviderSpendQuote>();
+  const usageEvidence = (prepared: unknown, response: ModelInvocationNativeResponse): OpenRouterUsageObservation => {
+    const captured = prepared && typeof prepared === 'object' ? completed.get(prepared) : undefined;
+    if (!captured || captured.responseDigest !== openRouterResponseDigest(response)) throw new OpenRouterChatError('INVALID_REQUEST');
+    return captured.observation;
+  };
   const read = (token: unknown) => {
     if (!token || typeof token !== 'object') throw new OpenRouterChatError('INVALID_REQUEST');
     const value = tokens.get(token);
@@ -96,14 +103,24 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
         Object.freeze({ responseDigest: openRouterResponseDigest(result), observation }));
       return result;
     },
+    observeSpending(prepared: unknown, response: ModelInvocationNativeResponse) {
+      const observed = usageEvidence(prepared, response);
+      if (observed.kind === 'hold') return null;
+      const quote = quotes.get(prepared as object);
+      if (!quote) throw new OpenRouterChatError('INVALID_REQUEST');
+      const evidence = observed.evidence, source = evidence.source;
+      // Financial retention is an explicit scalar allowlist. Never copy native usage extensions across content purge.
+      return parseProviderSpendReportedMeasurement({ schemaVersion: 1, basis: 'provider-reported', currency: evidence.currency,
+        exactMinorUnits: openRouterReportedExactMinorUnits(source.numericSource), roundedMinorUnits: evidence.roundedChargeMinorUnits,
+        quoteDigest: providerSpendQuoteDigest(quote), requestDigest: quote.requestDigest, profileDigest: evidence.context.profileDigest,
+        responseContentDigest: modelInvocationResponseContentDescriptor(response).digest,
+        source: { id: 'openrouter-account-charge', version: 1, field: source.field, generationId: source.generationId, modelId: source.modelId,
+          numericSource: source.numericSource, minorUnitsPerCurrencyUnit: 100, bodyDigest: source.bodyDigest, responseDigest: source.responseDigest,
+          requestBodyDigest: evidence.context.requestBodyDigest, tariffDigest: evidence.context.tariffDigest,
+          selectedEndpointTag: evidence.context.selectedEndpointTag } });
+    },
   });
-  return Object.freeze({ native, usageEvidence(prepared: unknown, response: ModelInvocationNativeResponse): OpenRouterUsageObservation {
-    const captured = prepared && typeof prepared === 'object' ? completed.get(prepared) : undefined;
-    if (!captured || captured.responseDigest !== openRouterResponseDigest(response)) {
-      throw new OpenRouterChatError('INVALID_REQUEST');
-    }
-    return captured.observation;
-  }, quote(input: ModelInvocationSpendingInput): ProviderSpendQuote {
+  return Object.freeze({ native, usageEvidence, quote(input: ModelInvocationSpendingInput): ProviderSpendQuote {
     const value = read(input.prepared); fresh(value);
     if (!isDeepStrictEqual(input.profile, value.profile) || !isDeepStrictEqual(input.definition, value.binding)
       || !isDeepStrictEqual(parseOpenRouterTextRequest(input.command.nativeRequest), value.request)
@@ -120,9 +137,11 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
         inputBound: 'published-endpoint-prompt-or-context', outputBound: 'requested-output-tokens', requestCount: 1 },
       reservation: value.reservation };
     const evidenceDigest = providerSpendEvidenceDigest(evidence);
-    return parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest, profileDigest: input.profileDigest,
+    const quote = parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest, profileDigest: input.profileDigest,
       pricing: { id: 'openrouter-endpoint-tariff', version: 1, digest: value.reservation.tariffDigest, definition: value.observation.tariff.definition },
       meter: { id: 'openrouter-text-reservation', version: 1, evidenceDigest, evidence },
       currency: value.reservation.currency, maxChargeMinorUnits: value.reservation.maxChargeMinorUnits });
+    quotes.set(input.prepared as object, quote);
+    return quote;
   } });
 }

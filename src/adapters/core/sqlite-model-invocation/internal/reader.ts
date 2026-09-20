@@ -22,6 +22,11 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
       if (!record) { this.db.exec('COMMIT'); return null; }
       let spending = null;
       const version = requireLedgerVersion(this.db, MODEL_INVOCATION_LEDGER_VERSION);
+      if (version === PROVIDER_SPEND_LEDGER_VERSION - 1
+        && this.db.prepare(`SELECT 1 FROM model_invocation_spend_reservations
+          WHERE scope_id=? AND invocation_id=? LIMIT 1`).get(scopeId, invocationId)) {
+        requireLedgerVersion(this.db, PROVIDER_SPEND_LEDGER_VERSION);
+      }
       if (version >= PROVIDER_SPEND_LEDGER_VERSION) {
         const reservation = this.db.prepare('SELECT record,digest FROM model_invocation_spend_reservations WHERE scope_id=? AND invocation_id=?')
           .get(scopeId, invocationId);

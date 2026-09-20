@@ -57,7 +57,7 @@ function snapshot(path: string) {
 it('migrates a real ledger18 allocation inventory through revision-one checkpoints without changing receipts', async () => {
   const path = await file(); await seed18(path); const before = snapshot(path);
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
-  const after = snapshot(path); expect(after).toEqual({ ...before, version: 20 });
+  const after = snapshot(path); expect(after).toEqual({ ...before, version: 21 });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     const allocationRow = db.prepare('SELECT record FROM model_invocation_allocations').get() as { record: string };

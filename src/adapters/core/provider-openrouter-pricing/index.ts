@@ -6,4 +6,4 @@ export { parseOpenRouterTextRequest, quoteOpenRouterText } from './internal/quot
 export type { OpenRouterTextReservation } from './internal/quote.js';
 export { fetchOpenRouterTariff, requireOpenRouterMetadataObservation } from './internal/fetch.js';
 export type { OpenRouterMetadataFetchOptions, OpenRouterMetadataObservation } from './internal/fetch.js';
-export { parseOpenRouterReportedCharge } from './internal/charge.js';
+export { parseOpenRouterReportedCharge, openRouterReportedExactMinorUnits } from './internal/charge.js';

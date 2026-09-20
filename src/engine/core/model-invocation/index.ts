@@ -10,7 +10,7 @@ export { parseModelInvocationCancellationResultForCommand, parseModelInvocationI
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
   parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './internal/evidence.js';
 export { createModelInvocationEvidenceRecord, createModelInvocationPreventedRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
-  parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './internal/content.js';
+  modelInvocationResponseContentDescriptor, parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './internal/content.js';
 export type { ModelInvocationDelivery } from './internal/delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
 export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationRecord, ModelInvocationStore,

@@ -2,6 +2,7 @@ import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActo
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord, ModelInvocationNativeResponse, ModelInvocationProfile,
   ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationResponseContent,
   ModelInvocationResponseEvidence, ModelInvocationUnknownReason, ProviderSpendBudget, ProviderSpendQuote } from '#domain/index.js';
+import type { ProviderSpendReportedMeasurement } from '#engine/core/provider-spend/index.js';
 
 export interface ModelInvocationAdmission {
   readonly command: ModelInvocationCommand;
@@ -39,7 +40,8 @@ export interface ModelInvocationStore {
   claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult>;
   /** A committed single-use permission, not an observation that HTTP was sent. Never replay a grant. */
   permitSend(claim: ModelInvocationClaim, ownerId: string, now: number): Promise<ModelInvocationSendPermission>;
-  recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number): Promise<ModelInvocationRecord>;
+  recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number,
+    measurement?: ProviderSpendReportedMeasurement | null): Promise<ModelInvocationRecord>;
   recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number): Promise<ModelInvocationRecord>;
   recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number, evidence?: ModelInvocationResponseEvidence | null): Promise<ModelInvocationRecord>;
   loadInvocation(scopeId: string, invocationId: string): Promise<ModelInvocationRecord | null>;

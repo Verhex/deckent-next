@@ -40,7 +40,7 @@ it('folds bounded pages and reports only the exact checkpoint that was verified'
       nextInvocationId: calls === 1 ? 'b' : null };
   }, close() {} };
   expect(await verifyProviderSpendIntegrity(reader, 'scope', 2)).toEqual({ checkpoint: f.checkpoint,
-    reservationCount: 3, reservedMinorUnits: 9, settledMinorUnits: 0 }); expect(calls).toBe(2);
+    reservationCount: 3, reservedMinorUnits: 9, settledMinorUnits: 0, settledExactMinorUnits: '0' }); expect(calls).toBe(2);
 });
 
 it.each(['duplicate', 'missing', 'cursor', 'totals', 'freeze', 'scope', 'oversized', 'revision'] as const)(

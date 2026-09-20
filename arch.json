@@ -879,7 +879,9 @@
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
         "src/domain/core/model-invocation",
-        "src/engine/core/model-allocation"
+        "src/engine/core/model-allocation",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
       ],
       "plan": "STORE/LEDGER-OWNER"
     },

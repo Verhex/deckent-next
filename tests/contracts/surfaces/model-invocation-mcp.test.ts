@@ -14,13 +14,13 @@ const purge: ModelInvocationPurgeCommand = { schemaVersion: 1, commandId: 'purge
   reference, expectedContentDigest: 'a'.repeat(64) };
 const cancellation: ModelInvocationCancellationCommand = { schemaVersion: 1, commandId: 'cancel-a', scopeId: 'scope-a', targetCommandId: 'command-a',
   reference, expectedRequestDigest: 'a'.repeat(64) };
-const inspection: ModelInvocationInspection = { ...query, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: null, control: null, contentStatus: null, purge: null, spending: null };
+const inspection: ModelInvocationInspection = { ...query, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: null, control: null, contentStatus: null, purge: null, spending: null };
 const result = { replayed: false, receipt: { fixture: 'native invocation is not a provider call' } } as unknown as ModelInvocationResult;
 function settledSpending() {
   const quote = { schemaVersion: 1 as const, scopeId: 'scope-a', requestDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
     pricing: { id: 'price', version: 1, digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } },
     currency: 'USD', maxChargeMinorUnits: 99 };
-  return parseProviderSpendReservation({ schemaVersion: 1, descriptor: { schemaVersion: 1, scopeId: 'scope-a', invocationId: 'invocation-a',
+  return parseProviderSpendReservation({ schemaVersion: 2, measurement: null, descriptor: { schemaVersion: 1, scopeId: 'scope-a', invocationId: 'invocation-a',
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quoteDigest: providerSpendQuoteDigest(quote), quote },
   disposition: { state: 'settled-local', amountMinorUnits: 40, evidenceDigest: 'e'.repeat(64) } });
 }

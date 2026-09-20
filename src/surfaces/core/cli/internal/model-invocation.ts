@@ -52,6 +52,12 @@ function renderSpending(spending: ProviderSpendReservation | null, locale: Local
   if (spending.disposition.state === 'reserved') return t('models.invocation.spendingReserved', parameters, locale);
   if (spending.disposition.state === 'held') return t('models.invocation.spendingHeld', { ...parameters, reason: renderSpendingReason(spending.disposition.reason, locale) }, locale);
   if (spending.disposition.state === 'released-not-sent') return t('models.invocation.spendingReleasedNotSent', parameters, locale);
+  if (spending.disposition.state === 'settled-provider-reported') {
+    if (spending.measurement === null) throw new Error('PROVIDER_SPEND_INVALID');
+    return t('models.invocation.spendingSettledProviderReported', {
+      ...parameters, exactAmount: spending.measurement.exactMinorUnits, roundedAmount: spending.measurement.roundedMinorUnits,
+    }, locale);
+  }
   return t('models.invocation.spendingSettledLocal', { ...parameters, amount: spending.disposition.amountMinorUnits }, locale);
 }
 function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null,

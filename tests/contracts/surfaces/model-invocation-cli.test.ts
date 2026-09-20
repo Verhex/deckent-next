@@ -16,15 +16,22 @@ const command = { schemaVersion: 1, commandId: 'command', scopeId: 'scope', refe
   nativeRequest: { messages: [{ role: 'user', content: 'response-content-must-not-render' }] } };
 const purgedReceipt = { claim: { invocationId: 'call', commandId: 'command' }, outcome: { state: 'responded' } };
 const purgeReceipt = { command: { invocationId: 'call' } };
-function spending(state: 'held' | 'released-not-sent' | 'settled-local', reason: 'unknown' | 'missing-usage' | 'overrun' = 'missing-usage') {
+function spending(state: 'held' | 'released-not-sent' | 'settled-local' | 'settled-provider-reported', reason: 'unknown' | 'missing-usage' | 'overrun' = 'missing-usage') {
   const quote = { schemaVersion: 1 as const, scopeId: 'scope', requestDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
     pricing: { id: 'price', version: 1, digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } },
     currency: 'USD', maxChargeMinorUnits: 99 };
-  return parseProviderSpendReservation({ schemaVersion: 1, descriptor: { schemaVersion: 1, scopeId: 'scope', invocationId: 'call',
+  const overrun = state === 'held' && reason === 'overrun';
+  const measurement = { schemaVersion: 1 as const, basis: 'provider-reported' as const, currency: 'USD', exactMinorUnits: overrun ? '99.02' : '0.02', roundedMinorUnits: overrun ? 100 : 1,
+    quoteDigest: providerSpendQuoteDigest(quote), requestDigest: quote.requestDigest, profileDigest: quote.profileDigest, responseContentDigest: 'c'.repeat(64),
+    source: { id: 'provider', version: 1, field: 'usage.cost', generationId: 'generation', modelId: 'model', numericSource: overrun ? '0.9902' : '0.0002', minorUnitsPerCurrencyUnit: 100,
+      bodyDigest: 'd'.repeat(64), responseDigest: 'e'.repeat(64), requestBodyDigest: 'f'.repeat(64), tariffDigest: quote.pricing.digest, selectedEndpointTag: 'chat' } };
+  return parseProviderSpendReservation({ schemaVersion: 2, descriptor: { schemaVersion: 1, scopeId: 'scope', invocationId: 'call',
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quoteDigest: providerSpendQuoteDigest(quote), quote },
   disposition: state === 'held' ? { state, reason, observedMinorUnits: reason === 'overrun' ? 100 : null, evidenceDigest: 'e'.repeat(64) }
     : state === 'released-not-sent' ? { state, evidenceDigest: 'e'.repeat(64) }
-      : { state, amountMinorUnits: 40, evidenceDigest: 'e'.repeat(64) } });
+      : state === 'settled-provider-reported' ? { state, amountMinorUnits: 1, evidenceDigest: 'e'.repeat(64) }
+        : { state, amountMinorUnits: 40, evidenceDigest: 'e'.repeat(64) },
+  measurement: state === 'settled-provider-reported' || overrun ? measurement : null });
 }
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-invocation-cli-')); roots.push(root);
@@ -38,7 +45,7 @@ it('reads file and stdin queries through one inspection contract and renders EN/
     let output = '', calls = 0;
     const code = await main(['models', 'invocation', '--input', language === 'en' ? path : '-', '--lang', language], {
       ...f, stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 6,
+      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 7,
         historyIntegrity: 'not-recorded' as const, invocation: null, control: null, contentStatus: null, purge: null, spending: null }; },
     });
     expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain(language === 'en' ? 'No invocation receipt' : 'Çağrı kaydı bulunamadı');
@@ -95,11 +102,27 @@ it('renders only the invocation reservation state in EN/TR without exposing nati
   for (const state of ['held', 'released-not-sent', 'settled-local'] as const) for (const language of ['en', 'tr'] as const) {
     let output = '';
     const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f, stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged',
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged',
         purge: purgeReceipt, spending: spending(state) }) as never });
     expect(code).toBe(0); expect(output).toContain(expected[language][state]); expect(output).toContain(language === 'en' ? 'not a provider invoice' : 'sağlayıcı faturası değildir');
     expect(output).toContain(language === 'en' ? 'No persisted full-history audit result is available' : 'Kalıcı bir tam geçmiş denetim sonucu yok');
     expect(output).not.toContain('response-content-must-not-render'); expect(output).not.toContain('scope budget');
+  }
+});
+it('renders the provider-reported exact minor-unit amount separately from its per-invocation rounding projection', async () => {
+  const f = await fixture(), path = join(f.root, 'reported-spending-query.json'); await writeFile(path, JSON.stringify(query));
+  const expected = {
+    en: 'Provider-reported charge: exact 0.02 minor units (USD); local per-invocation rounding projection: 1 minor units (USD)',
+    tr: 'Sağlayıcı tarafından bildirilen tutar: tam olarak 0.02 alt birim (USD); çağrı başına yerel yuvarlama gösterimi: 1 alt birim (USD)',
+  } as const;
+  for (const language of ['en', 'tr'] as const) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f, stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
+        contentStatus: 'purged', purge: purgeReceipt, spending: spending('settled-provider-reported') }) as never });
+    expect(code).toBe(0); expect(output).toContain(expected[language]);
+    expect(output).toContain(language === 'en' ? 'not a local tariff calculation or external invoice verification' : 'yerel tarife hesabı veya harici fatura doğrulaması değildir');
+    expect(output).not.toContain(language === 'en' ? 'scope budget' : 'kapsam bütçesi');
   }
 });
 it('localizes held spending reasons in Turkish without exposing enum values', async () => {
@@ -107,7 +130,7 @@ it('localizes held spending reasons in Turkish without exposing enum values', as
   for (const [reason, label] of [['unknown', 'kullanım bilinmiyor'], ['overrun', 'yerel tutar teklif üst sınırını aştı']] as const) {
     let output = '';
     const code = await main(['models', 'invocation', '--input', path, '--lang', 'tr'], { ...f, stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
         contentStatus: 'purged', purge: purgeReceipt, spending: spending('held', reason) }) as never });
     expect(code).toBe(0); expect(output).toContain(label); expect(output).not.toContain(reason);
   }
@@ -117,14 +140,14 @@ it('states that missing spending evidence is neither free nor zero cost', async 
   for (const [language, expected] of [['en', 'does not mean it was free or zero cost'], ['tr', 'ücretsiz veya sıfır maliyetli olduğu anlamına gelmez']] as const) {
     let output = '';
     const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f, stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
         contentStatus: 'purged', purge: purgeReceipt, spending: null }) as never });
     expect(code).toBe(0); expect(output).toContain(expected); expect(output).not.toContain('0 USD');
   }
 });
 it('preserves the same spending record in inspection JSON without ANSI', async () => {
   const f = await fixture(), path = join(f.root, 'spending-json-query.json'); await writeFile(path, JSON.stringify(query));
-  const result = { ...query, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged', purge: purgeReceipt,
+  const result = { ...query, schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged', purge: purgeReceipt,
     spending: spending('settled-local') } as never;
   let output = '';
   const code = await main(['models', 'invocation', '--input', path, '--json', '--no-color'], { ...f, stdout: { write(text) { output += text; } },

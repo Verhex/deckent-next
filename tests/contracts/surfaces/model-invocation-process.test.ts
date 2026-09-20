@@ -103,7 +103,7 @@ type A5ProofInput = Readonly<{ root: string; project: string; env: Record<string
   setResponse: (value: 'malformed' | 'status') => void; setContentPolicy: (allowed: boolean) => Promise<void>;
   large: ModelInvocationResult }>;
 function heldOpenRouterSpend(receipt: ModelInvocationResult['receipt']) {
-  return expect.objectContaining({ schemaVersion: 1, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
+  return expect.objectContaining({ schemaVersion: 2, measurement: null, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
     invocationId: receipt.claim.invocationId, quote: expect.objectContaining({ currency: 'USD', maxChargeMinorUnits: 2,
       pricing: expect.objectContaining({ id: 'openrouter-endpoint-tariff', version: 1 }),
       meter: expect.objectContaining({ id: 'openrouter-text-reservation', version: 1 }) }) }),
@@ -159,7 +159,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', legacyQueryPath)).toEqual({ ok: false, code: 'MODEL_INVOCATION_INVALID' });
   await input.setContentPolicy(false);
   const defaultInspection = await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', malformedQueryPath);
-  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 6, historyIntegrity: 'not-recorded', spending: heldOpenRouterSpend(malformedReceipt), invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
+  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 7, historyIntegrity: 'not-recorded', spending: heldOpenRouterSpend(malformedReceipt), invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
     send: { state: 'permitted', ownerId: expect.any(String), permittedAtMs: expect.any(Number) }, cancellation: null }, contentStatus: 'retained', purge: null } });
   if (defaultInspection.ok) { expect(Object.hasOwn(defaultInspection.value, 'responseContent')).toBe(false); expectNoRawBody(defaultInspection.value.invocation!, Buffer.from(malformedBody)); }
   const defaultText = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
@@ -189,7 +189,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
 function nativeFixtureBody(mode: 'normal' | 'oversize', count: number): string {
   return JSON.stringify(mode === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${count}`, object: 'chat.completion', created: 1,
     model: 'vendor/model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
-    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, private_note: 'retained-sensitive-usage' } });
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0002, private_note: 'retained-sensitive-usage' } });
 }
 
 async function assertRetainedNativeContent(project: string, root: string, env: Record<string, string>, ledger: string,
@@ -197,7 +197,17 @@ async function assertRetainedNativeContent(project: string, root: string, env: R
   const count = bodies.length, inputPath = join(root, 'retained-native-query.json');
   await writeFile(inputPath, JSON.stringify(query), { mode: 0o600 });
   const ordinary = await callSdk<ModelInvocationInspection>(project, env, 'inspect', inputPath);
-  expect(ordinary).toMatchObject({ ok: true, value: { contentStatus: 'retained' } });
+  expect(ordinary).toMatchObject({ ok: true, value: { contentStatus: 'retained', spending: {
+    disposition: { state: 'settled-provider-reported', amountMinorUnits: 1 },
+    measurement: { basis: 'provider-reported', exactMinorUnits: '0.02', roundedMinorUnits: 1,
+      source: { field: 'usage.cost', numericSource: '0.0002' } },
+  } } });
+  if (!ordinary.ok) throw new Error('INSPECTION_FAILED');
+  const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', inputPath, '--json'],
+    { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
+  expect(cliInspection).toEqual(ordinary.value);
+  const mcpInspection = await callMcp(project, env, 'inspect_model_invocation', query);
+  expect(mcpInspection.isError).not.toBe(true); expect(mcpInspection.structuredContent).toEqual(ordinary.value);
   expect(JSON.stringify(ordinary)).not.toContain('retained-sensitive-usage');
   if (ordinary.ok) expect(Object.hasOwn(ordinary.value, 'responseContent')).toBe(false);
   await writeFile(inputPath, JSON.stringify({ ...query, includeResponseContent: true }), { mode: 0o600 });
@@ -267,8 +277,8 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
     }
     expect(result.replayed).toBe(false); receipts.push(result.receipt);
     const purged = await callSdk<ModelInvocationInspection>(project, env, 'inspect', queryPath);
-    expect(purged).toMatchObject({ ok: true, value: { schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: inspected.value.invocation,
-      contentStatus: 'purged', responseContent: null, purge: result.receipt } });
+    expect(purged).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', invocation: inspected.value.invocation,
+      contentStatus: 'purged', responseContent: null, purge: result.receipt, spending: inspected.value.spending } });
     expect(snapshot()).toEqual(before);
   }
   const service = runtimeProcesses.at(-1)!; await stopRuntime(service); runtimeProcesses.splice(runtimeProcesses.indexOf(service), 1);

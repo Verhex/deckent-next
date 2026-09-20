@@ -17,7 +17,7 @@ const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RE
 const statusSchema = z.enum(['retained', 'not-captured', 'purged']);
 const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(),
   contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
-const inspectionSchema = z.object({ schemaVersion: z.literal(6), historyIntegrity: z.literal('not-recorded'), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
+const inspectionSchema = z.object({ schemaVersion: z.literal(7), historyIntegrity: z.literal('not-recorded'), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
   invocation: z.unknown().nullable(), control: z.unknown().nullable(), spending: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
   responseContent: z.unknown().optional() }).strict();
 const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
@@ -52,7 +52,7 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (!parsed?.success || parsed.data.scopeId !== query.scopeId || parsed.data.invocationId !== query.invocationId || !same(parsed.data.reference, query.reference)) return corrupt();
     const wantsContent = query.includeResponseContent === true;
     if (Object.hasOwn(parsed.data, 'responseContent') !== wantsContent) return corrupt();
-    const identity = { schemaVersion: 6 as const, historyIntegrity: 'not-recorded' as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 7 as const, historyIntegrity: 'not-recorded' as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
     if (parsed.data.invocation === null) {
       if (parsed.data.spending !== null || parsed.data.control !== null || parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
       return Object.freeze({ ...identity, invocation: null, control: null, spending: null, contentStatus: null, purge: null,

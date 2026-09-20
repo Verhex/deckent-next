@@ -622,6 +622,7 @@
   "models.invocation.spendingHeld": "Yerel rezervasyon bekletildi: en fazla {maximum} alt birim ({currency}); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı; neden: {reason}. Bu bir sağlayıcı faturası değildir.",
   "models.invocation.spendingReleasedNotSent": "Yerel rezervasyon gönderimden önce serbest bırakıldı: en fazla {maximum} alt birim ({currency}); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı. Bu bir sağlayıcı faturası değildir.",
   "models.invocation.spendingSettledLocal": "Yerel hesaplanan tutar: {amount} alt birim ({currency}) (teklif üst sınırı: {maximum} alt birim ({currency})); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı. Bu bir sağlayıcı faturası değildir.",
+  "models.invocation.spendingSettledProviderReported": "Sağlayıcı tarafından bildirilen tutar: tam olarak {exactAmount} alt birim ({currency}); çağrı başına yerel yuvarlama gösterimi: {roundedAmount} alt birim ({currency}) (teklif üst sınırı: {maximum} alt birim ({currency})). Bu, sağlayıcının bildirdiği kullanımdır; yerel tarife hesabı veya harici fatura doğrulaması değildir.",
   "models.invocation.spendingReason.unknown": "kullanım bilinmiyor",
   "models.invocation.spendingReason.overrun": "yerel tutar teklif üst sınırını aştı",
   "models.invocation.spendingReason.missingUsage": "kullanım bilgisi eksik",

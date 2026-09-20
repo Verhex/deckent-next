@@ -17,6 +17,8 @@ import { createModelInvocationPreventedRecord, createModelInvocationEvidenceReco
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationRecord, type ModelInvocationStore } from './port.js';
+import type { ProviderSpendReportedMeasurement } from '#engine/core/provider-spend/index.js';
+import { observeModelInvocationSpending } from './measurement.js';
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
@@ -33,6 +35,8 @@ export interface ModelInvocationNativePort {
   responseBytesUpperBound?(prepared: unknown): bigint;
   /** The model execution transport operation; authorized metadata acquisition is separate. */
   send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult>;
+  /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
+  observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendReportedMeasurement | null;
 }
 export interface ModelInvocationNativeRegistry {
   resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null;
@@ -214,11 +218,12 @@ export class ModelInvocationApplication {
         }
         try {
           const observedAtMs = this.runtime.now();
+          const measurement = 'kind' in response ? null : observeModelInvocationSpending(native, prepared, response, spending.quote);
           const record = verifyModelInvocationRecord('kind' in response
             ? response.evidence.body.complete
               ? await store.recordRejected(claimReceipt.claim, response.evidence, observedAtMs)
               : await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, response.evidence)
-            : await store.recordResponse(claimReceipt.claim, response, observedAtMs));
+            : await store.recordResponse(claimReceipt.claim, response, observedAtMs, measurement));
           const expected = 'kind' in response
             ? createModelInvocationEvidenceRecord(claimReceipt, response.evidence, observedAtMs)
             : createModelInvocationResponseRecord(claimReceipt, response, observedAtMs);

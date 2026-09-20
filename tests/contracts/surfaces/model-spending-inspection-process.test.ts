@@ -11,7 +11,8 @@ import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationProfileDigest, modelInvocationRequestDigest,
-  modelInvocationTargetId, type ModelInvocationInspection, type ProviderSpendReservation } from '#engine/index.js';
+  modelInvocationResponseContentDescriptor, modelInvocationTargetId, parseProviderSpendReportedMeasurement,
+  providerSpendQuoteDigest, type ModelInvocationInspection, type ProviderSpendReservation } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const execute = promisify(execFile), roots: string[] = [], children: ChildProcess[] = [];
@@ -112,32 +113,62 @@ it('shows exact per-invocation spending across compiled SDK, CLI and MCP without
       quote: { schemaVersion: 1 as const, scopeId: 'scope', requestDigest, profileDigest,
         pricing: { id: 'native-price', version: 1, digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'native-meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } },
         currency: 'USD', maxChargeMinorUnits: 6 } };
-    return store.claim({ command, requestDigest, actor, authorization: { revision: 'seed', ruleId: 'seed' }, definition,
+    const claimed = await store.claim({ command, requestDigest, actor, authorization: { revision: 'seed', ruleId: 'seed' }, definition,
       activation: activation.receipt.record, profile, profileDigest, invocationId: `invocation-${suffix}`, claimedAtMs: 2, spending });
+    return { ...claimed, quote: spending.quote, requestDigest, profileDigest };
   };
   const held = await seed('held'); await store.permitSend(held.record.receipt.claim, 'owner', 3);
   await store.recordResponse(held.record.receipt.claim, { schemaVersion: 1, native: { id: 'response' }, usage: null }, 4);
   const released = await seed('released'); await store.cancelInvocation({ command: { schemaVersion: 1, commandId: 'cancel-released', scopeId: 'scope',
     targetCommandId: released.record.receipt.claim.commandId, reference, expectedRequestDigest: released.record.receipt.claim.requestDigest },
-  actor, authorization: { revision: 'seed', ruleId: 'seed' }, requestedAtMs: 5 }); store.close();
+  actor, authorization: { revision: 'seed', ruleId: 'seed' }, requestedAtMs: 5 });
+  const reported = await seed('reported'), reportedResponse = { schemaVersion: 1 as const, native: { id: 'reported-response' }, usage: null };
+  await store.permitSend(reported.record.receipt.claim, 'owner', 6);
+  const reportedMeasurement = parseProviderSpendReportedMeasurement({ schemaVersion: 1, basis: 'provider-reported', currency: 'USD',
+    exactMinorUnits: '0.02', roundedMinorUnits: 1, quoteDigest: providerSpendQuoteDigest(reported.quote),
+    requestDigest: reported.requestDigest, profileDigest: reported.profileDigest,
+    responseContentDigest: modelInvocationResponseContentDescriptor(reportedResponse).digest,
+    source: { id: 'inspection-fixture', version: 1, field: 'usage.cost', generationId: 'generation', modelId: 'native',
+      numericSource: '0.0002', minorUnitsPerCurrencyUnit: 100, bodyDigest: createHash('sha256').update('body').digest('hex'),
+      responseDigest: createHash('sha256').update('response').digest('hex'), requestBodyDigest: createHash('sha256').update('request').digest('hex'),
+      tariffDigest: reported.quote.pricing.digest, selectedEndpointTag: 'inspection' } });
+  await store.recordResponse(reported.record.receipt.claim, reportedResponse, 7, reportedMeasurement); store.close();
   await startRuntime(project, env);
   const query = (id: string, ref = reference, scopeId = 'scope') => ({ schemaVersion: 2, scopeId, invocationId: id, reference: ref });
-  const heldQuery = query('invocation-held'), releasedQuery = query('invocation-released');
-  const before = ledgerSnapshot(ledger), heldSdk = await inspectSdk(project, env, heldQuery), releasedSdk = await inspectSdk(project, env, releasedQuery);
-  expect(heldSdk).toMatchObject({ ok: true, value: { schemaVersion: 6, historyIntegrity: 'not-recorded', contentStatus: 'retained', spending: { disposition: { state: 'held', reason: 'missing-usage' } } } });
-  expect(releasedSdk).toMatchObject({ ok: true, value: { schemaVersion: 6, historyIntegrity: 'not-recorded', contentStatus: 'not-captured', spending: { disposition: { state: 'released-not-sent' } } } });
-  if (!heldSdk.ok || !releasedSdk.ok) throw new Error('SDK_INSPECTION_FAILED');
+  const heldQuery = query('invocation-held'), releasedQuery = query('invocation-released'), reportedQuery = query('invocation-reported');
+  const before = ledgerSnapshot(ledger), heldSdk = await inspectSdk(project, env, heldQuery), releasedSdk = await inspectSdk(project, env, releasedQuery),
+    reportedSdk = await inspectSdk(project, env, reportedQuery);
+  expect(heldSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'retained', spending: { disposition: { state: 'held', reason: 'missing-usage' } } } });
+  expect(releasedSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'not-captured', spending: { disposition: { state: 'released-not-sent' } } } });
+  expect(reportedSdk).toMatchObject({ ok: true, value: { schemaVersion: 7, historyIntegrity: 'not-recorded', contentStatus: 'retained', spending: {
+    disposition: { state: 'settled-provider-reported', amountMinorUnits: 1 }, measurement: { basis: 'provider-reported', exactMinorUnits: '0.02', roundedMinorUnits: 1 } } } });
+  if (!heldSdk.ok || !releasedSdk.ok || !reportedSdk.ok) throw new Error('SDK_INSPECTION_FAILED');
   expect(Object.hasOwn(heldSdk.value, 'responseContent')).toBe(false); expect(Object.hasOwn(releasedSdk.value, 'responseContent')).toBe(false);
+  expect(Object.hasOwn(reportedSdk.value, 'responseContent')).toBe(false); expect(JSON.stringify(reportedSdk.value)).not.toContain('reported-response');
   const input = join(root, 'query.json'); await writeFile(input, JSON.stringify(heldQuery));
   const cliJson = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', input, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
   expect(cliJson).toEqual(heldSdk.value);
+  const reportedInput = join(root, 'reported-query.json'); await writeFile(reportedInput, JSON.stringify(reportedQuery));
+  const reportedCliJson = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', reportedInput, '--json'],
+    { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
+  expect(reportedCliJson).toEqual(reportedSdk.value);
   const mcpResult = await inspectMcp(project, env, releasedQuery);
   expect(mcpResult.isError).not.toBe(true); expect(mcpResult.structuredContent).toEqual(releasedSdk.value);
+  const reportedMcpResult = await inspectMcp(project, env, reportedQuery);
+  expect(reportedMcpResult.isError).not.toBe(true); expect(reportedMcpResult.structuredContent).toEqual(reportedSdk.value);
   for (const [language, phrase] of [['en', 'Local reservation held: up to 6 minor units (USD)'], ['tr', 'Yerel rezervasyon bekletildi: en fazla 6 alt birim (USD)']] as const) {
     const text = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', input, '--lang', language, '--no-color'],
       { cwd: project, env, timeout: 10_000 })).stdout;
     expect(text).toContain(phrase); expect(text.toLowerCase()).toContain(language === 'en' ? 'not a provider invoice' : 'sağlayıcı faturası değildir');
+  }
+  for (const [language, phrase, distinction] of [
+    ['en', 'Provider-reported charge: exact 0.02 minor units (USD); local per-invocation rounding projection: 1 minor units (USD)', 'not a local tariff calculation or external invoice verification'],
+    ['tr', 'Sağlayıcı tarafından bildirilen tutar: tam olarak 0.02 alt birim (USD); çağrı başına yerel yuvarlama gösterimi: 1 alt birim (USD)', 'yerel tarife hesabı veya harici fatura doğrulaması değildir'],
+  ] as const) {
+    const text = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', reportedInput, '--lang', language, '--no-color'],
+      { cwd: project, env, timeout: 10_000 })).stdout;
+    expect(text).toContain(phrase); expect(text).toContain(distinction); expect(text).not.toContain('reported-response');
   }
   expect((heldSdk.value.spending as ProviderSpendReservation).disposition).toEqual({ state: 'held', reason: 'missing-usage', observedMinorUnits: null,
     evidenceDigest: expect.any(String) });

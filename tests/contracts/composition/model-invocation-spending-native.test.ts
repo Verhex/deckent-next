@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
-import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import * as adapters from '#adapters/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore,
   openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
+import { ModelActivationApplication, ModelBindingApplication, ModelInvocationPurgeApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [];
@@ -30,6 +30,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
   const [key, caPem] = await Promise.all([readFile(keyPath, 'utf8'), readFile(certPath, 'utf8')]);
   let metadataGets = 0, posts = 0;
+  let nativeUsage: Record<string, unknown> | undefined;
   const server = createServer({ key, cert: caPem }, (request, response) => {
     if (request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ data: { id: 'vendor/model', endpoints: [{
@@ -43,6 +44,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
       posts++; request.resume(); response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({
         id: 'response', object: 'chat.completion', created: 1, model: 'vendor/model',
         choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+        ...(nativeUsage === undefined ? {} : { usage: nativeUsage }),
       })); return;
     }
     response.writeHead(404); response.end();
@@ -81,6 +83,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
   const command = { schemaVersion: 1 as const, commandId: 'command', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } };
   return { project, ledger, config, configPath: join(project, '.deckent/config.json'), policyPath, policy, writePolicy,
+    principal, setUsage(value: Record<string, unknown>) { nativeUsage = value; },
     env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, command,
     get metadataGets() { return metadataGets; }, get posts() { return posts; } };
 }
@@ -92,7 +95,7 @@ it('acquires one native tariff, persists one reservation, and replays without re
   let persisted;
   try { persisted = await invocationReader.loadInspection('scope', first.receipt.claim.invocationId); }
   finally { invocationReader.close(); }
-  expect(persisted?.spending).toMatchObject({ schemaVersion: 1, descriptor: { scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
+  expect(persisted?.spending).toMatchObject({ schemaVersion: 2, descriptor: { scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quote: { maxChargeMinorUnits: 2,
       pricing: { id: 'openrouter-endpoint-tariff', version: 1, definition: expect.objectContaining({ modelId: 'vendor/model', endpointTag: 'provider/region' }) },
       meter: { id: 'openrouter-text-reservation', version: 1, evidence: expect.objectContaining({ tariffDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }) } } },
@@ -149,4 +152,84 @@ it('rechecks the configured profile before selected native metadata acquisition'
   });
   await expect(invokeConfiguredModel(f.project, f.command, { env: f.env })).rejects.toThrow();
   await expectNoAcquisitionEffects(f);
+});
+
+async function inspectAccount(f: Awaited<ReturnType<typeof fixture>>) {
+  const reader = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
+  try { return await verifyProviderSpendIntegrity(reader, 'scope', 10); }
+  finally { reader.close(); }
+}
+
+it.each(['throws', 'wrong-request', 'malformed-amount'] as const)('keeps a valid response and its reservation when the charge observer %s', async mode => {
+  const f = await fixture(), original = adapters.createOpenRouterPricedNative;
+  f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002 });
+  vi.spyOn(adapters, 'createOpenRouterPricedNative').mockImplementation(options => {
+    const priced = original(options);
+    return { ...priced, native: { ...priced.native, observeSpending(prepared, response) {
+      if (mode === 'throws') throw new Error('OBSERVER_FAILED');
+      const valid = priced.native.observeSpending!(prepared, response);
+      if (!valid) throw new Error('FIXTURE_EVIDENCE_MISSING');
+      return mode === 'wrong-request' ? { ...valid, requestDigest: 'f'.repeat(64) } : { ...valid, exactMinorUnits: 'invalid' };
+    } } };
+  });
+  const result = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  expect(result.receipt.outcome?.state).toBe('responded');
+  const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+  try { expect((await reader.loadInspection('scope', result.receipt.claim.invocationId))?.spending).toMatchObject({
+    measurement: null, disposition: { state: 'held', reason: 'missing-usage' },
+  }); } finally { reader.close(); }
+  expect(await inspectAccount(f)).toMatchObject({ reservedMinorUnits: 2, settledExactMinorUnits: '0', settledMinorUnits: 0 });
+  expect((await invokeConfiguredModel(f.project, f.command, { env: f.env })).replayed).toBe(true);
+  expect([f.metadataGets, f.posts]).toEqual([1, 1]);
+});
+
+it('atomically persists exact native charges, aggregates before rounding, and retains only financial evidence across content purge', async () => {
+  const f = await fixture(), policy = f.policy(true);
+  policy.grants[0]!.actions.push('inspect', 'inspect-content', 'purge-content');
+  await writeFile(f.policyPath, JSON.stringify(policy), { mode: 0o600 });
+  f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002,
+    debug_prompt: 'sensitive-usage-payload', cost_details: { upstream_inference_cost: 99 } });
+  const first = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  const second = await invokeConfiguredModel(f.project, { ...f.command, commandId: 'second' }, { env: f.env });
+  expect(first.receipt.outcome?.state).toBe('responded'); expect(second.receipt.outcome?.state).toBe('responded');
+  const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.command.reference };
+  const inspected = await inspectConfiguredModelInvocation(f.project, query, { env: f.env });
+  expect(inspected).toMatchObject({ schemaVersion: 7, spending: { schemaVersion: 2,
+    disposition: { state: 'settled-provider-reported', amountMinorUnits: 1 },
+    measurement: { basis: 'provider-reported', exactMinorUnits: '0.02', roundedMinorUnits: 1, currency: 'USD',
+      source: { id: 'openrouter-account-charge', field: 'usage.cost', numericSource: '0.0002', minorUnitsPerCurrencyUnit: 100 } } } });
+  expect(JSON.stringify(inspected)).not.toContain('sensitive-usage-payload');
+  expect(JSON.stringify(inspected.spending)).not.toContain('upstream_inference_cost');
+  const account = await inspectAccount(f);
+  expect(account).toMatchObject({ reservationCount: 2, reservedMinorUnits: 0, settledMinorUnits: 1,
+    checkpoint: { account: { schemaVersion: 2, settledExactMinorUnits: '0.04', settledMinorUnits: 1, frozen: false } } });
+  expect((await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env })).responseContent)
+    .toMatchObject({ response: { usage: { debug_prompt: 'sensitive-usage-payload' } } });
+  const purge = new ModelInvocationPurgeApplication({ async verify() { return f.principal; } },
+    { async authorize() { return { revision: 'test-purge', ruleId: 'test-purge' }; } },
+    async () => openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid'), { now: () => Date.now() });
+  await purge.purge({ schemaVersion: 1, commandId: 'purge-first', scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
+    reference: f.command.reference, expectedContentDigest: first.receipt.outcome!.content!.digest });
+  const after = await inspectConfiguredModelInvocation(f.project, { ...query, includeResponseContent: true }, { env: f.env });
+  expect(after).toMatchObject({ contentStatus: 'purged', responseContent: null, spending: inspected.spending });
+  expect(JSON.stringify(after)).not.toContain('sensitive-usage-payload');
+  expect(await inspectAccount(f)).toEqual(account);
+  const replay = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  expect(replay).toMatchObject({ replayed: true, response: null, contentStatus: 'purged' });
+  expect([f.metadataGets, f.posts]).toEqual([2, 2]); expect(await inspectAccount(f)).toEqual(account);
+});
+
+it('keeps a reported overrun and freezes admission instead of capping or discarding the native amount', async () => {
+  const f = await fixture(); f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.02001 });
+  const response = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  expect(response.receipt.outcome?.state).toBe('responded');
+  const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+  try { expect((await reader.loadInspection('scope', response.receipt.claim.invocationId))?.spending).toMatchObject({
+    disposition: { state: 'held', reason: 'overrun', observedMinorUnits: 3 },
+    measurement: { exactMinorUnits: '2.001', roundedMinorUnits: 3 } }); }
+  finally { reader.close(); }
+  expect(await inspectAccount(f)).toMatchObject({ reservedMinorUnits: 2, settledMinorUnits: 0,
+    checkpoint: { account: { settledExactMinorUnits: '0', frozen: true } } });
+  await expect(invokeConfiguredModel(f.project, { ...f.command, commandId: 'after-overrun' }, { env: f.env })).rejects.toThrow();
+  expect(f.posts).toBe(1);
 });

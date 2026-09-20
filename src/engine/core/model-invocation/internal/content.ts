@@ -29,6 +29,9 @@ function nativeDescriptor(response: ModelInvocationNativeResponse): ModelInvocat
     digest: createHash('sha256').update(nativePrefix, 'utf8').update(encoded, 'utf8').digest('hex'),
     byteLength: Buffer.byteLength(encoded, 'utf8') });
 }
+export function modelInvocationResponseContentDescriptor(responseInput: unknown): ModelInvocationContentDescriptor {
+  return nativeDescriptor(parseModelInvocationNativeResponse(responseInput));
+}
 const bodyDescriptor = (evidence: ModelInvocationResponseEvidence): ModelInvocationContentDescriptor => Object.freeze({
   schemaVersion: 1, kind: 'response-body', encoding: 'base64', digest: evidence.body.digest, byteLength: evidence.body.byteLength,
 });

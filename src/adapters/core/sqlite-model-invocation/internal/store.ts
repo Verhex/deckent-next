@@ -1,6 +1,7 @@
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
-import { reserveInvocationSpend, settleInvocationSpend, verifyInvocationSpendReplay } from './spend.js';
+import { reserveInvocationSpend, settleInvocationSpend, verifyInvocationSpendReplay,
+  verifyInvocationSpendSettlementReplay } from './spend.js';
 import { purgeInvocationContent } from './purge.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
@@ -10,7 +11,7 @@ import { modelInvocationClaimSchema, parseModelInvocationControlRecord, parseMod
 import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendError, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
-  type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
+  type ModelInvocationStore, type ProviderSpendReportedMeasurement, verifyModelActivationRecord } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
 
@@ -99,7 +100,8 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       });
     } catch (error) { return this.fail(error); }
   }
-  private settle(claimInput: ModelInvocationClaim, build: (record: ModelInvocationRecord) => ModelInvocationRecord): ModelInvocationRecord {
+  private settle(claimInput: ModelInvocationClaim, build: (record: ModelInvocationRecord) => ModelInvocationRecord,
+    measurement: ProviderSpendReportedMeasurement | null | undefined = null): ModelInvocationRecord {
     const parsed = modelInvocationClaimSchema.parse(claimInput);
     return this.transaction(() => {
       const current = decodeInvocationRecord(invocationRow(this.db, parsed.scopeId, parsed.invocationId), parsed.scopeId, parsed.invocationId, 'invocation_id');
@@ -108,24 +110,26 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       const next = verifyModelInvocationRecord(build(current));
       if (current.receipt.outcome) {
         if (!same(current, next)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
+        verifyInvocationSpendSettlementReplay(this.db, current, measurement);
         return current;
       }
       const control = invocationControl(this.db, current);
       if (control.send.state !== 'permitted' && control.send.state !== 'unobserved') {
         throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
       }
-      this.persistOutcome(current, next, allocation);
+      this.persistOutcome(current, next, allocation, measurement);
       return next;
     });
   }
-  private persistOutcome(current: ModelInvocationRecord, next: ModelInvocationRecord, checkpoint: ModelAllocationCheckpoint | null): void {
+  private persistOutcome(current: ModelInvocationRecord, next: ModelInvocationRecord, checkpoint: ModelAllocationCheckpoint | null,
+    measurement: ProviderSpendReportedMeasurement | null | undefined = null): void {
     if (!next.receipt.outcome || !same({ ...next.receipt, outcome: null }, current.receipt)) {
       throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
     const allocation = checkpoint?.allocation;
     if (!allocation || !checkpoint || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     const outcome = next.receipt.outcome;
-    settleInvocationSpend(this.db, next);
+    settleInvocationSpend(this.db, next, measurement);
     const terminal = outcome.state === 'responded' || outcome.state === 'rejected' || outcome.state === 'not-sent';
     // Even unknown changes receipt evidence: advance the revision so paged audits cannot mix snapshots.
     writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - (terminal ? 1 : 0) }));
@@ -187,8 +191,10 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       });
     } catch (error) { return this.fail(error); }
   }
-  async recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number) {
-    try { return this.settle(claim, record => createModelInvocationResponseRecord({ ...record.receipt, outcome: null }, response, observedAtMs)); }
+  async recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number,
+    measurement?: ProviderSpendReportedMeasurement | null) {
+    try { return this.settle(claim,
+      record => createModelInvocationResponseRecord({ ...record.receipt, outcome: null }, response, observedAtMs), measurement); }
     catch (error) { return this.fail(error); }
   }
   async recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number) {

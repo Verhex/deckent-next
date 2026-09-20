@@ -622,6 +622,7 @@
   "models.invocation.spendingHeld": "Local reservation held: up to {maximum} minor units ({currency}), using recorded tariff {tariffId} v{tariffVersion}; reason: {reason}. This is not a provider invoice.",
   "models.invocation.spendingReleasedNotSent": "Local reservation released before sending: up to {maximum} minor units ({currency}), using recorded tariff {tariffId} v{tariffVersion}. This is not a provider invoice.",
   "models.invocation.spendingSettledLocal": "Local calculated amount: {amount} minor units ({currency}) (quoted maximum: {maximum} minor units ({currency})) using recorded tariff {tariffId} v{tariffVersion}. This is not a provider invoice.",
+  "models.invocation.spendingSettledProviderReported": "Provider-reported charge: exact {exactAmount} minor units ({currency}); local per-invocation rounding projection: {roundedAmount} minor units ({currency}) (quoted maximum: {maximum} minor units ({currency})). This is provider-reported usage, not a local tariff calculation or external invoice verification.",
   "models.invocation.spendingReason.unknown": "unknown usage",
   "models.invocation.spendingReason.overrun": "local amount exceeded the quote maximum",
   "models.invocation.spendingReason.missingUsage": "usage is missing",

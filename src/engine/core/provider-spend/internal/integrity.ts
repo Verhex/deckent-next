@@ -1,6 +1,8 @@
 import { identitySchema } from '#domain/index.js';
-import { parseProviderSpendReservation, ProviderSpendError, type ProviderSpendReservation } from './account.js';
+import { parseProviderSpendReservation, type ProviderSpendReservation } from './account.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from './checkpoint.js';
+import { addProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits } from './exact.js';
+import { ProviderSpendError } from './error.js';
 
 export interface ProviderSpendIntegrityPageQuery {
   readonly scopeId: string;
@@ -29,7 +31,7 @@ export async function verifyProviderSpendIntegrity(reader: ProviderSpendIntegrit
   if (!identitySchema.safeParse(scopeId).success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   validateProviderSpendIntegrityPageSize(pageSize);
   let checkpoint: ProviderSpendCheckpoint | null = null, cursor: string | null = null;
-  let reserved = 0n, settled = 0n, count = 0, overrun = false;
+  let reserved = 0n, settledExact = '0', count = 0, overrun = false;
   for (;;) {
     if (signal?.aborted) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     const page = await reader.readPage({ scopeId, checkpoint, afterInvocationId: cursor, limit: pageSize });
@@ -54,7 +56,8 @@ export async function verifyProviderSpendIntegrity(reader: ProviderSpendIntegrit
       if (count > current.reservationCount) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
       const state = reservation.disposition;
       if (state.state === 'reserved' || state.state === 'held') reserved += BigInt(d.quote.maxChargeMinorUnits);
-      if (state.state === 'settled-local') settled += BigInt(state.amountMinorUnits);
+      if (state.state === 'settled-local') settledExact = addProviderSpendExactMinorUnits(settledExact, String(state.amountMinorUnits));
+      if (state.state === 'settled-provider-reported') settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.measurement!.exactMinorUnits);
       if (state.state === 'held' && state.reason === 'overrun') overrun = true;
     }
     if (page.nextInvocationId !== null) {
@@ -63,8 +66,10 @@ export async function verifyProviderSpendIntegrity(reader: ProviderSpendIntegrit
     }
     const account = current.account;
     if (count !== current.reservationCount || reserved !== BigInt(account.reservedMinorUnits)
-      || settled !== BigInt(account.settledMinorUnits) || account.frozen !== overrun) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+      || settledExact !== account.settledExactMinorUnits || ceilProviderSpendExactMinorUnits(settledExact) !== account.settledMinorUnits
+      || account.frozen !== overrun) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     return Object.freeze({ checkpoint: current, reservationCount: count,
-      reservedMinorUnits: Number(reserved), settledMinorUnits: Number(settled) });
+      reservedMinorUnits: Number(reserved), settledMinorUnits: account.settledMinorUnits,
+      settledExactMinorUnits: settledExact });
   }
 }
