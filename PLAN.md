@@ -679,3 +679,9 @@ PROVIDERS/A8B3 DONE — Fable2148 PASS: atomic read-only inspection4/control sna
 | MCP-ENVELOPE | P5; PROVIDERS/A8 | Bound full MCP JSON-RPC UTF8/newline and pre-effect model results; actual codec/ID/error tests | REVIEW |
 
 MCP-ENVELOPE DONE — Fable2152 PASS closes C-b/A4-2: final UTF8/newline JSON-RPC transport bound and actual-ID model preflight, legacy and2026 codecs, no-effect oversized requests. Full1153/216+24native+18host, architecture0/lint0warnings. Non-model effects may precede delivery overflow; no rollback claim.
+
+| ID | Scope / dependencies | Acceptance | Status |
+|---|---|---|---|
+| PROVIDER-ALLOCATION/CHECKPOINT | Replace invocation history scans in write transactions with fenced allocation checkpoints; ledger18→19 allocation-only migration, separate paged read-only audit | Same quota/replay/unknown semantics; migration and checkpoint rollback, two-process claim races, explicit inspection5 historyIntegrity=not-recorded across SDK/CLI/MCP, measured workload histories, fullverify and independent review | REVIEW |
+
+No automatic audit scheduling or durable full-history audit timestamp is implemented. The paged integrity verifier reports consistent/not-found for its fenced snapshot; the operator inspection remains not-recorded because no persisted audit result producer exists. Monetary authority and credential/native capability land separately after this gate.

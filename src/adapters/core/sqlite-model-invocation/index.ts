@@ -1,5 +1,5 @@
 import type { SupervisorProfileValidator } from '#engine/index.js';
-import type { ModelInvocationStore, ModelInvocationPurgeStore, ModelInvocationCancellationStore } from '#engine/index.js';
+import type { ModelAllocationIntegrityReader, ModelInvocationStore, ModelInvocationPurgeStore, ModelInvocationCancellationStore } from '#engine/index.js';
 import type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Lazy native SQLite boundary; importing adapter aggregates never loads node:sqlite. */
@@ -16,4 +16,9 @@ export async function openSqliteModelInvocationReader(path: string, options: { r
 export async function openSqliteModelInvocationCancellationInventory(path: string, options: { readonly busyTimeoutMs: number }) {
   const implementation = await import('./internal/cancellation-inventory.js');
   return implementation.openSqliteModelInvocationCancellationInventory(path, options);
+}
+export async function openSqliteModelAllocationIntegrityReader(path: string,
+  options: { readonly busyTimeoutMs: number }): Promise<ModelAllocationIntegrityReader> {
+  const implementation = await import('./internal/allocation-integrity.js');
+  return implementation.openSqliteModelAllocationIntegrityReader(path, options);
 }

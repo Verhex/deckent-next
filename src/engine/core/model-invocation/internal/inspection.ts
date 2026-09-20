@@ -12,9 +12,10 @@ export interface ModelInvocationInspectionReader {
   loadInspection(scopeId: string, invocationId: string): Promise<ModelInvocationInspectionRecord | null>;
   close(): void;
 }
-export type ModelInvocationInspection = Readonly<{ schemaVersion: 4; scopeId: string; invocationId: string;
+export type ModelInvocationInspection = Readonly<{ schemaVersion: 5; scopeId: string; invocationId: string;
   reference: ModelInvocationQuery['reference']; invocation: ModelInvocationReceipt | null;
   control: ModelInvocationControlRecord | null;
+  historyIntegrity: 'not-recorded';
   contentStatus: 'retained' | 'not-captured' | 'purged' | null; purge: ModelInvocationPurgeReceipt | null;
   responseContent?: ModelInvocationResponseContent | null }>;
 export class ModelInvocationInspectionApplication {
@@ -26,7 +27,8 @@ export class ModelInvocationInspectionApplication {
     await this.authorization.authorize('inspect', { scopeId: query.scopeId, reference: query.reference }, principal);
     if (query.includeResponseContent === true) await this.authorization.authorize('inspect-content',
       { scopeId: query.scopeId, reference: query.reference }, principal);
-    const identity = { schemaVersion: 4 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 5 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference,
+      historyIntegrity: 'not-recorded' as const };
     const reader = await this.openReader();
     try {
       const stored = await reader.loadInspection(query.scopeId, query.invocationId);

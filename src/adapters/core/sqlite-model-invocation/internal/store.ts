@@ -1,12 +1,12 @@
+import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
 import { purgeInvocationContent } from './purge.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { z } from 'zod';
-import { identitySchema, modelInvocationClaimSchema, parseModelInvocationControlRecord, parseModelInvocationCancellationReceipt, proposeModelInvocationSendPermission,
+import { modelInvocationClaimSchema, parseModelInvocationControlRecord, parseModelInvocationCancellationReceipt, proposeModelInvocationSendPermission,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
   type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
-import { parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
+import { parseModelAllocation, type ModelAllocationCheckpoint, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
@@ -14,10 +14,6 @@ import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
-const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
-  maxCalls: z.number().int().positive().safe(), maxInFlight: z.number().int().positive().safe(),
-  lifetimeCalls: z.number().int().nonnegative().safe(), inFlight: z.number().int().nonnegative().safe() }).strict().readonly();
-type Allocation = z.infer<typeof allocationSchema>;
 const encoded = (value: unknown) => JSON.stringify(value);
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 
@@ -52,29 +48,6 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
     try { return loadInvocationRecord(this.db, scopeInput, invocationInput); }
     catch (error) { return this.fail(error); }
   }
-  private allocation(scopeId: string, allocationId: string): Allocation | null {
-    const row = this.db.prepare(`SELECT scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record
-      FROM model_invocation_allocations WHERE scope_id=? AND allocation_id=?`).get(scopeId, allocationId) as Row | undefined;
-    if (!row) {
-      const invocation = this.db.prepare(`SELECT 1 AS found FROM model_invocations
-        WHERE scope_id=? AND allocation_id=? LIMIT 1`).get(scopeId, allocationId);
-      if (invocation) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-      return null;
-    }
-    try {
-      if (typeof row['record'] !== 'string') throw new Error();
-      const record = allocationSchema.parse(JSON.parse(row['record']));
-      if (row['scope_id'] !== scopeId || row['allocation_id'] !== allocationId || row['max_calls'] !== record.maxCalls
-        || row['max_in_flight'] !== record.maxInFlight || row['lifetime_calls'] !== record.lifetimeCalls
-        || row['in_flight'] !== record.inFlight || record.scopeId !== scopeId || record.allocationId !== allocationId
-        || record.inFlight > record.lifetimeCalls || record.lifetimeCalls > record.maxCalls || record.inFlight > record.maxInFlight) throw new Error();
-      const observed = this.db.prepare(`SELECT count(*) AS lifetime_calls,
-        sum(CASE WHEN state IN ('responded','rejected','not-sent') THEN 0 ELSE 1 END) AS in_flight
-        FROM model_invocations WHERE scope_id=? AND allocation_id=?`).get(scopeId, allocationId);
-      if (observed?.lifetime_calls !== record.lifetimeCalls || (observed?.in_flight ?? 0) !== record.inFlight) throw new Error();
-      return record;
-    } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
-  }
   async claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult> {
     try {
       const admission = parseModelInvocationAdmission(input), { command, profile } = admission;
@@ -100,22 +73,17 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
             || activationRow['model_version'] !== command.reference.modelVersion || activationRow['revision'] !== persisted.revision
             || persisted.state !== 'active' || !same(persisted, supplied) || persisted.binding.digest !== admission.profile.bindingDigest) throw new Error();
         } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT'); }
-        const configured = profile.allocation, current = this.allocation(command.scopeId, configured.id);
+        const configured = profile.allocation, checkpoint = readModelAllocationCheckpoint(this.db, command.scopeId, configured.id);
+        const current = checkpoint?.allocation;
         if (current && (current.maxCalls !== configured.maxCalls || current.maxInFlight !== configured.maxInFlight)) {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_ALLOCATION_CONFLICT');
         }
-        const before = current ?? allocationSchema.parse({ schemaVersion: 1, scopeId: command.scopeId, allocationId: configured.id,
+        const before = current ?? parseModelAllocation({ schemaVersion: 1, scopeId: command.scopeId, allocationId: configured.id,
           maxCalls: configured.maxCalls, maxInFlight: configured.maxInFlight, lifetimeCalls: 0, inFlight: 0 });
         if (before.lifetimeCalls >= before.maxCalls) throw new ModelInvocationStoreError('MODEL_INVOCATION_QUOTA_EXHAUSTED');
         if (before.inFlight >= before.maxInFlight) throw new ModelInvocationStoreError('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
-        const after = allocationSchema.parse({ ...before, lifetimeCalls: before.lifetimeCalls + 1, inFlight: before.inFlight + 1 });
-        if (current) {
-          const updated = this.db.prepare(`UPDATE model_invocation_allocations SET lifetime_calls=?,in_flight=?,record=?
-          WHERE scope_id=? AND allocation_id=? AND lifetime_calls=? AND in_flight=?`)
-          .run(after.lifetimeCalls, after.inFlight, encoded(after), command.scopeId, configured.id, before.lifetimeCalls, before.inFlight);
-          if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-        } else this.db.prepare(`INSERT INTO model_invocation_allocations(scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record)
-          VALUES(?,?,?,?,?,?,?)`).run(command.scopeId, configured.id, after.maxCalls, after.maxInFlight, after.lifetimeCalls, after.inFlight, encoded(after));
+        const after = parseModelAllocation({ ...before, lifetimeCalls: before.lifetimeCalls + 1, inFlight: before.inFlight + 1 });
+        writeModelAllocation(this.db, checkpoint, after);
         const receipt = createModelInvocationClaimReceipt(admission);
         const record = encoded(receipt);
         this.db.prepare('INSERT INTO model_invocations(scope_id,command_id,invocation_id,allocation_id,state,record) VALUES(?,?,?,?,?,?)')
@@ -133,7 +101,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
     return this.transaction(() => {
       const current = decodeInvocationRecord(invocationRow(this.db, parsed.scopeId, parsed.invocationId), parsed.scopeId, parsed.invocationId, 'invocation_id');
       if (!current || !same(current.receipt.claim, parsed)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
-      const allocation = this.allocation(current.receipt.request.scopeId, current.receipt.profile.allocation.id);
+      const allocation = readModelAllocationCheckpoint(this.db, current.receipt.request.scopeId, current.receipt.profile.allocation.id);
       const next = verifyModelInvocationRecord(build(current));
       if (current.receipt.outcome) {
         if (!same(current, next)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
@@ -147,19 +115,16 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
       return next;
     });
   }
-  private persistOutcome(current: ModelInvocationRecord, next: ModelInvocationRecord, allocation: Allocation | null): void {
+  private persistOutcome(current: ModelInvocationRecord, next: ModelInvocationRecord, checkpoint: ModelAllocationCheckpoint | null): void {
     if (!next.receipt.outcome || !same({ ...next.receipt, outcome: null }, current.receipt)) {
       throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
-    if (!allocation || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+    const allocation = checkpoint?.allocation;
+    if (!allocation || !checkpoint || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     const outcome = next.receipt.outcome;
-    if (outcome.state === 'responded' || outcome.state === 'rejected' || outcome.state === 'not-sent') {
-      const after = allocationSchema.parse({ ...allocation, inFlight: allocation.inFlight - 1 });
-      const updated = this.db.prepare(`UPDATE model_invocation_allocations SET in_flight=?,record=?
-        WHERE scope_id=? AND allocation_id=? AND lifetime_calls=? AND in_flight=?`)
-        .run(after.inFlight, encoded(after), allocation.scopeId, allocation.allocationId, allocation.lifetimeCalls, allocation.inFlight);
-      if (updated.changes !== 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-    }
+    const terminal = outcome.state === 'responded' || outcome.state === 'rejected' || outcome.state === 'not-sent';
+    // Even unknown changes receipt evidence: advance the revision so paged audits cannot mix snapshots.
+    writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - (terminal ? 1 : 0) }));
     if (next.content) this.db.prepare(`INSERT INTO model_invocation_contents(scope_id,invocation_id,record) VALUES(?,?,?)`)
       .run(current.receipt.claim.scopeId, current.receipt.claim.invocationId, encoded(next.content));
     const updated = this.db.prepare(`UPDATE model_invocations SET state=?,record=? WHERE scope_id=? AND invocation_id=? AND state='claimed'`)
@@ -178,7 +143,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         const record = loadInvocationRecord(this.db, claim.scopeId, claim.invocationId);
         if (!record || !same(record.receipt.claim, claim)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         const current = invocationControl(this.db, record);
-        if (!this.allocation(claim.scopeId, record.receipt.profile.allocation.id)) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+        if (!readModelAllocationCheckpoint(this.db, claim.scopeId, record.receipt.profile.allocation.id)) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
         const proposal = proposeModelInvocationSendPermission(current, ownerId, now);
         if (proposal.granted) writeInvocationControl(this.db, current, proposal.record);
         return Object.freeze({ granted: proposal.granted, control: proposal.record, record });
@@ -209,7 +174,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         const receipt = parseModelInvocationCancellationReceipt({ schemaVersion: 1, ...admission, claim: current.receipt.claim, disposition });
         const next = parseModelInvocationControlRecord({ ...control, cancellation: receipt,
           send: disposition === 'prevented' ? { state: 'prevented' } : control.send });
-        const allocation = this.allocation(command.scopeId, current.receipt.profile.allocation.id);
+        const allocation = readModelAllocationCheckpoint(this.db, command.scopeId, current.receipt.profile.allocation.id);
         this.db.prepare(`INSERT INTO model_invocation_cancellations(scope_id,command_id,invocation_id,record) VALUES(?,?,?,?)`)
           .run(command.scopeId, command.commandId, current.receipt.claim.invocationId, encoded(receipt));
         writeInvocationControl(this.db, control, next);

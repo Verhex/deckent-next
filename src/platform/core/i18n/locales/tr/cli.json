@@ -591,6 +591,7 @@
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <dosya|-> [--json] [--lang en|tr]\nAyrı purge-content policy yetkisiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <dosya|-> [--json] [--lang en|tr]\nTam çağrı komut kimliğiyle iptal isteğini kaydeder. Gönderim izninden önce dağıtımı engelleyebilir; izin sonrasında uzaktan iptal veya tamamlama kanıtı değildir.",
   "models.invocation.absent": "Çağrı kaydı bulunamadı.",
+  "models.invocation.historyNotRecorded": "Tam geçmiş bütünlüğü denetimi sonucu kaydedilmedi; tekil kayıt kontrolleri bunun kanıtı değildir.",
   "models.invocation.claimed": "başlatma hakkı kaydedildi; gönderim/sonuç doğrulanmadı",
   "models.invocation.responded": "native yanıt içeriği kayıttan ayrı saklandı",
   "models.invocation.respondedPurged": "native yanıt alındı; yanıt içeriği silindi",

@@ -70,7 +70,8 @@ export async function modelInvocationCommand(argv: readonly string[], context: C
     if (!context.inspectModelInvocation) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let query; try { query = parseModelInvocationQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.inspectModelInvocation(root, query, options);
-    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge, item.control) });
+    emit(result, { ...sinks, json: args.json, render: item => [render(item.invocation, locale, undefined, item.purge, item.control),
+      t('models.invocation.historyNotRecorded', {}, locale)].join('\n') });
   } else if (args.action === 'purge-content') {
     if (!context.purgeModelInvocationContent) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationPurgeCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }

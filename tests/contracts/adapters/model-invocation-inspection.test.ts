@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -51,7 +52,7 @@ it('loads one read-only receipt/control/cancellation snapshot and rejects contra
       cancellation: { command: { commandId: 'cancel', targetCommandId: 'invoke' }, disposition: 'requested' } } });
   expect(await readFile(base.path)).toEqual(before);
   const version = new DatabaseSync(base.path, { readOnly: true });
-  expect(version.prepare('PRAGMA user_version').get()?.user_version).toBe(18); version.close();
+  expect(version.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); version.close();
 
   const corrupt = new DatabaseSync(base.path);
   const row = corrupt.prepare('SELECT record FROM model_invocation_controls WHERE invocation_id=?').get('invocation') as { record: string };

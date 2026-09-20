@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -56,7 +57,7 @@ async function seedV16(path: string) {
       if (receipt.outcome) receipt.outcome.schemaVersion = 3;
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(receipt), row.invocation_id);
     }
-    db.exec(`DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+    db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
       ALTER TABLE model_invocation_contents RENAME TO model_invocation_contents_v17;
       DROP TABLE model_invocation_content_purges;
       CREATE TABLE model_invocation_contents(scope_id TEXT NOT NULL,invocation_id TEXT NOT NULL,record TEXT NOT NULL,
@@ -85,7 +86,7 @@ it('migrates a genuine ledger16 content inventory through the current ledger wit
   expect(String(before.contents[0]?.record)).toContain('sensitive-response');
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
   const after = inventory(path);
-  expect(after.version).toBe(18);
+  expect(after.version).toBe(CURRENT_LEDGER_VERSION);
   expect(after.invocations.map(row => ({ ...row, record: undefined }))).toEqual(before.invocations.map(row => ({ ...row, record: undefined })));
   for (const row of after.invocations) expect(JSON.parse(String(row.record))).toMatchObject({ schemaVersion: 4 });
   expect(after.contents.map(row => ({ scope_id: row.scope_id, invocation_id: row.invocation_id, record: row.record }))).toEqual(before.contents);

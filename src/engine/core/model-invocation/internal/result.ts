@@ -16,7 +16,8 @@ const envelope = createImmutableJsonObjectSchema({ maxDepth: MODEL_INVOCATION_RE
 const statusSchema = z.enum(['retained', 'not-captured', 'purged']);
 const resultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown(), response: z.unknown().nullable(),
   contentStatus: statusSchema, purge: z.unknown().nullable() }).strict();
-const inspectionSchema = z.object({ schemaVersion: z.literal(4), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
+const inspectionSchema = z.object({ schemaVersion: z.literal(5), scopeId: z.string(), invocationId: z.string(), reference: z.unknown(),
+  historyIntegrity: z.literal('not-recorded'),
   invocation: z.unknown().nullable(), control: z.unknown().nullable(), contentStatus: statusSchema.nullable(), purge: z.unknown().nullable(),
   responseContent: z.unknown().optional() }).strict();
 const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown() }).strict();
@@ -51,7 +52,8 @@ export function parseModelInvocationInspectionForQuery(queryInput: unknown, inpu
     if (!parsed?.success || parsed.data.scopeId !== query.scopeId || parsed.data.invocationId !== query.invocationId || !same(parsed.data.reference, query.reference)) return corrupt();
     const wantsContent = query.includeResponseContent === true;
     if (Object.hasOwn(parsed.data, 'responseContent') !== wantsContent) return corrupt();
-    const identity = { schemaVersion: 4 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference };
+    const identity = { schemaVersion: 5 as const, scopeId: query.scopeId, invocationId: query.invocationId, reference: query.reference,
+      historyIntegrity: 'not-recorded' as const };
     if (parsed.data.invocation === null) {
       if (parsed.data.control !== null || parsed.data.contentStatus !== null || parsed.data.purge !== null || (wantsContent && parsed.data.responseContent !== null)) return corrupt();
       return Object.freeze({ ...identity, invocation: null, control: null, contentStatus: null, purge: null,

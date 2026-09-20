@@ -154,7 +154,7 @@ describe('SQLite service shutdown journal', () => {
     const path = await fixture(), seeded = await open(path); seeded.close(); stores.splice(stores.indexOf(seeded), 1);
     const old = new DatabaseSync(path);
     old.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('preserved', '{"marker":true}');
-    old.exec('DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; PRAGMA user_version=9'); old.close();
+    old.exec('DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; PRAGMA user_version=9'); old.close();
     await expect(openSqliteAttemptStore(path, options, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
     const migrated = await open(path);
     expect(await migrated.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();

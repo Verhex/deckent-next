@@ -873,7 +873,8 @@
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-allocation"
       ],
       "plan": "STORE/LEDGER-OWNER"
     },
@@ -961,7 +962,8 @@
         "src/domain/core/primitives",
         "src/engine/core/dispatch",
         "src/engine/core/model-activation",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/engine/core/model-allocation"
       ],
       "plan": "PROVIDERS/A3A"
     },
@@ -994,6 +996,14 @@
     "src/adapters/core/mcp-transport": {
       "dependencies": [],
       "plan": "MCP-ENVELOPE"
+    },
+    "src/engine/core/model-allocation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
     }
   },
   "composition": {

@@ -1,3 +1,4 @@
+import { migrateModelAllocationCheckpoints } from './migration-v19.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { requireLedgerV5Custody } from './migration-v5.js';
@@ -17,7 +18,8 @@ export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
 export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
 export const MODEL_INVOCATION_LEDGER_VERSION = 18;
-export const CURRENT_LEDGER_VERSION = MODEL_INVOCATION_LEDGER_VERSION;
+export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
+export const CURRENT_LEDGER_VERSION = MODEL_ALLOCATION_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -97,6 +99,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 18) {
       migrateModelInvocationControl(db);
       db.exec('PRAGMA user_version=18;');
+      continue;
+    }
+    if (next === 19) {
+      migrateModelAllocationCheckpoints(db);
+      db.exec('PRAGMA user_version=19;');
       continue;
     }
     const sql = migrations[next];

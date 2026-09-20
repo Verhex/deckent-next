@@ -591,6 +591,7 @@
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <file|-> [--json] [--lang en|tr]\nPurges active retained native, usage, or raw response content after separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <file|-> [--json] [--lang en|tr]\nRecords a cancellation request by exact invocation command identity. It can prevent dispatch before send permission; after permission it does not prove remote cancellation or completion.",
   "models.invocation.absent": "No invocation receipt found.",
+  "models.invocation.historyNotRecorded": "No full-history integrity audit result is recorded; individual record checks do not establish it.",
   "models.invocation.claimed": "claimed; send/result not confirmed",
   "models.invocation.responded": "native response content retained separately from the receipt",
   "models.invocation.respondedPurged": "native response received; response content has been purged",

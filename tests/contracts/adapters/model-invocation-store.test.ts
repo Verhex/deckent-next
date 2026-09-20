@@ -6,9 +6,12 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
-import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { openSqliteModelActivationStore, openSqliteModelAllocationIntegrityReader,
+  openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
-import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest,
+  verifyModelAllocationIntegrity } from '#engine/index.js';
 
 const execute = promisify(execFile), roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -227,6 +230,7 @@ it('fails closed when an allocation row is missing behind canonical invocation h
   const base = await fixture(3, 2), seed = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   await seed.claim(admission(base, 'command-1', 'invocation-1')); seed.close();
   const damage = new DatabaseSync(base.path);
+  damage.exec('PRAGMA foreign_keys=OFF');
   damage.prepare('DELETE FROM model_invocation_allocations WHERE scope_id=? AND allocation_id=?').run('scope', 'allocation'); damage.close();
   const store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   await expect(store.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_CORRUPT'); store.close();
@@ -235,7 +239,7 @@ it('fails closed when an allocation row is missing behind canonical invocation h
   expect(check.prepare('SELECT count(*) AS count FROM model_invocations').get()?.count).toBe(1); check.close();
 });
 
-it('rejects canonical receipt substitution and missing canonical history behind retained counters', async () => {
+it('rejects canonical receipt substitution and detects missing canonical history in the read-only integrity audit', async () => {
   const substituted = await fixture(3, 2), seed = await openSqliteModelInvocationStore(substituted.path, options, 'forbid');
   await seed.claim(admission(substituted, 'command-1', 'invocation-1'));
   await seed.claim(admission(substituted, 'command-2', 'invocation-2')); seed.close();
@@ -251,8 +255,11 @@ it('rejects canonical receipt substitution and missing canonical history behind 
   const missingDb = new DatabaseSync(missing.path);
   missingDb.prepare('DELETE FROM model_invocation_controls WHERE scope_id=? AND invocation_id=?').run('scope', 'invocation-1');
   missingDb.prepare('DELETE FROM model_invocations WHERE scope_id=? AND command_id=?').run('scope', 'command-1'); missingDb.close();
-  const missingStore = await openSqliteModelInvocationStore(missing.path, options, 'forbid');
-  await expect(missingStore.claim(admission(missing, 'command-1', 'replacement-invocation'))).rejects.toThrow('MODEL_INVOCATION_CORRUPT'); missingStore.close();
+  const beforeAudit = await readFile(missing.path);
+  const integrity = await openSqliteModelAllocationIntegrityReader(missing.path, { busyTimeoutMs: options.busyTimeoutMs });
+  try { await expect(verifyModelAllocationIntegrity(integrity, 'scope', 'allocation', 1)).rejects.toThrow('MODEL_INVOCATION_CORRUPT'); }
+  finally { integrity.close(); }
+  expect(await readFile(missing.path)).toEqual(beforeAudit);
   const check = new DatabaseSync(missing.path, { readOnly: true });
   expect(check.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 1, in_flight: 1 }); check.close();
 });
@@ -269,7 +276,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
   await expect(openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(oldBytes);
   const writer = await openSqliteModelInvocationStore(path, options, 'allow'); writer.close();
-  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(18);
+  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
   expect(migrated.prepare('SELECT * FROM model_activations').all()).toEqual(before); migrated.close();
   const reader = await openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 });
   expect('claim' in reader).toBe(false); expect('recordResponse' in reader).toBe(false); reader.close();

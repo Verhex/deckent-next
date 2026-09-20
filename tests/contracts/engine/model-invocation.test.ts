@@ -304,8 +304,9 @@ describe('model invocation application after permission', () => {
     const f = fixture(); const invoked = await f.app.invoke(command); let authorized = 0;
     const inspect = new ModelInvocationInspectionApplication({ async verify() { return principal; } },
       { async authorize(action) { expect(action).toBe('inspect'); authorized++; return authorization; } }, async () => inspectionReader(f));
-    expect((await inspect.inspect({ schemaVersion: 2, scopeId: 'scope', invocationId: 'invocation-1', reference })).invocation)
-      .toEqual(invoked.receipt); expect(authorized).toBe(1);
+    const inspected = await inspect.inspect({ schemaVersion: 2, scopeId: 'scope', invocationId: 'invocation-1', reference });
+    expect(inspected.invocation).toEqual(invoked.receipt); expect(inspected.historyIntegrity).toBe('not-recorded');
+    expect(authorized).toBe(1);
     expect(modelInvocationProfileDigest(profile)).toMatch(/^[a-f0-9]{64}$/);
     expect(modelInvocationRequestDigest(command)).toMatch(/^[a-f0-9]{64}$/);
   });

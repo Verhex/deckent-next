@@ -27,10 +27,12 @@ it('reads file and stdin queries through one inspection contract and renders EN/
     let output = '', calls = 0;
     const code = await main(['models', 'invocation', '--input', language === 'en' ? path : '-', '--lang', language], {
       ...f, stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 4,
-        invocation: null, control: null, contentStatus: null, purge: null }; },
+      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 5,
+        historyIntegrity: 'not-recorded', invocation: null, control: null, contentStatus: null, purge: null }; },
     });
     expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain(language === 'en' ? 'No invocation receipt' : 'Çağrı kaydı bulunamadı');
+    expect(output).toContain(language === 'en' ? 'No full-history integrity audit result is recorded'
+      : 'Tam geçmiş bütünlüğü denetimi sonucu kaydedilmedi');
   }
 });
 it('renders purged replay and inspection outcomes without claiming retained or showing response content', async () => {

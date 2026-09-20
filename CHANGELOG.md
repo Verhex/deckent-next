@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PROVIDER-ALLOCATION/CHECKPOINT: replace per-write history scans with transactional quota checkpoints, preserve uncertain capacity, and expose the absence of a recorded full-history audit.
+
 - K1-F1/C: pure config-fields unit, registry-backed output defaults, canonical nested provider fields, localized metadata with tier/since, and source-derived config vocabulary checked before lint/build. Accepted (Fable REVIEW1323); parent K1-F1 closed with REVIEW1316. Host-sizing constants remain ASSURANCE work.
 
 - K1-F1/B: config schema, defaults, environment bindings and metadata now derive from one field registry. Removed legacy config aliases, migration command, execution-style/routing-version selectors and home-path fallback. Unregistered fields are rejected; worker capacity accepts safe positive integers without the old100 ceiling. Existing secret/write-lock checks retained. Independent Fable PASS in REVIEW1316 (84 product +9 host tests); parent K1-F1 remains open.

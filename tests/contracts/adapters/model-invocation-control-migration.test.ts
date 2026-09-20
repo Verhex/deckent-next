@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -55,7 +56,7 @@ async function seedV17(path: string) {
 
   const db = new DatabaseSync(path); db.exec('PRAGMA foreign_keys=OFF');
   try {
-    db.exec('DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;');
+    db.exec('DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;');
     for (const row of db.prepare('SELECT invocation_id,record FROM model_invocations').all() as Array<{ invocation_id: string; record: string }>) {
       const receipt = JSON.parse(row.record); receipt.schemaVersion = 3;
       if (receipt.outcome) receipt.outcome.schemaVersion = 3;
@@ -86,7 +87,7 @@ it('migrates genuine ledger17 receipts, content, purge evidence, and counters to
   await expect(openSqliteModelInvocationReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
   const after = inventory(path);
-  expect(after.version).toBe(18); expect(after.allocations).toEqual(before.allocations);
+  expect(after.version).toBe(CURRENT_LEDGER_VERSION); expect(after.allocations).toEqual(before.allocations);
   expect(after.contents).toEqual(before.contents); expect(after.purges).toEqual(before.purges);
   expect(after.invocations.map(row => ({ ...row, record: undefined }))).toEqual(before.invocations.map(row => ({ ...row, record: undefined })));
   const db = new DatabaseSync(path, { readOnly: true });
