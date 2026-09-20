@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand } from '#domain/index.js';
-import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationDelivery } from '#engine/index.js';
+import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, createOpenAiChatNativePort,
   OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
+
+export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers }
 
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
@@ -14,11 +16,11 @@ export async function invokeConfiguredModel(projectRoot: string, input: ModelInv
 }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
-  peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery) {
-  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), undefined, delivery);
+  peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost) {
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), undefined, delivery, host);
 }
 async function invoke(input: ModelInvocationCommand,
-  loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
+  loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost) {
   try {
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
@@ -39,7 +41,8 @@ async function invoke(input: ModelInvocationCommand,
         return createOpenAiChatNativePort();
       } },
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
-      { invocationId: randomUUID, ownerId: randomUUID, now: Date.now });
+      { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: Date.now,
+        ...(host ? { register: host.controllers.register.bind(host.controllers) } : {}) });
     return await application.invoke(command, undefined, signal, delivery);
   } catch (error) { throw queryFailure(error); }
 }

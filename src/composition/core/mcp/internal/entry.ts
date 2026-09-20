@@ -17,6 +17,7 @@ export async function main(root = process.cwd()) {
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectModelInvocation: query => runtime.inspectModelInvocation(query, { maxResultBytes: config.mcp.responseMaxBytes }),
     purgeModelInvocationContent: command => runtime.purgeModelInvocationContent(command, { maxResultBytes: config.mcp.responseMaxBytes }),
+    cancelModelInvocation: command => runtime.cancelModelInvocation(command, { maxResultBytes: config.mcp.responseMaxBytes }),
     invokeModel: command => runtime.invokeModel(command, { maxResultBytes: config.mcp.responseMaxBytes }),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {

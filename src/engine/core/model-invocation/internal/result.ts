@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
   modelInvocationRequestEvidence, modelInvocationResponseContentSchema, parseModelInvocationCommand, parseModelInvocationNativeResponse,
-  parseModelInvocationPurgeCommand, parseModelInvocationQuery,
+  parseModelInvocationCancellationCommand, parseModelInvocationCancellationReceipt, parseModelInvocationPurgeCommand, parseModelInvocationQuery,
   type ModelInvocationPurgeReceipt, type ModelInvocationResponseContent } from '#domain/index.js';
 import type { ModelInvocationResult } from './application.js';
 import type { ModelInvocationInspection } from './inspection.js';
-import type { ModelInvocationPurgeResult } from './port.js';
+import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult } from './port.js';
 import { modelInvocationRequestDigest, verifyModelInvocationReceipt } from './evidence.js';
 import { verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
 import { ModelInvocationStoreError } from './port.js';
@@ -77,6 +77,16 @@ export function parseModelInvocationPurgeResultForCommand(commandInput: unknown,
     const parsed = copied.success ? purgeResultSchema.safeParse(copied.data) : undefined;
     if (!parsed?.success) return corrupt();
     const receipt = verifyModelInvocationPurgeReceipt(parsed.data.receipt);
+    if (!same(receipt.command, command)) return corrupt();
+    return Object.freeze({ replayed: parsed.data.replayed, receipt });
+  } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }
+}
+export function parseModelInvocationCancellationResultForCommand(commandInput: unknown, input: unknown): ModelInvocationCancellationResult {
+  try {
+    const command = parseModelInvocationCancellationCommand(commandInput), copied = envelope.safeParse(input);
+    const parsed = copied.success ? purgeResultSchema.safeParse(copied.data) : undefined;
+    if (!parsed?.success) return corrupt();
+    const receipt = parseModelInvocationCancellationReceipt(parsed.data.receipt);
     if (!same(receipt.command, command)) return corrupt();
     return Object.freeze({ replayed: parsed.data.replayed, receipt });
   } catch (error) { if (error instanceof ModelInvocationStoreError) throw error; return corrupt(); }

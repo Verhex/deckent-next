@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
+import { ModelActivationApplication, ModelBindingApplication, modelInvocationRequestDigest, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
@@ -25,17 +25,31 @@ async function waitFor(check: () => boolean, label: string) {
   const until = Date.now() + 5_000;
   while (!check()) { if (Date.now() >= until) throw new Error(label); await new Promise(resolve => setTimeout(resolve, 5)); }
 }
+async function within<T>(work: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(label)), 2_000); })]);
+  } finally { if (timer) clearTimeout(timer); }
+}
 
-async function fixture() {
+async function fixture(nativeTimeoutMs = 2_000) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-runtime-model-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  let requests = 0, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined, hold = false;
+  let requests = 0, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined,
+    observeHeldClose: (() => void) | undefined, hold = false, heldPartial = false;
   heldReleases.push(() => releaseHeld?.());
   const heldObserved = () => new Promise<void>(resolve => { observeHeld = resolve; });
   const native = createServer((request, reply) => { const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => {
-      requests++; if (hold) { observeHeld?.(); await new Promise<void>(resolve => { releaseHeld = resolve; }); hold = false; }
+      requests++; if (hold) {
+        if (heldPartial) {
+          reply.once('close', () => observeHeldClose?.());
+          reply.writeHead(200, { 'content-type': 'application/json' }); reply.write('{"id":"partial"');
+        }
+        observeHeld?.(); await new Promise<void>(resolve => { releaseHeld = resolve; }); hold = false;
+        if (heldPartial) { heldPartial = false; reply.destroy(); return; }
+      }
       reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(JSON.stringify({ id: `response-${requests}`,
         object: 'chat.completion', created: 1, model: 'native-model', choices: [{ index: 0, finish_reason: 'stop',
           message: { role: 'assistant', content: 'done', refusal: null } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
@@ -51,7 +65,7 @@ async function fixture() {
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
       definition: { endpoint: `http://127.0.0.1:${address.port}/customer/gateway/native-chat`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
-    limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: 2_000 } };
+    limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: nativeTimeoutMs } };
   const config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog,
     provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
@@ -72,7 +86,7 @@ async function fixture() {
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding });
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
   const policy = async (allow: boolean) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [],
-    grants: allow ? [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
+    grants: allow ? [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'],
       principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } },
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
       resource: { kind: 'scope', ids: ['scope'] } }] : [] }), { mode: 0o600 });
@@ -88,10 +102,13 @@ async function fixture() {
     setServiceResponseMaxBytes,
     totalCount, serviceOptions: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8,
       headerTimeoutMs: 1000, responseTimeoutMs: 1000, acceptRetryDelayMs: 10, acceptRetryLimit: 2 },
-    get requests() { return requests; }, holdResponse() { hold = true; return heldObserved(); }, releaseResponse() { releaseHeld?.(); } };
+    get requests() { return requests; }, holdResponse() { hold = true; return heldObserved(); },
+    heldResponseClosed() { return new Promise<void>(resolve => { observeHeldClose = resolve; }); },
+    holdPartialResponse() { hold = true; heldPartial = true; return heldObserved(); },
+    releaseResponse() { releaseHeld?.(); } };
 }
 
-it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 across disconnect, replay, restart and policy change', async () => {
+it.skipIf(process.platform !== 'linux')('owns bounded invocation through current wire7 across disconnect, replay, restart and policy change', async () => {
   const f = await fixture(), observer = { async onPage() {}, async onError() {} };
   let service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const incomplete = createConnection(service.endpoint); incomplete.on('error', () => undefined);
@@ -112,7 +129,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await observed; raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -132,7 +149,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -144,7 +161,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: 7, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await expiryObserved; expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
@@ -165,4 +182,37 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   expect(f.count('denied')).toBe(0); expect(f.requests).toBe(3);
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
   expect((await readFile(f.ledger)).includes(Buffer.from('prompt-shared'))).toBe(false);
+}, 15_000);
+
+it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a partial native response remains ambiguous and capacity stays held', async () => {
+  const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('cancel-held-partial');
+  const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
+  const invocation = client.invokeModel(command, { maxResultBytes: 60_000 });
+  await observed;
+  const cancellation = { schemaVersion: 1 as const, commandId: 'cancel-held-partial-command', scopeId: 'scope',
+    targetCommandId: command.commandId, reference: f.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+  try {
+    const cancelled = await client.cancelModelInvocation(cancellation, { maxResultBytes: 60_000 });
+    expect(cancelled).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested' } });
+    expect(await client.cancelModelInvocation(cancellation, { maxResultBytes: 60_000 })).toEqual({ replayed: true, receipt: cancelled.receipt });
+    const descriptor = await client.describeService(), audit = new DatabaseSync(f.ledger, { readOnly: true });
+    try {
+      expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_cancellations WHERE command_id=?')
+        .get(cancellation.commandId)?.record))).toMatchObject({ command: cancellation, disposition: 'requested' });
+      expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_controls').get()?.record)))
+        .toMatchObject({ send: { state: 'permitted', ownerId: descriptor.instanceId } });
+    } finally { audit.close(); }
+    await within(closed, 'MODEL_INVOCATION_ABORT_NOT_OBSERVED');
+    const settled = await within(invocation, 'MODEL_INVOCATION_ABORT_NOT_SETTLED');
+    expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
+    const inspection = await client.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: settled.receipt.claim.invocationId,
+      reference: f.reference, includeResponseContent: true }, { maxResultBytes: 60_000 });
+    expect(Buffer.from((inspection.responseContent as { data: string }).data, 'base64').toString('utf8')).toBe('{"id":"partial"');
+    const allocation = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
+      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+    expect(f.requests).toBe(1);
+  } finally { f.releaseResponse(); }
 }, 15_000);

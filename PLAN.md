@@ -663,3 +663,7 @@ CANCEL/FAIRNESS-DIAG instrumentation: PASS Fable2124; one test-only slice, full1
 PROVIDERS/A8A: WIP atomic one-shot model send permission and current-policy durable cancellation admission; receipt/outcome4, ledger18 forward-only, runtime wire6. Pre-permission cancellation proves not-sent; post-permission unknown holds capacity. Real HTTP no-send and independent writer races. A8B runtime cancellation delivery/recovery and public cancel surfaces remain open; no full A8/dogfood/provider readiness claim.
 
 PROVIDERS/A8A DONE — Fable2130 PASS, partial A8: atomic single-use send permission, cancellation-before-permission prevention and immutable cancellation audit; receipt4/ledger18/wire6. Full1111/208+24native+18host. Historical control remains unobserved; unknown capacity is retained. Runtime delivery, durable recovery and public cancellation remain A8B WIP.
+
+PROVIDERS/A8B1 REVIEW — shared runtime live-controller ownership, explicit cancelModelInvocation on SDK/CLI/MCP, sole wire7. Local abort follows durable cancellation and fresh policy; disconnection/shutdown do not cancel. Durable scan/restart/inspection remain A8B2, no remote-stop/terminal/unknown-release claim.
+
+PROVIDERS/A8B1 DONE — Fable2139 PASS: bounded process-local controller custody; durable cancellation and fresh authorization before local abort; shared SDK/CLI/MCP cancel entry, wire7. Full1123/209+24native+18host, no-op abort negative experiment RED. No remote terminal/quota release claim; B2 durable recovery and B3 inspection are separate.

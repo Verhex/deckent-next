@@ -4,7 +4,7 @@ import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#do
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, createModelInvocationClaimReceipt,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
   createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand,
-  parseModelInvocationPurgeResultForCommand, verifyModelInvocationRecord } from '#engine/core/model-invocation/index.js';
+  parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, verifyModelInvocationRecord } from '#engine/core/model-invocation/index.js';
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'provider', version: 1,
   models: [{ id: 'model', version: 1, nativeId: 'native/model', protocols: [{ family: 'chat', version: '1', capabilities: [] }] }] }] }, reference)!;
@@ -196,4 +196,19 @@ describe('model invocation purge and hostile input correlation', () => {
         request: { ...record.receipt.request, reference: { ...reference, modelId: 'foreign' } } } },
     ]) expect(() => parseModelInvocationInspectionForQuery(query, value)).toThrow('MODEL_INVOCATION_CORRUPT');
   });
+});
+
+it('rejects substituted cancellation results and hostile envelopes at the runtime client boundary', () => {
+  const cancellation = { schemaVersion: 1 as const, commandId: 'cancel-result', scopeId: receipt.claim.scopeId,
+    targetCommandId: receipt.claim.commandId, reference, expectedRequestDigest: receipt.claim.requestDigest };
+  const cancelled = { schemaVersion: 1 as const, command: cancellation, claim: receipt.claim,
+    actor: receipt.actor, authorization: receipt.authorization, requestedAtMs: 2, disposition: 'requested' as const };
+  const result = { replayed: false, receipt: cancelled };
+  expect(parseModelInvocationCancellationResultForCommand(cancellation, result)).toEqual(result);
+  const getter = Object.defineProperty({}, 'receipt', { enumerable: true, get() { throw new Error('EXECUTED_GETTER'); } });
+  for (const value of [getter, { ...result, extra: true }, { ...result, replayed: 'false' },
+    { ...result, receipt: { ...cancelled, command: { ...cancellation, commandId: 'foreign' } } },
+    { ...result, receipt: { ...cancelled, claim: { ...receipt.claim, scopeId: 'foreign' } } },
+    { ...result, receipt: { ...cancelled, disposition: 'remote-stopped' } },
+  ]) expect(() => parseModelInvocationCancellationResultForCommand(cancellation, value)).toThrow('MODEL_INVOCATION_CORRUPT');
 });

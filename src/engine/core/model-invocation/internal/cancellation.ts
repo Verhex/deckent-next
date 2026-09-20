@@ -1,3 +1,4 @@
+import type { ModelInvocationControllers } from './controllers.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import { counterSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS,
@@ -20,7 +21,8 @@ import { checkInvocationResultDelivery, validateInvocationDelivery, type ModelIn
 /** Records intent under fresh policy; transport delivery belongs to the shared runtime, never the caller connection. */
 export class ModelInvocationCancellationApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelInvocationAuthorizer,
-    private readonly openStore: () => Promise<ModelInvocationCancellationStore>, private readonly runtime: Pick<ModelInvocationRuntime, 'now'>) {}
+    private readonly openStore: () => Promise<ModelInvocationCancellationStore>, private readonly runtime: Pick<ModelInvocationRuntime, 'now'>,
+    private readonly controllers?: Pick<ModelInvocationControllers, 'requestAbort'>) {}
   async cancel(input: unknown, credential?: unknown, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult> {
     validateInvocationDelivery(delivery);
     const command = parseModelInvocationCancellationCommand(input);
@@ -48,6 +50,13 @@ export class ModelInvocationCancellationApplication {
         || !isDeepStrictEqual(receipt.claim, current.receipt.claim) || (!result.replayed
           && (!isDeepStrictEqual(receipt.authorization, admitted.authorization) || receipt.requestedAtMs !== admitted.requestedAtMs))) {
         throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      }
+      if (this.controllers) {
+        const control = await store.loadControl(receipt.claim.scopeId, receipt.claim.invocationId);
+        if (!control || !isDeepStrictEqual(control.cancellation, receipt)) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+        await this.authorization.authorize('cancel-invocation', command, principal);
+        // Only local abort is requested. The durable receipt continues to describe intent, never remote completion.
+        this.controllers.requestAbort(control);
       }
       return checkInvocationResultDelivery(Object.freeze({ replayed: result.replayed, receipt }), delivery);
     } finally { store.close(); }

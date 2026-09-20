@@ -1,4 +1,4 @@
-import type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationPurgeCommand } from '#domain/index.js';
+import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationQuery, ModelInvocationPurgeCommand } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -16,4 +16,7 @@ export function inspectRuntimeModelInvocation(projectRoot: string, input: ModelI
 }
 export function purgeRuntimeModelInvocationContent(projectRoot: string, input: ModelInvocationPurgeCommand, options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).purgeModelInvocationContent(input);
+}
+export function cancelRuntimeModelInvocation(projectRoot: string, input: ModelInvocationCancellationCommand, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).cancelModelInvocation(input);
 }

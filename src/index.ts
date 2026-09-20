@@ -40,7 +40,8 @@ export type { ModelReference, ModelBindingDefinition } from '#domain/index.js';
 export { admitConfiguredModelActivation as admitModelActivation, inspectConfiguredModelActivation as inspectModelActivation } from '#composition/index.js';
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
 export type { ModelActivationResult, ModelActivationInspection } from '#engine/index.js';
-export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation, purgeRuntimeModelInvocationContent as purgeModelInvocationContent } from '#composition/index.js';
+export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation, purgeRuntimeModelInvocationContent as purgeModelInvocationContent,
+  cancelRuntimeModelInvocation as cancelModelInvocation } from '#composition/index.js';
 export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationReceipt,
-  ModelInvocationContentDescriptor, ModelInvocationResponseContent, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt } from '#domain/index.js';
-export type { ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult } from '#engine/index.js';
+  ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationContentDescriptor, ModelInvocationResponseContent, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt } from '#domain/index.js';
+export type { ModelInvocationCancellationResult, ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult } from '#engine/index.js';

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError } from '#adapters/index.js';
-import { RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
+import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -29,6 +29,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   }, options) : null;
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   const instanceId = randomUUID();
+  const modelHost = { ownerId: instanceId, controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
     shutdownAvailable: config.service.identity !== null, identity: config.service.identity });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
@@ -43,21 +44,21 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
-        return { schemaVersion: 6, requestId: request.requestId, ok: true, result };
+        return { schemaVersion: 7, requestId: request.requestId, ok: true, result };
       }
       if (request.operation === 'shutdownService') {
         if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
         const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
-        return { response: { schemaVersion: 6, requestId: request.requestId, ok: true, result },
+        return { response: { schemaVersion: 7, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent'
-        ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
+      const result = await lifecycle.admit(() => request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
+        ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost)
         : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
-      return { schemaVersion: 6, requestId: request.requestId, ok: true, result };
+      return { schemaVersion: 7, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: 6, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      return { schemaVersion: 7, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;

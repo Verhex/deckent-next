@@ -25,23 +25,26 @@ const command = { schemaVersion: 1 as const, commandId: 'cancel', scopeId: 'scop
   expectedRequestDigest: invocationReceipt.claim.requestDigest };
 
 interface Options {
-  readonly replayed?: boolean; readonly denyAt?: number; readonly missing?: boolean; readonly loadError?: boolean;
+  readonly live?: boolean; readonly corruptControl?: boolean; readonly replayed?: boolean; readonly denyAt?: number; readonly missing?: boolean; readonly loadError?: boolean;
   readonly writeError?: boolean; readonly substitute?: (result: ModelInvocationCancellationResult) => ModelInvocationCancellationResult;
 }
 function fixture(options: Options = {}) {
   let opens = 0, loads = 0, writes = 0, closes = 0, policies = 0;
   const admissions: ModelInvocationCancellationAdmission[] = [], targets: unknown[] = [];
+  const events: string[] = []; let committed: ModelInvocationCancellationResult | null = null;
   const historical = { schemaVersion: 1 as const, command, claim: invocationReceipt.claim, actor,
-    authorization: { revision: 'historical', ruleId: 'cancel' }, requestedAtMs: 4, disposition: 'prevented' as const };
+    authorization: { revision: 'historical', ruleId: 'cancel' }, requestedAtMs: 4, disposition: options.live ? 'requested' as const : 'prevented' as const };
   const store: ModelInvocationCancellationStore = {
     async loadReceipt(scopeId, commandId) { loads++; if (options.loadError) throw new Error('LOAD');
       if (!options.missing) expect([scopeId, commandId]).toEqual(['scope', 'invoke']);
       return options.missing ? null : { receipt: invocationReceipt, content: null, purge: null }; },
-    async loadControl() { return null; },
+    async loadControl() { events.push('load-control'); return committed ? { schemaVersion: 1, claim: invocationReceipt.claim, reference,
+      send: { state: 'permitted', ownerId: 'service-owner', permittedAtMs: 2 },
+      cancellation: options.corruptControl ? null : committed.receipt } : null; },
     async cancelInvocation(input) { writes++; admissions.push(input); if (options.writeError) throw new Error('WRITE');
       const result: ModelInvocationCancellationResult = options.replayed ? { replayed: true, receipt: historical }
-        : { replayed: false, receipt: { schemaVersion: 1, ...input, claim: invocationReceipt.claim, disposition: 'prevented' } };
-      return options.substitute?.(result) ?? result; },
+        : { replayed: false, receipt: { schemaVersion: 1, ...input, claim: invocationReceipt.claim, disposition: options.live ? 'requested' : 'prevented' } };
+      committed = options.substitute?.(result) ?? result; events.push('audit-committed'); return committed; },
     close() { closes++; },
   };
   const app = new ModelInvocationCancellationApplication({ async verify(credential) {
@@ -50,8 +53,11 @@ function fixture(options: Options = {}) {
   } }, { async authorize(action, target) { policies++; targets.push(target); expect(action).toBe('cancel-invocation');
     if (options.denyAt === policies) throw new Error(`DENIED_${policies}`);
     return { revision: `policy-${policies}`, ruleId: 'cancel' };
-  } }, async () => { opens++; return store; }, { now: () => 10 });
-  return { app, admissions, targets, counts: () => ({ opens, loads, writes, closes, policies }) };
+  } }, async () => { opens++; return store; }, { now: () => 10 }, options.live ? { requestAbort(control) {
+    expect(control.cancellation).toEqual(committed?.receipt); expect(policies).toBe(3);
+    events.push('abort-requested'); return 'abort-requested';
+  } } : undefined);
+  return { app, admissions, targets, events, counts: () => ({ opens, loads, writes, closes, policies }) };
 }
 const credential = { id: 'client-supplied', actor: { id: 'forged' } };
 
@@ -122,4 +128,24 @@ describe('model invocation cancellation application', () => {
       await expect(f.app.cancel(command, credential)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
     }
   });
+  it('delivers live abort only after durable audit, exact control and fresh policy; replay preserves the audit', async () => {
+    for (const replayed of [false, true]) {
+      const f = fixture({ live: true, replayed });
+      const result = await f.app.cancel(command, credential);
+      expect(result).toMatchObject({ replayed, receipt: { disposition: 'requested' } });
+      expect(f.events).toEqual(['audit-committed', 'load-control', 'abort-requested']);
+      expect(f.counts().closes).toBe(1);
+    }
+  });
+
+  it('never aborts on audit failure, substituted control or policy revocation after recording intent', async () => {
+    for (const options of [{ writeError: true }, { corruptControl: true }, { denyAt: 3 }]) {
+      const f = fixture({ live: true, ...options });
+      await expect(f.app.cancel(command, credential)).rejects.toThrow();
+      expect(f.events).not.toContain('abort-requested');
+      expect(f.events.includes('audit-committed')).toBe(!('writeError' in options));
+      expect(f.counts().closes).toBe(1);
+    }
+  });
+
 });

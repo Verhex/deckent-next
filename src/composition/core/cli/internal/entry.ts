@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
-import { createConfiguredRuntimeClient, invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent } from '#composition/core/runtime-service/index.js';
+import { createConfiguredRuntimeClient, invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
@@ -20,6 +20,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
     inspectDeclaredModels, inspectModelBinding,
     invokeModel: invokeRuntimeModel, inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
+    cancelModelInvocation: cancelRuntimeModelInvocation,
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation,
     previewInstallation: async (projectRoot, input) => {
       try { return await previewSuppliedInstallation(projectRoot,

@@ -99,3 +99,18 @@ it('parses and renders purge-content without exposing retained payloads', async 
   expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain('Invocation content purged: call.');
   expect(output).toContain('Logical purge does not erase'); expect(output).not.toContain('native');
 });
+
+it('records cancellation through the exact command input without claiming remote completion', async () => {
+  const f = await fixture(), path = join(f.root, 'cancel.json');
+  const cancel = { schemaVersion: 1, commandId: 'cancel-command', scopeId: 'scope', targetCommandId: 'command', reference,
+    expectedRequestDigest: 'a'.repeat(64) };
+  await writeFile(path, JSON.stringify(cancel)); let output = '', calls = 0;
+  const code = await main(['models', 'cancel', '--input', path], { ...f, stdout: { write(text) { output += text; } },
+    cancelModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(cancel); return { replayed: false,
+      receipt: { schemaVersion: 1, command: cancel, claim: { scopeId: 'scope', commandId: 'command', invocationId: 'call',
+        requestDigest: cancel.expectedRequestDigest, profileDigest: 'b'.repeat(64) }, actor: { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'os-user' },
+      authorization: { revision: 'allow', ruleId: 'cancel-invocation' }, requestedAtMs: 1, disposition: 'requested' } } as never; },
+  });
+  expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain('Cancellation recorded for invocation: call.');
+  expect(output).toContain('does not prove that a provider received, stopped, or completed work');
+});

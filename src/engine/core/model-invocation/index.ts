@@ -3,7 +3,7 @@ export type { ModelInvocationAuthorizer, ModelInvocationNativePort, ModelInvocat
   ModelInvocationProfileSource, ModelInvocationResult, ModelInvocationRuntime } from './internal/application.js';
 export { ModelInvocationInspectionApplication } from './internal/inspection.js';
 export type { ModelInvocationInspection } from './internal/inspection.js';
-export { parseModelInvocationInspectionForQuery, parseModelInvocationPurgeResultForCommand,
+export { parseModelInvocationCancellationResultForCommand, parseModelInvocationInspectionForQuery, parseModelInvocationPurgeResultForCommand,
   parseModelInvocationResultForCommand } from './internal/result.js';
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
   parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './internal/evidence.js';
@@ -19,3 +19,6 @@ export { createModelInvocationResponseEvidence, verifyModelInvocationResponseEvi
 export type { ModelInvocationCancellationAdmission, ModelInvocationCancellationResult, ModelInvocationCancellationStore,
   ModelInvocationSendPermission } from './internal/port.js';
 export { ModelInvocationCancellationApplication, parseModelInvocationCancellationAdmission } from './internal/cancellation.js';
+
+export { ModelInvocationControllers } from './internal/controllers.js';
+export type { ModelInvocationAbortResult, ModelInvocationControllerHandle } from './internal/controllers.js';

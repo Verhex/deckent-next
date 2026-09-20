@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { IDENTITY_MAX_LENGTH } from '#domain/core/primitives/index.js';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { modelInvocationRequestEvidence, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
-import { ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
+import { modelInvocationRequestEvidence, type ModelInvocationClaim, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
+import { ModelInvocationControllers, ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
   createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
   type ModelInvocationPurgeAdmission, type ModelInvocationPurgeResult, type ModelInvocationRecord,
@@ -31,9 +31,10 @@ function receipt(input: ModelInvocationAdmission, outcome: ModelInvocationReceip
     claim: { scopeId: input.command.scopeId, commandId: input.command.commandId, invocationId: input.invocationId,
       requestDigest: input.requestDigest, profileDigest: input.profileDigest }, claimedAtMs: input.claimedAtMs, outcome };
 }
-function fixture(options: { nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
+function fixture(options: { liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
   permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
+  const controllers = new ModelInvocationControllers(2), registrations: ModelInvocationClaim[] = [];
   let stored: ModelInvocationRecord | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
   if (options.profilePadding) selectedProfile = { ...selectedProfile, adapter: { ...selectedProfile.adapter,
     definition: { padding: Array.from({ length: options.profilePadding }, () => null) } } };
@@ -44,9 +45,9 @@ function fixture(options: { nativeResult?: ModelInvocationNativeResult; profileP
     async loadReceipt() { const found = stored;
       if (options.concurrentBarrier && found === null && ++waitingLoads <= 2) { if (waitingLoads === 2) releaseLoads?.(); await loadBarrier; }
       return found; }, async loadInvocation() { return stored; },
-    async claim(input) { calls.claims++; if (stored) return { replayed: true, record: stored };
+    async claim(input) { calls.claims++; if (options.claimError) throw new Error('CLAIM'); if (stored) return { replayed: true, record: stored };
       stored = { receipt: receipt(input), content: null, purge: null }; return { replayed: false, record: stored }; },
-    async permitSend(claim, ownerId, now) { calls.permissions++;
+    async permitSend(claim, ownerId, now) { calls.permissions++; if (options.permitError) throw new Error('PERMIT');
       if (options.permission === 'denied') return { granted: false, record: stored!, control: { schemaVersion: 1, claim, reference,
         send: { state: 'permitted', ownerId: 'other-runtime', permittedAtMs: now }, cancellation: null } };
       if (options.permission === 'pending') return { granted: false, record: stored!,
@@ -86,11 +87,32 @@ function fixture(options: { nativeResult?: ModelInvocationNativeResult; profileP
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
       async send() { calls.sends++; if (options.sendError) throw new Error('RESET');
         return options.nativeResult ?? { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
-    }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10 });
-  return { app, calls, store, get stored() { return stored; } };
+    }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10,
+      ...(options.liveControllers ? { register(claim: ModelInvocationClaim, owner: string) { registrations.push(claim); return controllers.register(claim, owner); } } : {}) });
+  return { app, calls, store, controllers, registrations, get stored() { return stored; } };
 }
 
 describe('model invocation application', () => {
+  it('releases live controller custody on claim/permission failures, prevention, native failure, settlement and concurrent replay', async () => {
+    const cases = [{ claimError: true }, { permitError: true }, { permission: 'prevented' as const },
+      { sendError: true }, { responseWriteError: true }, {}, { concurrentBarrier: true }];
+    for (const options of cases) {
+      const f = fixture({ ...options, liveControllers: true });
+      const results = await Promise.allSettled(options.concurrentBarrier
+        ? [f.app.invoke(command), f.app.invoke(command)] : [f.app.invoke(command)]);
+      expect(f.registrations.length).toBe(options.concurrentBarrier ? 2 : 1);
+      if (options.claimError || options.permitError || options.responseWriteError) expect(results[0].status).toBe('rejected');
+      else expect(results.every(result => result.status === 'fulfilled')).toBe(true);
+      for (const claim of f.registrations) {
+        // A leaked entry conflicts; also verify release never fabricates a cancellation signal.
+        const registeredAgain = f.controllers.register(claim, 'runtime-owner');
+        expect(registeredAgain.signal.aborted).toBe(false);
+        registeredAgain.release();
+      }
+      expect(f.calls.sends).toBe(options.claimError || options.permitError || options.permission ? 0 : 1);
+    }
+  });
+
   it('rejects profiles whose retained evidence cannot fit the canonical receipt before any effect', async () => {
     const f = fixture({ responseLimit: Number.MAX_SAFE_INTEGER });
     await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
