@@ -667,3 +667,7 @@ PROVIDERS/A8A DONE — Fable2130 PASS, partial A8: atomic single-use send permis
 PROVIDERS/A8B1 REVIEW — shared runtime live-controller ownership, explicit cancelModelInvocation on SDK/CLI/MCP, sole wire7. Local abort follows durable cancellation and fresh policy; disconnection/shutdown do not cancel. Durable scan/restart/inspection remain A8B2, no remote-stop/terminal/unknown-release claim.
 
 PROVIDERS/A8B1 DONE — Fable2139 PASS: bounded process-local controller custody; durable cancellation and fresh authorization before local abort; shared SDK/CLI/MCP cancel entry, wire7. Full1123/209+24native+18host, no-op abort negative experiment RED. No remote terminal/quota release claim; B2 durable recovery and B3 inspection are separate.
+
+PROVIDERS/A8B2 REVIEW — bounded read-only cancellation inventory and runtime-owned fair scope scan use existing cancellation recovery config. Every entry freshly authorized; failure after durable intent is recoverable while live, restart missing controller remains not-live/unknown without resend or quota release. Cancellation inspection surface and remote terminal lookup remain open; no raw provider content in scan.
+
+PROVIDERS/A8B2 DONE — Fable2144 PASS: read-only scoped cancellation inventory, whole-page integrity before effects, fresh per-entry policy and fair configured recovery loop. Full1136/212+24native+18host. Actual HTTP delivery-failure/restart proof, no resend or unknown-capacity release. Public inspection remains B3.

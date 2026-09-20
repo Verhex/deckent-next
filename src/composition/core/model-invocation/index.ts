@@ -4,3 +4,4 @@ export { purgePeerConfiguredModelInvocationContent } from './internal/purge.js';
 
 export { cancelPeerConfiguredModelInvocation } from './internal/cancel.js';
 export type { RuntimeModelInvocationHost } from './internal/invoke.js';
+export { recoverConfiguredModelCancellations } from './internal/recover-cancellation.js';

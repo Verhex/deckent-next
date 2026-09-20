@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, modelInvocationRequestDigest, modelInvocationTargetId } from '#engine/index.js';
+import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
@@ -216,3 +216,77 @@ it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a p
     expect(f.requests).toBe(1);
   } finally { f.releaseResponse(); }
 }, 15_000);
+
+it.skipIf(process.platform !== 'linux')('recovers a durable requested cancellation after its live delivery fails', async () => {
+  const f = await fixture(10_000);
+  const modelPages: { readonly command: unknown; readonly result: { readonly outcomes: readonly { readonly status: string }[] } }[] = [];
+  let releaseInitialPage!: () => void, observeInitialPage!: () => void, firstPage = true;
+  const initialPage = new Promise<void>(resolve => { observeInitialPage = resolve; });
+  const initialPageBarrier = new Promise<void>(resolve => { releaseInitialPage = resolve; });
+  let initialPageReleased = false;
+  const unblockInitialPage = () => { if (!initialPageReleased) { initialPageReleased = true; releaseInitialPage(); } };
+  const observer = {
+    async onPage() {}, async onError() {},
+    async onModelCancellationPage(command: unknown, result: { readonly outcomes: readonly { readonly status: string }[] }) {
+      modelPages.push({ command, result });
+      if (firstPage) { firstPage = false; observeInitialPage(); await initialPageBarrier; }
+    },
+    async onModelCancellationError() { throw new Error('UNEXPECTED_MODEL_CANCELLATION_RECOVERY_ERROR'); },
+  };
+  let service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  await within(initialPage, 'MODEL_CANCELLATION_INITIAL_PAGE_MISSING').catch(error => { unblockInitialPage(); throw error; });
+  const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('recover-cancel-held-partial');
+  const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
+  const invocation = client.invokeModel(command, { maxResultBytes: 60_000 });
+  await observed;
+  const cancellation = { schemaVersion: 1 as const, commandId: 'recover-cancel-held-partial-command', scopeId: 'scope',
+    targetCommandId: command.commandId, reference: f.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+  const originalRequestAbort = ModelInvocationControllers.prototype.requestAbort;
+  let injected = false;
+  ModelInvocationControllers.prototype.requestAbort = function(control) {
+    if (!injected) { injected = true; throw new Error('FIXTURE_ABORT_DELIVERY_FAILURE'); }
+    return originalRequestAbort.call(this, control);
+  };
+  try {
+    await expect(client.cancelModelInvocation(cancellation, { maxResultBytes: 60_000 })).rejects.toThrow();
+    expect(injected).toBe(true);
+    const audit = new DatabaseSync(f.ledger, { readOnly: true });
+    try {
+      expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_cancellations WHERE command_id=?')
+        .get(cancellation.commandId)?.record))).toMatchObject({ command: cancellation, disposition: 'requested' });
+    } finally { audit.close(); }
+  } finally {
+    ModelInvocationControllers.prototype.requestAbort = originalRequestAbort;
+    unblockInitialPage();
+  }
+  try {
+    await within(closed, 'MODEL_INVOCATION_RECOVERY_ABORT_NOT_OBSERVED');
+    await waitFor(() => modelPages.some(page => page.result.outcomes.some(outcome => outcome.status === 'abort-requested')),
+      'MODEL_INVOCATION_RECOVERY_ABORT_PAGE_MISSING');
+    const settled = await within(invocation, 'MODEL_INVOCATION_RECOVERY_ABORT_NOT_SETTLED');
+    expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
+    const inspection = await client.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: settled.receipt.claim.invocationId,
+      reference: f.reference, includeResponseContent: true }, { maxResultBytes: 60_000 });
+    expect(Buffer.from((inspection.responseContent as { data: string }).data, 'base64').toString('utf8')).toBe('{"id":"partial"');
+    expect(f.requests).toBe(1);
+    const allocation = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
+      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+
+    expect(await service.stop()).toMatchObject({ state: 'clean' }); await service.done;
+    services.splice(services.indexOf(service), 1);
+    const restartPages: { readonly outcomes: readonly { readonly status: string }[] }[] = [];
+    service = await startConfiguredRuntimeService(f.project, {
+      async onPage() {}, async onError() {},
+      async onModelCancellationPage(_command, result) { restartPages.push(result); },
+      async onModelCancellationError() { throw new Error('UNEXPECTED_RESTART_MODEL_CANCELLATION_ERROR'); },
+    }, { env: f.env });
+    services.push(service);
+    await waitFor(() => restartPages.some(page => page.outcomes.some(outcome => outcome.status === 'not-live')),
+      'MODEL_INVOCATION_RESTART_NOT_LIVE_PAGE_MISSING');
+    expect(f.requests).toBe(1);
+    const restartedAllocation = new DatabaseSync(f.ledger, { readOnly: true });
+    try { expect(restartedAllocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
+      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { restartedAllocation.close(); }
+  } finally { f.releaseResponse(); }
+}, 20_000);

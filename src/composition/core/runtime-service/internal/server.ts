@@ -7,6 +7,7 @@ import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSock
 import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
+import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
@@ -14,6 +15,8 @@ import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
   onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
+  onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
+  onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
 }
 
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
@@ -30,6 +33,10 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   const instanceId = randomUUID();
   const modelHost = { ownerId: instanceId, controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
+  const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
+    onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
+    onError: (command, error) => observer.onModelCancellationError?.(command, error),
+  }, options);
   const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
     shutdownAvailable: config.service.identity !== null, identity: config.service.identity });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
@@ -106,6 +113,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   });
   const hostedRecovery = [
     preparedRecovery.run(controller.signal),
+    preparedModelCancellation.run(controller.signal),
     ...(preparedReconciliation ? [preparedReconciliation.run(controller.signal)] : []),
   ];
   recovery = Promise.allSettled(hostedRecovery.map(work => work.catch(error => {

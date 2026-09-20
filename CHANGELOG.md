@@ -378,3 +378,5 @@ CANCEL/FAIRNESS-DIAG: capture bounded execution, workspace and owned Docker stat
 PROVIDERS/A8A: atomically prevent model sends when cancellation wins before send permission; retain auditable intent and honest uncertainty after permission without replaying calls.
 
 PROVIDERS/A8B1: route explicit SDK/CLI/MCP cancellation through the shared runtime, recording intent before aborting the owned transport; client disconnect preserves work.
+
+PROVIDERS/A8B2: recover durable model cancellation intent with bounded scoped scanning; retain honest unknown outcomes when no live transport exists.

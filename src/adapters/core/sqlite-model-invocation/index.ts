@@ -13,3 +13,7 @@ export async function openSqliteModelInvocationReader(path: string, options: { r
   const implementation = await import('./internal/reader.js');
   return implementation.openSqliteModelInvocationReader(path, options);
 }
+export async function openSqliteModelInvocationCancellationInventory(path: string, options: { readonly busyTimeoutMs: number }) {
+  const implementation = await import('./internal/cancellation-inventory.js');
+  return implementation.openSqliteModelInvocationCancellationInventory(path, options);
+}

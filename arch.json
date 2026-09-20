@@ -433,8 +433,10 @@
     },
     "src/composition/core/runtime": {
       "dependencies": [
+        "src/composition/core/model-invocation",
         "src/composition/core/query-errors",
         "src/composition/core/runs",
+        "src/engine/core/model-invocation",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/platform/core/config",
@@ -595,6 +597,7 @@
         "src/domain/core/principal",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
+        "src/engine/core/model-invocation",
         "src/engine/core/policy",
         "src/engine/core/runs"
       ],

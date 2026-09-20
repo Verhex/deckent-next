@@ -22,3 +22,9 @@ export { ModelInvocationCancellationApplication, parseModelInvocationCancellatio
 
 export { ModelInvocationControllers } from './internal/controllers.js';
 export type { ModelInvocationAbortResult, ModelInvocationControllerHandle } from './internal/controllers.js';
+export { modelInvocationCancellationRecoveryCommandSchema, modelInvocationCancellationInventoryQuerySchema } from './internal/cancellation-inventory.js';
+export type { ModelInvocationCancellationRecoveryCommand, ModelInvocationCancellationInventoryQuery,
+  ModelInvocationCancellationInventoryEntry, ModelInvocationCancellationInventoryPage, ModelInvocationCancellationInventory } from './internal/cancellation-inventory.js';
+export { ModelInvocationCancellationRecoveryApplication } from './internal/cancellation-recovery.js';
+export type { ModelInvocationCancellationRecoveryStatus, ModelInvocationCancellationRecoveryOutcome,
+  ModelInvocationCancellationRecoveryPage } from './internal/cancellation-recovery.js';
