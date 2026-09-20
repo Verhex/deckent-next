@@ -1,7 +1,7 @@
 export { OPENAI_CHAT_WIRE_LIMITS, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits,
   parseOpenAiChatTextRequest } from './internal/contract.js';
-export type { OpenAiChatHttpDefinition, OpenAiChatHttpErrorCode, OpenAiChatHttpLimits, OpenAiChatHttpResponse,
+export type { OpenAiChatHttpAuthentication, OpenAiChatHttpDefinition, OpenAiChatHttpErrorCode, OpenAiChatHttpLimits, OpenAiChatHttpResponse,
   OpenAiChatTextMessage, OpenAiChatTextRequest } from './internal/contract.js';
 export { createOpenAiChatNativePort, openAiChatProtocol, prepareOpenAiChatHttpRequest } from './internal/transport.js';
-export type { PreparedOpenAiChatRequest } from './internal/transport.js';
+export type { OpenAiChatNativePortOptions, PreparedOpenAiChatRequest } from './internal/transport.js';

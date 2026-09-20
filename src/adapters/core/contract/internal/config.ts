@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
+import { registerProviderSpendingConfig } from './spending.js';
 import { isDeepStrictEqual } from 'node:util';
 import { ConfigValidationError, CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
 const units = z.enum(['percent', 'requests', 'tokens', 'credits', 'usd']);
@@ -52,5 +53,7 @@ export function registerProviderConfig(): void {
   registerConfigSection('provider_limits', LIMIT_SCHEMA, { optional: true, metadata: { descriptionKey: 'config.field.provider_limits', tier: 'core', since: CONFIG_CONTRACT_SINCE }, validateLayers: assertProviderLimitPolicyLayerPrecedence });
   registerProviderCatalogConfig();
   registerInvocationProfileConfig();
+  registerProviderSpendingConfig();
   registered = true;
 }
+export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';

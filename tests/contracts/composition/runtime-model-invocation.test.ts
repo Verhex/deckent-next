@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server } from 'node:https';
 import { createConnection } from 'node:net';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
@@ -15,6 +15,7 @@ import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime
 import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], httpServers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [],
   heldReleases: (() => void)[] = [];
@@ -42,11 +43,19 @@ async function fixture(nativeTimeoutMs = 2_000) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-runtime-model-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  let requests = 0, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined,
+  let metadataRequests = 0, requests = 0, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined,
     observeHeldClose: (() => void) | undefined, hold = false, heldPartial = false;
   heldReleases.push(() => releaseHeld?.());
   const heldObserved = () => new Promise<void>(resolve => { observeHeld = resolve; });
-  const native = createServer((request, reply) => { const chunks: Buffer[] = [];
+  const tls = await createPricedProviderTls(root);
+  const native = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
+    if (request.method === 'GET' && request.url === '/api/v1/models/vendor/model/endpoints') {
+      metadataRequests++;
+      if (metadataRequests === 2) { setTimeout(() => replyPricedProviderMetadata(request, reply), 10); return; }
+      replyPricedProviderMetadata(request, reply); return;
+    }
+    if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
+    const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => {
       requests++; if (hold) {
         if (heldPartial) {
@@ -57,23 +66,24 @@ async function fixture(nativeTimeoutMs = 2_000) {
         if (heldPartial) { heldPartial = false; reply.destroy(); return; }
       }
       reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(JSON.stringify({ id: `response-${requests}`,
-        object: 'chat.completion', created: 1, model: 'native-model', choices: [{ index: 0, finish_reason: 'stop',
+        object: 'chat.completion', created: 1, model: 'vendor/model', choices: [{ index: 0, finish_reason: 'stop',
           message: { role: 'assistant', content: 'done', refusal: null } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
     }); });
   httpServers.push(native); await new Promise<void>((resolve, reject) => { native.once('error', reject); native.listen(0, '127.0.0.1', resolve); });
   const address = native.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
-  const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
-  const model = { id: 'model', version: 1, nativeId: 'native-model', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
-  const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ id: 'provider', version: 1, models: [model] }] };
-  const definition = { encodingVersion: 1 as const, provider: { id: 'provider', version: 1 }, model };
+  const origin = `https://127.0.0.1:${address.port}`;
+  const reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
+  const model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openrouter-chat-completions', version: 'v1', capabilities: [] }] };
+  const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ id: 'openrouter', version: 1, models: [model] }] };
+  const definition = { encodingVersion: 1 as const, provider: { id: 'openrouter', version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
-      definition: { endpoint: `http://127.0.0.1:${address.port}/customer/gateway/native-chat`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
+    protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
+      definition: pricedProviderDefinition(origin, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: nativeTimeoutMs } };
   const config = { layout: { root: data }, storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog,
-    provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
+    provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
     mcp: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConcurrentCalls: 8 },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
@@ -105,7 +115,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
   await policy(true);
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: 'catalog', expectedBinding: binding,
-    nativeRequest: { model: 'native-model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
+    nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
   const count = (commandId: string) => { const db = new DatabaseSync(ledger, { readOnly: true });
     try { return Number(db.prepare('SELECT count(*) AS count FROM model_invocations WHERE command_id=?').get(commandId)?.count); } finally { db.close(); } };
   const totalCount = () => { const db = new DatabaseSync(ledger, { readOnly: true });
@@ -114,7 +124,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
     setServiceResponseMaxBytes, setMcpResponseMaxBytes,
     totalCount, serviceOptions: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8,
       headerTimeoutMs: 1000, responseTimeoutMs: 1000, acceptRetryDelayMs: 10, acceptRetryLimit: 2 },
-    get requests() { return requests; }, holdResponse() { hold = true; return heldObserved(); },
+    get metadataRequests() { return metadataRequests; }, get requests() { return requests; }, holdResponse() { hold = true; return heldObserved(); },
     heldResponseClosed() { return new Promise<void>(resolve => { observeHeldClose = resolve; }); },
     holdPartialResponse() { hold = true; heldPartial = true; return heldObserved(); },
     releaseResponse() { releaseHeld?.(); } };
@@ -134,9 +144,10 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   ]);
   expect([first.replayed, second.replayed].sort()).toEqual([false, true]); expect(first.receipt.claim).toEqual(second.receipt.claim);
   const fresh = first.replayed ? second : first;
-  expect(f.requests).toBe(1); expect(f.count('shared')).toBe(1);
+  expect(f.metadataRequests).toBe(2); expect(f.requests).toBe(1); expect(f.count('shared')).toBe(1);
   const sharedQuery = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.reference };
-  expect((await firstClient.inspectModelInvocation(sharedQuery, { maxResultBytes: 60_000 })).invocation).toEqual(fresh.receipt);
+  const sharedInspection = await firstClient.inspectModelInvocation(sharedQuery, { maxResultBytes: 60_000 });
+  expect(sharedInspection.invocation).toEqual(fresh.receipt); expect(sharedInspection.spending).not.toBeNull();
 
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
@@ -189,6 +200,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
 
   await expect(afterExpiry.invokeModel(f.command('tiny'), { maxResultBytes: 64 })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
   expect(f.count('tiny')).toBe(0); expect(f.requests).toBe(3);
+  expect((await afterExpiry.inspectModelInvocation(sharedQuery, { maxResultBytes: 60_000 })).spending).toEqual(sharedInspection.spending);
   await f.policy(false);
   await expect(afterExpiry.invokeModel(f.command('denied'), { maxResultBytes: 60_000 })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   expect(f.count('denied')).toBe(0); expect(f.requests).toBe(3);

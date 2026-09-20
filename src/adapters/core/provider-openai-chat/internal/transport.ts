@@ -1,13 +1,17 @@
-import { Agent, request as httpRequest } from 'node:http';
 import { z } from 'zod';
-import { createModelInvocationResponseEvidence, type ModelInvocationNativePort } from '#engine/index.js';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationNativeResult, type ModelInvocationRejectionReason } from '#domain/index.js';
+import type { ModelInvocationNativePort } from '#engine/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationNativeResult } from '#domain/index.js';
+import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
   openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
-  type OpenAiChatHttpDefinition, type OpenAiChatHttpLimits, type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
+  type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
+  type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
 
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
+export interface OpenAiChatNativePortOptions {
+  readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
+}
 const finishReason = z.enum(['stop', 'length', 'content_filter']);
 const usageSchema = z.object({ prompt_tokens: z.number().int().nonnegative().safe(),
   completion_tokens: z.number().int().nonnegative().safe(), total_tokens: z.number().int().nonnegative().safe() }).passthrough()
@@ -27,69 +31,6 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     max_completion_tokens: nativeRequest.max_completion_tokens, stream: false, ...(nativeRequest.n === 1 ? { n: 1 } : {}) });
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   return Object.freeze({ definition, limits, request: nativeRequest, body });
-}
-
-function statusOf(value: number | undefined): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : null;
-}
-function rejected(reason: ModelInvocationRejectionReason, status: number | null,
-  body: Uint8Array, complete: boolean, observedBytes = body.byteLength): ModelInvocationNativeResult {
-  return Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(
-    { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION }, reason, status, body, complete, observedBytes), });
-}
-
-async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatRequest, signal?: AbortSignal): Promise<ModelInvocationNativeResult> {
-  if (signal?.aborted) throw new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED');
-  const endpoint = new URL(prepared.definition.endpoint);
-  return new Promise((resolve, reject) => {
-    const agent = new Agent({ keepAlive: false, proxyEnv: {} });
-    let settled = false; let response: import('node:http').IncomingMessage | undefined;
-    const retained: Buffer[] = []; let retainedBytes = 0; let observedBytes = 0; let status: number | null = null;
-    const retainedBody = () => Buffer.concat(retained);
-    const done = (error?: OpenAiChatHttpError, value?: ModelInvocationNativeResult) => {
-      if (settled) return; settled = true; clearTimeout(timer); signal?.removeEventListener('abort', abort);
-      agent.destroy();
-      if (error) { response?.destroy(); req.destroy(); reject(error); } else if (value) resolve(value);
-    };
-    const settleRejected = (reason: ModelInvocationRejectionReason, complete: boolean) => {
-      if (settled) return;
-      try { done(undefined, rejected(reason, status, retainedBody(), complete, observedBytes)); }
-      catch { done(new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE')); }
-    };
-    const interrupted = (error: OpenAiChatHttpError) => {
-      if (settled) return;
-      if (response && status !== null) settleRejected('interrupted', false);
-      else done(error);
-    };
-    const abort = () => interrupted(new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED'));
-    const req = httpRequest(endpoint, { agent, method: 'POST', headers: { 'content-type': 'application/json',
-      'content-length': String(Buffer.byteLength(prepared.body, 'utf8')), accept: 'application/json' } }, incoming => {
-      response = incoming; const currentStatus = statusOf(incoming.statusCode); status = currentStatus;
-      if (currentStatus === null) { done(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); return; }
-      incoming.on('data', (chunk: Buffer) => {
-        if (settled) return;
-        observedBytes += chunk.byteLength;
-        const remaining = prepared.limits.responseMaxBytes - retainedBytes;
-        if (remaining > 0) { const prefix = chunk.subarray(0, remaining); retained.push(prefix); retainedBytes += prefix.byteLength; }
-        if (observedBytes > prepared.limits.responseMaxBytes) {
-          settleRejected('response-limit', false);
-        }
-      });
-      incoming.on('error', () => { if (!settled) interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); });
-      incoming.on('end', () => {
-        if (settled) return;
-        try {
-          if (currentStatus >= 300 && currentStatus < 400) { settleRejected('redirect', true); return; }
-          if (currentStatus < 200 || currentStatus >= 300) { settleRejected('http-status', true); return; }
-          const parsed = parseResponse(retainedBody(), prepared);
-          if ('reason' in parsed) settleRejected(parsed.reason, true); else done(undefined, parsed.response);
-        } catch { done(new OpenAiChatHttpError('OPENAI_CHAT_RESPONSE_TOO_LARGE')); }
-      });
-    });
-    const timer = setTimeout(() => interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TIMEOUT')), prepared.limits.timeoutMs);
-    req.on('error', () => { if (!settled) interrupted(new OpenAiChatHttpError('OPENAI_CHAT_TRANSPORT_UNKNOWN')); });
-    signal?.addEventListener('abort', abort, { once: true }); req.end(prepared.body);
-  });
 }
 
 function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { response: OpenAiChatHttpResponse } | { reason: 'invalid-response' | 'model-mismatch' | 'response-limit' } {
@@ -114,10 +55,25 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
   return { response: Object.freeze({ schemaVersion: 1, native: copied.data, usage: usageCopied.data }) };
 }
 
+async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatRequest, options: OpenAiChatNativePortOptions,
+  signal?: AbortSignal) {
+  try {
+    const definition = { endpoint: prepared.definition.endpoint, authentication: prepared.definition.authentication,
+      ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
+    return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body,
+      adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION } },
+    { ...options, parseResponse: body => parseResponse(body, prepared) }, signal);
+  } catch (error) {
+    if (!(error instanceof NativeJsonHttpError)) throw error;
+    const code = error.code.replace('NATIVE_JSON_HTTP_', 'OPENAI_CHAT_') as OpenAiChatHttpErrorCode;
+    throw new OpenAiChatHttpError(code, error.status);
+  }
+}
+
 export const openAiChatProtocol = Object.freeze({ family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION });
 
 /** Structural native port for the engine resolver. Only preparation validates the profile and binding; it has no network effect. */
-export function createOpenAiChatNativePort(): ModelInvocationNativePort {
+export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions = {}): ModelInvocationNativePort {
   const preparedTokens = new WeakSet<object>();
   return Object.freeze({
     responseBytesUpperBound(prepared: unknown): bigint {
@@ -152,7 +108,7 @@ export function createOpenAiChatNativePort(): ModelInvocationNativePort {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
         throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       }
-      preparedTokens.delete(prepared); return sendPreparedOpenAiChatHttpRequest(prepared as PreparedOpenAiChatRequest, signal);
+      preparedTokens.delete(prepared); return sendPreparedOpenAiChatHttpRequest(prepared as PreparedOpenAiChatRequest, options, signal);
     },
   });
 }

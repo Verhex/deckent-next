@@ -14,7 +14,7 @@ export interface ModelInvocationAdmission {
   readonly profileDigest: string;
   readonly invocationId: string;
   readonly claimedAtMs: number;
-  /** Internal staged spend admission; mandatory application quote wiring is a separate unfinished gate. */
+  /** Required by the application for new calls; historical store records may predate monetary admission. */
   readonly spending?: { readonly budget: ProviderSpendBudget; readonly quote: ProviderSpendQuote };
 }
 export interface ModelInvocationRecord { readonly receipt: ModelInvocationReceipt; readonly content: ModelInvocationResponseContent | null;

@@ -92,7 +92,11 @@ function fixture(options: { liveControllers?: boolean; claimError?: boolean; per
       async send() { calls.sends++; if (options.sendError) throw new Error('RESET');
         return options.nativeResult ?? { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
     }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10,
-      ...(options.liveControllers ? { register(claim: ModelInvocationClaim, owner: string) { registrations.push(claim); return controllers.register(claim, owner); } } : {}) });
+      ...(options.liveControllers ? { register(claim: ModelInvocationClaim, owner: string) { registrations.push(claim); return controllers.register(claim, owner); } } : {}) },
+    { async authorize(input) { return { budget: { schemaVersion: 1 as const, scopeId: input.command.scopeId, budgetId: 'test-budget', revision: 1,
+      currency: 'USD', limitMinorUnits: 100_000 }, quote: { schemaVersion: 1 as const, scopeId: input.command.scopeId,
+      requestDigest: input.requestDigest, profileDigest: input.profileDigest, pricing: { id: 'test-pricing', version: 1,
+        digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'test-meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } }, currency: 'USD', maxChargeMinorUnits: 1 } }; } });
   return { app, calls, store, controllers, registrations, get stored() { return stored; } };
 }
 

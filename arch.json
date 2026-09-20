@@ -213,7 +213,8 @@
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/platform/core/common",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/domain/core/provider-spend"
       ],
       "plan": "P1"
     },
@@ -402,7 +403,9 @@
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
         "src/platform/core/managed-files",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/adapters/core/provider-openrouter-chat",
+        "src/adapters/core/provider-openrouter-pricing"
       ],
       "plan": "K1"
     },
@@ -977,7 +980,8 @@
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/adapters/core/provider-http-json"
       ],
       "plan": "PROVIDERS/A3B"
     },
@@ -994,7 +998,13 @@
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
         "src/engine/core/provider-catalog",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/provider-openrouter-chat",
+        "src/adapters/core/provider-openrouter-pricing",
+        "src/adapters/core/contract",
+        "src/adapters/core/provider-http-json"
       ],
       "plan": "PROVIDERS/A3B"
     },
@@ -1023,6 +1033,33 @@
         "src/domain/core/model-invocation"
       ],
       "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
+    },
+    "src/adapters/core/provider-http-json": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDERS/A3B"
+    },
+    "src/adapters/core/provider-openrouter-chat": {
+      "dependencies": [
+        "src/adapters/core/provider-http-json",
+        "src/adapters/core/provider-openrouter-pricing",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "PROVIDERS/A3B"
+    },
+    "src/adapters/core/provider-openrouter-pricing": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS/A3B"
     }
   },
   "composition": {

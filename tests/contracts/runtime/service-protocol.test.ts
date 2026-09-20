@@ -20,7 +20,7 @@ function expectProtocolError(call: () => void, code: RuntimeServiceProtocolError
 }
 
 describe('runtime service protocol', () => {
-  it('accepts exactly the current v7 operation allowlist', () => {
+  it('accepts exactly the current v8 operation allowlist', () => {
     for (const operation of operations) expect(runtimeServiceOperationSchema.parse(operation)).toBe(operation);
     expect(() => runtimeServiceOperationSchema.parse('shutdown')).toThrow();
     expect(classifyRuntimeServiceOperation('invokeModel')).toBe('execution');
@@ -67,7 +67,7 @@ describe('runtime service protocol', () => {
       input: {}, delivery: { maxResultBytes: 1 } })).toThrow();
   });
 
-  it('derives an exact v7 success-envelope result capacity and rejects impossible or invalid limits', () => {
+  it('derives an exact v8 success-envelope result capacity and rejects impossible or invalid limits', () => {
     const requestId = 'request-1', responseMaxBytes = 512;
     const capacity = runtimeServiceResultCapacity(requestId, responseMaxBytes);
     const exact = { schemaVersion: 8, requestId, ok: true, result: 'x'.repeat(capacity - 2) };

@@ -1,7 +1,8 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
+import { createServer as createHttpServer, type Server } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,6 +17,7 @@ import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocati
   type ModelInvocationResult, type ModelInvocationPurgeResult } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
 
 const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [], runtimeProcesses: ChildProcess[] = [], clientProcesses: ChildProcess[] = [],
   heldReleases: (() => void)[] = [];
@@ -100,6 +102,13 @@ type A5ProofInput = Readonly<{ root: string; project: string; env: Record<string
   command: (commandId: string) => Record<string, unknown>; bodies: string[]; runtime: ChildProcess;
   setResponse: (value: 'malformed' | 'status') => void; setContentPolicy: (allowed: boolean) => Promise<void>;
   large: ModelInvocationResult }>;
+function heldOpenRouterSpend(receipt: ModelInvocationResult['receipt']) {
+  return expect.objectContaining({ schemaVersion: 1, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
+    invocationId: receipt.claim.invocationId, quote: expect.objectContaining({ currency: 'USD', maxChargeMinorUnits: 2,
+      pricing: expect.objectContaining({ id: 'openrouter-endpoint-tariff', version: 1 }),
+      meter: expect.objectContaining({ id: 'openrouter-text-reservation', version: 1 }) }) }),
+  disposition: expect.objectContaining({ state: 'held', reason: 'unknown', observedMinorUnits: null }) });
+}
 async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
   const largeBody = Buffer.from(JSON.stringify({ value: 'x'.repeat(4096) })).subarray(0, 512);
@@ -150,7 +159,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', legacyQueryPath)).toEqual({ ok: false, code: 'MODEL_INVOCATION_INVALID' });
   await input.setContentPolicy(false);
   const defaultInspection = await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', malformedQueryPath);
-  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 6, historyIntegrity: 'not-recorded', spending: null, invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
+  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 6, historyIntegrity: 'not-recorded', spending: heldOpenRouterSpend(malformedReceipt), invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
     send: { state: 'permitted', ownerId: expect.any(String), permittedAtMs: expect.any(Number) }, cancellation: null }, contentStatus: 'retained', purge: null } });
   if (defaultInspection.ok) { expect(Object.hasOwn(defaultInspection.value, 'responseContent')).toBe(false); expectNoRawBody(defaultInspection.value.invocation!, Buffer.from(malformedBody)); }
   const defaultText = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
@@ -179,7 +188,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
 
 function nativeFixtureBody(mode: 'normal' | 'oversize', count: number): string {
   return JSON.stringify(mode === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${count}`, object: 'chat.completion', created: 1,
-    model: 'native-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
+    model: 'vendor/model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, private_note: 'retained-sensitive-usage' } });
 }
 
@@ -285,7 +294,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  let proxyRequests = 0; const proxy = createServer((_request, reply) => { proxyRequests++; reply.writeHead(502); reply.end('proxy trap'); });
+  let proxyRequests = 0; const proxy = createHttpServer((_request, reply) => { proxyRequests++; reply.writeHead(502); reply.end('proxy trap'); });
   servers.push(proxy); await new Promise<void>((done, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', done); });
   const proxyAddress = proxy.address(); if (!proxyAddress || typeof proxyAddress === 'string') throw new Error('PROXY_FIXTURE_ADDRESS');
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', NODE_USE_ENV_PROXY: '1',
@@ -299,8 +308,9 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     heldReleases.push(() => releaseHeld?.());
     return observed;
   };
-  const server = createServer((request, reply) => {
-    if (request.url !== '/customer/gateway/native-chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
+  const tls = await createPricedProviderTls(root), server = createHttpsServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
+    if (replyPricedProviderMetadata(request, reply)) return;
+    if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
     const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => { bodies.push(Buffer.concat(chunks).toString('utf8'));
       if (holdResponse) {
@@ -311,17 +321,16 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
       reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(nativeFixtureBody(response, bodies.length)); }); });
   servers.push(server); await new Promise<void>((done, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', done); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
-  const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
-  const model = { id: 'model', version: 1, nativeId: 'native-model', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
-  const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'provider', version: 1, models: [model] }] };
-  const definition = { encodingVersion: 1 as const, provider: { id: 'provider', version: 1 }, model };
+  const reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 }, model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openrouter-chat-completions', version: 'v1', capabilities: [] }] };
+  const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'openrouter', version: 1, models: [model] }] };
+  const definition = { encodingVersion: 1 as const, provider: { id: 'openrouter', version: 1 }, model };
   const binding = bindingDigest(definition);
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
-      definition: { endpoint: `http://127.0.0.1:${address.port}/customer/gateway/native-chat`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
+    protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
+      definition: pricedProviderDefinition(`https://127.0.0.1:${address.port}`, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
-    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
+    storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 1_048_576, maxConnections: 8, maxConcurrentRequests: 4,
@@ -348,7 +357,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await writePolicy(true);
   const command = (commandId: string, scopeId = 'scope') => ({ schemaVersion: 1, commandId, scopeId, reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
-    nativeRequest: { model: 'native-model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
+    nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
   const invocationCount = (commandId: string) => countInvocations(ledger, commandId);
   const firstPath = join(root, 'first.json'); await writeFile(firstPath, JSON.stringify(command('first')), { mode: 0o600 });
   expect(await callSdk(project, env, 'invoke', firstPath)).toEqual({ ok: false, code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
@@ -376,8 +385,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   expect(cliInspection.invocation).toEqual(first);
   const replay = await callMcp(project, env, 'invoke_model', command('first'));
   expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toMatchObject({ replayed: true, receipt: first,
-    contentStatus: 'retained', response: { native: { model: 'native-model' } } }); expect(bodies).toHaveLength(1);
-
+    contentStatus: 'retained', response: { native: { model: 'vendor/model' } } }); expect(bodies).toHaveLength(1);
   const capCommand = command('mcp-result-cap'); const capPath = join(root, 'mcp-result-cap.json');
   await writeFile(capPath, JSON.stringify(capCommand), { mode: 0o600 });
   // The inner result fits this limit; duplicated text/structured JSON-RPC does not.
@@ -406,7 +414,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
   expect(bodies).toHaveLength(2);
   expect(await callSdk<ModelInvocationResult>(project, env, 'invoke', capPath)).toMatchObject({ ok: true, value: { replayed: true,
-    receipt: capReceipt, contentStatus: 'retained', response: { native: { model: 'native-model' } } } });
+    receipt: capReceipt, contentStatus: 'retained', response: { native: { model: 'vendor/model' } } } });
   expect(bodies).toHaveLength(2);
   await writeConfig();
 

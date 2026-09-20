@@ -1,6 +1,7 @@
+import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
-import { RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
+import { ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { ErrorRegistry, ManagedFileError } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
@@ -55,4 +56,25 @@ it('exposes only bounded managed-file failure metadata, without path, UID or raw
   expect(safe.params).toEqual({ resource: 'ledger', companion: '-shm', stage: 'path', reason: 'link-count', mode: 0o600, links: 0 });
   expect(JSON.stringify(safe)).not.toContain('/private'); expect(JSON.stringify(safe)).not.toContain('private-key');
   expect(safe.params).not.toHaveProperty('uid');
+});
+
+it.each(['PROVIDER_SPEND_INVALID', 'PROVIDER_SPEND_CONFLICT', 'PROVIDER_SPEND_EXHAUSTED', 'PROVIDER_SPEND_FROZEN', 'PROVIDER_SPEND_UNAVAILABLE'] as const)(
+  'preserves monetary failure identity without raw record details: %s', code => {
+    const failure = new ProviderSpendError(code); failure.message += ' /private/ledger credential=secret';
+    const safe = queryFailure(failure); expect(safe.code).toBe(code);
+    expect(String(safe)).not.toContain('/private'); expect(String(safe)).not.toContain('secret');
+    expect(safe.localize?.('tr').message).not.toBe(safe.localize?.('en').message);
+  });
+
+it('maps native pricing and request failures to safe product errors without backend details', () => {
+  for (const [error, code] of [
+    [new OpenRouterPricingError('INCOMPLETE_PRICING'), 'PROVIDER_SPEND_UNAVAILABLE'],
+    [new OpenRouterPricingError('INVALID_REQUEST'), 'MODEL_INVOCATION_INVALID'],
+    [new OpenRouterChatError('INVALID_PROFILE'), 'MODEL_INVOCATION_PROFILE_CONFLICT'],
+    [new OpenRouterChatError('TARIFF_CONFLICT'), 'PROVIDER_SPEND_CONFLICT'],
+  ] as const) {
+    error.message += ' https://private/credential=secret';
+    const safe = queryFailure(error); expect(safe.code).toBe(code);
+    expect(String(safe)).not.toContain('private'); expect(String(safe)).not.toContain('credential=secret');
+  }
 });

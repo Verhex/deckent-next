@@ -10,7 +10,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const profile = (overrides: Record<string, unknown> = {}) => ({ schemaVersion: 1, id: 'profile', version: 1, scopeId: 'scope', reference,
   bindingDigest: 'a'.repeat(64), protocol: { family: 'openai-chat-completions', version: 'v1' },
-  adapter: { id: 'openai-chat-http', version: 2, definition: { endpoint: 'http://127.0.0.1:1234/customer/native-chat', maxOutputTokens: 4 } },
+  adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: 'http://127.0.0.1:1234/customer/native-chat', maxOutputTokens: 4, authentication: { type: 'none' } } },
   allocation: { id: 'allocation', maxCalls: 2, maxInFlight: 1 }, limits: { requestMaxBytes: 100, responseMaxBytes: 200, timeoutMs: 1000 }, ...overrides });
 const collection = (...profiles: unknown[]) => ({ schemaVersion: 1, profiles });
 async function configFixture() {
@@ -29,7 +29,7 @@ describe('invocation profile configuration authority', () => {
     await writeFile(f.projectPath, JSON.stringify({ provider_invocation_profiles: collection(second) }));
     expect((await loadConfig(f.project, { env: f.env })).provider_invocation_profiles).toEqual(collection(second));
     for (const changed of [profile({ limits: { requestMaxBytes: 101, responseMaxBytes: 200, timeoutMs: 1000 } }),
-      profile({ adapter: { id: 'openai-chat-http', version: 2, definition: { endpoint: 'http://127.0.0.1:9999/customer/native-chat', maxOutputTokens: 4 } } })]) {
+      profile({ adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: 'http://127.0.0.1:9999/customer/native-chat', maxOutputTokens: 4, authentication: { type: 'none' } } } })]) {
       await writeFile(f.projectPath, JSON.stringify({ provider_invocation_profiles: collection(changed) })); clearConfigCache();
       await expect(loadConfig(f.project, { env: f.env })).rejects.toThrow();
     }
@@ -51,7 +51,7 @@ describe('invocation profile configuration authority', () => {
   it('rejects secret interpolation before invoking a resolver', async () => {
     const f = await configFixture();
     await writeFile(f.projectPath, JSON.stringify({ provider_invocation_profiles: collection(profile({
-      adapter: { id: 'openai-chat-http', version: 2, definition: { endpoint: '$DECK:ENDPOINT', maxOutputTokens: 4 } } })) }));
+      adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: '$DECK:ENDPOINT', maxOutputTokens: 4, authentication: { type: 'none' } } } })) }));
     let resolutions = 0;
     await expect(loadConfig(f.project, { env: f.env, secretResolver: async () => { resolutions++; return 'http://127.0.0.1:1'; } })).rejects.toThrow();
     expect(resolutions).toBe(0);

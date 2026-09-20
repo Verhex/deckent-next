@@ -54,6 +54,19 @@ describe.skipIf(!imageId)('real Docker supervisor (explicit pinned test image re
     const result = await f.supervisor.execute(f.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 7 }); expect(result.interrupted).toBe(false);
   });
+  it('does not inherit a synthetic provider secret from the default supervisor parent environment', async () => {
+    const previous = process.env.DECKENT_TEST_PROVIDER_SECRET;
+    process.env.DECKENT_TEST_PROVIDER_SECRET = 'synthetic-provider-secret';
+    try {
+      const f = await fixture(['node', '-e', "if(process.env.DECKENT_TEST_PROVIDER_SECRET!==undefined)process.exit(23);process.stdout.write('secret-absent\\n')"]);
+      const result = await f.supervisor.execute(f.request);
+      expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
+      expect(result.stdout).toBe('secret-absent\n');
+    } finally {
+      if (previous === undefined) delete process.env.DECKENT_TEST_PROVIDER_SECRET;
+      else process.env.DECKENT_TEST_PROVIDER_SECRET = previous;
+    }
+  });
   it('kills the actual container on deadline and observes daemon terminal evidence', async () => {
     const f = await fixture(['node', '-e', 'setInterval(()=>{},1000)'], 700);
     const result = await f.supervisor.execute(f.request);

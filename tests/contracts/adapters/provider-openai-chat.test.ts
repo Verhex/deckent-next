@@ -16,9 +16,9 @@ async function fixture(handler: (req: IncomingMessage, res: ServerResponse) => v
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('fixture address');
   return `http://127.0.0.1:${address.port}/`;
 }
-function profile(endpoint: string, profileLimits = limits, definition: Record<string, unknown> = { endpoint, maxOutputTokens: 32 }) {
+function profile(endpoint: string, profileLimits = limits, definition: Record<string, unknown> = { endpoint, maxOutputTokens: 32, authentication: { type: 'none' } }) {
   return { schemaVersion: 1, id: 'profile', version: 1, scopeId: 'scope', reference: { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 },
-    bindingDigest: 'a'.repeat(64), protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2, definition },
+    bindingDigest: 'a'.repeat(64), protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 3, definition },
     allocation: { id: 'allocation', maxCalls: 1, maxInFlight: 1 }, limits: profileLimits };
 }
 async function token(origin: string, input: unknown = request, profileLimits = limits, definition?: Record<string, unknown>) {
@@ -30,7 +30,7 @@ function response(model = 'configured-model', overrides: Record<string, unknown>
     message: { role: 'assistant', content: 'native answer' } }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }, ...overrides };
 }
 function expectRejected(result: unknown, reason: string, body: Buffer, complete: boolean, httpStatus: number | null, observedBytes = body.byteLength) {
-  expect(result).toMatchObject({ kind: 'rejected', evidence: { schemaVersion: 1, adapter: { id: 'openai-chat-http', version: 2 },
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { schemaVersion: 1, adapter: { id: 'openai-chat-http', version: 3 },
     reason, httpStatus, body: { complete, byteLength: body.byteLength, observedBytes } } });
   const evidence = (result as { evidence: { body: { data: string } } }).evidence;
   expect(Buffer.from(evidence.body.data, 'base64')).toEqual(body);
@@ -44,7 +44,7 @@ it('uses exact native nonstream bytes and preserves full native completion evide
   const { port, prepared } = await token(origin), result = await port.send(prepared);
   expect({ id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION,
     family: OPENAI_CHAT_COMPLETIONS_FAMILY, protocol: OPENAI_CHAT_COMPLETIONS_VERSION }).toEqual({
-    id: 'openai-chat-http', version: 2, family: 'openai-chat-completions', protocol: 'v1' });
+    id: 'openai-chat-http', version: 3, family: 'openai-chat-completions', protocol: 'v1' });
   expect(seen.method).toBe('POST'); expect(seen.url).toBe('/'); expect(JSON.parse(seen.body ?? '')).toEqual({ ...request, stream: false });
   expect(seen.headers?.authorization).toBeUndefined(); expect(seen.headers?.['proxy-authorization']).toBeUndefined();
   expect(result).toEqual({ schemaVersion: 1, native: response(), usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
@@ -54,7 +54,7 @@ it('uses exact native nonstream bytes and preserves full native completion evide
 it('uses the explicit endpoint pathname without adding a default route, and freezes it during preparation', async () => {
   let seen: { method?: string; url?: string } = {}; let redirected = 0;
   const origin = await fixture((req, res) => { seen = { method: req.method, url: req.url }; res.end(JSON.stringify(response())); });
-  const endpoint = `${origin}custom/v2/chat`; const definition = { endpoint, maxOutputTokens: 32 };
+  const endpoint = `${origin}custom/v2/chat`; const definition = { endpoint, maxOutputTokens: 32, authentication: { type: 'none' as const } };
   const { port, prepared } = await token(origin, request, limits, definition);
   definition.endpoint = `${origin}redirected`; redirected++;
   await expect(port.send(prepared)).resolves.toMatchObject({ native: { model: 'configured-model' } });
@@ -95,12 +95,12 @@ it('bypasses inherited proxy selectors and rejects non-canonical endpoints or tr
     const origin = await fixture((_req, res) => res.end(JSON.stringify(response()))), { port, prepared } = await token(origin);
     await expect(port.send(prepared)).resolves.toMatchObject({ native: { model: 'configured-model' } }); expect(proxyRequests).toBe(0);
     for (const definition of [
-      { endpoint: 'http://8.8.8.8:80/', maxOutputTokens: 2 }, { endpoint: 'http://user:pass@127.0.0.1:80/', maxOutputTokens: 2 },
-      { endpoint: '//127.0.0.1:18080/', maxOutputTokens: 2 }, { endpoint: 'http://127.0.0.1:18080/a/../b', maxOutputTokens: 2 },
-      { endpoint: 'http://127.0.0.1:18080/a\\b', maxOutputTokens: 2 }, { endpoint: 'http://127.0.0.1:18080/?query=x', maxOutputTokens: 2 },
-      { endpoint: 'http://127.0.0.1:18080/#fragment', maxOutputTokens: 2 }, { endpoint: 'http://127.0.0.1:0/', maxOutputTokens: 2 },
-      { origin, maxOutputTokens: 2 }, { endpoint: 'http://localhost:18080/', maxOutputTokens: 2 },
-      { endpoint: origin, maxOutputTokens: 2, proxy: trap }, { endpoint: origin, maxOutputTokens: 2, headers: { authorization: 'x' } },
+      { endpoint: 'http://8.8.8.8:80/', maxOutputTokens: 2, authentication: { type: 'none' } }, { endpoint: 'http://user:pass@127.0.0.1:80/', maxOutputTokens: 2, authentication: { type: 'none' } },
+      { endpoint: '//127.0.0.1:18080/', maxOutputTokens: 2, authentication: { type: 'none' } }, { endpoint: 'http://127.0.0.1:18080/a/../b', maxOutputTokens: 2, authentication: { type: 'none' } },
+      { endpoint: 'http://127.0.0.1:18080/a\\b', maxOutputTokens: 2, authentication: { type: 'none' } }, { endpoint: 'http://127.0.0.1:18080/?query=x', maxOutputTokens: 2, authentication: { type: 'none' } },
+      { endpoint: 'http://127.0.0.1:18080/#fragment', maxOutputTokens: 2, authentication: { type: 'none' } }, { endpoint: 'http://127.0.0.1:0/', maxOutputTokens: 2, authentication: { type: 'none' } },
+      { origin, maxOutputTokens: 2, authentication: { type: 'none' } }, { endpoint: 'http://localhost:18080/', maxOutputTokens: 2, authentication: { type: 'none' } },
+      { endpoint: origin, maxOutputTokens: 2, authentication: { type: 'none' }, proxy: trap }, { endpoint: origin, maxOutputTokens: 2, authentication: { type: 'none' }, headers: { authorization: 'x' } },
     ]) expect(() => parseOpenAiChatHttpDefinition(definition)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
     expect(proxyRequests).toBe(0);
   } finally {
@@ -109,12 +109,14 @@ it('bypasses inherited proxy selectors and rejects non-canonical endpoints or tr
   }
 });
 
-it('accepts only an explicit canonical endpoint and rejects version-one profiles before network activity', async () => {
+it('accepts only an explicit canonical endpoint and rejects version-two profiles before network activity', async () => {
   let requests = 0; const origin = await fixture((_req, res) => { requests++; res.end(JSON.stringify(response())); });
-  expect(parseOpenAiChatHttpDefinition({ endpoint: origin, maxOutputTokens: 2 })).toEqual({ endpoint: origin, maxOutputTokens: 2 });
-  expect(parseOpenAiChatHttpDefinition({ endpoint: `${origin}custom/route`, maxOutputTokens: 2 })).toEqual({ endpoint: `${origin}custom/route`, maxOutputTokens: 2 });
+  expect(parseOpenAiChatHttpDefinition({ endpoint: origin, maxOutputTokens: 2, authentication: { type: 'none' } }))
+    .toEqual({ endpoint: origin, maxOutputTokens: 2, authentication: { type: 'none' } });
+  expect(parseOpenAiChatHttpDefinition({ endpoint: `${origin}custom/route`, maxOutputTokens: 2, authentication: { type: 'none' } }))
+    .toEqual({ endpoint: `${origin}custom/route`, maxOutputTokens: 2, authentication: { type: 'none' } });
   const port = createOpenAiChatNativePort(); const legacy = profile(origin) as { adapter: { version: number } };
-  legacy.adapter.version = 1;
+  legacy.adapter.version = 2;
   await expect(port.prepare(legacy, binding, request)).rejects.toMatchObject({ code: 'OPENAI_CHAT_DEFINITION_INVALID' } satisfies Partial<OpenAiChatHttpError>);
   expect(requests).toBe(0);
 });
@@ -129,7 +131,7 @@ it('keeps preparation pure, rejects unsupported/getter input, binding mismatch, 
     .rejects.toMatchObject({ code: 'OPENAI_CHAT_MODEL_MISMATCH' } satisfies Partial<OpenAiChatHttpError>); expect(requests).toBe(0);
   const prepared = await port.prepare(profile(origin), binding, request); await expect(port.send(prepared)).resolves.toMatchObject({ usage: null });
   await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' } satisfies Partial<OpenAiChatHttpError>); expect(requests).toBe(1);
-  expect(() => prepareOpenAiChatHttpRequest({ endpoint: 'http://localhost:1/', maxOutputTokens: 1 }, limits, request)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+  expect(() => prepareOpenAiChatHttpRequest({ endpoint: 'http://localhost:1/', maxOutputTokens: 1, authentication: { type: 'none' } }, limits, request)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
 });
 
 it('reports cancellation and timeout after the owned fixture has observed the request', async () => {

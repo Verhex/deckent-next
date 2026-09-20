@@ -1,4 +1,4 @@
-export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '#adapters/core/contract/index.js';
+export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence, providerSpendingSchema } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -34,5 +34,8 @@ export { initializeInstallationLedger, verifyInstallationLedger, InstallationLed
 export { openSqliteModelActivationStore, openSqliteModelActivationReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';
 export * from '#adapters/core/provider-openai-chat/index.js';
+export * from '#adapters/core/provider-openrouter-chat/index.js';
+export * from '#adapters/core/provider-openrouter-pricing/index.js';
+export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
 export { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js';

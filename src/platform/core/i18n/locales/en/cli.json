@@ -587,6 +587,7 @@
   "models.activation.admitted": "Admitted",
   "models.activation.notice": "Recorded activation only; provider availability and invocation permission are not established.",
   "config.field.provider_invocation_profiles": "Native invocation profiles and explicit request allocations",
+  "config.field.provider_spending": "Scope-specific model spending budgets and reservation limits",
   "cli.help.modelsInvocation": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON. Both require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.",
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <file|-> [--json] [--lang en|tr]\nPurges active retained native, usage, or raw response content after separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <file|-> [--json] [--lang en|tr]\nRecords a cancellation request by exact invocation command identity. It can prevent dispatch before send permission; after permission it does not prove remote cancellation or completion.",

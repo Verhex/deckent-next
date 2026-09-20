@@ -1,4 +1,7 @@
 import type { ModelInvocationControllerHandle } from './controllers.js';
+import { claimModelInvocation } from './claim.js';
+import { acquireModelInvocationEvidence, type ModelInvocationAcquisitionInput } from './acquisition.js';
+import { authorizeModelInvocationSpending, type ModelInvocationSpendingAuthority } from './spending.js';
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
   parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, parseModelInvocationControlRecord, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
   type ModelInvocationClaim, type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
@@ -28,10 +31,14 @@ export interface ModelInvocationNativePort {
   prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject): Promise<unknown>;
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
   responseBytesUpperBound?(prepared: unknown): bigint;
-  /** The only external transport operation. */
+  /** The model execution transport operation; authorized metadata acquisition is separate. */
   send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult>;
 }
-export interface ModelInvocationNativeRegistry { resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null }
+export interface ModelInvocationNativeRegistry {
+  resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null;
+  /** Called only after initial identity, policy, activation and profile checks; no secrets or model execution. */
+  acquire?(input: ModelInvocationAcquisitionInput, signal?: AbortSignal): Promise<void>;
+}
 export interface ModelInvocationRuntime {
   invocationId(): string; ownerId(): string; now(): number;
   register?(claim: ModelInvocationClaim, ownerId: string): ModelInvocationControllerHandle;
@@ -101,7 +108,8 @@ export class ModelInvocationApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorization: ModelInvocationAuthorizer,
     private readonly bindings: Pick<ModelBindingApplication, 'inspect'>, private readonly openActivationReader: () => Promise<ModelActivationReader>,
     private readonly profiles: ModelInvocationProfileSource, private readonly natives: ModelInvocationNativeRegistry,
-    private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime) {}
+    private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime,
+    private readonly spending?: ModelInvocationSpendingAuthority) {}
 
   async invoke(input: unknown, credential?: unknown, signal?: AbortSignal, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult> {
     validateInvocationDelivery(delivery);
@@ -135,7 +143,14 @@ export class ModelInvocationApplication {
           && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
       const native = this.natives.resolve(profile);
       if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      if (!this.spending) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+      await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
       const prepared = await native.prepare(profile, binding.definition, command.nativeRequest);
+      if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      // New claims require spending authority. Historical replay above never requotes or reserves again.
+      // Preparation/quote precede fresh policy + binding/profile checks, then evidence/delivery admission.
+      const spending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest, profile,
+        profileDigest: modelInvocationProfileDigest(profile), definition: binding.definition, prepared }, signal);
       if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
       const authorization = modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke',
         { scopeId: command.scopeId, reference: command.reference }, principal));
@@ -147,15 +162,20 @@ export class ModelInvocationApplication {
       }
       const admission = parseModelInvocationAdmission({ command, requestDigest, actor, authorization,
         definition: currentBinding.definition, activation, profile: currentProfile, profileDigest: modelInvocationProfileDigest(currentProfile),
-        invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now() });
+        invocationId: identitySchema.parse(this.runtime.invocationId()), claimedAtMs: this.runtime.now(), spending });
       const responseBound = delivery ? native.responseBytesUpperBound?.(prepared) : undefined;
       const prospectiveReceipt = createModelInvocationClaimReceipt(admission);
       assertInvocationEvidenceStorageFit(prospectiveReceipt);
       if (delivery) assertInvocationDeliveryFit(prospectiveReceipt, responseBound, delivery);
+      // A config revocation while policy/profile checks were awaiting must not initialize a stale account.
+      const currentSpending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest, profile: currentProfile,
+        profileDigest: admission.profileDigest, definition: currentBinding.definition, prepared }, signal);
+      if (!isDeepStrictEqual(currentSpending, spending)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+      if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
       const ownerId = identitySchema.parse(this.runtime.ownerId());
       const live = this.runtime.register?.(prospectiveReceipt.claim, ownerId);
       try {
-        const claimResult = checkedResult(await store.claim(admission), command, requestDigest, actor, admission);
+        const claimResult = checkedResult(await claimModelInvocation(store, admission), command, requestDigest, actor, admission);
         if (claimResult.replayed) return checkInvocationResultDelivery(publicResult(true, claimResult.record), delivery);
         const claimReceipt = claimResult.record.receipt;
         const permission = await store.permitSend(claimReceipt.claim, ownerId, this.runtime.now());
@@ -210,3 +230,4 @@ export class ModelInvocationApplication {
   }
 }
 import { isDeepStrictEqual } from 'node:util';
+import { ProviderSpendError } from '#engine/core/provider-spend/index.js';

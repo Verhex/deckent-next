@@ -587,6 +587,7 @@
   "models.activation.admitted": "Kabul edildi",
   "models.activation.notice": "Yalnız kayıtlı aktivasyon; sağlayıcı kullanılabilirliği ve çağrı yetkisi doğrulanmış değil.",
   "config.field.provider_invocation_profiles": "Native çağrı profilleri ve açık istek tahsisleri",
+  "config.field.provider_spending": "Kapsama özel model harcama bütçeleri ve rezervasyon sınırları",
   "cli.help.modelsInvocation": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi. Her ikisi de açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.",
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <dosya|-> [--json] [--lang en|tr]\nAyrı purge-content policy yetkisiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <dosya|-> [--json] [--lang en|tr]\nTam çağrı komut kimliğiyle iptal isteğini kaydeder. Gönderim izninden önce dağıtımı engelleyebilir; izin sonrasında uzaktan iptal veya tamamlama kanıtı değildir.",
