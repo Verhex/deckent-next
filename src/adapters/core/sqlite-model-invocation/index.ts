@@ -17,6 +17,10 @@ export async function openSqliteModelInvocationCancellationInventory(path: strin
   const implementation = await import('./internal/cancellation-inventory.js');
   return implementation.openSqliteModelInvocationCancellationInventory(path, options);
 }
+export async function openSqliteProviderSpendIntegrityReader(path: string, options: { readonly busyTimeoutMs: number }) {
+  const implementation = await import('./internal/spend-integrity.js');
+  return implementation.openSqliteProviderSpendIntegrityReader(path, options);
+}
 export async function openSqliteModelAllocationIntegrityReader(path: string,
   options: { readonly busyTimeoutMs: number }): Promise<ModelAllocationIntegrityReader> {
   const implementation = await import('./internal/allocation-integrity.js');

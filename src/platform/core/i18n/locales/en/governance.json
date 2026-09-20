@@ -925,5 +925,10 @@
   "error.CLI_INVOCATION_INPUT_LIMIT": "Model invocation input exceeds cli.invocationInputMaxBytes: {limit} bytes.",
   "error.CLI_INVOCATION_INPUT_INVALID": "Invalid model invocation JSON or command schema.",
   "error.CLI_INVOCATION_INPUT_TTY": "Pipe model invocation JSON to stdin or provide a regular file.",
-  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model invocation input could not be read."
+  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model invocation input could not be read.",
+  "error.PROVIDER_SPEND_UNAVAILABLE": "Verified budget and native pricing authority are unavailable. No new model request was admitted.",
+  "error.PROVIDER_SPEND_INVALID": "The local spending record is invalid. No new spending was admitted.",
+  "error.PROVIDER_SPEND_CONFLICT": "The budget or quote conflicts with its recorded identity. Existing reservations were preserved.",
+  "error.PROVIDER_SPEND_EXHAUSTED": "The shared scope budget cannot cover this reservation. Reserved or uncertain amounts remain held; this is not a provider invoice.",
+  "error.PROVIDER_SPEND_FROZEN": "The local spending account is frozen after an unresolved overrun. No new reservation was admitted."
 }

@@ -1,4 +1,3 @@
-import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
@@ -56,7 +56,8 @@ async function seedV17(path: string) {
 
   const db = new DatabaseSync(path); db.exec('PRAGMA foreign_keys=OFF');
   try {
-    db.exec('DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;');
+    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+      DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;`);
     for (const row of db.prepare('SELECT invocation_id,record FROM model_invocations').all() as Array<{ invocation_id: string; record: string }>) {
       const receipt = JSON.parse(row.record); receipt.schemaVersion = 3;
       if (receipt.outcome) receipt.outcome.schemaVersion = 3;

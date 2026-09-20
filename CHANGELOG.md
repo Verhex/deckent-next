@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PROVIDER-SPEND persistence/inspection foundation (preparation only): add durable monetary record and inspection primitives; production invocation does not yet enforce configured budgets, and no spending config is registered until trusted quote wiring and the mandatory gate land together.
+
 - PROVIDER-ALLOCATION/CHECKPOINT: replace per-write history scans with transactional quota checkpoints, preserve uncertain capacity, and expose the absence of a recorded full-history audit.
 
 - K1-F1/C: pure config-fields unit, registry-backed output defaults, canonical nested provider fields, localized metadata with tier/since, and source-derived config vocabulary checked before lint/build. Accepted (Fable REVIEW1323); parent K1-F1 closed with REVIEW1316. Host-sizing constants remain ASSURANCE work.

@@ -44,4 +44,4 @@ export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as ins
   cancelRuntimeModelInvocation as cancelModelInvocation } from '#composition/index.js';
 export type { ModelInvocationCommand, ModelInvocationQuery, ModelInvocationReceipt,
   ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationContentDescriptor, ModelInvocationResponseContent, ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt } from '#domain/index.js';
-export type { ModelInvocationCancellationResult, ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult } from '#engine/index.js';
+export type { ModelInvocationCancellationResult, ModelInvocationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ProviderSpendReservation } from '#engine/index.js';

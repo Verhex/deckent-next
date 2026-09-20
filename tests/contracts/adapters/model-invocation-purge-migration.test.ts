@@ -1,4 +1,3 @@
-import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
@@ -57,7 +57,8 @@ async function seedV16(path: string) {
       if (receipt.outcome) receipt.outcome.schemaVersion = 3;
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(receipt), row.invocation_id);
     }
-    db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+      DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
       ALTER TABLE model_invocation_contents RENAME TO model_invocation_contents_v17;
       DROP TABLE model_invocation_content_purges;
       CREATE TABLE model_invocation_contents(scope_id TEXT NOT NULL,invocation_id TEXT NOT NULL,record TEXT NOT NULL,

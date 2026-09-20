@@ -150,7 +150,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', legacyQueryPath)).toEqual({ ok: false, code: 'MODEL_INVOCATION_INVALID' });
   await input.setContentPolicy(false);
   const defaultInspection = await callSdk<ModelInvocationInspection>(input.project, input.env, 'inspect', malformedQueryPath);
-  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 5, historyIntegrity: 'not-recorded', invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
+  expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 6, historyIntegrity: 'not-recorded', spending: null, invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
     send: { state: 'permitted', ownerId: expect.any(String), permittedAtMs: expect.any(Number) }, cancellation: null }, contentStatus: 'retained', purge: null } });
   if (defaultInspection.ok) { expect(Object.hasOwn(defaultInspection.value, 'responseContent')).toBe(false); expectNoRawBody(defaultInspection.value.invocation!, Buffer.from(malformedBody)); }
   const defaultText = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
@@ -258,7 +258,7 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
     }
     expect(result.replayed).toBe(false); receipts.push(result.receipt);
     const purged = await callSdk<ModelInvocationInspection>(project, env, 'inspect', queryPath);
-    expect(purged).toMatchObject({ ok: true, value: { schemaVersion: 5, historyIntegrity: 'not-recorded', invocation: inspected.value.invocation,
+    expect(purged).toMatchObject({ ok: true, value: { schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: inspected.value.invocation,
       contentStatus: 'purged', responseContent: null, purge: result.receipt } });
     expect(snapshot()).toEqual(before);
   }
@@ -358,7 +358,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const firstClient = spawn(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, 'invoke', project, firstPath],
     { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
   clientProcesses.push(firstClient);
-  await firstObserved;
+  await bounded(firstObserved, 'FIRST_HTTP_REQUEST_NOT_OBSERVED');
   await terminate(firstClient);
   clientProcesses.splice(clientProcesses.indexOf(firstClient), 1);
   releaseHeld?.();

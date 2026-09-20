@@ -57,7 +57,7 @@ it('rejects schema-3 policy without pool evidence and preserves the complete old
   const { store, path } = await fixture(); await store.createExecutionPool(pool); await store.createRun(create('s')); await store.reserveRunTasks(claim('s'));
   store.close(); stores.splice(stores.indexOf(store), 1);
   const db = new DatabaseSync(path); downgradeRunEligibilityFixtures(db); db.prepare('UPDATE runs SET policy=?').run(JSON.stringify({ schemaVersion: 1, capacity: pool.capacity, ordering: ['a'] }));
-  db.exec('DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; PRAGMA user_version=3;'); db.close();
+  db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; PRAGMA user_version=3;'); db.close();
   const before = await readFile(path);
   await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
   expect(await readFile(path)).toEqual(before);

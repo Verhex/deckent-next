@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { afterEach, expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
 import { parseModelInvocationCancellationReceipt } from '#domain/core/model-invocation/index.js';
+import { parseProviderSpendReservation, providerSpendQuoteDigest } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -15,6 +16,16 @@ const command = { schemaVersion: 1, commandId: 'command', scopeId: 'scope', refe
   nativeRequest: { messages: [{ role: 'user', content: 'response-content-must-not-render' }] } };
 const purgedReceipt = { claim: { invocationId: 'call', commandId: 'command' }, outcome: { state: 'responded' } };
 const purgeReceipt = { command: { invocationId: 'call' } };
+function spending(state: 'held' | 'released-not-sent' | 'settled-local', reason: 'unknown' | 'missing-usage' | 'overrun' = 'missing-usage') {
+  const quote = { schemaVersion: 1 as const, scopeId: 'scope', requestDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
+    pricing: { id: 'price', version: 1, digest: '291f395a66cb728f57612b09b06f9512815b982e9a5d65e3fafec28256ff0aa9', definition: { schemaVersion: 1, kind: 'synthetic-price' } }, meter: { id: 'meter', version: 1, evidenceDigest: '446658cc1c39184b672f423a7f970bffab0e8f38e851c5b5dacd3f38eb85051f', evidence: { schemaVersion: 1, kind: 'synthetic-meter' } },
+    currency: 'USD', maxChargeMinorUnits: 99 };
+  return parseProviderSpendReservation({ schemaVersion: 1, descriptor: { schemaVersion: 1, scopeId: 'scope', invocationId: 'call',
+    budgetId: 'budget', budgetRevision: 1, currency: 'USD', quoteDigest: providerSpendQuoteDigest(quote), quote },
+  disposition: state === 'held' ? { state, reason, observedMinorUnits: reason === 'overrun' ? 100 : null, evidenceDigest: 'e'.repeat(64) }
+    : state === 'released-not-sent' ? { state, evidenceDigest: 'e'.repeat(64) }
+      : { state, amountMinorUnits: 40, evidenceDigest: 'e'.repeat(64) } });
+}
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-invocation-cli-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home); await mkdir(join(root, '.deckent'));
@@ -27,12 +38,10 @@ it('reads file and stdin queries through one inspection contract and renders EN/
     let output = '', calls = 0;
     const code = await main(['models', 'invocation', '--input', language === 'en' ? path : '-', '--lang', language], {
       ...f, stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
-      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 5,
-        historyIntegrity: 'not-recorded', invocation: null, control: null, contentStatus: null, purge: null }; },
+      inspectModelInvocation: async (_root, input) => { calls++; expect(input).toEqual(query); return { ...input, schemaVersion: 6,
+        historyIntegrity: 'not-recorded' as const, invocation: null, control: null, contentStatus: null, purge: null, spending: null }; },
     });
     expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain(language === 'en' ? 'No invocation receipt' : 'Çağrı kaydı bulunamadı');
-    expect(output).toContain(language === 'en' ? 'No full-history integrity audit result is recorded'
-      : 'Tam geçmiş bütünlüğü denetimi sonucu kaydedilmedi');
   }
 });
 it('renders purged replay and inspection outcomes without claiming retained or showing response content', async () => {
@@ -68,12 +77,59 @@ it('renders pre-permission cancellation as never sent without remote-cancellatio
       reason: 'cancelled-before-permission', cancellationCommandId: 'cancel', content: null } };
     const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f,
       stdout: { write(text) { output += text; } }, inspectModelInvocation: async input => ({ ...input,
-        invocation: receipt, contentStatus: 'not-captured', purge: null }) as never });
+        historyIntegrity: 'not-recorded', invocation: receipt, contentStatus: 'not-captured', purge: null, spending: null }) as never });
     expect(code).toBe(0); expect(output).toContain(expected); expect(output).not.toContain('remote');
     expect(output).toContain(language === 'en' ? 'local total call quota' : 'yerel toplam çağrı kotasında');
     expect(output).toContain(language === 'en' ? 'in-flight slot has been released' : 'eşzamanlı çalışma yuvası serbest bırakıldı');
     expect(output).not.toContain(language === 'en' ? 'Response content, if captured' : 'inspect-content');
   }
+});
+it('renders only the invocation reservation state in EN/TR without exposing native content or claiming an invoice', async () => {
+  const f = await fixture(), path = join(f.root, 'spending-query.json'); await writeFile(path, JSON.stringify(query));
+  const expected = {
+    en: { held: 'Local reservation held: up to 99 minor units (USD), using recorded tariff price v1; reason: usage is missing.', 'released-not-sent': 'Local reservation released before sending: up to 99 minor units (USD), using recorded tariff price v1.',
+      'settled-local': 'Local calculated amount: 40 minor units (USD) (quoted maximum: 99 minor units (USD)) using recorded tariff price v1.' },
+    tr: { held: 'Yerel rezervasyon bekletildi: en fazla 99 alt birim (USD); kayıtlı tarife price v1 kullanıldı; neden: kullanım bilgisi eksik.', 'released-not-sent': 'Yerel rezervasyon gönderimden önce serbest bırakıldı: en fazla 99 alt birim (USD); kayıtlı tarife price v1 kullanıldı.',
+      'settled-local': 'Yerel hesaplanan tutar: 40 alt birim (USD) (teklif üst sınırı: 99 alt birim (USD)); kayıtlı tarife price v1 kullanıldı.' },
+  } as const;
+  for (const state of ['held', 'released-not-sent', 'settled-local'] as const) for (const language of ['en', 'tr'] as const) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f, stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged',
+        purge: purgeReceipt, spending: spending(state) }) as never });
+    expect(code).toBe(0); expect(output).toContain(expected[language][state]); expect(output).toContain(language === 'en' ? 'not a provider invoice' : 'sağlayıcı faturası değildir');
+    expect(output).toContain(language === 'en' ? 'No persisted full-history audit result is available' : 'Kalıcı bir tam geçmiş denetim sonucu yok');
+    expect(output).not.toContain('response-content-must-not-render'); expect(output).not.toContain('scope budget');
+  }
+});
+it('localizes held spending reasons in Turkish without exposing enum values', async () => {
+  const f = await fixture(), path = join(f.root, 'held-reason-query.json'); await writeFile(path, JSON.stringify(query));
+  for (const [reason, label] of [['unknown', 'kullanım bilinmiyor'], ['overrun', 'yerel tutar teklif üst sınırını aştı']] as const) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', path, '--lang', 'tr'], { ...f, stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
+        contentStatus: 'purged', purge: purgeReceipt, spending: spending('held', reason) }) as never });
+    expect(code).toBe(0); expect(output).toContain(label); expect(output).not.toContain(reason);
+  }
+});
+it('states that missing spending evidence is neither free nor zero cost', async () => {
+  const f = await fixture(), path = join(f.root, 'no-spending-query.json'); await writeFile(path, JSON.stringify(query));
+  for (const [language, expected] of [['en', 'does not mean it was free or zero cost'], ['tr', 'ücretsiz veya sıfır maliyetli olduğu anlamına gelmez']] as const) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f, stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async input => ({ ...input, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null,
+        contentStatus: 'purged', purge: purgeReceipt, spending: null }) as never });
+    expect(code).toBe(0); expect(output).toContain(expected); expect(output).not.toContain('0 USD');
+  }
+});
+it('preserves the same spending record in inspection JSON without ANSI', async () => {
+  const f = await fixture(), path = join(f.root, 'spending-json-query.json'); await writeFile(path, JSON.stringify(query));
+  const result = { ...query, schemaVersion: 6, historyIntegrity: 'not-recorded', invocation: purgedReceipt, control: null, contentStatus: 'purged', purge: purgeReceipt,
+    spending: spending('settled-local') } as never;
+  let output = '';
+  const code = await main(['models', 'invocation', '--input', path, '--json', '--no-color'], { ...f, stdout: { write(text) { output += text; } },
+    inspectModelInvocation: async (_root, input) => { expect(input).toEqual(query); return result; } });
+  expect(code).toBe(0); expect(output).toBe(`${JSON.stringify(result)}\n`); expect(output).not.toContain(String.fromCharCode(27));
 });
 it('rejects invalid/oversized/interactive input before an application call without echoing its content', async () => {
   const f = await fixture(); let calls = 0;

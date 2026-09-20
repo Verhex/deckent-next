@@ -1,4 +1,3 @@
-import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 
@@ -49,7 +49,7 @@ it('loads one read-only receipt/control/cancellation snapshot and rejects contra
   const inspected = await reader.loadInspection('scope', 'invocation'); reader.close();
   expect(inspected).toMatchObject({ record: { receipt: { claim: base.claim, outcome: null }, content: null, purge: null },
     control: { claim: base.claim, reference, send: { state: 'permitted', ownerId: 'runtime-owner' },
-      cancellation: { command: { commandId: 'cancel', targetCommandId: 'invoke' }, disposition: 'requested' } } });
+      cancellation: { command: { commandId: 'cancel', targetCommandId: 'invoke' }, disposition: 'requested' } }, spending: null });
   expect(await readFile(base.path)).toEqual(before);
   const version = new DatabaseSync(base.path, { readOnly: true });
   expect(version.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); version.close();

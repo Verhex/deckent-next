@@ -591,7 +591,6 @@
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <file|-> [--json] [--lang en|tr]\nPurges active retained native, usage, or raw response content after separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <file|-> [--json] [--lang en|tr]\nRecords a cancellation request by exact invocation command identity. It can prevent dispatch before send permission; after permission it does not prove remote cancellation or completion.",
   "models.invocation.absent": "No invocation receipt found.",
-  "models.invocation.historyNotRecorded": "No full-history integrity audit result is recorded; individual record checks do not establish it.",
   "models.invocation.claimed": "claimed; send/result not confirmed",
   "models.invocation.responded": "native response content retained separately from the receipt",
   "models.invocation.respondedPurged": "native response received; response content has been purged",
@@ -616,5 +615,16 @@
   "mcp.tool.purgeModelInvocationContent": "Purge active retained native, usage, or raw response content by exact command identity and expected content digest. Requires the local runtime service and separate purge-content policy authorization. It preserves the invocation outcome, quota record, and no-resend identity; logical purge does not erase write-ahead logs, media, or backups.",
   "mcp.tool.cancelModelInvocation": "Record cancellation intent for an exact model invocation command. It may prevent local dispatch before send permission; after permission it does not claim remote cancellation or completion.",
   "mcp.tool.invokeModel": "Submit one native model request using the configured profile and durable command identity. It requires an explicitly started local `deckent runtime serve`; a runtime-owned invocation continues if the client disconnects. Retrying the same command identity returns its receipt and does not resend the native request. Complete result capacity is checked before a new call. A received native response or rejection is evidence only, neither task acceptance nor a billing determination; the lifetime call is consumed.",
-  "mcp.error.modelInvocationResultLimit": "The complete result cannot fit this MCP surface. Increase its configured response capacity. For an existing invocation, use SDK or CLI inspection to retrieve the saved result; do not submit a new command to repeat the model call."
+  "mcp.error.modelInvocationResultLimit": "The complete result cannot fit this MCP surface. Increase its configured response capacity. For an existing invocation, use SDK or CLI inspection to retrieve the saved result; do not submit a new command to repeat the model call.",
+  "models.invocation.spendingAbsent": "No recorded monetary evidence for this invocation. This does not mean it was free or zero cost.",
+  "models.invocation.spendingReserved": "Local reservation: up to {maximum} minor units ({currency}), using recorded tariff {tariffId} v{tariffVersion}. This is not a provider invoice.",
+  "models.invocation.spendingHeld": "Local reservation held: up to {maximum} minor units ({currency}), using recorded tariff {tariffId} v{tariffVersion}; reason: {reason}. This is not a provider invoice.",
+  "models.invocation.spendingReleasedNotSent": "Local reservation released before sending: up to {maximum} minor units ({currency}), using recorded tariff {tariffId} v{tariffVersion}. This is not a provider invoice.",
+  "models.invocation.spendingSettledLocal": "Local calculated amount: {amount} minor units ({currency}) (quoted maximum: {maximum} minor units ({currency})) using recorded tariff {tariffId} v{tariffVersion}. This is not a provider invoice.",
+  "models.invocation.spendingReason.unknown": "unknown usage",
+  "models.invocation.spendingReason.overrun": "local amount exceeded the quote maximum",
+  "models.invocation.spendingReason.missingUsage": "usage is missing",
+  "models.invocation.spendingReason.invalidUsage": "usage is invalid",
+  "models.invocation.spendingReason.priceUnavailable": "price is unavailable",
+  "models.invocation.historyIntegrityNotRecorded": "No persisted full-history audit result is available; this view validates the queried records."
 }

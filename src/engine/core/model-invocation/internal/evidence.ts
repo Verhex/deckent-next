@@ -4,7 +4,7 @@ import { counterSchema, createImmutableJsonObjectSchema, encodeModelBindingDefin
   identitySchema, modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationCommandSchema,
   MODEL_INVOCATION_NATIVE_JSON_LIMITS, modelInvocationProfileSchema, parseModelActivationRecord,
   parseModelBindingDefinition, parseModelInvocationCommand, parseModelInvocationReceipt, parseModelReference,
-  modelInvocationRequestEvidence, type ModelInvocationActor, type ModelInvocationReceipt } from '#domain/index.js';
+  modelInvocationRequestEvidence, providerSpendBudgetSchema, providerSpendQuoteSchema, type ModelInvocationActor, type ModelInvocationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port.js';
 import { verifyModelActivationRecord } from '#engine/core/model-activation/index.js';
 
@@ -12,7 +12,8 @@ const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const admissionSchema = z.object({ command: modelInvocationCommandSchema, requestDigest: hex,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: z.unknown(),
   activation: z.unknown(), profile: modelInvocationProfileSchema, profileDigest: hex,
-  invocationId: identitySchema, claimedAtMs: counterSchema }).strict();
+  invocationId: identitySchema, claimedAtMs: counterSchema,
+  spending: z.object({ budget: providerSpendBudgetSchema, quote: providerSpendQuoteSchema }).strict().readonly().optional() }).strict();
 const admissionEnvelope = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 export function modelInvocationRequestDigest(input: unknown): string {
   return createHash('sha256').update(encodeModelInvocationRequest(input), 'utf8').digest('hex');
@@ -45,12 +46,18 @@ export function parseModelInvocationAdmission(input: unknown): ModelInvocationAd
     || activation.binding.digest !== command.expectedBinding.digest || profileDigest !== parsed.data.profileDigest
     || JSON.stringify(activation.reference) !== JSON.stringify(command.reference)
     || parsed.data.profile.scopeId !== command.scopeId || parsed.data.profile.bindingDigest !== command.expectedBinding.digest
-    || JSON.stringify(parsed.data.profile.reference) !== JSON.stringify(command.reference)) {
+    || JSON.stringify(parsed.data.profile.reference) !== JSON.stringify(command.reference)
+    || (parsed.data.spending && (parsed.data.spending.budget.scopeId !== command.scopeId
+      || parsed.data.spending.quote.scopeId !== command.scopeId
+      || parsed.data.spending.budget.currency !== parsed.data.spending.quote.currency
+      || parsed.data.spending.quote.requestDigest !== parsed.data.requestDigest
+      || parsed.data.spending.quote.profileDigest !== profileDigest))) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
   return Object.freeze({ command, requestDigest: parsed.data.requestDigest, actor: parsed.data.actor,
     authorization: parsed.data.authorization, definition, activation, profile: parsed.data.profile,
-    profileDigest: parsed.data.profileDigest, invocationId: parsed.data.invocationId, claimedAtMs: parsed.data.claimedAtMs });
+    profileDigest: parsed.data.profileDigest, invocationId: parsed.data.invocationId, claimedAtMs: parsed.data.claimedAtMs,
+    ...(parsed.data.spending ? { spending: parsed.data.spending } : {}) });
 }
 export function verifyModelInvocationReceipt(input: unknown): ModelInvocationReceipt {
   try {

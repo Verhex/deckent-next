@@ -1,4 +1,3 @@
-import { migrateModelAllocationCheckpoints } from './migration-v19.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { requireLedgerV5Custody } from './migration-v5.js';
@@ -9,6 +8,8 @@ import { migrateModelInvocationEvidence } from './migration-v15.js';
 import { migrateModelInvocationContents } from './migration-v16.js';
 import { migrateModelInvocationPurge } from './migration-v17.js';
 import { migrateModelInvocationControl } from './migration-v18.js';
+import { migrateModelAllocationCheckpoints } from './migration-v19.js';
+import { migrateProviderSpend } from './migration-v20.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
@@ -19,7 +20,8 @@ export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
 export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
-export const CURRENT_LEDGER_VERSION = MODEL_ALLOCATION_LEDGER_VERSION;
+export const PROVIDER_SPEND_LEDGER_VERSION = 20;
+export const CURRENT_LEDGER_VERSION = PROVIDER_SPEND_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
@@ -52,6 +54,8 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   16: '',
   17: '',
   18: '',
+  19: '',
+  20: '',
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
@@ -104,6 +108,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 19) {
       migrateModelAllocationCheckpoints(db);
       db.exec('PRAGMA user_version=19;');
+      continue;
+    }
+    if (next === 20) {
+      migrateProviderSpend(db);
+      db.exec('PRAGMA user_version=20;');
       continue;
     }
     const sql = migrations[next];

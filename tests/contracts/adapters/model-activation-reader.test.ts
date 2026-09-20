@@ -39,7 +39,9 @@ it('reads the current exact record and returns null for a missing key without wr
 
 it('accepts a genuine historical v13 activation ledger read-only without changing its bytes', async () => {
   const file = await seeded(), db = new DatabaseSync(file);
-  db.exec(`DROP INDEX model_invocations_allocation_state;
+  db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
+    DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state;
     DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; PRAGMA user_version=13`);
   db.close();
   const before = await readFile(file), reader = await openSqliteModelActivationReader(file, { busyTimeoutMs: 100 });

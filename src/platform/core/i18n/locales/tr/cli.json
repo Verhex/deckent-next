@@ -591,7 +591,6 @@
   "cli.help.modelsPurgeContent": "deckent models purge-content --input <dosya|-> [--json] [--lang en|tr]\nAyrı purge-content policy yetkisiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur.",
   "cli.help.modelsCancelInvocation": "deckent models cancel --input <dosya|-> [--json] [--lang en|tr]\nTam çağrı komut kimliğiyle iptal isteğini kaydeder. Gönderim izninden önce dağıtımı engelleyebilir; izin sonrasında uzaktan iptal veya tamamlama kanıtı değildir.",
   "models.invocation.absent": "Çağrı kaydı bulunamadı.",
-  "models.invocation.historyNotRecorded": "Tam geçmiş bütünlüğü denetimi sonucu kaydedilmedi; tekil kayıt kontrolleri bunun kanıtı değildir.",
   "models.invocation.claimed": "başlatma hakkı kaydedildi; gönderim/sonuç doğrulanmadı",
   "models.invocation.responded": "native yanıt içeriği kayıttan ayrı saklandı",
   "models.invocation.respondedPurged": "native yanıt alındı; yanıt içeriği silindi",
@@ -616,5 +615,16 @@
   "mcp.tool.purgeModelInvocationContent": "Tam komut kimliği ve beklenen içerik özetiyle etkin saklanan native, usage veya ham yanıt içeriğini siler. Yerel runtime servisi ve ayrı purge-content policy yetkisi gerekir. Çağrı sonucunu, kota kaydını ve yeniden göndermeme kimliğini korur; mantıksal silme write-ahead log, ortam veya yedekleri silmez.",
   "mcp.tool.cancelModelInvocation": "Tam model çağrısı komutu için iptal niyetini kaydeder. Gönderim izninden önce yerel dağıtımı engelleyebilir; izin sonrasında uzaktan iptal veya tamamlama iddiası taşımaz.",
   "mcp.tool.invokeModel": "Yapılandırılmış profil ve kalıcı komut kimliğiyle bir native model isteği gönder. Açıkça başlatılmış yerel `deckent runtime serve` gerektirir; runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer. Aynı komut kimliğiyle tekrar kaydını döndürür ve native isteği yeniden göndermez. Yeni çağrıdan önce tam sonuç kapasitesi denetlenir. Alınmış native yanıt veya ret yalnız kanıttır; ne görev kabulüdür ne de faturalama belirlemesidir; ömür boyu çağrı kullanılmıştır.",
-  "mcp.error.modelInvocationResultLimit": "Tam sonuç bu MCP yüzeyine sığmıyor. Yapılandırılmış yanıt kapasitesini artırın. Mevcut çağrının kayıtlı sonucunu SDK veya CLI incelemesiyle alın; model çağrısını tekrarlamak için yeni komut göndermeyin."
+  "mcp.error.modelInvocationResultLimit": "Tam sonuç bu MCP yüzeyine sığmıyor. Yapılandırılmış yanıt kapasitesini artırın. Mevcut çağrının kayıtlı sonucunu SDK veya CLI incelemesiyle alın; model çağrısını tekrarlamak için yeni komut göndermeyin.",
+  "models.invocation.spendingAbsent": "Bu çağrı için kaydedilmiş parasal kanıt yok. Bu, çağrının ücretsiz veya sıfır maliyetli olduğu anlamına gelmez.",
+  "models.invocation.spendingReserved": "Yerel rezervasyon: en fazla {maximum} alt birim ({currency}); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı. Bu bir sağlayıcı faturası değildir.",
+  "models.invocation.spendingHeld": "Yerel rezervasyon bekletildi: en fazla {maximum} alt birim ({currency}); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı; neden: {reason}. Bu bir sağlayıcı faturası değildir.",
+  "models.invocation.spendingReleasedNotSent": "Yerel rezervasyon gönderimden önce serbest bırakıldı: en fazla {maximum} alt birim ({currency}); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı. Bu bir sağlayıcı faturası değildir.",
+  "models.invocation.spendingSettledLocal": "Yerel hesaplanan tutar: {amount} alt birim ({currency}) (teklif üst sınırı: {maximum} alt birim ({currency})); kayıtlı tarife {tariffId} v{tariffVersion} kullanıldı. Bu bir sağlayıcı faturası değildir.",
+  "models.invocation.spendingReason.unknown": "kullanım bilinmiyor",
+  "models.invocation.spendingReason.overrun": "yerel tutar teklif üst sınırını aştı",
+  "models.invocation.spendingReason.missingUsage": "kullanım bilgisi eksik",
+  "models.invocation.spendingReason.invalidUsage": "kullanım bilgisi geçersiz",
+  "models.invocation.spendingReason.priceUnavailable": "fiyat bilgisi yok",
+  "models.invocation.historyIntegrityNotRecorded": "Kalıcı bir tam geçmiş denetim sonucu yok; bu görünüm sorgulanan kayıtları doğrular."
 }

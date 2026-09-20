@@ -1,4 +1,3 @@
-import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteModelActivationStore, openSqliteModelInvocationReader,
   openSqliteModelInvocationStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -35,7 +35,8 @@ async function seedV13(path: string) {
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); }
   finally { activation.close(); }
   const db = new DatabaseSync(path);
-  try { db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+  try { db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
     DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
     DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; PRAGMA user_version=13`); }
   finally { db.close(); }
@@ -78,7 +79,8 @@ async function seedV14(path: string, corrupt?: 'receipt' | 'allocation') {
       if (corrupt === 'receipt' && row.invocation_id === 'unknown-invocation') old.unexpected = true;
       downgrade.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(old), String(row.invocation_id));
     }
-    downgrade.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+    downgrade.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+      DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
       DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP INDEX model_invocations_allocation_state;
       ALTER TABLE model_invocations RENAME TO model_invocations_current;
       CREATE TABLE model_invocations(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,invocation_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
@@ -135,7 +137,9 @@ async function seedV15(path: string, corrupt?: 'state' | 'identity' | 'count') {
       }
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify({ ...receipt, schemaVersion: 2, outcome: oldOutcome }), String(row.invocation_id));
     }
-    db.exec('DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; PRAGMA user_version=15;');
+    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+      DROP TABLE model_invocation_cancellations;
+      DROP TABLE model_invocation_controls; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; PRAGMA user_version=15;`);
     if (corrupt === 'state') db.prepare("UPDATE model_invocations SET state='claimed' WHERE invocation_id='rejected-id'").run();
     if (corrupt === 'identity') {
       const row = db.prepare("SELECT record FROM model_invocations WHERE invocation_id='responded-id'").get() as { record: string };

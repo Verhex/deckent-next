@@ -1,7 +1,7 @@
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
   ModelInvocationClaim, ModelInvocationCommand, ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord, ModelInvocationNativeResponse, ModelInvocationProfile,
   ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationResponseContent,
-  ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
+  ModelInvocationResponseEvidence, ModelInvocationUnknownReason, ProviderSpendBudget, ProviderSpendQuote } from '#domain/index.js';
 
 export interface ModelInvocationAdmission {
   readonly command: ModelInvocationCommand;
@@ -14,6 +14,8 @@ export interface ModelInvocationAdmission {
   readonly profileDigest: string;
   readonly invocationId: string;
   readonly claimedAtMs: number;
+  /** Internal staged spend admission; mandatory application quote wiring is a separate unfinished gate. */
+  readonly spending?: { readonly budget: ProviderSpendBudget; readonly quote: ProviderSpendQuote };
 }
 export interface ModelInvocationRecord { readonly receipt: ModelInvocationReceipt; readonly content: ModelInvocationResponseContent | null;
   readonly purge: ModelInvocationPurgeReceipt | null }

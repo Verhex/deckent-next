@@ -925,5 +925,10 @@
   "error.CLI_INVOCATION_INPUT_LIMIT": "Model çağrısı girdisi cli.invocationInputMaxBytes sınırını aşıyor: {limit} bayt.",
   "error.CLI_INVOCATION_INPUT_INVALID": "Model çağrısı JSON verisi veya komut şeması geçersiz.",
   "error.CLI_INVOCATION_INPUT_TTY": "Model çağrısı JSON verisini stdin üzerinden gönderin veya normal bir dosya belirtin.",
-  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model çağrısı girdisi okunamadı."
+  "error.CLI_INVOCATION_INPUT_UNAVAILABLE": "Model çağrısı girdisi okunamadı.",
+  "error.PROVIDER_SPEND_UNAVAILABLE": "Doğrulanmış bütçe ve native fiyatlandırma yetkisi kullanılamıyor. Yeni model isteği kabul edilmedi.",
+  "error.PROVIDER_SPEND_INVALID": "Yerel harcama kaydı geçersiz. Yeni harcama kabul edilmedi.",
+  "error.PROVIDER_SPEND_CONFLICT": "Bütçe veya fiyatlandırma hesabı kayıtlı kimliğiyle çelişiyor. Mevcut rezervasyonlar korundu.",
+  "error.PROVIDER_SPEND_EXHAUSTED": "Ortak kapsam bütçesi bu rezervasyonu karşılamıyor. Ayrılmış veya belirsiz tutarlar tutuluyor; bu kayıt sağlayıcı faturası değildir.",
+  "error.PROVIDER_SPEND_FROZEN": "Yerel harcama hesabı çözümlenmemiş aşım nedeniyle durduruldu. Yeni rezervasyon kabul edilmedi."
 }

@@ -401,7 +401,8 @@
         "src/engine/core/workspaces",
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/engine/core/provider-spend"
       ],
       "plan": "K1"
     },
@@ -758,7 +759,8 @@
         "src/platform/core/host",
         "src/platform/core/i18n",
         "src/platform/core/identity",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/provider-spend"
       ],
       "plan": "S0"
     },
@@ -951,7 +953,9 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/authentication",
         "src/engine/core/model-activation",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS/A3A"
     },
@@ -963,7 +967,8 @@
         "src/engine/core/dispatch",
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
-        "src/engine/core/model-allocation"
+        "src/engine/core/model-allocation",
+        "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS/A3A"
     },
@@ -1002,6 +1007,20 @@
         "src/domain/core/primitives",
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
+    },
+    "src/domain/core/provider-spend": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
+    },
+    "src/engine/core/provider-spend": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/provider-spend",
+        "src/domain/core/model-invocation"
       ],
       "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
     }

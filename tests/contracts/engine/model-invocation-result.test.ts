@@ -37,7 +37,7 @@ describe('model invocation runtime result correlation', () => {
         expectedRequestDigest: receipt.claim.requestDigest }, claim: receipt.claim, actor: receipt.actor,
       authorization: { revision: 'cancel-policy', ruleId: 'cancel' }, requestedAtMs: 2, disposition: 'requested' as const };
     const requested = { ...controlFor(record.receipt), cancellation };
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: record.receipt, control: requested,
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: record.receipt, control: requested, spending: null, historyIntegrity: 'not-recorded' as const,
       contentStatus: 'retained' as const, purge: null };
     expect(parseModelInvocationInspectionForQuery(query, inspection)).toEqual(inspection);
     let reads = 0;
@@ -51,7 +51,7 @@ describe('model invocation runtime result correlation', () => {
     const response = { schemaVersion: 1 as const, native, usage: null };
     const record = createModelInvocationResponseRecord(receipt, response, 2);
     const result = { replayed: false, receipt: record.receipt, response, contentStatus: 'retained' as const, purge: null };
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: record.receipt, control: controlFor(record.receipt), contentStatus: 'retained' as const, purge: null };
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: record.receipt, control: controlFor(record.receipt), spending: null, historyIntegrity: 'not-recorded' as const, contentStatus: 'retained' as const, purge: null };
     expect(parseModelInvocationResultForCommand(command, result)).toEqual(result);
     expect(parseModelInvocationInspectionForQuery(query, inspection)).toEqual(inspection);
     expect(parseModelInvocationInspectionForQuery({ ...query, includeResponseContent: true },
@@ -61,7 +61,7 @@ describe('model invocation runtime result correlation', () => {
   it('withholds rejected bytes by default and accepts only exact explicitly requested content', () => {
     const evidence = createModelInvocationResponseEvidence(profile.adapter, 'invalid-response', 200, Buffer.from('private echoed input'), true);
     const record = createModelInvocationEvidenceRecord(receipt, evidence, 2);
-    const ordinary = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: record.receipt, control: controlFor(record.receipt), contentStatus: 'retained' as const, purge: null };
+    const ordinary = { ...query, schemaVersion: 6 as const, invocation: record.receipt, control: controlFor(record.receipt), spending: null, historyIntegrity: 'not-recorded' as const, contentStatus: 'retained' as const, purge: null };
     expect(parseModelInvocationInspectionForQuery(query, ordinary)).toEqual(ordinary);
     const explicitQuery = { ...query, includeResponseContent: true };
     const explicit = { ...ordinary, responseContent: record.content };
@@ -96,7 +96,7 @@ describe('model invocation runtime result correlation', () => {
         { replayed: false, receipt: forgedReceipt, response: null, contentStatus: 'retained', purge: null }))
         .toThrow('MODEL_INVOCATION_CORRUPT');
       expect(() => parseModelInvocationInspectionForQuery(query,
-        { ...query, schemaVersion: 5, historyIntegrity: 'not-recorded', invocation: forgedReceipt, control: controlFor(record.receipt), contentStatus: 'retained', purge: null }))
+        { ...query, schemaVersion: 6, invocation: forgedReceipt, control: controlFor(record.receipt), spending: null, historyIntegrity: 'not-recorded', contentStatus: 'retained', purge: null }))
         .toThrow('MODEL_INVOCATION_CORRUPT');
       expect(() => verifyModelInvocationRecord({ receipt: forgedReceipt, content: record.content, purge: null }))
         .toThrow('MODEL_INVOCATION_CORRUPT');
@@ -105,7 +105,7 @@ describe('model invocation runtime result correlation', () => {
 
   it('distinguishes not-captured from retained content and rejects unsolicited content', () => {
     const unknown = createModelInvocationUnknownRecord(receipt, 2);
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: unknown.receipt, control: controlFor(unknown.receipt),
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: unknown.receipt, control: controlFor(unknown.receipt), spending: null, historyIntegrity: 'not-recorded' as const,
       contentStatus: 'not-captured' as const, purge: null };
     expect(parseModelInvocationInspectionForQuery(query, inspection)).toEqual(inspection);
     expect(parseModelInvocationInspectionForQuery({ ...query, includeResponseContent: true }, { ...inspection, responseContent: null }))
@@ -131,7 +131,7 @@ describe('model invocation pre-permission result', () => {
     expect(parseModelInvocationResultForCommand(command, result)).toEqual(result);
     const control = { schemaVersion: 1 as const, claim: receipt.claim, reference,
       send: { state: 'prevented' as const }, cancellation };
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: prevented.receipt, control,
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: prevented.receipt, control, spending: null, historyIntegrity: 'not-recorded' as const,
       contentStatus: 'not-captured' as const, purge: null };
     expect(parseModelInvocationInspectionForQuery(query, inspection)).toEqual(inspection);
     expect(() => createModelInvocationPreventedRecord(receipt, { ...cancellation, disposition: 'requested' }))
@@ -157,7 +157,7 @@ describe('model invocation purge and hostile input correlation', () => {
     const record = verifyModelInvocationRecord({ receipt: retained.receipt, content: null, purge });
     const result = { replayed: true, receipt: retained.receipt, response: null, contentStatus: 'purged' as const, purge };
     expect(parseModelInvocationResultForCommand(command, result)).toEqual(result);
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: retained.receipt, control: controlFor(retained.receipt),
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: retained.receipt, control: controlFor(retained.receipt), spending: null, historyIntegrity: 'not-recorded' as const,
       contentStatus: 'purged' as const, purge };
     expect(parseModelInvocationInspectionForQuery(query, inspection)).toEqual(inspection);
     expect(parseModelInvocationInspectionForQuery({ ...query, includeResponseContent: true },
@@ -173,7 +173,7 @@ describe('model invocation purge and hostile input correlation', () => {
   });
 
   it('rejects query1, identity mismatches, hostile descriptors and command evidence mismatches', () => {
-    const absent = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: null, control: null, contentStatus: null, purge: null };
+    const absent = { ...query, schemaVersion: 6 as const, invocation: null, control: null, spending: null, historyIntegrity: 'not-recorded' as const, contentStatus: null, purge: null };
     expect(parseModelInvocationInspectionForQuery(query, absent)).toEqual(absent);
     expect(() => parseModelInvocationInspectionForQuery({ ...query, schemaVersion: 1 }, absent)).toThrow();
     for (const value of [{ ...absent, extra: true }, { ...absent, scopeId: 'foreign' }, { ...absent, invocationId: 'foreign' }]) {
@@ -201,17 +201,17 @@ describe('model invocation purge and hostile input correlation', () => {
       claim: { ...record.receipt.claim, requestDigest: foreignDigest } };
     expect(() => parseModelInvocationResultForCommand(command, { ...result, receipt: forgedReceipt }))
       .toThrow('MODEL_INVOCATION_CORRUPT');
-    const inspection = { ...query, schemaVersion: 5 as const, historyIntegrity: 'not-recorded' as const, invocation: record.receipt, control: controlFor(record.receipt),
+    const inspection = { ...query, schemaVersion: 6 as const, invocation: record.receipt, control: controlFor(record.receipt), spending: null, historyIntegrity: 'not-recorded' as const,
       contentStatus: 'retained' as const, purge: null };
+    expect(() => parseModelInvocationInspectionForQuery(query, { ...inspection, schemaVersion: 3 }))
+      .toThrow('MODEL_INVOCATION_CORRUPT');
     expect(() => parseModelInvocationInspectionForQuery(query, { ...inspection, schemaVersion: 4 }))
       .toThrow('MODEL_INVOCATION_CORRUPT');
-    for (const historyIntegrity of ['verified', 'unknown']) {
-      expect(() => parseModelInvocationInspectionForQuery(query, { ...inspection, historyIntegrity }))
-        .toThrow('MODEL_INVOCATION_CORRUPT');
-    }
-    const withoutHistoryIntegrity: Partial<typeof inspection> = { ...inspection };
-    delete withoutHistoryIntegrity.historyIntegrity;
-    expect(() => parseModelInvocationInspectionForQuery(query, withoutHistoryIntegrity))
+    const withoutSpending: Record<string, unknown> = { ...inspection }; delete withoutSpending['spending'];
+    expect(() => parseModelInvocationInspectionForQuery(query, withoutSpending)).toThrow('MODEL_INVOCATION_CORRUPT');
+    const withoutHistory: Record<string, unknown> = { ...inspection }; delete withoutHistory['historyIntegrity'];
+    expect(() => parseModelInvocationInspectionForQuery(query, withoutHistory)).toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(() => parseModelInvocationInspectionForQuery(query, { ...inspection, historyIntegrity: 'verified' }))
       .toThrow('MODEL_INVOCATION_CORRUPT');
     expect(() => parseModelInvocationInspectionForQuery(query, { ...inspection, control: null }))
       .toThrow('MODEL_INVOCATION_CORRUPT');

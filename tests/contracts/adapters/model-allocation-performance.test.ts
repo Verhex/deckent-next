@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelActivationStore, openSqliteModelAllocationIntegrityReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseModelInvocationControlRecord, parseProviderCatalog, resolveModelBindingDefinition, type ModelActivationRecord } from '#domain/index.js';
 import { createModelAllocationCheckpoint, createModelInvocationClaimReceipt, modelInvocationProfileDigest, modelInvocationRequestDigest,
@@ -102,7 +103,7 @@ it('reports descriptive actual claim timings for schema-valid allocation histori
       results.push({ history, samplesMs, medianMs: percentile(samplesMs, 0.5), p95Ms: percentile(samplesMs, 0.95) });
     } finally { store.close(); }
   }
-  process.stdout.write(`${JSON.stringify({ benchmark: 'sqlite-model-invocation-claim-allocation-history', ledgerVersion: 19,
+  process.stdout.write(`${JSON.stringify({ benchmark: 'sqlite-model-invocation-claim-allocation-history', ledgerVersion: CURRENT_LEDGER_VERSION,
     workload: 'one scope/allocation; schema-valid claimed receipt/control/allocation/checkpoint seed; audit before 2 warmup and 10 actual store.claim samples',
     warmupClaims: 2, samplesPerHistory: 10, results })}\n`);
 }, 60_000);

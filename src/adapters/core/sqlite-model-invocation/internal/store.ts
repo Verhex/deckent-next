@@ -1,12 +1,13 @@
 import { readModelAllocationCheckpoint, writeModelAllocation } from './allocation.js';
 import { invocationControl, writeInvocationControl } from './control.js';
+import { reserveInvocationSpend, settleInvocationSpend, verifyInvocationSpendReplay } from './spend.js';
 import { purgeInvocationContent } from './purge.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationClaimSchema, parseModelInvocationControlRecord, parseModelInvocationCancellationReceipt, proposeModelInvocationSendPermission,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
   type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
-import { parseModelAllocation, type ModelAllocationCheckpoint, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
+import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendError, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, verifyModelActivationRecord } from '#engine/index.js';
@@ -21,7 +22,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
   constructor(private readonly db: DatabaseSync) {}
 
   private fail(error: unknown): never {
-    if (error instanceof ModelInvocationStoreError) throw error;
+    if (error instanceof ModelInvocationStoreError || error instanceof ProviderSpendError) throw error;
     sqliteFailure(error);
     throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
@@ -57,6 +58,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
           if (!sameModelInvocationRequest(prior.receipt, command, admission.requestDigest, admission.actor)) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
           }
+          verifyInvocationSpendReplay(this.db, admission, prior);
           return Object.freeze({ replayed: true, record: prior });
         }
         if (invocationRow(this.db, command.scopeId, admission.invocationId)) throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
@@ -92,6 +94,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
           send: { state: 'pending' }, cancellation: null });
         this.db.prepare(`INSERT INTO model_invocation_controls(scope_id,invocation_id,send_state,record) VALUES(?,?,?,?)`)
           .run(command.scopeId, admission.invocationId, 'pending', encoded(control));
+        reserveInvocationSpend(this.db, admission);
         return Object.freeze({ replayed: false, record: verifyModelInvocationRecord({ receipt, content: null, purge: null }) });
       });
     } catch (error) { return this.fail(error); }
@@ -122,6 +125,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
     const allocation = checkpoint?.allocation;
     if (!allocation || !checkpoint || allocation.inFlight < 1) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     const outcome = next.receipt.outcome;
+    settleInvocationSpend(this.db, next);
     const terminal = outcome.state === 'responded' || outcome.state === 'rejected' || outcome.state === 'not-sent';
     // Even unknown changes receipt evidence: advance the revision so paged audits cannot mix snapshots.
     writeModelAllocation(this.db, checkpoint, parseModelAllocation({ ...allocation, inFlight: allocation.inFlight - (terminal ? 1 : 0) }));

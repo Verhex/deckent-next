@@ -41,7 +41,7 @@ async function seed18(path: string) {
   store.close();
   const db = new DatabaseSync(path); db.exec('PRAGMA foreign_keys=OFF');
   try {
-    db.exec(`DROP TABLE model_invocation_allocation_checkpoints;
+    db.exec(`DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
       DROP INDEX model_invocations_allocation_identity;
       PRAGMA user_version=18;`);
   } finally { db.close(); }
@@ -54,10 +54,10 @@ function snapshot(path: string) {
   finally { db.close(); }
 }
 
-it('migrates a real ledger18 allocation inventory to revision-one checkpoints without changing receipts', async () => {
+it('migrates a real ledger18 allocation inventory through revision-one checkpoints without changing receipts', async () => {
   const path = await file(); await seed18(path); const before = snapshot(path);
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
-  const after = snapshot(path); expect(after).toEqual({ ...before, version: 19 });
+  const after = snapshot(path); expect(after).toEqual({ ...before, version: 20 });
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     const allocationRow = db.prepare('SELECT record FROM model_invocation_allocations').get() as { record: string };
@@ -83,7 +83,7 @@ it('rejects corrupt or missing allocation evidence and orphan invocation identit
     const after = new DatabaseSync(path, { readOnly: true });
     try {
       expect(after.prepare('PRAGMA user_version').get()?.user_version).toBe(18);
-      expect(after.prepare("SELECT name FROM sqlite_schema WHERE name IN ('model_invocation_allocation_checkpoints')").all()).toEqual([]);
+      expect(after.prepare("SELECT name FROM sqlite_schema WHERE name IN ('provider_spend_accounts','model_invocation_allocation_checkpoints')").all()).toEqual([]);
     } finally { after.close(); }
   }
 });
