@@ -40,7 +40,7 @@ function rejected(reason: ModelInvocationRejectionReason, status: number | null,
 
 async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatRequest, signal?: AbortSignal): Promise<ModelInvocationNativeResult> {
   if (signal?.aborted) throw new OpenAiChatHttpError('OPENAI_CHAT_CANCELLED');
-  const endpoint = new URL('/v1/chat/completions', prepared.definition.origin);
+  const endpoint = new URL(prepared.definition.endpoint);
   return new Promise((resolve, reject) => {
     const agent = new Agent({ keepAlive: false, proxyEnv: {} });
     let settled = false; let response: import('node:http').IncomingMessage | undefined;

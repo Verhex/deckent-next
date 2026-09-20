@@ -366,3 +366,5 @@ PROVIDERS/A4A: share native peer authentication and current scope policy for mod
 PROVIDERS/A4B: SDK/CLI/MCP model invocation and inspection use the shared runtime; client disconnect preserves work, bounded delivery is checked before effects, recorded results survive graceful service restart.
 
 PROVIDERS/A5: retain exact rejected and partial model response evidence, hide raw content by default, and preserve incomplete-outcome capacity without resending.
+
+PROVIDERS/A6: configure exact provider endpoint paths in versioned adapter profiles without default routes or legacy execution aliases.

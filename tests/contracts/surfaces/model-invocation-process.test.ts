@@ -171,6 +171,12 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(input.bodies).toHaveLength(6);
 }
 
+function nativeFixtureBody(mode: 'normal' | 'oversize', count: number): string {
+  return JSON.stringify(mode === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${count}`, object: 'chat.completion', created: 1,
+    model: 'native-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
+}
+
 it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -189,17 +195,16 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     heldReleases.push(() => releaseHeld?.());
     return observed;
   };
-  const server = createServer((request, reply) => { const chunks: Buffer[] = [];
+  const server = createServer((request, reply) => {
+    if (request.url !== '/customer/gateway/native-chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
+    const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => { bodies.push(Buffer.concat(chunks).toString('utf8'));
       if (holdResponse) {
         observeHeld?.(); await new Promise<void>(resolve => { releaseHeld = resolve; }); holdResponse = false;
       }
       if (response === 'status') { reply.writeHead(429, { 'content-type': 'application/json', 'x-private-header': 'never-evidence' }); reply.end(statusBody); return; }
       if (response === 'malformed') { reply.writeHead(200, { 'content-type': 'application/json', 'x-private-header': 'never-evidence' }); reply.end(malformedBody); return; }
-      const native = response === 'oversize' ? { value: 'x'.repeat(4096) } : { id: `completion-${bodies.length}`, object: 'chat.completion', created: 1,
-        model: 'native-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'done', refusal: null } }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
-      reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(JSON.stringify(native)); }); });
+      reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(nativeFixtureBody(response, bodies.length)); }); });
   servers.push(server); await new Promise<void>((done, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', done); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
@@ -209,8 +214,8 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 1,
-      definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
+      definition: { endpoint: `http://127.0.0.1:${address.port}/customer/gateway/native-chat`, maxOutputTokens: 8 } }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const config = { mode: 'api', layout: { root: data },
     storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },

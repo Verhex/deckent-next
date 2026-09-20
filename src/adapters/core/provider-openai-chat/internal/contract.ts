@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type JsonObject } from '#domain/index.js';
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
-export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 1 as const;
+export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 2 as const;
 export const OPENAI_CHAT_COMPLETIONS_FAMILY = 'openai-chat-completions' as const;
 export const OPENAI_CHAT_COMPLETIONS_VERSION = 'v1' as const;
 export const OPENAI_CHAT_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
@@ -17,7 +17,7 @@ export class OpenAiChatHttpError extends Error {
   constructor(readonly code: OpenAiChatHttpErrorCode, readonly status?: number) { super(code); this.name = 'OpenAiChatHttpError'; }
 }
 
-export type OpenAiChatHttpDefinition = Readonly<{ origin: string; maxOutputTokens: number }>;
+export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user' | 'assistant'; content: string }>;
 export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly OpenAiChatTextMessage[];
@@ -25,7 +25,7 @@ export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
 const positive = z.number().int().positive().safe();
-const definitionSchema = z.object({ origin: z.string().min(1), maxOutputTokens: positive }).strict();
+const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive }).strict();
 const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
   timeoutMs: positive.max(2_147_483_647) }).strict();
 const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z.array(z.object({
@@ -36,8 +36,8 @@ export const openAiChatWireObjectSchema = createImmutableJsonObjectSchema(OPENAI
 
 export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDefinition {
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && definitionSchema.safeParse(copied.data);
-  if (!parsed || !parsed.success || !isCanonicalLoopbackOrigin(parsed.data.origin)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
-  return Object.freeze({ origin: parsed.data.origin, maxOutputTokens: parsed.data.maxOutputTokens });
+  if (!parsed || !parsed.success || !isCanonicalLoopbackEndpoint(parsed.data.endpoint)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
+  return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens });
 }
 
 export function parseOpenAiChatHttpLimits(input: unknown): OpenAiChatHttpLimits {
@@ -54,10 +54,10 @@ export function parseOpenAiChatTextRequest(input: unknown, definition: OpenAiCha
     ...(parsed.data.n === 1 ? { n: 1 as const } : {}) });
 }
 
-function isCanonicalLoopbackOrigin(origin: string): boolean {
+function isCanonicalLoopbackEndpoint(endpoint: string): boolean {
   let url: URL;
-  try { url = new URL(origin); } catch { return false; }
+  try { url = new URL(endpoint); } catch { return false; }
   return url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')
-    && url.port !== '' && url.pathname === '/' && url.search === '' && url.hash === '' && url.username === '' && url.password === ''
-    && url.origin === origin;
+    && url.port !== '' && Number(url.port) > 0 && url.search === '' && url.hash === '' && url.username === '' && url.password === ''
+    && !endpoint.includes('?') && !endpoint.includes('#') && url.href === endpoint;
 }

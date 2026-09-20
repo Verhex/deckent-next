@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConfiguredModel,
   inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, ModelInvocationStoreError, modelInvocationProfileDigest, modelInvocationTargetId,
+import { openSqliteModelInvocationStore, openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
+import { ModelActivationApplication, ModelInvocationStoreError, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
   verifyModelInvocationReceipt } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -25,8 +25,8 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  let requests = 0, response = options.response ?? 'ok'; const bodies: string[] = [];
-  const server = createServer((request, reply) => { requests++; const chunks: Buffer[] = [];
+  let requests = 0, response = options.response ?? 'ok'; const bodies: string[] = [], paths: string[] = [];
+  const server = createServer((request, reply) => { requests++; paths.push(request.url ?? ''); const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', () => { bodies.push(Buffer.concat(chunks).toString('utf8'));
       if (response === 'reset') { request.socket.destroy(); return; }
       const native = response === 'large' ? { value: 'x'.repeat(4096) } : { id: 'completion', object: 'chat.completion', created: 1,
@@ -39,8 +39,8 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   let profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 1,
-      definition: { origin: `http://127.0.0.1:${address.port}`, maxOutputTokens: 8 } },
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
+      definition: { endpoint: `http://127.0.0.1:${address.port}/customer/gateway/native-chat`, maxOutputTokens: 8 } },
     allocation: { id: 'allocation', maxCalls: options.maxCalls ?? 4, maxInFlight: options.maxInFlight ?? 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: options.responseMaxBytes ?? 8192, timeoutMs: 2_000 } };
   const configPath = join(project, '.deckent/config.json'); const writeConfig = async () => {
@@ -63,7 +63,7 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
     nativeRequest: { model: 'native-model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4 } });
   return { project, env, ledger, binding, command, policy, activation, activate, writeConfig,
     setProfile(value: typeof profile) { profile = value; }, get profile() { return profile; },
-    setResponse(value: typeof response) { response = value; }, get requests() { return requests; }, bodies };
+    setResponse(value: typeof response) { response = value; }, get requests() { return requests; }, bodies, paths, definition };
 }
 
 describe('configured native model invocation', () => {
@@ -96,7 +96,7 @@ describe('configured native model invocation', () => {
     const f = await fixture(), first = await invokeConfiguredModel(f.project, f.command('one'), { env: f.env });
     expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded', response: { native: { model: 'native-model' } } } } });
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
-    expect(f.requests).toBe(1); expect(f.bodies[0]).toContain('prompt-must-not-persist');
+    expect(f.requests).toBe(1); expect(f.paths).toEqual(['/customer/gateway/native-chat']); expect(f.bodies[0]).toContain('prompt-must-not-persist');
     expect(await invokeConfiguredModel(f.project, f.command('one'), { env: f.env })).toEqual({ replayed: true, receipt: first.receipt });
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(f.requests).toBe(1); expect((await readFile(f.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
@@ -141,5 +141,49 @@ describe('configured native model invocation', () => {
     await expect(invokeConfiguredModel(unknown.project, unknown.command('blocked'), { env: unknown.env })).rejects.toThrow();
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
     expect(unknown.requests).toBe(1); expect((await readFile(unknown.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
+  });
+});
+
+describe('native endpoint version and historical receipt boundaries', () => {
+  it('reads an unchanged historical adapter1 claim without executing it; new sends require adapter2', async () => {
+    const f = await fixture(), command = f.command('historical');
+    const historicalProfile = { ...f.profile, adapter: { id: 'openai-chat-http', version: 1,
+      definition: { origin: new URL(f.profile.adapter.definition.endpoint).origin, maxOutputTokens: 8 } } };
+    const activationReader = await openSqliteModelActivationStore(f.ledger, sqlite);
+    const activation = await activationReader.loadRecord('scope', reference); activationReader.close();
+    if (!activation) throw new Error('FIXTURE_ACTIVATION');
+    const store = await openSqliteModelInvocationStore(f.ledger, sqlite);
+    let claim;
+    try {
+      claim = await store.claim({ command, requestDigest: modelInvocationRequestDigest(command),
+        actor: readLocalOsIdentity(), authorization: { revision: 'allow', ruleId: 'invoke' }, definition: f.definition, activation,
+        profile: historicalProfile, profileDigest: modelInvocationProfileDigest(historicalProfile), invocationId: 'historical-invocation', claimedAtMs: 1 });
+    } finally { store.close(); }
+    // Synthetic historical claim, not evidence that an old provider operation actually ran.
+    const encodedBefore = JSON.stringify(claim.receipt);
+    f.setProfile({ ...f.profile, adapter: { ...f.profile.adapter, version: 1 } }); await f.writeConfig();
+    expect(await invokeConfiguredModel(f.project, command, { env: f.env })).toEqual({ replayed: true, receipt: claim.receipt });
+    const inspected = await inspectConfiguredModelInvocation(f.project,
+      { schemaVersion: 1, scopeId: 'scope', invocationId: 'historical-invocation', reference }, { env: f.env });
+    expect(JSON.stringify(inspected.invocation)).toBe(encodedBefore); expect(f.requests).toBe(0);
+    await expect(invokeConfiguredModel(f.project, f.command('new'), { env: f.env }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });
+    const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
+    try { expect(await reader.loadReceipt('scope', 'new')).toBeNull(); expect(await reader.loadReceipt('scope', 'historical')).toEqual(claim.receipt); }
+    finally { reader.close(); }
+    expect(f.requests).toBe(0);
+  });
+
+  it('rejects normalized or credential-bearing endpoints before a durable claim or HTTP request', async () => {
+    const f = await fixture(), original = f.profile;
+    for (const suffix of ['?token=private', '#fragment', '/a/../b']) {
+      f.setProfile({ ...original, adapter: { ...original.adapter, definition: { ...original.adapter.definition,
+        endpoint: original.adapter.definition.endpoint + suffix } } }); await f.writeConfig();
+      await expect(invokeConfiguredModel(f.project, f.command('denied-endpoint'), { env: f.env }))
+        .rejects.toMatchObject({ code: 'OPENAI_CHAT_DEFINITION_INVALID' });
+    }
+    const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
+    try { expect(await reader.loadReceipt('scope', 'denied-endpoint')).toBeNull(); } finally { reader.close(); }
+    expect(f.requests).toBe(0);
   });
 });

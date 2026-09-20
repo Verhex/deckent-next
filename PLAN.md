@@ -645,3 +645,7 @@ PROVIDERS/A4B DONE — Fable2087 PASS with E-a text correction before M1; single
 PROVIDERS/A5 REVIEW — bounded private rejected response evidence, receipt/outcome2 and forward ledger15 migration; complete observation settles local capacity, partial remains unknown. Default receipt view withholds raw bytes; explicit current-policy inspect-evidence read is correlated and bounded. E-a runtime prerequisite and A5 no-resend/billing texts corrected. No real provider, automatic retention/purge, model cancellation or dogfood claim.
 
 PROVIDERS/A5 DONE — Fable2098 PASS closes B-b/D-a: receipt2/ledger15 preserve bounded rejected/partial response evidence; default metadata view and explicit inspect-evidence grant; all outcomes preflighted. Full1068/201+24native+18host. Retention/purge remains mandatory before sensitive provider data.
+
+PROVIDERS/A6 REVIEW — current native HTTP adapter2 requires explicit canonical endpoint data; no origin/default-route alias. Custom/root routes supported within existing loopback trust. Historical pinned profile evidence unchanged; incompatible new sends denied before claim/HTTP. No HTTPS/auth/remote provider claim.
+
+PROVIDERS/A6 DONE — independent Fable PASS: sole current adapter2 uses explicit canonical endpoint; historic profiles remain read-only evidence. Numeric-loopback scope; full1072/201+24native+18host. No real provider or retention completion claim.
