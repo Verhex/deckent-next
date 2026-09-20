@@ -43,21 +43,21 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
-        return { schemaVersion: 5, requestId: request.requestId, ok: true, result };
+        return { schemaVersion: 6, requestId: request.requestId, ok: true, result };
       }
       if (request.operation === 'shutdownService') {
         if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
         const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
-        return { response: { schemaVersion: 5, requestId: request.requestId, ok: true, result },
+        return { response: { schemaVersion: 6, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
       const result = await lifecycle.admit(() => request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent'
         ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
-      return { schemaVersion: 5, requestId: request.requestId, ok: true, result };
+      return { schemaVersion: 6, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: 5, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      return { schemaVersion: 6, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;

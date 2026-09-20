@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConfiguredModel,
   inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelInvocationStore, openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
-import { ModelActivationApplication, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
+import { openSqliteModelInvocationStore, openSqliteModelActivationStore, openSqliteModelActivationReader, createOpenAiChatNativePort, readLocalOsIdentity } from '#adapters/index.js';
+import { ModelInvocationApplication, ModelInvocationCancellationApplication, ModelActivationApplication, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
   verifyModelInvocationReceipt } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -198,4 +198,46 @@ describe('native endpoint version and historical receipt boundaries', () => {
     try { expect(await reader.loadReceipt('scope', 'denied-endpoint')).toBeNull(); } finally { reader.close(); }
     expect(f.requests).toBe(0);
   });
+});
+
+it('prevents real native HTTP when durable cancellation wins the send permission and never resends on replay', async () => {
+  const f = await fixture(), principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
+  const verifier = { async verify() { return principal; } }, authorization = { async authorize() { return { revision: 'fixture', ruleId: 'permit' }; } };
+  let notifyClaim!: () => void, releasePermit!: () => void, first = true, nextId = 0;
+  const claimReady = new Promise<void>(resolve => { notifyClaim = resolve; });
+  const permitGate = new Promise<void>(resolve => { releasePermit = resolve; });
+  const application = new ModelInvocationApplication(verifier, authorization,
+    new ModelBindingApplication({ async read() { return catalog; } }),
+    async () => openSqliteModelActivationReader(f.ledger, { busyTimeoutMs: sqlite.busyTimeoutMs }),
+    { async resolve() { return f.profile; } }, { resolve() { return createOpenAiChatNativePort(); } },
+    async () => {
+      const store = await openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid');
+      const originalPermit = store.permitSend.bind(store);
+      store.permitSend = async (...args) => {
+        if (first) { first = false; notifyClaim(); await permitGate; }
+        return originalPermit(...args);
+      };
+      return store;
+    }, { invocationId: () => `owned-${++nextId}`, ownerId: () => 'owned-runtime', now: Date.now });
+  const command = f.command('cancel-before-http'), pending = application.invoke(command);
+  // Observe rejections immediately while the independent cancellation writer is active.
+  const observed = pending.then(result => ({ result }), error => ({ error }));
+  try {
+    await claimReady;
+    const cancellation = new ModelInvocationCancellationApplication(verifier, authorization,
+      async () => openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid'), { now: Date.now });
+    const cancel = await cancellation.cancel({ schemaVersion: 1, commandId: 'explicit-cancel', scopeId: command.scopeId,
+      targetCommandId: command.commandId, reference, expectedRequestDigest: modelInvocationRequestDigest(command) });
+    expect(cancel.receipt.disposition).toBe('prevented');
+    releasePermit();
+    const completed = await observed;
+    if ('error' in completed) throw completed.error;
+    expect(completed.result.receipt.outcome).toMatchObject({ state: 'not-sent', cancellationCommandId: 'explicit-cancel' });
+    expect(f.requests).toBe(0);
+    expect(await application.invoke(command)).toEqual({ ...completed.result, replayed: true });
+    expect(f.requests).toBe(0);
+    // The same actual adapter and HTTP fixture remain reachable for a distinct authorized invocation.
+    expect((await application.invoke(f.command('following-http'))).receipt.outcome?.state).toBe('responded');
+    expect(f.requests).toBe(1);
+  } finally { releasePermit(); await observed; }
 });

@@ -18,7 +18,7 @@ function expectProtocolError(call: () => void, code: RuntimeServiceProtocolError
 }
 
 describe('runtime service protocol', () => {
-  it('accepts exactly the current v5 operation allowlist', () => {
+  it('accepts exactly the current v6 operation allowlist', () => {
     for (const operation of operations) expect(runtimeServiceOperationSchema.parse(operation)).toBe(operation);
     expect(() => runtimeServiceOperationSchema.parse('shutdown')).toThrow();
     expect(classifyRuntimeServiceOperation('invokeModel')).toBe('execution');
@@ -28,22 +28,23 @@ describe('runtime service protocol', () => {
   });
 
   it('requires input to be present and rejects old or extra request fields', () => {
-    const request = { schemaVersion: 5, requestId: 'request-1', operation: 'inspectRun', input: null };
+    const request = { schemaVersion: 6, requestId: 'request-1', operation: 'inspectRun', input: null };
     expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
     expect(() => runtimeServiceRequestSchema.parse({ ...request, schemaVersion: 2 })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, schemaVersion: 4 })).toThrow();
+    expect(() => runtimeServiceRequestSchema.parse({ ...request, schemaVersion: 5 })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, input: undefined })).not.toThrow();
-    const withoutInput = { schemaVersion: 5, requestId: 'request-1', operation: 'inspectRun' };
+    const withoutInput = { schemaVersion: 6, requestId: 'request-1', operation: 'inspectRun' };
     expect(() => runtimeServiceRequestSchema.parse(withoutInput)).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, extra: true })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...request, requestId: '' })).toThrow();
   });
 
   it('requires bounded delivery only for model invocation operations and validates descriptor-safe inputs', () => {
-    const invoke = { schemaVersion: 5, requestId: 'request-1', operation: 'invokeModel', input: invocation,
+    const invoke = { schemaVersion: 6, requestId: 'request-1', operation: 'invokeModel', input: invocation,
       delivery: { maxResultBytes: 1 } };
     expect(runtimeServiceRequestSchema.parse(invoke)).toEqual(invoke);
-    expect(runtimeServiceRequestSchema.parse({ schemaVersion: 5, requestId: 'request-2', operation: 'inspectModelInvocation',
+    expect(runtimeServiceRequestSchema.parse({ schemaVersion: 6, requestId: 'request-2', operation: 'inspectModelInvocation',
       input: inspection, delivery: { maxResultBytes: 2 } })).toMatchObject({ operation: 'inspectModelInvocation' });
     const purge = { ...invoke, operation: 'purgeModelInvocationContent', input: { schemaVersion: 1,
       commandId: 'purge', scopeId: 'scope-1', invocationId: 'invocation-1', reference, expectedContentDigest: 'a'.repeat(64) } };
@@ -55,15 +56,15 @@ describe('runtime service protocol', () => {
     expect(() => runtimeServiceRequestSchema.parse({ ...invoke, delivery: { maxResultBytes: 1.5 } })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...invoke, delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER + 1 } })).toThrow();
     expect(() => runtimeServiceRequestSchema.parse({ ...invoke, input: { ...invocation, nativeRequest: [] } })).toThrow();
-    expect(() => runtimeServiceRequestSchema.parse({ schemaVersion: 5, requestId: 'request-3', operation: 'inspectRun',
+    expect(() => runtimeServiceRequestSchema.parse({ schemaVersion: 6, requestId: 'request-3', operation: 'inspectRun',
       input: {}, delivery: { maxResultBytes: 1 } })).toThrow();
   });
 
-  it('derives an exact v5 success-envelope result capacity and rejects impossible or invalid limits', () => {
+  it('derives an exact v6 success-envelope result capacity and rejects impossible or invalid limits', () => {
     const requestId = 'request-1', responseMaxBytes = 512;
     const capacity = runtimeServiceResultCapacity(requestId, responseMaxBytes);
-    const exact = { schemaVersion: 5, requestId, ok: true, result: 'x'.repeat(capacity - 2) };
-    const overflow = { schemaVersion: 5, requestId, ok: true, result: 'x'.repeat(capacity - 1) };
+    const exact = { schemaVersion: 6, requestId, ok: true, result: 'x'.repeat(capacity - 2) };
+    const overflow = { schemaVersion: 6, requestId, ok: true, result: 'x'.repeat(capacity - 1) };
     expect(Buffer.byteLength(JSON.stringify(exact), 'utf8')).toBe(responseMaxBytes);
     expect(Buffer.byteLength(JSON.stringify(overflow), 'utf8')).toBe(responseMaxBytes + 1);
     expect(runtimeServiceResultCapacity(requestId, responseMaxBytes, capacity + 1)).toBe(capacity);
@@ -74,11 +75,11 @@ describe('runtime service protocol', () => {
   });
 
   it('requires success results and keeps failures closed and message-free', () => {
-    const success = { schemaVersion: 5, requestId: 'request-1', ok: true, result: null };
+    const success = { schemaVersion: 6, requestId: 'request-1', ok: true, result: null };
     expect(runtimeServiceResponseSchema.parse(success)).toEqual(success);
-    const withoutResult = { schemaVersion: 5, requestId: 'request-1', ok: true };
+    const withoutResult = { schemaVersion: 6, requestId: 'request-1', ok: true };
     expect(() => runtimeServiceResponseSchema.parse(withoutResult)).toThrow();
-    const failure = { schemaVersion: 5, requestId: 'request-1', ok: false,
+    const failure = { schemaVersion: 6, requestId: 'request-1', ok: false,
       error: { code: 'RUN_NOT_FOUND', category: 'error' } };
     expect(runtimeServiceResponseSchema.parse(failure)).toEqual(failure);
     expect(() => runtimeServiceResponseSchema.parse({ ...failure,
@@ -86,7 +87,7 @@ describe('runtime service protocol', () => {
   });
 
   it('validates response correlation after validating the response envelope', () => {
-    const response = { schemaVersion: 5, requestId: 'request-1', ok: true, result: {} };
+    const response = { schemaVersion: 6, requestId: 'request-1', ok: true, result: {} };
     expect(parseRuntimeServiceResponse('request-1', response)).toEqual(response);
     expect(() => parseRuntimeServiceResponse('request-2', response)).toThrowError(RuntimeServiceProtocolError);
     expect(() => parseRuntimeServiceResponse('request-1', { ...response, result: undefined, extra: true })).toThrow();

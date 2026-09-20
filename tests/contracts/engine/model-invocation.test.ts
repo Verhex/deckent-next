@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { IDENTITY_MAX_LENGTH } from '#domain/core/primitives/index.js';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationRequestEvidence, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt } from '#domain/core/model-invocation/index.js';
 import { ModelInvocationApplication, ModelInvocationInspectionApplication, ModelInvocationPurgeApplication, modelInvocationProfileDigest,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
-  createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
+  createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
   type ModelInvocationPurgeAdmission, type ModelInvocationPurgeResult, type ModelInvocationRecord,
   type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
 
@@ -25,25 +26,46 @@ const authorization = { revision: 'policy', ruleId: 'invoke' };
 
 function receipt(input: ModelInvocationAdmission, outcome: ModelInvocationReceipt['outcome'] = null): ModelInvocationReceipt {
   const request = modelInvocationRequestEvidence(input.command, input.requestDigest);
-  return { schemaVersion: 3, request, actor: input.actor, authorization: input.authorization, definition: input.definition,
+  return { schemaVersion: 4, request, actor: input.actor, authorization: input.authorization, definition: input.definition,
     activationRevision: input.activation.revision, profile: input.profile, profileDigest: input.profileDigest,
     claim: { scopeId: input.command.scopeId, commandId: input.command.commandId, invocationId: input.invocationId,
       requestDigest: input.requestDigest, profileDigest: input.profileDigest }, claimedAtMs: input.claimedAtMs, outcome };
 }
 function fixture(options: { nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
-  substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint } = {}) {
+  substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
+  permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
   let stored: ModelInvocationRecord | null = null, policy = 0, selectedProfile: ModelInvocationProfile = { ...profile, limits: { ...profile.limits, responseMaxBytes: options.responseLimit ?? profile.limits.responseMaxBytes } }, invocationSequence = 0;
   if (options.profilePadding) selectedProfile = { ...selectedProfile, adapter: { ...selectedProfile.adapter,
     definition: { padding: Array.from({ length: options.profilePadding }, () => null) } } };
   let waitingLoads = 0, releaseLoads: (() => void) | undefined;
   const loadBarrier = new Promise<void>(resolve => { releaseLoads = resolve; });
-  const calls = { claims: 0, sends: 0, bindings: 0, profiles: 0, activations: 0, closes: 0 };
+  const calls = { claims: 0, permissions: 0, sends: 0, bindings: 0, profiles: 0, activations: 0, closes: 0 };
   const store: ModelInvocationStore = {
     async loadReceipt() { const found = stored;
       if (options.concurrentBarrier && found === null && ++waitingLoads <= 2) { if (waitingLoads === 2) releaseLoads?.(); await loadBarrier; }
       return found; }, async loadInvocation() { return stored; },
     async claim(input) { calls.claims++; if (stored) return { replayed: true, record: stored };
       stored = { receipt: receipt(input), content: null, purge: null }; return { replayed: false, record: stored }; },
+    async permitSend(claim, ownerId, now) { calls.permissions++;
+      if (options.permission === 'denied') return { granted: false, record: stored!, control: { schemaVersion: 1, claim, reference,
+        send: { state: 'permitted', ownerId: 'other-runtime', permittedAtMs: now }, cancellation: null } };
+      if (options.permission === 'pending') return { granted: false, record: stored!,
+        control: { schemaVersion: 1, claim, reference, send: { state: 'pending' }, cancellation: null } };
+      if (options.permission === 'prevented' || options.permission === 'prevented-claimed' || options.permission === 'forged-terminal') {
+        const cancellation = { schemaVersion: 1 as const,
+          command: { schemaVersion: 1 as const, commandId: 'cancel', scopeId: claim.scopeId,
+            targetCommandId: claim.commandId, reference, expectedRequestDigest: claim.requestDigest }, claim,
+          actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance },
+          authorization: { revision: 'cancel-policy', ruleId: 'cancel' }, requestedAtMs: now,
+          disposition: 'prevented' as const };
+        if (options.permission !== 'prevented-claimed') stored = createModelInvocationPreventedRecord(stored!.receipt,
+          options.permission === 'forged-terminal' ? { ...cancellation,
+            command: { ...cancellation.command, commandId: 'forged-cancel' } } : cancellation);
+        return { granted: false, record: stored,
+          control: { schemaVersion: 1, claim, reference, send: { state: 'prevented' }, cancellation } };
+      }
+      return { granted: true, record: stored!, control: { schemaVersion: 1, claim, reference,
+        send: { state: 'permitted', ownerId: options.permission === 'foreign-owner' ? 'foreign' : ownerId, permittedAtMs: now }, cancellation: null } }; },
     async recordResponse(_claim, response, observedAtMs) { if (options.responseWriteError) throw new Error('SQL');
       const base = stored!.receipt; stored = createModelInvocationResponseRecord(base,
         options.substituteOutcome ? { ...response, native: { substituted: true } } : response, observedAtMs); return stored; },
@@ -64,7 +86,7 @@ function fixture(options: { nativeResult?: ModelInvocationNativeResult; profileP
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
       async send() { calls.sends++; if (options.sendError) throw new Error('RESET');
         return options.nativeResult ?? { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
-    }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, now: () => 10 });
+    }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10 });
   return { app, calls, store, get stored() { return stored; } };
 }
 
@@ -81,7 +103,7 @@ describe('model invocation application', () => {
         Buffer.from('{malformed useful response'), complete);
       const f = fixture({ nativeResult: { kind: 'rejected', evidence }, responseBound: 100n });
       const result = await f.app.invoke(command, undefined, undefined, { maxResultBytes: 10_000 });
-      expect(result.receipt.outcome).toMatchObject({ schemaVersion: 3, state: complete ? 'rejected' : 'unknown',
+      expect(result.receipt.outcome).toMatchObject({ schemaVersion: 4, state: complete ? 'rejected' : 'unknown',
         evidence: { body: { digest: evidence.body.digest, byteLength: evidence.body.byteLength } } });
       expect(JSON.stringify(result)).not.toContain(evidence.body.data);
       expect(f.stored?.content).toMatchObject({ kind: 'response-body', data: evidence.body.data });
@@ -133,19 +155,22 @@ describe('model invocation application', () => {
     const probe = await fixture().app.invoke(command), receipt = { ...probe.receipt, outcome: null };
     const descriptor = { schemaVersion: 1, kind: 'native-response', encoding: 'canonical-json', digest: 'f'.repeat(64),
       byteLength: Number.MAX_SAFE_INTEGER };
-    const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
+    const responded = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
       state: 'responded', content: descriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null,
       contentStatus: 'retained', purge: null }), 'utf8') - 4 + 100;
     const evidenceDescriptor = { ...descriptor, kind: 'response-body', encoding: 'base64' };
     const summary = { schemaVersion: 1, adapter: profile.adapter, reason: 'response-limit', httpStatus: null,
       body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
         complete: false, digest: 'f'.repeat(64) } };
-    const partial = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 3,
+    const partial = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
       state: 'unknown', reason: 'transport-error', evidence: summary, content: evidenceDescriptor,
       observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null }), 'utf8');
-    const required = Math.max(responded, partial), small = fixture({ responseBound: 100n });
-    await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: required - 1 }))
-      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    const notSent = Buffer.byteLength(JSON.stringify({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4, state: 'not-sent',
+      reason: 'cancelled-before-permission', cancellationCommandId: String.fromCharCode(0xd800).repeat(IDENTITY_MAX_LENGTH),
+      observedAtMs: Number.MAX_SAFE_INTEGER, content: null } }, response: null, contentStatus: 'not-captured', purge: null }), 'utf8');
+    const required = Math.max(responded, partial, notSent), small = fixture({ responseBound: 100n });
+    expect(required).toBe(notSent);
+    await expect(small.app.invoke(command, undefined, undefined, { maxResultBytes: required - 1 })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
     expect(small.calls).toMatchObject({ claims: 0, sends: 0 });
     const exact = fixture({ responseBound: 100n });
     expect((await exact.app.invoke(command, undefined, undefined, { maxResultBytes: required })).receipt.outcome?.state).toBe('responded');
@@ -190,6 +215,38 @@ describe('model invocation application', () => {
     await expect(f.app.invoke(command, undefined, undefined, { maxResultBytes: 1 })).rejects.toThrow('DENIED');
     expect(f.calls).toMatchObject({ claims: 0, sends: 0 });
   });
+
+});
+
+describe('model invocation send permission', () => {
+
+  it('never calls native HTTP when another owner holds permission or cancellation prevented it', async () => {
+    const denied = fixture({ permission: 'denied' });
+    await expect(denied.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+    expect(denied.calls).toMatchObject({ claims: 1, permissions: 1, sends: 0 });
+    const prevented = fixture({ permission: 'prevented' }), preventedResult = await prevented.app.invoke(command);
+    expect(preventedResult).toMatchObject({ replayed: false, receipt: { outcome: { state: 'not-sent',
+      reason: 'cancelled-before-permission', cancellationCommandId: 'cancel' } }, contentStatus: 'not-captured', purge: null });
+    expect(prevented.calls).toMatchObject({ claims: 1, permissions: 1, sends: 0 });
+  });
+
+  it('rejects every false permission tuple except an exact prevented settlement without native HTTP', async () => {
+    for (const permission of ['pending', 'prevented-claimed', 'forged-terminal'] as const) {
+      const f = fixture({ permission });
+      await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+      expect(f.calls).toMatchObject({ claims: 1, permissions: 1, sends: 0, closes: 1 });
+    }
+  });
+
+  it('rejects a forged granted permission owner without calling native HTTP', async () => {
+    const f = fixture({ permission: 'foreign-owner' });
+    await expect(f.app.invoke(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CORRUPT' });
+    expect(f.calls).toMatchObject({ claims: 1, permissions: 1, sends: 0, closes: 1 });
+  });
+
+});
+
+describe('model invocation application after permission', () => {
 
   it('does not claim or send when the trusted profile changes during preparation', async () => {
     const f = fixture({ changeProfile: true });

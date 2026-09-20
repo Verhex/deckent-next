@@ -59,7 +59,7 @@ export function verifyModelInvocationReceipt(input: unknown): ModelInvocationRec
     const definitionDigest = createHash('sha256').update(encodeModelBindingDefinition(receipt.definition), 'utf8').digest('hex');
     if (definitionDigest !== receipt.request.expectedBinding.digest) throw new Error('BINDING');
     const outcome = receipt.outcome;
-    if (outcome && outcome.state !== 'responded' && outcome.evidence) {
+    if (outcome && (outcome.state === 'unknown' || outcome.state === 'rejected') && outcome.evidence) {
       const summary = outcome.evidence, descriptor = outcome.content;
       if (!descriptor || summary.adapter.id !== receipt.profile.adapter.id
         || summary.adapter.version !== receipt.profile.adapter.version
@@ -73,7 +73,7 @@ export function verifyModelInvocationReceipt(input: unknown): ModelInvocationRec
 }
 /** One receipt shape for pre-effect delivery admission and durable claim writers. */
 export function createModelInvocationClaimReceipt(admission: ModelInvocationAdmission): ModelInvocationReceipt {
-  return verifyModelInvocationReceipt({ schemaVersion: 3,
+  return verifyModelInvocationReceipt({ schemaVersion: 4,
     request: modelInvocationRequestEvidence(admission.command, admission.requestDigest), actor: admission.actor,
     authorization: admission.authorization, definition: admission.definition, activationRevision: admission.activation.revision,
     profile: admission.profile, profileDigest: admission.profileDigest,

@@ -597,6 +597,7 @@
   "models.invocation.rejectedPurged": "ret alındı; yanıt içeriği silindi; çağrı kotasından düşüldü",
   "models.invocation.unknown": "sonuç belirsiz; kapasite korunuyor",
   "models.invocation.unknownPurged": "sonuç belirsiz; yanıt içeriği silindi",
+  "models.invocation.notSent": "hiç gönderilmedi; {command} iptali izin öncesinde gönderimi engelledi",
   "models.invocation.receipt": "Çağrı {id}, komut {command}: {state}.",
   "models.invocation.replayed": "Mevcut kayıt döndürüldü; istek tekrar gönderilmedi.",
   "models.invocation.purged": "Çağrı içeriği silindi: {id}.",

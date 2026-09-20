@@ -55,7 +55,9 @@ export function migrateModelInvocationContents(db: DatabaseSync): void {
   const receiptUpdate = db.prepare(`UPDATE model_invocations SET record=? WHERE scope_id=? AND invocation_id=?`);
   for (const { receipt, content } of converted) {
     if (content) contentInsert.run(receipt.claim.scopeId, receipt.claim.invocationId, JSON.stringify(content));
-    const result = receiptUpdate.run(JSON.stringify(receipt), receipt.claim.scopeId, receipt.claim.invocationId);
+    const outcome = receipt.outcome === null ? null : { ...receipt.outcome, schemaVersion: 3 };
+    const historical = { ...receipt, schemaVersion: 3, outcome };
+    const result = receiptUpdate.run(JSON.stringify(historical), receipt.claim.scopeId, receipt.claim.invocationId);
     if (result.changes !== 1) invalid();
   }
 }

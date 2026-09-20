@@ -36,11 +36,11 @@ describe('model invocation domain contract', () => {
     const requestDigest = sha(encodeModelInvocationRequest(command)), profileDigest = sha(encodeModelInvocationProfile(profile));
     const request = modelInvocationRequestEvidence(command, requestDigest);
     expect(request).not.toHaveProperty('nativeRequest');
-    const receipt = { schemaVersion: 3, request, actor: { id: 'actor', issuer: 'os', subject: '1', assurance: 'os-user' },
+    const receipt = { schemaVersion: 4, request, actor: { id: 'actor', issuer: 'os', subject: '1', assurance: 'os-user' },
       authorization: { revision: 'policy', ruleId: 'rule' }, definition, activationRevision: 1, profile, profileDigest,
       claim: { scopeId: 's', commandId: 'c', invocationId: 'i', requestDigest, profileDigest }, claimedAtMs: 1, outcome: null };
     expect(parseModelInvocationReceipt(receipt).request).toEqual(request);
-    expect(() => parseModelInvocationReceipt({ ...receipt, schemaVersion: 2 })).toThrow('MODEL_INVOCATION_INVALID');
+    expect(() => parseModelInvocationReceipt({ ...receipt, schemaVersion: 3 })).toThrow('MODEL_INVOCATION_INVALID');
     expect(() => parseModelInvocationReceipt({ ...receipt, profile: { ...profile, protocol: { family: 'other', version: '1' } } }))
       .toThrow('MODEL_INVOCATION_INVALID');
   });

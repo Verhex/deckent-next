@@ -15,3 +15,8 @@ export type { ModelInvocationResponseEvidence, ModelInvocationResponseSummary, M
 export { MODEL_INVOCATION_RECEIPT_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_VERSION, modelInvocationContentDescriptorSchema,
   modelInvocationNativeResultSchema, modelInvocationResponseContentSchema, parseModelInvocationNativeResult } from './internal/contract.js';
 export type { ModelInvocationNativeResult } from './internal/contract.js';
+export { modelInvocationCancellationCommandSchema, modelInvocationCancellationCommandInputSchema,
+  modelInvocationCancellationReceiptSchema, modelInvocationControlRecordSchema, modelInvocationSendStateSchema,
+  parseModelInvocationCancellationCommand, parseModelInvocationCancellationReceipt, parseModelInvocationControlRecord,
+  proposeModelInvocationSendPermission } from './internal/cancellation.js';
+export type { ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord } from './internal/cancellation.js';

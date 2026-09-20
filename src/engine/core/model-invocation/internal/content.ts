@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { counterSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
   modelActivationActorSchema, modelActivationAuthorizationSchema, modelInvocationPurgeCommandSchema,
   modelInvocationResponseContentSchema, parseModelInvocationNativeResponse, type ModelInvocationContentDescriptor,
+  parseModelInvocationCancellationReceipt, type ModelInvocationCancellationReceipt,
   parseModelInvocationPurgeReceipt, type ModelInvocationNativeResponse, type ModelInvocationPurgeReceipt, type ModelInvocationReceipt,
   type ModelInvocationResponseEvidence } from '#domain/index.js';
 import { verifyModelInvocationReceipt } from './evidence.js';
@@ -45,7 +46,7 @@ export function createModelInvocationResponseRecord(claimInput: unknown, respons
   observedAtMs: number): ModelInvocationRecord {
   const claim = claimReceipt(claimInput), response = parseModelInvocationNativeResponse(responseInput);
   const descriptor = nativeDescriptor(response);
-  return verifyModelInvocationRecord({ receipt: { ...claim, outcome: { schemaVersion: 3, state: 'responded', content: descriptor, observedAtMs } },
+  return verifyModelInvocationRecord({ receipt: { ...claim, outcome: { schemaVersion: 4, state: 'responded', content: descriptor, observedAtMs } },
     content: { schemaVersion: 1, kind: 'native-response', descriptor, response }, purge: null });
 }
 export function createModelInvocationEvidenceRecord(claimInput: unknown, evidenceInput: unknown,
@@ -53,14 +54,27 @@ export function createModelInvocationEvidenceRecord(claimInput: unknown, evidenc
   const claim = claimReceipt(claimInput);
   const evidence = verifyModelInvocationResponseEvidence(evidenceInput, claim.profile), descriptor = bodyDescriptor(evidence);
   return verifyModelInvocationRecord({ receipt: { ...claim, outcome: evidence.body.complete
-    ? { schemaVersion: 3, state: 'rejected', evidence: summarize(evidence), content: descriptor, observedAtMs }
-    : { schemaVersion: 3, state: 'unknown', reason: 'transport-error', evidence: summarize(evidence), content: descriptor, observedAtMs } },
+    ? { schemaVersion: 4, state: 'rejected', evidence: summarize(evidence), content: descriptor, observedAtMs }
+    : { schemaVersion: 4, state: 'unknown', reason: 'transport-error', evidence: summarize(evidence), content: descriptor, observedAtMs } },
   content: { schemaVersion: 1, kind: 'response-body', descriptor, data: evidence.body.data }, purge: null });
 }
 export function createModelInvocationUnknownRecord(claimInput: unknown, observedAtMs: number): ModelInvocationRecord {
   const claim = claimReceipt(claimInput);
-  return verifyModelInvocationRecord({ receipt: { ...claim, outcome: { schemaVersion: 3, state: 'unknown', reason: 'transport-error',
+  return verifyModelInvocationRecord({ receipt: { ...claim, outcome: { schemaVersion: 4, state: 'unknown', reason: 'transport-error',
     evidence: null, content: null, observedAtMs } }, content: null, purge: null });
+}
+export function createModelInvocationPreventedRecord(claimInput: unknown, cancellationInput: unknown): ModelInvocationRecord {
+  const claim = claimReceipt(claimInput);
+  let cancellation: ModelInvocationCancellationReceipt;
+  try { cancellation = parseModelInvocationCancellationReceipt(cancellationInput); }
+  catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
+  if (cancellation.disposition !== 'prevented' || !isDeepStrictEqual(cancellation.claim, claim.claim)
+    || !isDeepStrictEqual(cancellation.command.reference, claim.request.reference)) {
+    throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+  }
+  return verifyModelInvocationRecord({ receipt: { ...claim, outcome: { schemaVersion: 4, state: 'not-sent',
+    reason: 'cancelled-before-permission', cancellationCommandId: cancellation.command.commandId,
+    observedAtMs: cancellation.requestedAtMs, content: null } }, content: null, purge: null });
 }
 export function verifyModelInvocationPurgeReceipt(input: unknown): ModelInvocationPurgeReceipt {
   try { return parseModelInvocationPurgeReceipt(input); }
@@ -83,7 +97,8 @@ export function verifyModelInvocationRecord(input: unknown): ModelInvocationReco
     const purge = value['purge'] === null ? null : verifyModelInvocationPurgeReceipt(value['purge']);
     if (!outcome) { if (parsed !== null || purge !== null) throw new Error(); return Object.freeze({ receipt, content: null, purge: null }); }
     if (outcome.content === null) {
-      if (parsed !== null || purge !== null || outcome.state !== 'unknown' || outcome.evidence !== null) throw new Error();
+      if (parsed !== null || purge !== null || (outcome.state === 'unknown' && outcome.evidence !== null)
+        || (outcome.state !== 'unknown' && outcome.state !== 'not-sent')) throw new Error();
       return Object.freeze({ receipt, content: null, purge: null });
     }
     if (purge) {

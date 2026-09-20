@@ -9,7 +9,7 @@ export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number(
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent';
 // v5 local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
-export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(5), requestId: identitySchema,
+export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(6), requestId: identitySchema,
   operation: runtimeServiceOperationSchema, input: z.unknown(), delivery: runtimeServiceDeliverySchema.optional(),
 }).strict().refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).superRefine((value, context) => {
   if (invocationOperation(value.operation)) {
@@ -25,9 +25,9 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(5
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_FORBIDDEN' });
   }
 }).readonly();
-const success = z.object({ schemaVersion: z.literal(5), requestId: identitySchema, ok: z.literal(true), result: z.unknown() })
+const success = z.object({ schemaVersion: z.literal(6), requestId: identitySchema, ok: z.literal(true), result: z.unknown() })
   .strict().refine(value => Object.hasOwn(value, 'result'), { path: ['result'], message: 'RUNTIME_SERVICE_RESULT_REQUIRED' }).readonly();
-const failure = z.object({ schemaVersion: z.literal(5), requestId: identitySchema, ok: z.literal(false),
+const failure = z.object({ schemaVersion: z.literal(6), requestId: identitySchema, ok: z.literal(false),
   error: z.object({ code: identitySchema, category: z.enum(['error', 'usage', 'config']) }).strict().readonly(),
 }).strict().readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();
@@ -55,7 +55,7 @@ export function runtimeServiceResultCapacity(requestId: string, responseMaxBytes
     throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_DELIVERY_INVALID');
   }
   const nullBytes = BigInt(Buffer.byteLength('null', 'utf8'));
-  const envelopeBytes = BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 5, requestId: id, ok: true, result: null }), 'utf8'));
+  const envelopeBytes = BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 6, requestId: id, ok: true, result: null }), 'utf8'));
   const wireCapacity = BigInt(responseMaxBytes) - envelopeBytes + nullBytes;
   if (wireCapacity <= 0n) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
   const capacity = requestedMaxResultBytes === undefined ? wireCapacity : wireCapacity < BigInt(requestedMaxResultBytes)

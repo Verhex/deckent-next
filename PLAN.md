@@ -659,3 +659,7 @@ PROVIDERS/A7B REVIEW — authorized logical content purge with durable actor/aud
 PROVIDERS/A7B DONE — Fable2120 PASS closes authorized logical retention/purge gate; atomic digest-bound actor/audit and stable tombstone preserve outcome/counters/no-resend. Shared runtime SDK/CLI/MCP; full1089/204+24native+18host, architecture0, lint clean. No physical WAL/media/backup erasure claim; cancellation and real-provider credential/spend admission remain open.
 
 CANCEL/FAIRNESS-DIAG instrumentation: PASS Fable2124; one test-only slice, full1089+24native+18host. Original worker-ready root cause remains OPEN; no timeout/retry/assertion changes.
+
+PROVIDERS/A8A: WIP atomic one-shot model send permission and current-policy durable cancellation admission; receipt/outcome4, ledger18 forward-only, runtime wire6. Pre-permission cancellation proves not-sent; post-permission unknown holds capacity. Real HTTP no-send and independent writer races. A8B runtime cancellation delivery/recovery and public cancel surfaces remain open; no full A8/dogfood/provider readiness claim.
+
+PROVIDERS/A8A DONE — Fable2130 PASS, partial A8: atomic single-use send permission, cancellation-before-permission prevention and immutable cancellation audit; receipt4/ledger18/wire6. Full1111/208+24native+18host. Historical control remains unobserved; unknown capacity is retained. Runtime delivery, durable recovery and public cancellation remain A8B WIP.

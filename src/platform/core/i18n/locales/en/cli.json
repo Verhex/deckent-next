@@ -597,6 +597,7 @@
   "models.invocation.rejectedPurged": "rejection received; response content has been purged; counts toward the total call quota",
   "models.invocation.unknown": "outcome unknown; capacity retained",
   "models.invocation.unknownPurged": "outcome unknown; response content has been purged",
+  "models.invocation.notSent": "never sent; cancellation {command} prevented dispatch before permission",
   "models.invocation.receipt": "Invocation {id}, command {command}: {state}.",
   "models.invocation.replayed": "Existing receipt returned; request was not sent again.",
   "models.invocation.purged": "Invocation content purged: {id}.",

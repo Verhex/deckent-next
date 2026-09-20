@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, createModelInvocationClaimReceipt,
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
-  createModelInvocationUnknownRecord, parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand,
+  createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, parseModelInvocationInspectionForQuery, parseModelInvocationResultForCommand,
   parseModelInvocationPurgeResultForCommand, verifyModelInvocationRecord } from '#engine/core/model-invocation/index.js';
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'provider', version: 1,
@@ -104,6 +104,34 @@ describe('model invocation runtime result correlation', () => {
       .toThrow('MODEL_INVOCATION_CORRUPT');
   });
 
+});
+
+describe('model invocation pre-permission result', () => {
+  it('settles exact pre-permission prevention as never sent with no purgeable content', () => {
+    const cancellation = { schemaVersion: 1 as const,
+      command: { schemaVersion: 1 as const, commandId: 'cancel', scopeId: 'scope', targetCommandId: 'command', reference,
+        expectedRequestDigest: receipt.claim.requestDigest }, claim: receipt.claim, actor: receipt.actor,
+      authorization: { revision: 'policy-2', ruleId: 'cancel' }, requestedAtMs: 7, disposition: 'prevented' as const };
+    const prevented = createModelInvocationPreventedRecord(receipt, cancellation);
+    expect(prevented).toMatchObject({ receipt: { schemaVersion: 4, outcome: { schemaVersion: 4, state: 'not-sent',
+      reason: 'cancelled-before-permission', cancellationCommandId: 'cancel', observedAtMs: 7, content: null } },
+    content: null, purge: null });
+    const result = { replayed: false, receipt: prevented.receipt, response: null,
+      contentStatus: 'not-captured' as const, purge: null };
+    expect(parseModelInvocationResultForCommand(command, result)).toEqual(result);
+    expect(() => createModelInvocationPreventedRecord(receipt, { ...cancellation, disposition: 'requested' }))
+      .toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(() => createModelInvocationPreventedRecord(receipt, { ...cancellation,
+      claim: { ...receipt.claim, invocationId: 'foreign' } })).toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(() => createModelInvocationPreventedRecord(receipt, { ...cancellation,
+      command: { ...cancellation.command, reference: { ...reference, modelId: 'foreign' } } }))
+      .toThrow('MODEL_INVOCATION_CORRUPT');
+    expect(() => verifyModelInvocationRecord({ ...prevented, purge: { unexpected: true } }))
+      .toThrow('MODEL_INVOCATION_CORRUPT');
+  });
+});
+
+describe('model invocation purge and hostile input correlation', () => {
   it('correlates a purge tombstone while preserving the immutable settlement', () => {
     const response = { schemaVersion: 1 as const, native: { id: 'sensitive' }, usage: null };
     const retained = createModelInvocationResponseRecord(receipt, response, 2);

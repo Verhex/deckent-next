@@ -10,7 +10,8 @@ export function migrateModelInvocationPurge(db: DatabaseSync): void {
     let contents = 0;
     for (const row of rows) {
       if (typeof row.record !== 'string' || (row.content_record !== null && typeof row.content_record !== 'string')) throw new Error();
-      const record = verifyModelInvocationRecord({ receipt: JSON.parse(row.record),
+      const old = JSON.parse(row.record), outcome = old.outcome === null ? null : { ...old.outcome, schemaVersion: 4 };
+      const record = verifyModelInvocationRecord({ receipt: { ...old, schemaVersion: 4, outcome },
         content: row.content_record === null ? null : JSON.parse(row.content_record as string), purge: null });
       const receipt = record.receipt;
       if (receipt.claim.scopeId !== row.scope_id || receipt.claim.invocationId !== row.invocation_id

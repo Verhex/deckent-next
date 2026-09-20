@@ -7,6 +7,7 @@ import { migrateImmediateEligibility } from './migration-v12.js';
 import { migrateModelInvocationEvidence } from './migration-v15.js';
 import { migrateModelInvocationContents } from './migration-v16.js';
 import { migrateModelInvocationPurge } from './migration-v17.js';
+import { migrateModelInvocationControl } from './migration-v18.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
@@ -15,7 +16,7 @@ export const SERVICE_SHUTDOWN_LEDGER_VERSION = 10;
 export const INSTALLATION_OWNERSHIP_LEDGER_VERSION = 11;
 export const IMMEDIATE_ELIGIBILITY_LEDGER_VERSION = 12;
 export const MODEL_ACTIVATION_LEDGER_VERSION = 13;
-export const MODEL_INVOCATION_LEDGER_VERSION = 17;
+export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const CURRENT_LEDGER_VERSION = MODEL_INVOCATION_LEDGER_VERSION;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
@@ -48,6 +49,7 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   15: '',
   16: '',
   17: '',
+  18: '',
 });
 export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
@@ -90,6 +92,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 17) {
       migrateModelInvocationPurge(db);
       db.exec('PRAGMA user_version=17;');
+      continue;
+    }
+    if (next === 18) {
+      migrateModelInvocationControl(db);
+      db.exec('PRAGMA user_version=18;');
       continue;
     }
     const sql = migrations[next];

@@ -374,3 +374,5 @@ PROVIDERS/A7A: store model response content separately from immutable receipts; 
 PROVIDERS/A7B: authorize logical model response-content purge with an immutable audit and explicit purged status across SDK, CLI and MCP; preserve invocation outcomes and quota.
 
 CANCEL/FAIRNESS-DIAG: capture bounded execution, workspace and owned Docker state/log evidence on readiness or cancellation failure; preserve existing assertions and timing. Fable2124 PASS covers diagnostics only.
+
+PROVIDERS/A8A: atomically prevent model sends when cancellation wins before send permission; retain auditable intent and honest uncertainty after permission without replaying calls.

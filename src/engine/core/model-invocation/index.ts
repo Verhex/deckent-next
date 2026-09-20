@@ -7,7 +7,7 @@ export { parseModelInvocationInspectionForQuery, parseModelInvocationPurgeResult
   parseModelInvocationResultForCommand } from './internal/result.js';
 export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationTargetId,
   parseModelInvocationAdmission, sameModelInvocationRequest, verifyModelInvocationReceipt, createModelInvocationClaimReceipt } from './internal/evidence.js';
-export { createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
+export { createModelInvocationEvidenceRecord, createModelInvocationPreventedRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
   parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './internal/content.js';
 export type { ModelInvocationDelivery } from './internal/delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
@@ -15,3 +15,7 @@ export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocat
   ModelInvocationPurgeAdmission, ModelInvocationPurgeResult, ModelInvocationPurgeStore, ModelInvocationStoreErrorCode } from './internal/port.js';
 
 export { createModelInvocationResponseEvidence, verifyModelInvocationResponseEvidence, modelInvocationResponseEvidenceUpperBound } from './internal/response-evidence.js';
+
+export type { ModelInvocationCancellationAdmission, ModelInvocationCancellationResult, ModelInvocationCancellationStore,
+  ModelInvocationSendPermission } from './internal/port.js';
+export { ModelInvocationCancellationApplication, parseModelInvocationCancellationAdmission } from './internal/cancellation.js';

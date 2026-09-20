@@ -1,5 +1,5 @@
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
-  parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
+  parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, parseModelInvocationControlRecord, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
   type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
   type ModelInvocationPurgeReceipt, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -8,7 +8,7 @@ import type { ModelBindingApplication } from '#engine/core/provider-catalog/inde
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, parseModelInvocationAdmission,
   sameModelInvocationRequest, createModelInvocationClaimReceipt } from './evidence.js';
 import { verifyModelInvocationResponseEvidence } from './response-evidence.js';
-import { createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
+import { createModelInvocationPreventedRecord, createModelInvocationEvidenceRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
   parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './content.js';
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
@@ -16,7 +16,7 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInv
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
-  authorize(action: 'invoke' | 'inspect' | 'inspect-content' | 'purge-content', target: { readonly scopeId: string; readonly reference: ModelReference },
+  authorize(action: 'invoke' | 'inspect' | 'inspect-content' | 'purge-content' | 'cancel-invocation', target: { readonly scopeId: string; readonly reference: ModelReference },
     principal: VerifiedPrincipal): Promise<ModelInvocationAuthorization>;
 }
 export interface ModelInvocationProfileSource {
@@ -31,7 +31,7 @@ export interface ModelInvocationNativePort {
   send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult>;
 }
 export interface ModelInvocationNativeRegistry { resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null }
-export interface ModelInvocationRuntime { invocationId(): string; now(): number }
+export interface ModelInvocationRuntime { invocationId(): string; ownerId(): string; now(): number }
 export interface ModelInvocationResult { readonly replayed: boolean; readonly receipt: ModelInvocationReceipt;
   readonly response: ModelInvocationNativeResponse | null; readonly contentStatus: 'retained' | 'not-captured' | 'purged';
   readonly purge: ModelInvocationPurgeReceipt | null }
@@ -151,6 +151,24 @@ export class ModelInvocationApplication {
       const claimResult = checkedResult(await store.claim(admission), command, requestDigest, actor, admission);
       if (claimResult.replayed) return checkInvocationResultDelivery(publicResult(true, claimResult.record), delivery);
       const claimReceipt = claimResult.record.receipt;
+      const ownerId = identitySchema.parse(this.runtime.ownerId());
+      const permission = await store.permitSend(claimReceipt.claim, ownerId, this.runtime.now());
+      const control = parseModelInvocationControlRecord(permission.control), permittedRecord = verifyModelInvocationRecord(permission.record);
+      if (typeof permission.granted !== 'boolean' || !isDeepStrictEqual(control.claim, claimReceipt.claim)
+        || !isDeepStrictEqual(control.reference, claimReceipt.request.reference)
+        || !isDeepStrictEqual({ ...permittedRecord.receipt, outcome: null }, claimReceipt)
+        || (permission.granted && (control.send.state !== 'permitted' || control.send.ownerId !== ownerId
+          || control.cancellation !== null || permittedRecord.receipt.outcome !== null))) {
+        throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      }
+      if (!permission.granted) {
+        // This invocation just created the claim. A denied permit can only complete it with an exact concurrent cancellation.
+        if (control.send.state !== 'prevented' || !control.cancellation
+          || !isDeepStrictEqual(permittedRecord, createModelInvocationPreventedRecord(claimReceipt, control.cancellation))) {
+          throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+        }
+        return checkInvocationResultDelivery(publicResult(false, permittedRecord), delivery);
+      }
       let response;
       try {
         response = parseModelInvocationNativeResult(await native.send(prepared, signal));

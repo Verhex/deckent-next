@@ -35,7 +35,8 @@ function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed
   const state = receipt.outcome === null ? t('models.invocation.claimed', {}, locale)
     : receipt.outcome.state === 'responded' ? (purge ? t('models.invocation.respondedPurged', {}, locale) : t('models.invocation.responded', {}, locale))
       : receipt.outcome.state === 'rejected' ? (purge ? t('models.invocation.rejectedPurged', {}, locale) : t('models.invocation.rejected', {}, locale))
-        : purge ? t('models.invocation.unknownPurged', {}, locale) : t('models.invocation.unknown', {}, locale);
+        : receipt.outcome.state === 'unknown' ? (purge ? t('models.invocation.unknownPurged', {}, locale) : t('models.invocation.unknown', {}, locale))
+          : t('models.invocation.notSent', { command: receipt.outcome.cancellationCommandId }, locale);
   return [t('models.invocation.receipt', { id: receipt.claim.invocationId, command: receipt.claim.commandId, state }, locale),
     ...(replayed === true ? [t('models.invocation.replayed', {}, locale)] : []),
     ...(purge ? [t('models.invocation.purged', { id: receipt.claim.invocationId }, locale), t('models.invocation.purgeNotice', {}, locale)] : []),

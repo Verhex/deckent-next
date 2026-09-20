@@ -51,8 +51,9 @@ it('claims one canonical record, replays it, and retains a null-content unknown 
   const input = admission(base, 'command-1', 'invocation-1'), first = await store.claim(input);
   expect(first).toMatchObject({ replayed: false, record: { receipt: { outcome: null }, content: null } });
   expect(await store.claim({ ...input, invocationId: 'ignored-on-replay' })).toEqual({ replayed: true, record: first.record });
+  await store.permitSend(first.record.receipt.claim, 'sender', 10);
   const unknown = await store.recordUnknown(first.record.receipt.claim, 'transport-error', 11);
-  expect(unknown).toMatchObject({ receipt: { outcome: { schemaVersion: 3, state: 'unknown', evidence: null, content: null } }, content: null });
+  expect(unknown).toMatchObject({ receipt: { outcome: { schemaVersion: 4, state: 'unknown', evidence: null, content: null } }, content: null });
   await expect(store.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
   store.close();
   const db = new DatabaseSync(base.path, { readOnly: true });
@@ -66,8 +67,9 @@ it('separates native response content from the durable receipt and returns the s
   const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const claim = await store.claim(admission(base, 'command-1', 'invocation-1'));
   const response = { schemaVersion: 1 as const, native: { id: 'secret-response', choices: [{ message: { content: 'sensitive result' } }] }, usage: { total_tokens: 3 } };
+  await store.permitSend(claim.record.receipt.claim, 'sender', 19);
   const settled = await store.recordResponse(claim.record.receipt.claim, response, 20);
-  expect(settled.receipt.outcome).toMatchObject({ schemaVersion: 3, state: 'responded', content: { kind: 'native-response', encoding: 'canonical-json' } });
+  expect(settled.receipt.outcome).toMatchObject({ schemaVersion: 4, state: 'responded', content: { kind: 'native-response', encoding: 'canonical-json' } });
   expect(settled.content).toMatchObject({ kind: 'native-response', response });
   expect(await store.recordResponse(claim.record.receipt.claim, response, 20)).toEqual(settled);
   store.close();
@@ -85,6 +87,7 @@ it('keeps only evidence summaries in rejected and partial receipts while preserv
   const complete = createModelInvocationResponseEvidence({ id: 'loopback-http', version: 1 }, 'http-status', 429, completeBytes, true);
   const rejectedBase = await fixture(), rejectedStore = await openSqliteModelInvocationStore(rejectedBase.path, options, 'forbid');
   const rejectedClaim = await rejectedStore.claim(admission(rejectedBase, 'reject', 'reject-id'));
+  await rejectedStore.permitSend(rejectedClaim.record.receipt.claim, 'sender', 29);
   const rejected = await rejectedStore.recordRejected(rejectedClaim.record.receipt.claim, complete, 30);
   expect(rejected).toMatchObject({ receipt: { outcome: { state: 'rejected', evidence: { body: { digest: complete.body.digest } }, content: { kind: 'response-body' } } },
     content: { kind: 'response-body', data: complete.body.data } });
@@ -97,6 +100,7 @@ it('keeps only evidence summaries in rejected and partial receipts while preserv
   const partialBase = await fixture(2, 1), partialStore = await openSqliteModelInvocationStore(partialBase.path, options, 'forbid');
   const partialClaim = await partialStore.claim(admission(partialBase, 'partial', 'partial-id'));
   const partial = createModelInvocationResponseEvidence({ id: 'loopback-http', version: 1 }, 'interrupted', null, Buffer.from('prefix'), false, 10);
+  await partialStore.permitSend(partialClaim.record.receipt.claim, 'sender', 30);
   const unknown = await partialStore.recordUnknown(partialClaim.record.receipt.claim, 'transport-error', 31, partial);
   expect(unknown.receipt.outcome).toMatchObject({ state: 'unknown', evidence: { body: { observedBytes: 10, complete: false } }, content: { kind: 'response-body' } });
   expect(unknown.content).toMatchObject({ kind: 'response-body', data: partial.body.data });
@@ -106,7 +110,8 @@ it('keeps only evidence summaries in rejected and partial receipts while preserv
 
 it('rolls back allocation and receipt writes when the content insert fails', async () => {
   const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
-  const claim = await store.claim(admission(base, 'command-1', 'invocation-1')); store.close();
+  const claim = await store.claim(admission(base, 'command-1', 'invocation-1'));
+  await store.permitSend(claim.record.receipt.claim, 'sender', 19); store.close();
   const db = new DatabaseSync(base.path);
   db.exec(`CREATE TRIGGER reject_content BEFORE INSERT ON model_invocation_contents
     BEGIN SELECT RAISE(ABORT,'fixture content failure'); END;`);
@@ -125,6 +130,7 @@ it('rolls back allocation and receipt writes when the content insert fails', asy
 it('fails closed on missing, extra, or descriptor-corrupted content rows', async () => {
   const base = await fixture(4, 4), seed = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const responseClaim = await seed.claim(admission(base, 'response', 'response-id'));
+  await seed.permitSend(responseClaim.record.receipt.claim, 'sender', 19);
   await seed.recordResponse(responseClaim.record.receipt.claim, { schemaVersion: 1, native: { id: 'result' }, usage: null }, 20);
   const claimed = await seed.claim(admission(base, 'claimed', 'claimed-id')); seed.close();
   const mutate = new DatabaseSync(base.path);
@@ -139,6 +145,7 @@ it('fails closed on missing, extra, or descriptor-corrupted content rows', async
 
   const descriptorBase = await fixture(), descriptorStore = await openSqliteModelInvocationStore(descriptorBase.path, options, 'forbid');
   const descriptorClaim = await descriptorStore.claim(admission(descriptorBase, 'descriptor', 'descriptor-id'));
+  await descriptorStore.permitSend(descriptorClaim.record.receipt.claim, 'sender', 19);
   await descriptorStore.recordResponse(descriptorClaim.record.receipt.claim, { schemaVersion: 1, native: { id: 'result' }, usage: null }, 20);
   descriptorStore.close();
   const damage = new DatabaseSync(descriptorBase.path);
@@ -156,6 +163,7 @@ it('releases in-flight once for a definitive response while lifetime count never
   const base = await fixture(2, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const first = await store.claim(admission(base, 'command-1', 'invocation-1'));
   const response = { schemaVersion: 1 as const, native: { id: 'response-1', choices: [] }, usage: { total_tokens: 3 } };
+  await store.permitSend(first.record.receipt.claim, 'sender', 18);
   await expect(store.recordResponse(first.record.receipt.claim,
     { schemaVersion: 1, native: { body: 'x'.repeat(5_000) }, usage: null }, 19)).rejects.toThrow('MODEL_INVOCATION_CORRUPT');
   expect((await store.loadInvocation('scope', 'invocation-1'))?.receipt.outcome).toBeNull();
@@ -190,6 +198,7 @@ it('reports immutable allocation ceiling conflicts without mutation and rolls al
   const db = new DatabaseSync(base.path); db.exec(`CREATE TRIGGER reject_invocation BEFORE INSERT ON model_invocations
     WHEN NEW.command_id='command-2' BEGIN SELECT RAISE(ABORT,'fixture invocation failure'); END;`); db.close();
   const failing = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  await failing.permitSend(first.record.receipt.claim, 'sender', 19);
   await failing.recordResponse(first.record.receipt.claim, { schemaVersion: 1, native: {}, usage: null }, 20);
   await expect(failing.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_UNAVAILABLE'); failing.close();
   const check = new DatabaseSync(base.path, { readOnly: true });
@@ -240,6 +249,7 @@ it('rejects canonical receipt substitution and missing canonical history behind 
   const missing = await fixture(3, 2), missingSeed = await openSqliteModelInvocationStore(missing.path, options, 'forbid');
   await missingSeed.claim(admission(missing, 'command-1', 'invocation-1')); missingSeed.close();
   const missingDb = new DatabaseSync(missing.path);
+  missingDb.prepare('DELETE FROM model_invocation_controls WHERE scope_id=? AND invocation_id=?').run('scope', 'invocation-1');
   missingDb.prepare('DELETE FROM model_invocations WHERE scope_id=? AND command_id=?').run('scope', 'command-1'); missingDb.close();
   const missingStore = await openSqliteModelInvocationStore(missing.path, options, 'forbid');
   await expect(missingStore.claim(admission(missing, 'command-1', 'replacement-invocation'))).rejects.toThrow('MODEL_INVOCATION_CORRUPT'); missingStore.close();
@@ -259,7 +269,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
   await expect(openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(oldBytes);
   const writer = await openSqliteModelInvocationStore(path, options, 'allow'); writer.close();
-  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(17);
+  const migrated = new DatabaseSync(path, { readOnly: true }); expect(migrated.prepare('PRAGMA user_version').get()?.user_version).toBe(18);
   expect(migrated.prepare('SELECT * FROM model_activations').all()).toEqual(before); migrated.close();
   const reader = await openSqliteModelInvocationReader(path, { busyTimeoutMs: 10 });
   expect('claim' in reader).toBe(false); expect('recordResponse' in reader).toBe(false); reader.close();

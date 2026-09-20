@@ -39,7 +39,7 @@ async function invoke(input: ModelInvocationCommand,
         return createOpenAiChatNativePort();
       } },
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
-      { invocationId: randomUUID, now: Date.now });
+      { invocationId: randomUUID, ownerId: randomUUID, now: Date.now });
     return await application.invoke(command, undefined, signal, delivery);
   } catch (error) { throw queryFailure(error); }
 }

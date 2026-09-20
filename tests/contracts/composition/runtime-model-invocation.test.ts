@@ -112,7 +112,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 5, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await observed; raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -132,7 +132,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 5, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -144,7 +144,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through wire3 a
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 5, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: 6, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await expiryObserved; expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });

@@ -42,14 +42,22 @@ async function seedV16(path: string) {
   };
   const store = await openSqliteModelInvocationStore(path, options, 'allow');
   const responded = await store.claim(admission('responded-command', 'responded-invocation'));
+  await store.permitSend(responded.record.receipt.claim, 'migration-fixture', 11);
   await store.recordResponse(responded.record.receipt.claim, { schemaVersion: 1, native: { id: 'sensitive-response' }, usage: null }, 20);
   const unknown = await store.claim(admission('unknown-command', 'unknown-invocation'));
+  await store.permitSend(unknown.record.receipt.claim, 'migration-fixture', 11);
   await store.recordUnknown(unknown.record.receipt.claim, 'transport-error', 21);
   store.close();
 
   const db = new DatabaseSync(path);
   try {
-    db.exec(`ALTER TABLE model_invocation_contents RENAME TO model_invocation_contents_v17;
+    for (const row of db.prepare('SELECT invocation_id,record FROM model_invocations').all() as Array<{ invocation_id: string; record: string }>) {
+      const receipt = JSON.parse(row.record); receipt.schemaVersion = 3;
+      if (receipt.outcome) receipt.outcome.schemaVersion = 3;
+      db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(receipt), row.invocation_id);
+    }
+    db.exec(`DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+      ALTER TABLE model_invocation_contents RENAME TO model_invocation_contents_v17;
       DROP TABLE model_invocation_content_purges;
       CREATE TABLE model_invocation_contents(scope_id TEXT NOT NULL,invocation_id TEXT NOT NULL,record TEXT NOT NULL,
         PRIMARY KEY(scope_id,invocation_id),FOREIGN KEY(scope_id,invocation_id) REFERENCES model_invocations(scope_id,invocation_id));
@@ -69,7 +77,7 @@ function inventory(path: string) {
   } finally { db.close(); }
 }
 
-it('migrates a genuine ledger16 content inventory to v17 without changing retained records', async () => workspace(async path => {
+it('migrates a genuine ledger16 content inventory through the current ledger without changing retained records', async () => workspace(async path => {
   await seedV16(path);
   const before = inventory(path);
   expect(before.version).toBe(16);
@@ -77,8 +85,9 @@ it('migrates a genuine ledger16 content inventory to v17 without changing retain
   expect(String(before.contents[0]?.record)).toContain('sensitive-response');
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
   const after = inventory(path);
-  expect(after.version).toBe(17);
-  expect(after.invocations).toEqual(before.invocations);
+  expect(after.version).toBe(18);
+  expect(after.invocations.map(row => ({ ...row, record: undefined }))).toEqual(before.invocations.map(row => ({ ...row, record: undefined })));
+  for (const row of after.invocations) expect(JSON.parse(String(row.record))).toMatchObject({ schemaVersion: 4 });
   expect(after.contents.map(row => ({ scope_id: row.scope_id, invocation_id: row.invocation_id, record: row.record }))).toEqual(before.contents);
   expect(after.contents.map(row => row.purge_command_id)).toEqual([null]);
   expect(after.tables.map(table => table.name)).toEqual(['model_invocation_content_purges', 'model_invocation_contents']);

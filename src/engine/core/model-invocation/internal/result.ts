@@ -22,8 +22,7 @@ const purgeResultSchema = z.object({ replayed: z.boolean(), receipt: z.unknown()
 const same = (left: unknown, right: unknown) => isDeepStrictEqual(left, right);
 function corrupt(): never { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 function expectedStatus(receipt: ReturnType<typeof verifyModelInvocationReceipt>, purge: ModelInvocationPurgeReceipt | null) {
-  return purge ? 'purged' : receipt.outcome === null
-    || (receipt.outcome.state === 'unknown' && receipt.outcome.content === null) ? 'not-captured' : 'retained';
+  return purge ? 'purged' : receipt.outcome === null || receipt.outcome.content === null ? 'not-captured' : 'retained';
 }
 export function parseModelInvocationResultForCommand(commandInput: unknown, input: unknown): ModelInvocationResult {
   try {

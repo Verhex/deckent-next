@@ -1,5 +1,5 @@
 import type { ModelActivationRecord, ModelBindingDefinition, ModelInvocationActor, ModelInvocationAuthorization,
-  ModelInvocationClaim, ModelInvocationCommand, ModelInvocationNativeResponse, ModelInvocationProfile,
+  ModelInvocationClaim, ModelInvocationCommand, ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord, ModelInvocationNativeResponse, ModelInvocationProfile,
   ModelInvocationPurgeCommand, ModelInvocationPurgeReceipt, ModelInvocationReceipt, ModelInvocationResponseContent,
   ModelInvocationResponseEvidence, ModelInvocationUnknownReason } from '#domain/index.js';
 
@@ -22,9 +22,21 @@ export interface ModelInvocationPurgeAdmission { readonly command: ModelInvocati
   readonly authorization: ModelInvocationAuthorization; readonly purgedAtMs: number }
 export interface ModelInvocationPurgeResult { readonly replayed: boolean; readonly receipt: ModelInvocationPurgeReceipt }
 export interface ModelInvocationPurgeStore { purgeContent(input: ModelInvocationPurgeAdmission): Promise<ModelInvocationPurgeResult>; close(): void }
+export interface ModelInvocationCancellationAdmission { readonly command: ModelInvocationCancellationCommand;
+  readonly actor: ModelInvocationActor; readonly authorization: ModelInvocationAuthorization; readonly requestedAtMs: number }
+export interface ModelInvocationCancellationResult { readonly replayed: boolean; readonly receipt: ModelInvocationCancellationReceipt }
+export interface ModelInvocationSendPermission { readonly granted: boolean; readonly control: ModelInvocationControlRecord; readonly record: ModelInvocationRecord }
+export interface ModelInvocationCancellationStore {
+  loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
+  loadControl(scopeId: string, invocationId: string): Promise<ModelInvocationControlRecord | null>;
+  cancelInvocation(input: ModelInvocationCancellationAdmission): Promise<ModelInvocationCancellationResult>;
+  close(): void;
+}
 export interface ModelInvocationStore {
   loadReceipt(scopeId: string, commandId: string): Promise<ModelInvocationRecord | null>;
   claim(input: ModelInvocationAdmission): Promise<ModelInvocationClaimResult>;
+  /** A committed single-use permission, not an observation that HTTP was sent. Never replay a grant. */
+  permitSend(claim: ModelInvocationClaim, ownerId: string, now: number): Promise<ModelInvocationSendPermission>;
   recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number): Promise<ModelInvocationRecord>;
   recordRejected(claim: ModelInvocationClaim, evidence: ModelInvocationResponseEvidence, observedAtMs: number): Promise<ModelInvocationRecord>;
   recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number, evidence?: ModelInvocationResponseEvidence | null): Promise<ModelInvocationRecord>;

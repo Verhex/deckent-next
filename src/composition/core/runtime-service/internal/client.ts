@@ -29,7 +29,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
-        { schemaVersion: 5, requestId, operation, input, ...capacity }, signal);
+        { schemaVersion: 6, requestId, operation, input, ...capacity }, signal);
       if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }

@@ -55,6 +55,19 @@ it('renders purged replay and inspection outcomes without claiming retained or s
   expect(invokeCode).toBe(0); expect(inspectionCode).toBe(0);
   expect(invokeOutput).toContain('Existing receipt returned; request was not sent again.');
 });
+it('renders pre-permission cancellation as never sent without remote-cancellation language', async () => {
+  const f = await fixture(), path = join(f.root, 'not-sent-query.json'); await writeFile(path, JSON.stringify(query));
+  for (const [language, expected] of [['en', 'never sent; cancellation cancel prevented dispatch before permission'],
+    ['tr', 'hiç gönderilmedi; cancel iptali izin öncesinde gönderimi engelledi']] as const) {
+    let output = '';
+    const receipt = { claim: { invocationId: 'call', commandId: 'command' }, outcome: { state: 'not-sent',
+      reason: 'cancelled-before-permission', cancellationCommandId: 'cancel', content: null } };
+    const code = await main(['models', 'invocation', '--input', path, '--lang', language], { ...f,
+      stdout: { write(text) { output += text; } }, inspectModelInvocation: async input => ({ ...input,
+        invocation: receipt, contentStatus: 'not-captured', purge: null }) as never });
+    expect(code).toBe(0); expect(output).toContain(expected); expect(output).not.toContain('remote');
+  }
+});
 it('rejects invalid/oversized/interactive input before an application call without echoing its content', async () => {
   const f = await fixture(); let calls = 0;
   for (const input of ['{"nativeRequest":"sensitive-marker"}', 'sensitive-marker'.repeat(100)]) {

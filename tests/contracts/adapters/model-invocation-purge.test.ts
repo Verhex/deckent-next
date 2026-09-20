@@ -45,6 +45,7 @@ function purge(commandId: string, invocationId: string, expectedContentDigest: s
 }
 async function responded(base: Awaited<ReturnType<typeof fixture>>, store: Awaited<ReturnType<typeof openSqliteModelInvocationStore>>, commandId = 'invoke', invocationId = 'invocation') {
   const claim = await store.claim(admission(base, commandId, invocationId));
+  await store.permitSend(claim.record.receipt.claim, 'sender', 19);
   return store.recordResponse(claim.record.receipt.claim, { schemaVersion: 1, native: { id: 'sensitive-result', output: 'secret' }, usage: { total_tokens: 2 } }, 20);
 }
 
@@ -115,6 +116,7 @@ it('rolls both pre-insert and post-insert audit failures back and keeps partial 
   const base = await fixture(1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const claim = await store.claim(admission(base));
   const partial = createModelInvocationResponseEvidence({ id: 'loopback-http', version: 1 }, 'interrupted', null, Buffer.from('prefix'), false, 10);
+  await store.permitSend(claim.record.receipt.claim, 'sender', 19);
   const record = await store.recordUnknown(claim.record.receipt.claim, 'transport-error', 20, partial), digest = record.content!.descriptor.digest;
   store.close();
   const trigger = new DatabaseSync(base.path); trigger.exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON model_invocation_content_purges

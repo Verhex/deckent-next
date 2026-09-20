@@ -41,9 +41,9 @@ describe('private native response evidence', () => {
     const summary = { ...prefix, body: prefixBody };
     const content = { schemaVersion: 1, kind: 'response-body', encoding: 'base64', digest: prefix.body.digest, byteLength: body.length };
     expect(prefix.body).toMatchObject({ complete: false, byteLength: body.length, observedBytes: 4096 });
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'rejected', evidence: summary, content, observedAtMs: 1 }).success).toBe(false);
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'unknown', reason: 'transport-error', evidence: summary, content, observedAtMs: 1 }).success).toBe(true);
-    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 3, state: 'unknown', reason: 'transport-error', evidence: null, content, observedAtMs: 1 }).success).toBe(false);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 4, state: 'rejected', evidence: summary, content, observedAtMs: 1 }).success).toBe(false);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 4, state: 'unknown', reason: 'transport-error', evidence: summary, content, observedAtMs: 1 }).success).toBe(true);
+    expect(modelInvocationOutcomeSchema.safeParse({ schemaVersion: 4, state: 'unknown', reason: 'transport-error', evidence: null, content, observedAtMs: 1 }).success).toBe(false);
     expect(() => createModelInvocationResponseEvidence(profile.adapter, 'interrupted', null, body, true)).toThrow('MODEL_INVOCATION_CORRUPT');
     expect(createModelInvocationResponseEvidence(profile.adapter, 'invalid-response', null, body, true).httpStatus).toBeNull();
   });

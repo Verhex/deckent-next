@@ -16,7 +16,7 @@ export function migrateInvocationReceiptContent(input: unknown): ModelInvocation
   try {
     const old = object(createImmutableJsonObjectSchema(MODEL_INVOCATION_RECEIPT_JSON_LIMITS).parse(input));
     if (old.schemaVersion !== 2) return invalid();
-    const base = verifyModelInvocationReceipt({ ...old, schemaVersion: 3, outcome: null });
+    const base = verifyModelInvocationReceipt({ ...old, schemaVersion: 4, outcome: null });
     if (old.outcome === null) return Object.freeze({ receipt: base, content: null, purge: null });
     const outcome = object(old.outcome);
     if (outcome.schemaVersion !== 2 || !Number.isSafeInteger(outcome.observedAtMs) || Number(outcome.observedAtMs) < 0) return invalid();
