@@ -937,5 +937,13 @@
   "error.CLI_CODING_INPUT_TTY": "Kodlama profili JSON verisini stdin üzerinden gönderin veya girdi dosyası belirtin.",
   "error.CLI_CODING_INPUT_UNAVAILABLE": "Kodlama profili girdisi okunamadı.",
   "error.NATIVE_CREDENTIAL_UNAVAILABLE": "Native abonelik kimliği kullanılamıyor veya süresi dolmuş.",
-  "error.NATIVE_CONNECTION_UNAVAILABLE": "İzole sağlayıcı bağlantısı kullanılamıyor."
+  "error.NATIVE_CONNECTION_UNAVAILABLE": "İzole sağlayıcı bağlantısı kullanılamıyor.",
+  "error.PATCH_UNAVAILABLE": "Durduğu doğrulanan worker veya hazırlanmış patch bulunamadı.",
+  "error.PATCH_UNSAFE": "Workspace patch güvensiz yol veya dosya içeriyor.",
+  "error.PATCH_LIMIT": "Workspace patch yapılandırılmış tarama veya artifact sınırını aşıyor.",
+  "error.PATCH_UNSUPPORTED": "Workspace patch yalnız normal UTF-8 metin dosyalarını destekler.",
+  "error.PATCH_CONFLICT": "Workspace snapshot kayıtlı patch ile çelişiyor.",
+  "error.PATCH_CORRUPT": "Workspace patch artifact veya üretici bağı bozuk.",
+  "error.WORKER_OBSERVATION_INVALID": "Worker gözlem sorgusu veya kaynak seçimi geçersiz.",
+  "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker gözlemi alınamadı; yürütme durumu değiştirilmedi."
 }

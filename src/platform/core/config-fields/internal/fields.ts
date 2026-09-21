@@ -19,7 +19,7 @@ export const CONFIG_FIELDS = Object.freeze({
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
   storage: field('config.field.storage', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64), patchPreview: z.object({ maxEntries: z.number().int().positive().safe().default(10000), maxDepth: z.number().int().positive().max(128).default(32), maxPathBytes: z.number().int().positive().safe().default(1024) }).strict().default({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   installation: field('config.field.installation', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
@@ -80,6 +80,12 @@ export const CONFIG_FIELDS = Object.freeze({
   inspection: field('config.field.inspection', z.object({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),
     policyMaxBytes: z.number().int().positive().safe().default(1048576),
+    workers: z.object({ heartbeatMs: z.number().int().min(100).max(60000).default(2000),
+      staleMs: z.number().int().positive().safe().default(10000), maxFileBytes: z.number().int().positive().safe().default(65536),
+      maxEntries: z.number().int().positive().safe().default(4096),
+      sources: z.array(z.object({ id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/).refine(value => value !== 'current'),
+        kind: z.enum(['next-project', 'legacy-tasks']), path: z.string().min(1), scopeId: z.string().min(1) }).strict()).max(16).default([]),
+    }).strict().refine(value => new Set(value.sources.map(source => source.id)).size === value.sources.length).default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),

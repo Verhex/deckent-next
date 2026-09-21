@@ -1,9 +1,9 @@
 import { userInfo } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection } from '#adapters/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection, startWorkerObservation } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -68,7 +68,17 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         ...(inputs.length ? { inputs } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
       for (const { source } of declarations) await authorization.authorizeIdentity('read-output', source, principal);
-      const result = await app.execute({ protocolVersion: 1, identity, workspace: lease.workspace, argv: profile.argv });
+      const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
+      const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
+        config.inspection.workers.maxFileBytes, async () => {
+          const record = await store.loadBoundDispatch(identity); if (!record) return null;
+          const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
+          return { schemaVersion: 1, identity, backend: 'docker', provider: profile.nativeSubscription?.provider ?? 'docker',
+            workspace: lease.workspace, observedAt: Date.now(), process: activity.state, handle: activity.handle,
+            terminal: record.terminal, outputRecorded: !!record.output };
+        });
+      let result;
+      try { result = await app.execute(request); } finally { await observation.close(); }
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: result.kind,
         terminal: result.record.terminal, outputRecorded: !!result.record.output }) });
       } finally { await connection?.close(); }

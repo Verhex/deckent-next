@@ -42,3 +42,7 @@ export { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
+
+export * from '#adapters/core/git-patch/index.js';
+
+export * from '#adapters/core/worker-observation/index.js';

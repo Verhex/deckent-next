@@ -22,5 +22,6 @@
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],
-  "rootEnvironmentKey": "DECKENT_HOME"
+  "rootEnvironmentKey": "DECKENT_HOME",
+  "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME"
 }

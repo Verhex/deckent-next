@@ -937,5 +937,13 @@
   "error.CLI_CODING_INPUT_TTY": "Pipe coding profile JSON to stdin or provide an input file.",
   "error.CLI_CODING_INPUT_UNAVAILABLE": "Coding profile input could not be read.",
   "error.NATIVE_CREDENTIAL_UNAVAILABLE": "Native subscription identity is unavailable or expired.",
-  "error.NATIVE_CONNECTION_UNAVAILABLE": "The isolated provider connection is unavailable."
+  "error.NATIVE_CONNECTION_UNAVAILABLE": "The isolated provider connection is unavailable.",
+  "error.PATCH_UNAVAILABLE": "A retained stopped worker or prepared patch is unavailable.",
+  "error.PATCH_UNSAFE": "Workspace patch contains unsafe paths or files.",
+  "error.PATCH_LIMIT": "Workspace patch exceeds the configured scan or artifact limit.",
+  "error.PATCH_UNSUPPORTED": "Workspace patch supports regular UTF-8 text files only.",
+  "error.PATCH_CONFLICT": "Workspace snapshot conflicts with its recorded patch.",
+  "error.PATCH_CORRUPT": "Workspace patch artifact or producer binding is corrupt.",
+  "error.WORKER_OBSERVATION_INVALID": "Worker observation query or source selection is invalid.",
+  "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker observation is unavailable; execution state was not changed."
 }

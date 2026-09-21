@@ -2,6 +2,9 @@ import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
+import type { WorkspacePatch } from '#engine/index.js';
+import type { ArtifactReceipt } from '#capabilities/index.js';
+export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; application: 'not-applied' }>>;
 import type { CommandContext } from './kernel-commands.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
@@ -16,7 +19,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (action !== 'execute' && action !== 'evaluate') throw usage();
+  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview'].includes(action ?? '')) throw usage();
   const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
@@ -34,6 +37,16 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
+  if (action === 'patch-prepare' || action === 'patch-preview') {
+    const handler = action === 'patch-prepare' ? context.prepareWorkspacePatch : context.previewWorkspacePatch;
+    if (!handler) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await handler(context.root ?? process.cwd(), identity, options);
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
+      t('cli.task.patch.heading', { task: identity.taskId, count: data.patch.changes.length }, locale),
+      ...data.patch.changes.map(change => JSON.stringify(change)),
+      t('cli.task.patch.notice', {}, locale),
+    ].join('\n') }); return;
+  }
   if (action === 'execute') {
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.executeTask(context.root ?? process.cwd(), identity, options);

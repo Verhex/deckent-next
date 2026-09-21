@@ -1,7 +1,8 @@
+import type { WorkerObservationHandler } from './workers.js';
 import type { RunAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
-import type { TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
+import type { TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
@@ -21,6 +22,9 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 
 export interface CommandContext {
+  inspectWorkers?: WorkerObservationHandler;
+  prepareWorkspacePatch?: TaskPatchHandler;
+  previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   invokeModel?: ModelInvocationHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;

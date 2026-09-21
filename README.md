@@ -17,8 +17,36 @@ one capability at a time, each landing with contract tests and a real-binary pro
 ```sh
 npm ci
 npm run build
-node dist/surfaces/core/cli/internal/entry.js --version
+node dist/composition/core/cli/internal/entry.js --version
 ```
+
+## Next development host
+
+This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
+its runtime and workers must not be launched. Local development entry points are:
+
+```sh
+node .agents/refactor/next-entry.mjs cli --version
+node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
+node .agents/refactor/next-entry.mjs mcp
+# For local SDK scripts, use the same environment and cwd:
+node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
+```
+
+The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
+`.deckent/host/global`. It drops an inherited `DECKENT_HOME` to avoid redirecting project
+runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
+`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
+configuration/state directory independently of project data. Without it, installed product
+defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
+
+The local observer reads only explicitly configured `inspection.workers.sources` and preserves
+source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
+is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
+are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
+safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
+The `pilot` scope and local source catalog are development fixtures, not an installed default.
+DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
 
 ## Develop
 

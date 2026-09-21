@@ -27,7 +27,8 @@ export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Envi
   const home = platform === 'win32'
     ? envValue(env, 'USERPROFILE') ?? (drive && homePath ? win32.join(drive, homePath) : null)
     : envValue(env, 'HOME') ?? null;
-  const override = productRootOverride(env);
+  // Global installation state can be isolated without relocating every project workspace.
+  const override = envValue(env, PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey) ?? productRootOverride(env);
   if (!home && !override) throw ErrorRegistry.createError('HOME_NOT_RESOLVED');
   const layout = resolveProductLayout({ projectRoot: home ?? override!, ...(override ? { root: override } : {}), platform: platform === 'win32' ? 'win32' : 'posix' });
   // No host home means no implicit scratch location: callers must supply a platform-local location.

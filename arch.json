@@ -205,7 +205,9 @@
         "src/platform/core/config-fields",
         "src/platform/core/host",
         "src/surfaces/core/cli",
-        "src/composition/core/native-coding"
+        "src/composition/core/native-coding",
+        "src/composition/core/workspace-patch",
+        "src/composition/core/worker-observation"
       ],
       "plan": "SURFACES"
     },
@@ -228,7 +230,8 @@
         "src/platform/core/errors",
         "src/platform/core/managed-files",
         "src/engine/core/task-inputs",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/adapters/core/worker-observation"
       ],
       "plan": "EXECUTION"
     },
@@ -299,7 +302,9 @@
         "src/engine/core/provider-spend",
         "src/adapters/core/provider-openrouter-chat",
         "src/adapters/core/provider-openrouter-pricing",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/engine/core/workspace-patch",
+        "src/engine/core/worker-observation"
       ],
       "plan": "FOUNDATION"
     },
@@ -666,7 +671,10 @@
         "src/engine/core/provider-spend",
         "src/domain/core/provider-spend",
         "src/engine/core/run-progression",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/engine/core/workspace-patch",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/worker-observation"
       ],
       "plan": "SURFACES"
     },
@@ -1047,6 +1055,77 @@
     "src/adapters/core/native-connection": {
       "dependencies": [],
       "plan": "PROVIDERS"
+    },
+    "src/engine/core/workspace-patch": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/workspaces"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/adapters/core/git-patch": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/dispatch",
+        "src/engine/core/workspaces",
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/git-workspace",
+        "src/adapters/core/docker-supervisor"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/composition/core/workspace-patch": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/git-patch",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/engine/core/policy",
+        "src/engine/core/workspace-patch",
+        "src/composition/core/policy",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/capabilities/core/artifacts"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/engine/core/worker-observation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/engine/core/dispatch"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/worker-observation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/worker-observation"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/worker-observation": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/managed-files",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/worker-observation",
+        "src/engine/core/policy",
+        "src/engine/core/worker-observation",
+        "src/composition/core/policy",
+        "src/composition/core/scoped-request",
+        "src/composition/core/inventory",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "EXECUTION"
     }
   },
   "composition": {

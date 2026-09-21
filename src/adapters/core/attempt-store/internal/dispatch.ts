@@ -78,6 +78,22 @@ export class SqliteDispatchJournal {
       return record;
     });
   }
+  async retainDispatchPatch(input: DispatchClaim, value: ArtifactReceipt) {
+    const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
+    if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
+    return this.transaction(() => {
+      const existing = this.read(claim.request);
+      if (!existing?.terminal || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
+      if (existing.patch) {
+        if (JSON.stringify(existing.patch) !== JSON.stringify(receipt)) throw new DispatchError('DISPATCH_CONFLICT');
+        return existing;
+      }
+      const record = dispatchRecordSchema.parse({ ...existing, patch: receipt });
+      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
+        .run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
+      return record;
+    });
+  }
   async readDispatch(request: DispatchClaim['request']) {
     const parsed = sandboxRequestSchema.parse(request);
     try { return this.read(parsed); } catch (error) { throw sqliteFailure(error); }

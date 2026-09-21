@@ -20,7 +20,10 @@ Earlier per-card instructions to append detailed PLAN entries are superseded by 
 
 ## Workspace and authority
 
-Operator workspace: `/home/alperen/deckent-dev`; product destination: `/home/alperen/deckent-next`.
+Operator and execution workspace: `/home/alperen/deckent-next`.
+`/home/alperen/deckent-dev` is read-only reference; never start its runtime, workers or entry points.
+Use `.agents/refactor/next-entry.mjs cli|mcp|node` for this checkout: it pins Next cwd and
+a separate Next global configuration root without moving per-project workspaces.
 Resolve commands and output paths explicitly; the shell cwd is not the product destination.
 Read target AGENTS.md, ARCHITECTURE.md, PLAN.md and relevant core-memory/ADR references before editing.
 Live owner instructions supersede persisted guidance. Reuse unchanged reads within the session.

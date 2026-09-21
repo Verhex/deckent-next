@@ -1,0 +1,4 @@
+{
+  "excludedSegments": [".git", ".deckent", ".brain", ".codex", ".claude", ".cursor", ".ssh", ".aws", ".azure", ".kube", ".npmrc", ".netrc", "auth.json", ".credentials.json", "credentials.json"],
+  "excludedPrefixes": [".env"]
+}

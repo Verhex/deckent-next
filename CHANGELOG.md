@@ -4,6 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- NEXT-HOST: CLI/MCP host routing and independent `DECKENT_GLOBAL_HOME`; legacy checkout is read-only reference, per-project runtime roots are retained.
+- WORKER-OBSERVATION: host-owned heartbeat/log/result projections and scoped SDK/CLI list/watch across explicit local Next projects and legacy task directories; bounded safe log diagnostics, separate freshness/process/result evidence, and view-only interruption. No legacy runtime or DOGFOOD activation.
+
+- NATIVE-PATCH-PREVIEW: producer-bound immutable text change artifacts and shared SDK/CLI prepare/preview, with exact stopped-worker custody, bounded no-follow reads, policy and conflict checks; ledger29. Preview preserves source HEAD/WIP; live target application and DOGFOOD remain disabled.
+
 - NATIVE-CODING/AUTH-NETWORK: shared Codex/Claude/Cursor worker image and SDK/CLI profile preparation; isolated temporary subscription access through a provider-restricted DNS/IP/SNI-checked HTTPS gateway with worker networking disabled. Real sequential file-edit proofs passed for all three providers; existing custody, cancellation and resource limits retained. Refresh, native model admission, event/usage normalization and controlled target delivery remain open; DOGFOOD stays OFF.
 
 - EXECUTION/CHECKPOINT: automatic admitted Run progression, completion-driven refill and configurable nonpreemptive Run rotation; named output-file retention and authorized readonly dependency inputs; ledger28. Includes prior branch/pool fixes, host/core-memory source and working-plan cleanup; historical migration fixtures now remove post-v24 tables and retain the full earlier execution schema. Remote transport, hard time fairness and the previously recorded intermittent model unknown remain open.

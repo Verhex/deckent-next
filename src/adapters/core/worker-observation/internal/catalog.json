@@ -1,0 +1,5 @@
+{
+  "phases": ["DRAFT", "PENDING", "CLAIMED", "EXECUTING", "TESTING", "DOCUMENTING", "DONE", "NO_GO", "CANCELLED", "PAUSED", "running", "paused", "created", "exited", "missing", "unknown"],
+  "assessments": ["GO", "NO_GO", "DONE", "PASS", "FAIL", "PARTIAL"],
+  "diagnostics": {"authentication": "auth(?:entication)?[_ -]?(?:failed|error)|unauthorized|not logged in", "rate-limit": "rate[_ -]?limit|too many requests", "timeout": "timed?[_ -]?out|deadline", "error": "\\berror\\b|\\bfailed\\b", "warning": "\\bwarn(?:ing)?\\b"}
+}

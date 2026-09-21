@@ -49,3 +49,7 @@ export type { TaskInputBinding } from '#engine/core/task-inputs/index.js';
 
 export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchema } from '#engine/core/supervisor/index.js';
 export type { CollectedOutputFile } from '#engine/core/supervisor/index.js';
+
+export * from '#engine/core/workspace-patch/index.js';
+
+export * from '#engine/core/worker-observation/index.js';

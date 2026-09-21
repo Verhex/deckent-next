@@ -12,9 +12,10 @@ export const dispatchRecordSchema = claimObject.extend({
   launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
   grant: z.object({ generation: counterSchema.positive(), grantedAt: counterSchema, principal: actorSchema }).strict().readonly().optional(),
   prevention: z.object({ reason: z.literal('cancel-requested') }).strict().readonly().optional(),
-  terminal: dispatchTerminalSchema.nullable(), output: artifactReceiptSchema.optional(), cancellation: actorSchema.optional(),
+  terminal: dispatchTerminalSchema.nullable(), output: artifactReceiptSchema.optional(), patch: artifactReceiptSchema.optional(), cancellation: actorSchema.optional(),
 }).strict().superRefine((record, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, path: ['launch'], message: 'DISPATCH_LAUNCH_EVIDENCE_CONFLICT' });
+  if (record.patch && (!record.terminal || record.patch.scopeId !== record.request.identity.scopeId)) invalid();
   if (record.launch === 'granted') {
     if (!record.grant || record.grant.generation !== record.request.identity.generation || record.prevention) invalid();
   } else {

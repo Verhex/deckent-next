@@ -450,3 +450,67 @@ No journal publication, permission grant, publisher trust, installation readines
 2026-09-19 REAL-INIT/P3E-PUBLICATION: explicit local custom consent binds actual OS issuer/subject to a freshly measured proposal; publisher authenticity stays unverified. A complete pending journal precedes every target effect. Original authored profile and normalized configuration are separate, immutable recovery inputs; resume revalidates current schema/paths/identity/evidence and rejects drift instead of silently adding defaults. Fresh file publication stages private bounded bytes in a transaction-reserved namespace and links without replacing a target; recovery recognizes only exact target/temp inode/content, including a bounded partial-prefix stage. SQLite schema11 stores exact installation ownership and pool in the same transaction; foreign markerless/nonempty databases are refused before persistent journal-mode changes. Readonly final verification precedes committed journal admission. Apply/resume share one engine application and require explicit custom acceptance/proposal/executable; shutdown permission remains an independent profile choice. This is local POSIX trusted-host installation; no builtin release profile, remote bootstrap, publisher signature, upgrade/overwrite flow or MCP self-authorization is added.
 
 2026-09-20 AUTH/NATIVE-CONFIG: the global API-mode vendor-key requirement was a known metadata/activation defect and is removed (Fable2042). Credential, profile and request-budget holds belong to native invocation admission (A3/B08/B09), never general config/catalog reads; no invocation authority follows from API mode or activation.
+
+### Workspace patch preparation (implemented, ledger29)
+
+Host-produced text change packages bind source fingerprint, recorded Git base, exact attempt,
+projected workspace snapshot digest and before/after file contents/modes. The existing dispatch
+record owns one immutable patch artifact receipt; artifact persistence precedes its transactional
+binding. A changed snapshot conflicts rather than replacing the first receipt. Unbound bytes after
+an interrupted publication are not addressable through patch preview. This is neither Task acceptance
+nor permission to apply changes to a live target.
+
+SDK and CLI `task patch-prepare` share the application service, requiring existing `recover-output`
+and `read-output` policy. First preparation and repeated capture require the retained exact Docker
+container to be observed exited before/after bounded reads. Preparation must precede container release;
+there is no credential renewal or worker launch. `task patch-preview` uses `read-output` and a read-only
+ledger reader; its retained artifact remains available after container/workspace release.
+
+The Git adapter reads immutable base blobs from the trusted source repository, never worker Git
+configuration, hooks, filters, index or attributes. Linux descriptor-relative no-follow workspace
+reads reject symlinks, hardlinks and special files, and detect changed snapshots. Versioned exclusion
+rules omit Git/product/auth metadata and environment files; exclusions are included in the package.
+Untracked non-excluded files are included. Only regular UTF-8 text files and executable mode are
+supported; binary/submodule/symlink input fails explicitly. Scan bytes/time use artifact/Git limits;
+`artifacts.patchPreview` config bounds entries, depth and path bytes. Bounds apply to the projected
+whole tree, so large/generated repositories may require a future explicit scope contract.
+
+Ledger29 protects the new optional dispatch receipt from older writers; explicit existing migration
+moves v28 forward without changing prior records. Preview does not migrate. Live target HEAD and WIP
+are not modified or certified fresh. Conditional apply, external-writer races, partial-apply recovery,
+MCP parity and non-Linux snapshot adapters remain separate work.
+
+### Local worker observation (implemented)
+
+Configured task execution now maintains host-owned `worker.hb`, `worker.log` and `worker.result`
+next to the attempt checkout, outside its Docker mount. Heartbeats sample exact daemon custody;
+logs contain bounded structured process/terminal observations, never raw native stdout or credentials.
+Results project the existing terminal ledger record. Atomic fsync/rename publication is best effort;
+a missing/stale file never changes execution, cancellation, acceptance or recovery ownership.
+
+`inspectConfiguredWorkers` and CLI `workers list|watch` share a local, read-only source monitor.
+The current Next project and explicit `inspection.workers.sources` entries can reference other Next
+projects or exact legacy task directories. Every Next source independently enforces its current scope
+inspection policy; artifact/activity detail requires attempt read-output. Legacy sources are admitted
+by the central project's scope inspection permission and explicit source/scope configuration. No recursive
+HOME/tmp scan or remote reader is implied. Limits cover total workers, source count, directory entries,
+file/tail bytes and heartbeat intervals. Each source reports its own unavailable/denied/not-sampled state.
+
+Legacy `.hb/.log/.result` shapes remain observations. Host PID existence is identity-unverified; file
+freshness is separate from process liveness. Result self-assessment is separate from Next terminal custody
+and Task acceptance. Log analysis emits bounded diagnostic categories and whitelisted structured events,
+not arbitrary legacy strings. Missing, malformed, stale, future and identity-mismatched evidence remain
+visible. Stopping watch stops only the view. CLI snapshots/JSON-lines and SDK are implemented; Desktop/MCP
+and cross-host monitoring remain future consumers of the same semantics. Linux local files/Docker are
+verified; no non-Linux or legacy runtime activation is claimed.
+
+### Next execution host cutover (2026-09-21)
+
+Owner makes Next the sole local execution workspace; legacy is read-only reference.
+Host CLI/MCP entry points and the registered local MCP integration target Next composition.
+The shared global-scope resolver accepts `DECKENT_GLOBAL_HOME`, independently of the existing
+project data override `DECKENT_HOME`; this location input participates in config cache identity.
+The development host launcher pins Next cwd and global state, and removes inherited project
+root overrides. Customer defaults and each source project's layout/policy remain unchanged.
+No legacy runtime migration, old-value conversion, global credential copy or automatic run
+admission follows from cutover. Existing external client processes need reconnection.

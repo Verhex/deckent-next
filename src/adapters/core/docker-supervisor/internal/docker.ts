@@ -94,6 +94,12 @@ export class DockerSupervisor implements ExecutionSupervisor {
       return Object.freeze({ stdout: output.stdout, stderr: output.stderr, completeness: 'partial' });
     } catch { throw new SupervisorError('SUPERVISOR_CONTROL_FAILED'); }
   }
+  async inspectActivity(input: SandboxRequest) {
+    const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
+    const status = existing?.State.Status;
+    const state = !existing ? 'missing' as const : status === 'running' || status === 'paused' || status === 'created' || status === 'exited' ? status : 'unknown' as const;
+    return Object.freeze({ handle, state });
+  }
   async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
     const { digest, handle } = this.identity(input);
     const observed = this.result(handle, await this.inspect(handle, digest));

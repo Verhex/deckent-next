@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -144,7 +145,7 @@ it('upgrades the reservation semantics gate without rewriting prior full-wave re
   const db = new DatabaseSync(f.path); db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; PRAGMA user_version=23'); db.close();
   await expect(openSqliteAttemptStore(f.path, options, 'forbid', custodyProfiles)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open(); expect(await reopened.loadRunReceipt('s', 'full-wave')).toEqual(before);
-  const check = new DatabaseSync(f.path); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(28); } finally { check.close(); }
+  const check = new DatabaseSync(f.path); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { check.close(); }
 });
 
 // Real separate processes import the built product; the parent only supplies the start barrier.

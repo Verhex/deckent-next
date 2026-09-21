@@ -1,3 +1,4 @@
+import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { requireLedgerVersion, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
   type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteRunJournal } from './runs.js';
@@ -20,6 +21,10 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
     try {
       requireLedgerVersion(this.db, DISPATCH_LEDGER_VERSION);
     } catch (error) { this.db.close(); throw readFailure(error); }
+  }
+  async loadBoundDispatch(identity: import('#domain/index.js').AttemptIdentity) {
+    requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
+    return readRunBoundDispatch(this.db, identity).dispatch;
   }
   async listDispatches(query: DispatchInventoryQuery) {
     try { return await new SqliteDispatchJournal(this.db).listDispatches(query); }

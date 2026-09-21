@@ -307,7 +307,7 @@ it('audits native-produced reservations across real pages and reopens one immuta
 it('uses configured work bounds and distinct live policy to audit native spend, replay and expose staleness', async () => {
   const f = await fixture(), options = { env: f.env };
   f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002 });
-  await invokeConfiguredModel(f.project, f.command, options);
+  expect((await invokeConfiguredModel(f.project, f.command, options)).receipt.outcome).toMatchObject({ state: 'responded' });
   const query = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
   const writeAccountPolicy = async (audit: boolean) => {
     const policy = f.policy(true);
@@ -332,7 +332,7 @@ it('uses configured work bounds and distinct live policy to audit native spend, 
   expect(await inspectConfiguredProviderSpendAccount(f.project, query, options))
     .toMatchObject({ schemaVersion: 2, audit: result.receipt, spendingHistoryIntegrity: 'consistent' });
   expect(await auditConfiguredProviderSpendAccount(f.project, command, 64_000, options)).toEqual({ ...result, replayed: true });
-  await invokeConfiguredModel(f.project, { ...f.command, commandId: 'after-audit' }, options);
+  expect((await invokeConfiguredModel(f.project, { ...f.command, commandId: 'after-audit' }, options)).receipt.outcome).toMatchObject({ state: 'responded' });
   expect(await inspectConfiguredProviderSpendAccount(f.project, query, options))
     .toMatchObject({ audit: result.receipt, spendingHistoryIntegrity: 'stale' });
   await expect(auditConfiguredProviderSpendAccount(f.project, { ...command, commandId: 'stale-input' }, 64_000, options))

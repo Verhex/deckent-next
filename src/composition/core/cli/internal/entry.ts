@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
+import { prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
@@ -15,10 +17,13 @@ import { prepareNativeCodingProfile } from '#composition/core/native-coding/inde
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
+  const handlesSignals = isRuntimeServe || (argv[0] === 'workers' && argv[1] === 'watch');
   const controller = new AbortController();
   const stop = () => controller.abort();
-  if (isRuntimeServe) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
+  if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch,
+    inspectWorkers: inspectConfiguredWorkers,
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     invokeModel: invokeRuntimeModel, inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
@@ -57,7 +62,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     createRun: (_root, input) => runtime.createRun(input),
     executeTask: (_root, input) => runtime.executeTask(input),
     evaluateTask: (_root, input) => runtime.evaluateTask(input),
-  }); } finally { if (isRuntimeServe) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
+  }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
 if (isMainModule(import.meta)) {
   void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });
