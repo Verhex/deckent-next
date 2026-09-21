@@ -1,6 +1,7 @@
+import { sameAttemptIdentity } from '#domain/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
-import { integrationIntentSchema, WorkspacePatchError, type IntegrationIntent, type IntegrationRecord } from '#engine/index.js';
+import { integrationIntentSchema, WorkspacePatchError, type IntegrationQuery, type IntegrationIntent, type IntegrationRecord } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 export class SqliteIntegrationJournal {
   constructor(private readonly db: DatabaseSync) {}
@@ -42,4 +43,21 @@ export class SqliteIntegrationJournal {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
+}
+
+/** Read one exact command without starting a writer transaction or changing schema. */
+export function readIntegration(db: DatabaseSync, query: IntegrationQuery): IntegrationRecord | null {
+  const dispatch = readRunBoundDispatch(db, query.identity).dispatch;
+  const row = db.prepare('SELECT intent,manifest FROM workspace_integrations WHERE scope_id=? AND command_id=?').get(query.identity.scopeId, query.commandId);
+  if (!row) return null;
+  let intent: IntegrationIntent; let manifest: ArtifactReceipt | null;
+  try {
+    intent = integrationIntentSchema.parse(JSON.parse(String(row.intent)));
+    manifest = row.manifest === null ? null : artifactReceiptSchema.parse(JSON.parse(String(row.manifest)));
+  } catch { throw new WorkspacePatchError('PATCH_CORRUPT'); }
+  if (!sameAttemptIdentity(intent.command.identity, query.identity) || intent.command.commandId !== query.commandId)
+    throw new WorkspacePatchError('PATCH_CONFLICT');
+  if (!dispatch?.terminal || JSON.stringify(dispatch.patch) !== JSON.stringify(intent.patch)
+    || (manifest && manifest.scopeId !== query.identity.scopeId)) throw new WorkspacePatchError('PATCH_CORRUPT');
+  return { intent, manifest };
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
-import { checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
+import { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
@@ -22,6 +22,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: registerProviderConfig, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+    inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch,
     inspectWorkers: inspectConfiguredWorkers,

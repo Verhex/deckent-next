@@ -51,8 +51,8 @@ export { auditRuntimeProviderSpendAccount as auditProviderSpendAccount } from '#
 export type { ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
 export type { ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
 
-export { checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/index.js';
-export type { WorkspacePatch, IntegrationCommand, IntegrationManifest } from '#engine/index.js';
+export { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/index.js';
+export type { WorkspacePatch, IntegrationQuery, IntegrationCommand, IntegrationManifest } from '#engine/index.js';
 
 export { inspectConfiguredWorkers } from '#composition/index.js';
 export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';

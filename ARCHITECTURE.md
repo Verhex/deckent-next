@@ -28,6 +28,17 @@ arch.json and the current source layout change together in that work. Existing W
 scripts/lint-arch.mjs enforces the current machine rules; historical decisions remain in the log.
 No baseline or silent exception is introduced; rule changes remain explicit and versioned.
 
+## Owner checkpoint — 2026-09-21: product model reopened
+
+The owner reopened the proposed reduction of the canonical vocabulary to Run → Task → Attempt.
+These execution concepts do not establish the complete Agent OS product model. The target still
+covers individual users and large enterprises managing business work and long-lived processes;
+millions of users and 10,000-person organizations are design context, not demonstrated capacity.
+Do not remove Goal/Mission/Flow/Operation capabilities or restore the old mandatory hierarchy by
+inference. Compare responsibilities, lifecycle, authorization, scope and concrete business journeys
+before proposing the product model for owner review. Existing runtime contracts remain in force;
+O4 from the external refactor decision record is reopened, not an implementation instruction.
+
 ## Owner amendment — 2026-09-17 (accepted target, implementation pending)
 
 Authority: Alperen's live acceptance of the consolidated Fable/Astra review, with database, sandbox/worktree,
@@ -325,7 +336,7 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 Owner 2026-09-21: `follow-up-works/current-flow.md` is an optional, replaceable development tracker;
 its exact path is admitted by the Markdown gate, excluded from product distribution, and may be deleted.
 PLAN.md retains durable roadmap/decisions and material open findings; small work/history lives in the
-transient tracker and local ignored refactor-work archive, not an append-only product plan.
+transient tracker and external refactor archive, not an append-only product plan.
 
 ## Decision log
 
@@ -534,11 +545,17 @@ exclusions are outside the content snapshot. This is neither a fence against oth
 processes nor a live landing, test result, Task acceptance, or automatic execution trigger.
 
 
-### Refactor workspace consolidation — owner 2026-09-21
+### Refactor workspace ownership — owner latest decision 2026-09-21
 
 Next is the repository where refactoring and product completion happen. The pre-refactor
 product repository stays read-only reference. Local historical documents, experiments,
-proof and toolchains live in `refactor-work/` beneath Next; the entire directory is excluded
-from Git and npm publication. Skills, hooks and active document links use this local surface.
+proof and toolchains live outside Next in `/home/alperen/deckent-refactor-work`; this
+document surface stays outside Git and npm publication. Skills and active links use that
+external location; no local directory or compatibility symlink is retained in Next.
 Next core-memory is canonical and verified by its local digest manifest; optional comparison
 against a separately selected reference is diagnostic, not legacy write authority.
+
+Integration inspection uses a separate read-only query port on the same ledger30 records.
+SDK/CLI require current read-output authority and exact Run/Attempt binding; they distinguish
+absent intent, pending preparation and retained manifest. This historical view requires no
+execution profile or Git access and explicitly does not revalidate current candidate files.

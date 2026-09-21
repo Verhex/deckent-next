@@ -14,8 +14,9 @@ Owner closed the Fable communication protocol until explicitly reopened. Do not 
 PLAN.md holds main product workstreams, durable decisions and material open findings only.
 Keep small slices, current progress and next-step details in `follow-up-works/current-flow.md`;
 replace/delete its completed content rather than append history or create a document per small job.
-Historical/canceled work and necessary proof live in `refactor-work/` inside Next.
-This local refactor surface is excluded from Git and npm; never write to a sibling refactor workspace.
+Owner latest decision: historical/canceled work and necessary proof live outside Next in
+`/home/alperen/deckent-refactor-work`. Keep this document/toolchain surface outside Git/npm
+and do not recreate a refactor-work directory inside Next. Owner coordinates its editing with Fable.
 Next owns refactoring, product completion, execution and its local core-memory authority.
 Legacy is the frozen pre-refactor product reference, not a canonical write target.
 The tracker is optional development-only material, not product state or durable scope authority.

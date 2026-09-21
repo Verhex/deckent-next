@@ -25,6 +25,7 @@ export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
 export const CURRENT_LEDGER_VERSION = 30;
+export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   30: `CREATE TABLE workspace_integrations(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,intent TEXT NOT NULL,manifest TEXT,
     PRIMARY KEY(scope_id,command_id)); PRAGMA user_version=30;`,

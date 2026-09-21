@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, chmod, stat } f
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
+import { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -237,5 +237,50 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await expect(prepareConfiguredWorkspaceIntegration(f.project, next, f.options)).rejects.toMatchObject({ code: 'PATCH_INTEGRATION_PENDING' });
     const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'), { readOnly: true });
     expect(db.prepare('SELECT COUNT(*) AS n FROM workspace_integrations WHERE manifest IS NULL').get()?.n).toBe(2); db.close();
+  });
+});
+
+describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('read-only integration inspection', () => {
+  it('exposes absent, pending and recorded through SDK/CLI without execution config, candidate repair or source checks', async () => {
+    const f = await fixture(); await f.run(); await f.prepare(); await writeFile(join(f.project, 'note.txt'), 'before\n');
+    const query = { schemaVersion: 1 as const, identity: f.identity, commandId: 'inspect-candidate' };
+    expect(await inspectConfiguredWorkspaceIntegration(f.project, query, f.options)).toMatchObject({ status: 'absent', intent: null, manifest: null });
+    await f.policy(['read-output', 'prepare-integration']);
+    const checked = await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+    const prepared = await prepareConfiguredWorkspaceIntegration(f.project, { ...query, proposal: checked.proposal }, f.options);
+    const pending = { ...query, commandId: 'inspect-pending' };
+    const crash = vi.spyOn(GitIntegrationTarget.prototype, 'verify').mockRejectedValueOnce(new Error('test interruption'));
+    try { await expect(prepareConfiguredWorkspaceIntegration(f.project, { ...pending, proposal: checked.proposal }, f.options)).rejects.toBeDefined(); }
+    finally { crash.mockRestore(); }
+    await f.policy(['read-output']);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8')); delete config.execution;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await writeFile(join(f.project, 'note.txt'), 'new-owner-work\n');
+    await writeFile(join(prepared.manifest.workspace, 'note.txt'), 'new-candidate-work\n');
+    const ledgerPath = productResourcePath(f.runtime.layout, 'ledger'), before = await readFile(ledgerPath);
+    const recorded = await inspectConfiguredWorkspaceIntegration(f.project, query, f.options);
+    expect(recorded).toMatchObject({ status: 'manifest-recorded', candidateVerification: 'not-performed', manifest: prepared.manifest, receipt: prepared.receipt });
+    expect(await f.cli('integration-inspect', ['--command-id', query.commandId])).toEqual(recorded);
+    expect(await inspectConfiguredWorkspaceIntegration(f.project, pending, f.options)).toMatchObject({ status: 'pending', receipt: null, manifest: null });
+    expect(await readFile(ledgerPath)).toEqual(before);
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('new-owner-work\n');
+    expect(await readFile(join(prepared.manifest.workspace, 'note.txt'), 'utf8')).toBe('new-candidate-work\n');
+    await expect(inspectConfiguredWorkspaceIntegration(f.project, { ...query, identity: { ...f.identity, scopeId: 'other' } }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(inspectConfiguredWorkspaceIntegration(f.project, { ...query, identity: { ...f.identity, generation: 2 } }, f.options)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+    const artifact = await f.runtime.artifacts.prepareReadOnlyFile('s', prepared.receipt); await writeFile(artifact.path, 'broken');
+    await expect(inspectConfiguredWorkspaceIntegration(f.project, query, f.options)).rejects.toMatchObject({ code: 'PATCH_CORRUPT' });
+    await f.policy(['execute']);
+    await expect(inspectConfiguredWorkspaceIntegration(f.project, pending, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  });
+  it('refuses an older ledger without creating the integration table or migrating bytes', async () => {
+    const f = await fixture(); await f.run();
+    const path = productResourcePath(f.runtime.layout, 'ledger'); const db = new DatabaseSync(path);
+    db.exec('DROP TABLE workspace_integrations; PRAGMA user_version=29;'); db.close();
+    const before = await readFile(path);
+    await expect(inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: f.identity, commandId: 'absent' }, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    expect(await readFile(path)).toEqual(before);
+    const reader = new DatabaseSync(path, { readOnly: true });
+    expect(reader.prepare('PRAGMA user_version').get()?.user_version).toBe(29);
+    expect(reader.prepare("SELECT name FROM sqlite_master WHERE name='workspace_integrations'").get()).toBeUndefined(); reader.close();
   });
 });

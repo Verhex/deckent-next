@@ -27,7 +27,7 @@ Owner: "Ne taşındı, nereye taşındı, hangi şekilde; eskiden nasıldı, yen
 doğrulama, dogfooding akışına ve ürün yüzeyine katkısı/etkisi, pozitif/negatif sebepler, yavaşlatıcı etkiler —
 tam detaylı analiz edilmiş bir log."
 
-Uygulama: `/home/alperen/deckent-next/refactor-work/MIGRATION-LEDGER.md` (Next içindeki yerel refaktör yüzeyi; Git ve npm dışında) —
+Uygulama: `/home/alperen/deckent-refactor-work/MIGRATION-LEDGER.md` (Next dışındaki yerel refaktör yüzeyi; Git ve npm dışında) —
 **§1** kart bazlı tablo (legacy kaynak → hedef, dönüşüm türü KORU/BİRLEŞTİR/YENİDEN TASARLA/SİL/YENİ,
 birleştirilen, doğrulama, Fable kararı + commit, skor T/K/P/D 0–5, dogfood/yüzey etkisi, riskler/yavaşlatıcılar),
 **§2** sayılarla durum, **§3** kronolojik izleme günlüğü (kanal seq · UTC · olay · aksiyon · sonuç),

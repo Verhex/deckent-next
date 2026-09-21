@@ -74,3 +74,8 @@ Repeating a completed command verifies its candidate; an interrupted command rep
 `PATCH_INTEGRATION_PENDING` and preserves its files without automatic repair or takeover.
 Existing ledgers require explicit installation/storage migration to version 30 before prepare;
 read-only check and ordinary preparation never silently migrate them.
+
+`task integration-inspect` takes the same identity flags plus `--command-id <id>`
+and requires only `read-output`. It reports `absent`, `pending`, or `manifest-recorded`
+from the existing ledger and immutable manifest. It works without execution configuration
+and does not migrate storage, repair candidates, or recheck their current files.

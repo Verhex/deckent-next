@@ -3,7 +3,7 @@ import { ArtifactError } from '#capabilities/index.js';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { GitIntegrationTarget, openSqliteAttemptStore, openSqliteInventoryReader, validateDockerSupervisorProfile } from '#adapters/index.js';
-import { WorkspacePatchApplication, WorkspaceIntegrationApplication, integrationCommandSchema, type IntegrationCommand, type RunBoundDispatchStore } from '#engine/index.js';
+import { WorkspaceIntegrationInspection, integrationQuerySchema, type IntegrationQuery, WorkspacePatchApplication, WorkspaceIntegrationApplication, integrationCommandSchema, type IntegrationCommand, type RunBoundDispatchStore } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
 async function application(root: string, c: Awaited<ReturnType<typeof workspacePatchContext>>, store: RunBoundDispatchStore) {
@@ -27,5 +27,15 @@ export async function prepareConfiguredWorkspaceIntegration(root: string, input:
     await c.authorization.authorizeIdentity('prepare-integration', command.identity, c.principal);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try { return await (await application(root, c, store)).prepare(command, store); } finally { store.close(); }
+  } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
+}
+
+export async function inspectConfiguredWorkspaceIntegration(root: string, input: IntegrationQuery, options: ConfigLoadOptions = {}) {
+  try {
+    const query = integrationQuerySchema.parse(input);
+    const c = await workspacePatchContext(root, query.identity, options, false);
+    const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
+    try { return await new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).inspect(query); }
+    finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
 }
