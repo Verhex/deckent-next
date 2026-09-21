@@ -167,4 +167,4 @@ Bu eşleme tarihsel kartlardaki sıra/ledger numaralarını yeni yürütme izni 
 | O4 | CONTRACT | Owner son talimatıyla yeniden açıldı. Ürün modeli incelemesi bekliyor; canonicalChain daraltılmadı. |
 | O5 | INSTALLATION / SECURITY | Kabul edilmiş grup-yazma kararı açık. Güncel observer/journal yanında publication kontrolleri de eşlenmeli; güven sınırı diğer policy/artifact/worker dizinlerine kendiliğinden genişletilmez. |
 | O6 | SECURITY | Süreç/tty bağlı os-user session ve token-verified genişleme portu hedefi açık. Mevcut OS principal doğrulaması session freshness tamamlandı demek değildir. |
-| O7 | SURFACES / ASSURANCE | Legacy cli-command-contract.ts salt okunur port envanteri kaynağıdır. Eski komut adları/alias'lar Next kabul şartı değildir; manifest ve davranış eşlemesi ayrı kanıtlanacak. |
+| O7 | SURFACES / ASSURANCE | Legacy cli-command-contract.ts salt okunur port envanteri kaynağıdır. Eski komut adları/alias'lar Next kabul şartı değildir; Statik manifest aracı bağlı: mevcut kaynakta 280 yol (269 CLI/39 MCP/41 REPL, 11 yalnız REPL). Tarihsel 282 sayımı kullanılmaz; çalışma zamanı erişilebilirliği ve Next davranış eşlemesi açık. |

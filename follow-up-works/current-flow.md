@@ -63,3 +63,13 @@ O2: config kaydı/validator/export ve EN/TR 29'ar yetim mesaj kaldırıldı.
 Değişiklik öncesi gerçek CLI config kabulü kaydedildi; sonrası CONFIG_VALIDATION/78 ret ve gerçek kota/harcama
 regresyonu doğrulandı. Hedefli66; full1514 ürün/261 dosya, native24, host34, atlanan0. Kanıt: /home/alperen/deckent-refactor-work/proof/PROVIDER-LIMITS-REMOVAL/.
 O1 MEMORY ana satırı ve O1–O7 karar→plan eşlemesi PLAN.md içinde; kapsam daraltılmadı.
+
+## O7 — statik legacy yüzey envanteri
+
+Next host aracı: `node .agents/refactor/legacy-surface-inventory.mjs /home/alperen/deckent-dev/src/core/cli-command-contract.ts`.
+Legacy import/çalıştırma yok; literal dışı/dinamik satır, tekrar eden path ve tanınmayan surface reddedilir.
+Kaynak hash + satır + yazılmış metadata + CLI/MCP/REPL kapsamı JSON üretilir; default surface
+factory'den okunur. 280 yol ve 11 REPL-only; eski rapordaki282 güncel kaynakla doğrulanmıyor.
+4 host testi ve gerçek kaynaktan manifest geçti; tam verify host34 bu testleri içeriyor.
+Kanıt: /home/alperen/deckent-refactor-work/proof/LEGACY-SURFACE-INVENTORY/.
+Bu bir port envanteridir; eski komutların çalıştığı veya Next'te bulunduğu iddiası değildir.
