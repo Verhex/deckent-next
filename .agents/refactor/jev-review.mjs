@@ -19,7 +19,7 @@ async function optional(directory, name) {
 export async function consult(config, policy, authoredCase, root, key, transport) {
   const requestAt = new Date().toISOString();
   const prepared = prepare(authoredCase, policy, requestAt);
-  safeData(authoredCase, key);
+  safeData(prepared, key);
   const wire = { model: config.model, state: prepared.input.state, questions: prepared.input.questions };
   ensure(Buffer.byteLength(JSON.stringify(wire)) <= config.maxRequestBytes, 'JEV_REQUEST_TOO_LARGE');
   const id = callId(); const directory = join(await privateDirectory(root), id);

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm, symlink } from 'node:fs/promises';
@@ -9,7 +10,7 @@ import { readEvent, writeEvent, callId, entries } from './jev-journal.mjs';
 const config = JSON.parse(await readFile(new URL('./jev.config.json', import.meta.url), 'utf8'));
 const policy = JSON.parse(await readFile(new URL('./jev.review.config.json', import.meta.url), 'utf8'));
 const key = 'local-test-secret-never-live';
-const fixture = () => ({ schemaVersion: 1, objective: 'Choose next validation action.', scope: 'host-test', revision: 'fixture-v1', evidence: [{ id: 'test', source: 'fixture', observedAt: '2026-09-19T00:00:00Z', observation: 'A test failed without a known cause.' }], constraints: ['Do not claim an unexplained failure fixed.'], unknowns: ['Failure cause'], options: [{ id: 'investigate', action: 'Inspect failure evidence', tradeoffs: ['Consumes time'], evidenceIds: ['test'] }, { id: 'accept', action: 'Accept without investigation', tradeoffs: ['Unresolved failure risk'], evidenceIds: ['test'] }], checks: [{ id: 'supported', instructions: 'Is acceptance supported?', evidenceIds: ['test'] }] });
+const fixture = () => ({ schemaVersion: 2, process: { stage: 'validation', currentState: 'Failure unexplained', acceptedDecisions: ['Do not accept without proof'], nextStep: 'Investigate failure', reopenReason: null }, objective: 'Choose next validation action.', scope: 'host-test', revision: 'fixture-v1', evidence: [{ id: 'test', source: 'fixture', observedAt: '2026-09-19T00:00:00Z', observation: 'A test failed without a known cause.' }], constraints: ['Do not claim an unexplained failure fixed.'], unknowns: ['Failure cause'], options: [{ id: 'investigate', action: 'Inspect failure evidence', tradeoffs: ['Gain: reliable acceptance; loss: investigation time'], northStarImpact: 'Preserves evidence-based enterprise reliability', evidenceIds: ['test'] }, { id: 'accept', action: 'Accept without investigation', tradeoffs: ['Gain: immediate progress; loss: unresolved failure risk'], northStarImpact: 'Compromises reliable acceptance', evidenceIds: ['test'] }], checks: [{ id: 'supported', instructions: 'Is acceptance supported?', evidenceIds: ['test'] }] });
 const transport = async (_url, options) => {
   const request = JSON.parse(options.body);
   return Response.json({ model: 'fixture-model', answers: Object.fromEntries(Object.entries(request.questions).map(([id, q]) => [id, q.type === 'noul' ? { type: 'noul', noul: 0.1 } : { type: 'choice', choice: 'investigate', confidence: 0.8, probabilities: { investigate: 0.9, accept: 0.05, none_of_the_above: 0.02, insufficient_information: 0.03 } }])), usage: { input_tokens: 10, output_tokens: 5 } });
@@ -20,7 +21,7 @@ async function sandbox(fn) {
 }
 test('preparation preserves authored evidence/options, rejects dangling references and supplies two distinct abstention choices', () => {
   const c = fixture(); const p = prepare(c, policy);
-  assert.deepEqual(p.input.state, c);
+  assert.deepEqual(p.input.state.case, c);
   assert.deepEqual(Object.keys(p.input.questions.next_action.criteria), ['investigate', 'accept', 'none_of_the_above', 'insufficient_information']);
   c.options[0].evidenceIds = ['invented']; assert.throws(() => prepare(c, policy), /JEV_OPTION/);
   c.options[0].evidenceIds = ['test']; c.checks[0].evidenceIds = []; assert.throws(() => prepare(c, policy), /JEV_CHECK/);
@@ -61,6 +62,13 @@ test('request exists before call; response, decision and labeled outcome are sep
     assert.equal(pending.ids.length, 1);
     const beforeSend = await readEvent(join(root, pending.ids[0]), 'request.json');
     assert.equal(beforeSend.case.objective, fixture().objective);
+    const wire = JSON.parse(args[1].body);
+    assert.deepEqual(wire.state, beforeSend.input.state);
+    assert.deepEqual(wire.state.case.process, fixture().process);
+    const charter = await readFile(new URL('../../.deckent/docs/core-memory/project_product_north_star.md', import.meta.url), 'utf8');
+    assert.equal(wire.state.northStar.text, charter);
+    assert.equal(wire.state.northStar.sha256, createHash('sha256').update(charter).digest('hex'));
+    assert.match(wire.questions.next_action.instructions, /state.northStar/);
     return transport(...args);
   });
   const request = await readEvent(result.directory, 'request.json');
@@ -141,4 +149,28 @@ test('historical defer is interpreted from the recorded request, never relabeled
   assert.deepEqual(summary.abstentions.insufficient_information, { offered: 0, selected: 0 });
   assert.equal(summary.rows[0].selectedOption, 'defer');
   assert.equal(summary.rows[0].abstentionProbabilities.insufficient_information, null);
+}));
+
+test('decision context cannot omit process or impact, override the shared charter, or submit legacy cases', async () => sandbox(async root => {
+  let calls = 0;
+  for (const mutate of [c => { delete c.process; }, c => { c.process.acceptedDecisions = []; },
+    c => { c.process.reopenReason = ''; }, c => { delete c.options[0].northStarImpact; },
+    c => { c.northStar = 'override'; }, c => { c.schemaVersion = 1; }]) {
+    const c = fixture(); mutate(c);
+    await assert.rejects(consult(config, policy, c, root, key, async (...args) => { calls++; return transport(...args); }));
+  }
+  assert.equal(calls, 0);
+  assert.equal((await entries(root, 10)).ids.length, 0);
+}));
+
+test('full wire budget and secrets in the injected charter fail before network', async () => sandbox(async root => {
+  let calls = 0;
+  const fake = async (...args) => { calls++; return transport(...args); };
+  const c = fixture();
+  const prepared = prepare(c, policy);
+  const bytesWithoutCharter = Buffer.byteLength(JSON.stringify({ model: config.model, state: c, questions: prepared.input.questions }));
+  await assert.rejects(consult({ ...config, maxRequestBytes: bytesWithoutCharter }, policy, c, root, key, fake), /JEV_REQUEST_TOO_LARGE/);
+  await assert.rejects(consult(config, policy, c, root, 'customer-installed Agent OS', fake), /JEV_SECRET_IN_JOURNAL/);
+  assert.equal(calls, 0);
+  assert.equal((await entries(root, 10)).ids.length, 0);
 }));

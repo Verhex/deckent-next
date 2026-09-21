@@ -1240,8 +1240,8 @@
       "CHANGELOG.md"
     ],
     "pointerFiles": {
-      "CLAUDE.md": 5,
-      "AGENTS.md": 5,
+      "CLAUDE.md": 70,
+      "AGENTS.md": 70,
       ".codex/AGENTS.md": 5
     },
     "writerModule": "src/platform/core/docs-authority/",

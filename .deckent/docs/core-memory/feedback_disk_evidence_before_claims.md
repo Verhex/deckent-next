@@ -1,24 +1,7 @@
----
-name: disk-evidence-before-claims
-description: Canlılık/ilerleme iddiası ASLA status-projection'dan yapılmaz — önce disk kanıtı (hb mtime, kill-0, log tail, result); varsayım etiketlenmeden söylenmez
-metadata:
-  type: feedback
----
+# Önce gerçek kanıt
 
-Sprint-507 gecesi (2026-08-11): `deckent status` "Writing code" gösterirken worker'lar
-9+ dakikadır ölüydü (son hb 00:41, runner PID 55905 dahil hepsi dead), fix-worker hiç
-doğmamıştı. Asistan status çıktısına dayanarak "retry'lar kod yazıyor" raporladı —
-Alperen: "uydurma ve varsayımlar kabul edilmeyecektir; bilgiler ve beklentiler tamamen
-yanlış ve uydurma."
+Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu: 2026-09-21.
 
-**Why:** deckent'in status/read-model projection'ları henüz güvenilir değil (status-projection
-dürüstlüğü MASTER-PLAN'da açık iş ailesi — RECOVERY-BORN-488-STATUS-PROJECTION-001 vd.).
-Projection'a dayalı iddia = sentetik verdict kabulü; CONFIG-RESOLVED SUPERVISION bunu
-zaten yasaklıyor. Yanlış iyimser rapor, owner'ın gece kararlarını bozuyor.
+Legacy status writing gösterirken worker yaklaşık dokuz dakika ölüydü: projection canlılık kanıtı değildir. İlgili adapterın gerçek custody, süreç/container kimliği, heartbeat zamanı, log ve result/settlement kayıtlarını birlikte incele. PID tek başına kimlik, heartbeat terminal başarı, log son satırı teslim kanıtı değildir. Eksik/çelişkili kanıtta bilinmiyor de. .hb/.log/.result biçimi tek platforma zorunlu evrensel protokol değildir.
 
-**How to apply:** Bir koşu/worker hakkında "canlı / ilerliyor / doğdu / bitti" demeden önce
-ZORUNLU disk doğrulaması: (1) `.tasks/*.hb` mtime'ı şimdiye karşı, (2) PID dosyası +
-`kill -0`, (3) worker log tail'inin son timestamp'i, (4) `.result` varlığı/içeriği.
-Projection yalnız yön gösterir, kanıt sayılmaz. Doğrulanamayan her şey rapora
-"doğrulanmadı" etiketiyle girer; beklenti ile gözlem aynı cümlede karışmaz.
-[[law_proof_blockers_brain_eval]] [[law_alp_discipline_anchor]]
+Tarihsel kaynak: bu dosyanın normalizasyon öncesi Git geçmişi; eski komut ve durumlar güncel yetki değildir.

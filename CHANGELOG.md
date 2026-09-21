@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FOUNDATION/MEMORY: permanent product-development contracts in AGENTS/CLAUDE with a 70-line architecture gate; normalized legacy lessons and shared Agent OS north star. Logged Jev case v2 requires current process and option impact, includes the curated charter text/hash, and preserves historical journal interpretation. Host governance only; no product-model or recovery authority change.
+
 - NEXT-HOST: CLI/MCP host routing and independent `DECKENT_GLOBAL_HOME`; legacy checkout is read-only reference, per-project runtime roots are retained.
 - WORKER-OBSERVATION: host-owned heartbeat/log/result projections and scoped SDK/CLI list/watch across explicit local Next projects and legacy task directories; bounded safe log diagnostics, separate freshness/process/result evidence, and view-only interruption. No legacy runtime or DOGFOOD activation.
 

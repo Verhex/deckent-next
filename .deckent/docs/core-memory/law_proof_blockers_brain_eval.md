@@ -1,10 +1,7 @@
----
-name: law_proof_blockers_brain_eval
-description: KANUN — user-surface DONE=gerçek-binary koşu · yönlendirmeden önce engelleri açıkla · karar Brain+disk-verify (worker iddiası ipucu)
-metadata:
-  type: feedback
----
+# Çalışma kanıtı ve kabul
 
-**(a) Proof-of-Function:** kullanıcı-yüzü (CLI/dashboard/API) işi ancak GERÇEK-BINARY koşu-kanıtıyla DONE; mock-only = TECH_DEBT.
-**(b) Proaktif-engel-bildirimi:** Alperen'i bir eyleme yönlendirmeden ÖNCE bilinen blocker/limit/kısıt/yapısal-bug'ları açıkça sun.
-**(c) Değerlendirme-otoritesi:** worker self-assessment ipucudur; karar Brain-eval + disk-verify (git diff/dosya-gerçeği). Sentetik NO_GO'da (exit-без-result/OOM) diske bak — gerçek iş çöpe atılmaz.
+Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu: 2026-09-21.
+
+Kullanıcıya yol göstermeden önce bilinen engeli söyle. DONE gerçek binary/yüzey ve kalıcı sonuç kanıtına dayanır. Worker öz değerlendirmesi kabul değildir. Brain kabul, Auditor bağımsız denetim, Nervous gözlem sorumluluklarıdır; ürün hedefiyle Nextte gerçekten bağlı mekanizmayı ayır. Doküman tek başına çalışan Brain veya kabul kanıtlamaz.
+
+Tarihsel kaynak: bu dosyanın normalizasyon öncesi Git geçmişi; eski komut ve durumlar güncel yetki değildir.

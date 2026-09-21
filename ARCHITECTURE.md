@@ -1,5 +1,8 @@
 # Architecture
 
+Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
+Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
+
 ## Northstar — owner 2026-09-17
 
 Deckent, kullanıcının niyetini güvenli, paralel ve doğrulanmış işe dönüştüren müşteri-kurulumlu Agent OS ürünüdür.
@@ -327,7 +330,8 @@ Model, provider and flow identifiers appear only in `providers/core/registry/` (
 ## Documents
 
 The Markdown gate admits four documents: `README.md`, `ARCHITECTURE.md`, `PLAN.md`, `CHANGELOG.md`;
-≤5-line pointers `CLAUDE.md`, `AGENTS.md`, `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
+≤70-line permanent product-development contracts `CLAUDE.md`, `AGENTS.md`;
+≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
 and the explicit refactor host-kit globs in `arch.json`: the remaining 23 `.agents/skills/<skill>`
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).

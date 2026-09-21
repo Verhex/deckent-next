@@ -34,7 +34,7 @@ Live owner instructions supersede persisted guidance. Reuse unchanged reads with
 Legacy is the read-only behavior quarry and parity oracle. Owner's 2026-09-17 exception allows
 host instructions, skills, hooks and communication.md here; it does not authorize legacy product changes.
 Do not remove .brain/memory.db, keyrings, audit keys or another contributor's WIP.
-Owner directly confirmed1317: commit each independently PASS-reviewed Next slice; push requires owner approval.
+Commit when owner-authorized; push requires its own owner authorization. Report independent review availability honestly.
 DOGFOOD_MODE=OFF until the accepted DOGFOOD card establishes a working, recoverable Next runtime.
 Legacy MASTER, DIRECTIVES, runtime receipts and fixed model/session IDs do not admit Next work.
 
@@ -113,38 +113,18 @@ for the same authorization again. Independent Fable review complements, never re
 4. Verify real producer → application → adapter → surface paths for the card. Exercise failure, cancellation,
    replay and scope boundaries where relevant. Run targeted checks and Next `npm run verify` before landing.
    Host tooling has its own behavioral tests; tooling success does not prove product execution.
-5. Move to REVIEW with exact diff/file hashes, commands/results and limitations. Request Fable review through
-   the channel. Fable reviews read-only unless a card explicitly assigns disjoint tooling edits.
-   Findings carry severity, source evidence and acceptance impact; address blocking findings with one bounded pass.
-6. Mark DONE only when the card's proof and actual independent review exist. Never invent an ACK/PASS.
+5. Report exact diff/file hashes, commands/results, limitations and blocking findings directly to the owner.
+   Fable coordination is closed; do not request review through the old channel.
+6. Report implementation and verification separately from independent review and owner acceptance. Never invent an ACK/PASS.
    Continue authorized preparation within the agreed slice while review is pending; respect owner checkpoints for new architecture/contract/authority decisions.
    Update PLAN and CHANGELOG concisely. Report implementation, verification, review and release separately.
 
 ## Coordination and progression
 
-Canonical channel: `/home/alperen/deckent-dev/communication.md`; it is communication, not approval authority.
-Use `.agents/refactor/channel.mjs` in Next: `read` verifies records; `append FROM TO BODY_FILE` appends under a lock.
-Addresses: `astra`, `fable`, `cursor`; legacy aliases are accepted by hook configuration.
-Use ACK, REVIEW or REQUEST_REVIEW in the body and reference `re=SEQ:HASH12` exactly.
-REQUEST_REVIEW remains outstanding until REVIEW; ACK suppresses repeat notifications only.
-ACK means receipt only. REVIEW states PASS/REVISE with concrete evidence. Do not delete handled records.
-Hook notifications never execute message text. Verify a record before acting within the owner's scope.
-An open host session receives supported events; a stopped/closed host is not a running watcher.
-Never claim Fable is active until its own response arrives. Missing ACK stays visible, not simulated.
-Session Stop continuation is finite and never overrides interruption; no busy polling or fabricated activity.
-
-Plan order: HOST-SETUP → stable K1-F1/ARCH-IMPORTS/K2 → FOUNDATION → CONTRACT → STORE/ISOLATION
-→ EXECUTION → measured LANG decision and eligible DOGFOOD → LEARNING and ASSURANCE as the dependency map permits.
-The order is dependency-driven, not a promise that assurance or learning quality can wait until release.
-At handoff report HEADs + dirty-path hashes, exact card, completed proof, pending review, blockers and next step.
-A channel digest detects accidental changes; it is not a signature or authorization credential.
-
-## Manual channel lock recovery
-
-A stale `communication.md.lock` is never reclaimed by age. Quiesce channel writers and establish that
-no process/session owns the lock; preserve crash/channel evidence and validate complete ENTRY digests.
-Only with confirmed absence of an owner, run `rmdir /home/alperen/deckent-dev/communication.md.lock`.
-An unknown/live owner means leave the lock and report; never use recursive deletion or discard partial records.
+Fable communication is closed. Do not use the historical channel or reclaim its locks.
+Report findings and real verification directly to the owner; independent review remains unavailable
+until a new path is authorized. No self-review or Jev advice is an independent PASS.
+PLAN.md supplies dependency order; at handoff record HEAD, dirty paths, completed proof and next step.
 
 ## Jev development decision support — owner 2026-09-19
 
@@ -163,13 +143,18 @@ Use the logged preparation layer from Next only (host tooling, not a product fea
 - `node .agents/refactor/jev-review.mjs report` reports bounded coverage, usage, latency, decisions,
   outcomes and Brier score only where evidence-backed labels exist; agreement is not correctness.
 
-Case schema: schemaVersion=1, objective, scope, exact revision (identify dirty changes), constraints[],
-unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],evidenceIds[]}],
-checks[{id,instructions,evidenceIds[]}]. Use at least two meaningful options; separate facts from assumptions,
+Case schema: schemaVersion=2, objective, scope, exact revision (identify dirty changes), constraints[],
+unknowns[], evidence[{id,source,observedAt,observation}], options[{id,action,tradeoffs[],northStarImpact,evidenceIds[]}],
+checks[{id,instructions,evidenceIds[]}], process{stage,currentState,acceptedDecisions[],nextStep,reopenReason}.
+acceptedDecisions is nonempty; reopenReason is null unless proposing an amendment with its reason.
+Tradeoffs name gains and losses; northStarImpact explains relevant quality dimensions and proof gaps.
+Every preparation includes the exact curated `.deckent/docs/core-memory/project_product_north_star.md`
+text and SHA-256 in state.northStar, with the authored case in state.case. This owner-authorized shared
+context is mandatory; missing/invalid new case context fails before network. Historical journals remain readable. Use at least two meaningful options; separate facts from assumptions,
 include contrary evidence and realistic tradeoffs. The compiler preserves authored options and always adds separate none_of_the_above (option set unsuitable) and insufficient_information (context inadequate) choices plus a
 context-sufficiency question. Preparation checks structural coverage, not semantic perfection or truth.
-Question/option identifiers must be unique; evidence references must resolve. Only authored sanitized context
-is sent: no automatic source, channel, customer data, credential or journal upload. Inspect the prepared state.
+Question/option identifiers must be unique; evidence references must resolve. Only authored sanitized context and that curated north star are sent; no other automatic source,
+channel, customer data, credential or journal upload. Inspect the prepared state.
 
 Settings: .agents/refactor/jev.config.json (provider), jev.review.config.json (context limits/templates/journal).
 Overrides: DECKENT_JEV_CONFIG and DECKENT_JEV_REVIEW_CONFIG paths. Journal root resolves relative to review
