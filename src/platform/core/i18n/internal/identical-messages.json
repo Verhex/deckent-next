@@ -63,7 +63,6 @@
   "doctor.platform_label_win32_native",
   "doctor.platform_profile_line",
   "doctor.provider_authority_keyring_name",
-  "doctor.provider_limit_authority_name",
   "gateway.pair_list_row",
   "gateway.projects_row",
   "health.mcp",

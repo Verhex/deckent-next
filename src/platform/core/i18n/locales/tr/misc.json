@@ -76,7 +76,6 @@
   "config.field.mode": "Yapılandırılmış çalışma profili.",
   "config.field.output_mode": "Çıktı sunum biçimi.",
   "config.field.projectName": "Proje görünen adı.",
-  "config.field.provider_limits": "Provider kullanım ve bütçe politikaları.",
   "config.field.providers": "İç içe provider seçimleri ve özelleştirmeleri.",
   "config.field.schema_version": "Yapılandırma sözleşmesi sürümü.",
   "config.field.spawn_backend": "Yürütme altyapısı tercihi.",

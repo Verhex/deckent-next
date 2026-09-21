@@ -76,7 +76,6 @@
   "config.field.mode": "Configured operating profile.",
   "config.field.output_mode": "Output presentation format.",
   "config.field.projectName": "Project display name.",
-  "config.field.provider_limits": "Provider usage and budget policies.",
   "config.field.providers": "Nested provider selections and overrides.",
   "config.field.schema_version": "Configuration contract version.",
   "config.field.spawn_backend": "Execution backend preference.",

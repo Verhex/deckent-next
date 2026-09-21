@@ -11,7 +11,7 @@ import {
   getConfigValue, resolveGlobalConfigPaths, productResourcePath, resolveTenant, t,
 } from '../../../src/platform/index.js';
 
-import { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence } from '../../../src/adapters/index.js';
+import { registerProviderConfig } from '../../../src/adapters/index.js';
 registerProviderConfig();
 
 const roots: string[] = [];
@@ -196,14 +196,16 @@ describe('new config contract and write authority', () => {
     await expect(writeConfig(f.projectPath, { language: 'en' }, 'obsolete')).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
     expect(JSON.parse(await readFile(f.projectPath, 'utf8'))).toEqual({ language: 'tr' });
   });
-  it('requires parent policy and prevents weaker child quotas, including selector mismatch', () => {
-    const selector = { tenantId: 'local', provider: 'test-provider' };
-    const parent = { schemaVersion: 1, policies: [{ selector, values: { warnAtRatio: 0.7, blockAtRatio: 0.9, minimumRemaining: { tokens: 10 } } }] };
-    const child = (values: unknown, id = selector) => ({ schemaVersion: 1, policies: [{ selector: id, values }] });
-    expect(() => assertProviderLimitPolicyLayerPrecedence(parent, child({ blockAtRatio: 0.8 }))).not.toThrow();
-    for (const value of [{ blockAtRatio: 0.99 }, { ratioEnforcement: 'observe_only' }, { minimumRemaining: { tokens: 1 } }]) expect(() => assertProviderLimitPolicyLayerPrecedence(parent, child(value))).toThrow();
-    expect(() => assertProviderLimitPolicyLayerPrecedence(undefined, child({}))).toThrow();
-    expect(() => assertProviderLimitPolicyLayerPrecedence(parent, child({}, { ...selector, tenantId: 'other' }))).toThrow();
+  it.each(['global', 'project', 'both'] as const)('rejects the unenforced provider limit section in %s config without rewriting it', async placement => {
+    const f = await fixture();
+    const authored = JSON.stringify({ provider_limits: { schemaVersion: 1, policies: [{ selector: { provider: 'fixture' },
+      values: { warnAtRatio: 0.5, blockAtRatio: 0.8 } }] } });
+    const paths = placement === 'both' ? [f.globalPath, f.projectPath] : [placement === 'global' ? f.globalPath : f.projectPath];
+    for (const path of paths) await writeFile(path, authored);
+    await expect(loadConfig(f.project, { env: f.env })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION',
+      issues: expect.arrayContaining([{ path: 'provider_limits', reason: 'unrecognized_keys' }]) });
+    for (const path of paths) expect(await readFile(path, 'utf8')).toBe(authored);
+    expect(getConfigMetadata().some(field => field.key === 'provider_limits')).toBe(false);
   });
   it('looks up only own keys and never follows object prototypes', () => {
     expect(getConfigValue(createDefaultConfig(), 'providers.brain')).toBeNull();

@@ -1,14 +1,14 @@
 import { admitRunAttempts } from '../support/admission.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
-import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
+import { clearConfigCache } from '#platform/index.js';
 import { custodyProfiles, custodyPrincipal, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { startTestRuntimeService } from '../support/runtime-service.js';
 const exec = promisify(execFile); const roots: string[] = [];
@@ -31,11 +31,6 @@ async function fixture() {
   const policy = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [{ id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'],
     principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'scope', ids: ['s'] } }] };
   await writeFile(join(data, 'policy.json'), JSON.stringify(policy), { mode: 0o600 });
-  const configPath = join(project, '.deckent/config.json');
-  const config = JSON.parse(await readFile(configPath, 'utf8')); config.provider_limits = { schemaVersion: 1, policies: [] };
-  await writeFile(configPath, JSON.stringify(config));
-  const globalPath = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(globalPath), { recursive: true, mode: 0o700 });
-  await writeFile(globalPath, JSON.stringify({ provider_limits: config.provider_limits }));
   await startTestRuntimeService(project, env);
   return { project, data, env, ledgerPath: opened.path, layoutRevision: opened.layout.revision };
 }

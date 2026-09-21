@@ -1,6 +1,7 @@
 # Anlık iş akışı — geçici
 
-İş: INTEGRATION-INSPECTION. Durum: uygulandı; tam doğrulama ve gerçek kayıt yeniden okuma geçti; yerel commit için hazır.
+İş: PROVIDER-LIMITS-REMOVAL (O2). Durum: uygulandı, tam doğrulama geçti; yerel commit.
+Önceki INTEGRATION-INSPECTION + dış belge yolu düzeltmesi: ac44bc6 yerel commit; push yok.
 Owner devam ve yerel commit izni verdi; push yapılmayacak. Tam doğrulama geçti; sıradaki onaylı bağımsız dilim PROVIDER-LIMITS-REMOVAL (O2).
 DOGFOOD_MODE=OFF. Legacy salt okunur eski ürün; Fable kanalı kapalı, owner belge düzenlemesini yürütüyor.
 
@@ -57,3 +58,8 @@ O4 owner tarafından yeniden açıldı; Run/Task/Attempt bütün Agent OS modeli
 Üç alternatif ve solo/ekip/ERP yolculuğu taslağı:
 /home/alperen/deckent-refactor-work/proof/AGENT-OS-MODEL-REVIEW/review.md.
 Jev yalnız hazırlık yöntemine danışıldı; final mimari karar veya kapasite kanıtı değildir.
+
+O2: config kaydı/validator/export ve EN/TR 29'ar yetim mesaj kaldırıldı.
+Değişiklik öncesi gerçek CLI config kabulü kaydedildi; sonrası CONFIG_VALIDATION/78 ret ve gerçek kota/harcama
+regresyonu doğrulandı. Hedefli66; full1514 ürün/261 dosya, native24, host34, atlanan0. Kanıt: /home/alperen/deckent-refactor-work/proof/PROVIDER-LIMITS-REMOVAL/.
+O1 MEMORY ana satırı ve O1–O7 karar→plan eşlemesi PLAN.md içinde; kapsam daraltılmadı.

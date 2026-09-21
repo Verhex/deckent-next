@@ -53,6 +53,7 @@ IFS-E2E ve DOGFOOD kendi uçtan uca kanıtından sonra, LANG ölçümle; ASSURAN
 | IFS-E2E | Cloud ve Applications 10'da aynı iş operasyonunun scope/policy/approval/etki uzlaştırmasıyla kanıtı. |
 | LANG | TS referansına karşı seçilmiş Go supervisor deneyi; toplam bakım/dağıtım/güvenilirlik kazancı olmadan geçiş yok. |
 | DOGFOOD | Kararlı N ile izole N+1 geliştirme; kabul/kurtarma kanıtı, maliyet izlemi ve dış kurtarma yolu. |
+| MEMORY | Kapsamlı kalıcı kayıt, revision/provenance, conflict journal, yetkili retrieval; sessiz silme yok, indeks kayıt otoritesinin yerine geçmez. |
 | LEARNING | Doğrulanmış sonuç→routing/skill/model iyileştirmesi; bağımsız eval, provenance ve geri dönüş. |
 | ASSURANCE | Yük/arıza/platform matrisi, backup/restore, sürüm yükseltme ve Core/Enterprise ayrı yayın kanıtı. |
 
@@ -110,7 +111,7 @@ Tam alan/ağaç kaynakları: [temel config](src/platform/core/config-fields/inte
 - **Tool yetkisi:** dosya okuma/yazma/silme, ağ ve iş operasyonu policy'si ortamdan ayrı tanımlanacak; Docker/tmux vb. adapter yalnız gerçekten uyguladığı sınırı sunacak. Shell erişimi varken silme tool'unu gizlemek izolasyon değildir.
 - **Maliyet:** ek çağrı ücreti olmayan abonelikte gerçek çağrı maliyeti 0, API eşdeğeri ayrı simülasyon. Simülasyon fiyatı eksikse bilinmiyor; yürütmeyi engellemez. Ücretli API'nin gerçek bütçe denetimi korunur. Provider kapsamı OpenRouter ile sınırlı hedeflenmez.
 - **MCP takip kayıtları:** MCP-CLIENT, MCP-CONNECTIONS, MCP-REMOTE, MCP-TOOL-EXECUTION, MCP-EFFECT-RECOVERY, MCP-CAPACITY, MCP-VERSION-CAPABILITIES, MCP-SERVER-CONSISTENCY, MCP-IFS. Ayrıntılı kabul koşulları arşiv raporda korunur; bu liste uygulama başlangıcı değildir.
-- **Diğer açıklar:** `provider_limits` kayıtlı fakat uygulanmıyor; A3A-b belirsiz custody, CANCEL/FAIRNESS, model dışı MCP mutasyonunun işlem öncesi yanıt sınırı, D-CUSTODY; periyodik parasal audit/append-only düzeltme, makine okunur maliyet kırılımı, gerçek ücretli çağrı credential ve sayısal tavan kabulü. HOST-JEV-EVIDENCE ayrı WIP, ürün kabulü değil.
+- **Diğer açıklar:** `provider_limits` O2 uyarınca kaldırıldı; gerçek invocation kotası ve harcama denetimi ayrı korunur; A3A-b belirsiz custody, CANCEL/FAIRNESS, model dışı MCP mutasyonunun işlem öncesi yanıt sınırı, D-CUSTODY; periyodik parasal audit/append-only düzeltme, makine okunur maliyet kırılımı, gerçek ücretli çağrı credential ve sayısal tavan kabulü. HOST-JEV-EVIDENCE ayrı WIP, ürün kabulü değil.
 
 ## Önemli açık bulgular
 
@@ -152,3 +153,18 @@ External decision O4 (reduce canonicalChain to Run/Task/Attempt) is on hold for 
 no automatic narrowing of enterprise process/goal/mission capabilities or restoration of the old
 mandatory hierarchy. Execution contracts continue unchanged. Owner authorizes continued work and
 local commits of verified slices; no push while the owner is travelling. DOGFOOD remains OFF.
+
+## Dış owner kararlarının güncel plana bağlanması — 2026-09-21
+
+Kaynak: [owner kararları](../deckent-refactor-work/REFAKTOR-OWNER-KARARLARI-2026-09-21.md).
+Bu eşleme tarihsel kartlardaki sıra/ledger numaralarını yeni yürütme izni saymaz.
+
+| Karar | Sorumlu ana alan | Güncel uygulama / açık kapsam |
+|---|---|---|
+| O1 | MEMORY | Ana iş satırı eklendi. Memory authority/retrieval ve yeni storage sözleşmesi hâlâ açık; eski DB doğrudan kullanılmaz. |
+| O2 | PROVIDERS | Uygulanmayan config bölümü ve bağlı yetim metinler kaldırıldı; alan yazılırsa tipli ret. Gerçek kota/harcama denetimi korunur. |
+| O3 | SECURITY / EXECUTION / CONTRACT | Onay claim önkoşulu; bekleyen iş aday seçimine girmez, onaydan sonra yeni rezervasyon komutu. Güncel transaction/custody ve command-envelope ile birlikte uygulanacak. |
+| O4 | CONTRACT | Owner son talimatıyla yeniden açıldı. Ürün modeli incelemesi bekliyor; canonicalChain daraltılmadı. |
+| O5 | INSTALLATION / SECURITY | Kabul edilmiş grup-yazma kararı açık. Güncel observer/journal yanında publication kontrolleri de eşlenmeli; güven sınırı diğer policy/artifact/worker dizinlerine kendiliğinden genişletilmez. |
+| O6 | SECURITY | Süreç/tty bağlı os-user session ve token-verified genişleme portu hedefi açık. Mevcut OS principal doğrulaması session freshness tamamlandı demek değildir. |
+| O7 | SURFACES / ASSURANCE | Legacy cli-command-contract.ts salt okunur port envanteri kaynağıdır. Eski komut adları/alias'lar Next kabul şartı değildir; manifest ve davranış eşlemesi ayrı kanıtlanacak. |

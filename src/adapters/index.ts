@@ -1,4 +1,4 @@
-export { registerProviderConfig, assertProviderLimitPolicyLayerPrecedence, providerSpendingSchema, providerSpendAuditConfigSchema } from '#adapters/core/contract/index.js';
+export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';

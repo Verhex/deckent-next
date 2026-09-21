@@ -111,6 +111,122 @@
     "cli.help.run": {
       "before": "Usage: deckent run <action>\n  create --scope <id> --id <run> --command-id <id> --graph <file|-> [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun creation admits a graph; reservation selects Tasks and generates Attempt\n    identities. Neither command executes Tasks or accepts a caller verdict.",
       "after": "Usage: deckent run <action>\n  create --scope <id> --id <run> --command-id <id> --graph <file|->\n    [--branch <file>] [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun creation admits a graph; reservation selects Tasks and generates Attempt\n    identities. Neither command executes Tasks or accepts a caller verdict."
+    },
+    "provider_authority.limits.aborted": {
+      "before": "Aborted by owner — nothing was written.",
+      "after": null
+    },
+    "provider_authority.limits.cmd_desc": {
+      "before": "Provider-limit authority — author the `provider_limits` policy from live provider truth",
+      "after": null
+    },
+    "provider_authority.limits.confirm": {
+      "before": "Apply this CAS-guarded provider_limits transition to the global config layer?",
+      "after": null
+    },
+    "provider_authority.limits.hold": {
+      "before": "HOLD ({reasonCode}): {detail}\nEvidence: {evidenceRef}\nNothing was written — a provider-limit selector is only ever authored from live provider truth.",
+      "after": null
+    },
+    "provider_authority.limits.init_desc": {
+      "before": "Derive and write the global `provider_limits` block for one exact provider scope (owner-confirmed)",
+      "after": null
+    },
+    "provider_authority.limits.invalid_enforcement": {
+      "before": "Refused: --ratio-enforcement must be enforce or observe_only.",
+      "after": null
+    },
+    "provider_authority.limits.invalid_ratio": {
+      "before": "Refused: --warn-at-ratio and --block-at-ratio must be finite numbers between 0 and 1.",
+      "after": null
+    },
+    "provider_authority.limits.needs_scope": {
+      "before": "Refused: an exact scope is required — pass --provider, --model, --auth-mode, --transport, --execution-backend, --execution-profile-ref, --warn-at-ratio and --block-at-ratio. A provider-limit selector is never inferred.",
+      "after": null
+    },
+    "provider_authority.limits.opt_auth_mode": {
+      "before": "Exact auth mode: subscription | api | hybrid | local",
+      "after": null
+    },
+    "provider_authority.limits.opt_block_at_ratio": {
+      "before": "Consumption ratio (0..1) at which a run is blocked (must be >= warn)",
+      "after": null
+    },
+    "provider_authority.limits.opt_endpoint_ref_hash": {
+      "before": "Optional opaque SHA-256 endpoint reference (never a URL)",
+      "after": null
+    },
+    "provider_authority.limits.opt_execution_backend": {
+      "before": "Exact execution backend: host-subprocess | docker | tmux | api | in-process",
+      "after": null
+    },
+    "provider_authority.limits.opt_execution_profile_ref": {
+      "before": "Adapter-owned execution profile reference the account authority is scoped to",
+      "after": null
+    },
+    "provider_authority.limits.opt_model": {
+      "before": "Exact model api id the live limit source is asked about",
+      "after": null
+    },
+    "provider_authority.limits.opt_provider": {
+      "before": "Canonical provider id the policy is authored for",
+      "after": null
+    },
+    "provider_authority.limits.opt_ratio_enforcement": {
+      "before": "Ratio gate mode: enforce (default) or observe_only; absolute floors and unknown evidence still fail closed",
+      "after": null
+    },
+    "provider_authority.limits.opt_tenant": {
+      "before": "Tenant id the policy is authored for (solo hosts use `local`)",
+      "after": null
+    },
+    "provider_authority.limits.opt_transport": {
+      "before": "Exact transport: cli | api | http | local-runtime",
+      "after": null
+    },
+    "provider_authority.limits.opt_warn_at_ratio": {
+      "before": "Consumption ratio (0..1) at which a run is warned",
+      "after": null
+    },
+    "provider_authority.limits.preview": {
+      "before": "Derived from live provider truth:\n  provider={provider} authMode={authMode} transport={transport} backend={executionBackend}\n  tenant={tenantId} accountRefHash={accountRefHash} quotaScopeRefHash={quotaScopeRefHash}\n  windows={windows}\n  ratioEnforcement={ratioEnforcement} warnAtRatio={warnAtRatio} blockAtRatio={blockAtRatio}\n  action={action} expectedAuthorityRef={expectedAuthorityRef}\n  authorityRef={authorityRef} policyRef={policyRef}",
+      "after": null
+    },
+    "provider_authority.limits.refused": {
+      "before": "Refused ({reasonCode}): {detail}. No provider-limit authority was changed.",
+      "after": null
+    },
+    "provider_authority.limits.sources_unavailable": {
+      "before": "HOLD: no live provider evidence source authority is registered on this host, so account and quota identity cannot be observed. The policy is deliberately NOT authored from placeholder values — register a live evidence source bundle first.",
+      "after": null
+    },
+    "provider_authority.limits.written": {
+      "before": "Applied ({action}): provider_limits authority {authorityRef} at {configPath}.",
+      "after": null
+    },
+    "xverify.remedy.provider_authority_unavailable": {
+      "before": "Missing authority: the provider-limit authority runtime. Author the provider_limits envelope (owner config) so the runtime opens, then retry.",
+      "after": null
+    },
+    "doctor.provider_limit_authority_absent": {
+      "before": "No owner-authored provider_limits block in the global config layer — the composition holds with provider-authority-unavailable. Remedy: `deckent provider-authority limits init` (never `keyring init`; the keyring is a different authority).",
+      "after": null
+    },
+    "doctor.provider_limit_authority_authored_empty": {
+      "before": "provider_limits block exists but carries zero policies (authored-empty) — the validator refuses it and the composition still holds. Complete authoring with `deckent provider-authority limits init`.",
+      "after": null
+    },
+    "doctor.provider_limit_authority_name": {
+      "before": "Provider limit authority",
+      "after": null
+    },
+    "doctor.provider_limit_authority_ok": {
+      "before": "Authored global provider_limits present ({policies} policy(ies)) — the xverify/execution composition can resolve limit scope.",
+      "after": null
+    },
+    "config.field.provider_limits": {
+      "before": "Provider usage and budget policies.",
+      "after": null
     }
   },
   "tr": {
@@ -333,6 +449,122 @@
     "cli.help.run": {
       "before": "Kullanım: deckent run <eylem>\n  create --scope <id> --id <run> --command-id <id> --graph <dosya|-> [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun oluşturma grafiği kabul eder; ayırma görevleri seçer ve Attempt kimlikleri\n    üretir. Hiçbiri görev yürütmez veya çağıranın sonucu belirlemesine izin\n    vermez.",
       "after": "Kullanım: deckent run <eylem>\n  create --scope <id> --id <run> --command-id <id> --graph <dosya|->\n    [--branch <dosya>] [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun oluşturma Graph'ı kabul eder; ayırma görevleri seçer ve Attempt kimlikleri\n    üretir. Hiçbiri görev yürütmez veya çağıranın sonucu belirlemesine izin\n    vermez."
+    },
+    "provider_authority.limits.aborted": {
+      "before": "Sahibi tarafından iptal edildi — hiçbir şey yazılmadı.",
+      "after": null
+    },
+    "provider_authority.limits.cmd_desc": {
+      "before": "Provider-limit authority — `provider_limits` politikasını canlı provider gerçeğinden yaz",
+      "after": null
+    },
+    "provider_authority.limits.confirm": {
+      "before": "Bu CAS-korumalı provider_limits geçişi global config katmanına uygulansın mı?",
+      "after": null
+    },
+    "provider_authority.limits.hold": {
+      "before": "HOLD ({reasonCode}): {detail}\nKanıt: {evidenceRef}\nHiçbir şey yazılmadı — provider-limit selector yalnızca canlı provider gerçeğinden yazılır.",
+      "after": null
+    },
+    "provider_authority.limits.init_desc": {
+      "before": "Tek bir kesin provider kapsamı için global `provider_limits` bloğunu türet ve yaz (sahip onaylı)",
+      "after": null
+    },
+    "provider_authority.limits.invalid_enforcement": {
+      "before": "Reddedildi: --ratio-enforcement enforce veya observe_only olmalıdır.",
+      "after": null
+    },
+    "provider_authority.limits.invalid_ratio": {
+      "before": "Reddedildi: --warn-at-ratio ve --block-at-ratio 0 ile 1 arasında sonlu sayılar olmalıdır.",
+      "after": null
+    },
+    "provider_authority.limits.needs_scope": {
+      "before": "Reddedildi: kesin kapsam zorunlu — --provider, --model, --auth-mode, --transport, --execution-backend, --execution-profile-ref, --warn-at-ratio ve --block-at-ratio verin. Provider-limit selector asla tahmin edilmez.",
+      "after": null
+    },
+    "provider_authority.limits.opt_auth_mode": {
+      "before": "Kesin auth modu: subscription | api | hybrid | local",
+      "after": null
+    },
+    "provider_authority.limits.opt_block_at_ratio": {
+      "before": "Run'ın bloklanacağı tüketim oranı (0..1; warn değerinden küçük olamaz)",
+      "after": null
+    },
+    "provider_authority.limits.opt_endpoint_ref_hash": {
+      "before": "İsteğe bağlı opak SHA-256 endpoint referansı (asla URL değil)",
+      "after": null
+    },
+    "provider_authority.limits.opt_execution_backend": {
+      "before": "Kesin execution backend: host-subprocess | docker | tmux | api | in-process",
+      "after": null
+    },
+    "provider_authority.limits.opt_execution_profile_ref": {
+      "before": "Account authority kapsamındaki adapter sahipli execution profile referansı",
+      "after": null
+    },
+    "provider_authority.limits.opt_model": {
+      "before": "Canlı limit kaynağına sorulacak kesin model api id",
+      "after": null
+    },
+    "provider_authority.limits.opt_provider": {
+      "before": "Politikanın yazılacağı kanonik provider id",
+      "after": null
+    },
+    "provider_authority.limits.opt_ratio_enforcement": {
+      "before": "Ratio gate modu: enforce (varsayılan) veya observe_only; absolute floor ve unknown evidence yine fail-closed kalır",
+      "after": null
+    },
+    "provider_authority.limits.opt_tenant": {
+      "before": "Politikanın yazılacağı tenant id (tek kullanıcılı host `local` kullanır)",
+      "after": null
+    },
+    "provider_authority.limits.opt_transport": {
+      "before": "Kesin transport: cli | api | http | local-runtime",
+      "after": null
+    },
+    "provider_authority.limits.opt_warn_at_ratio": {
+      "before": "Run'ın uyarılacağı tüketim oranı (0..1)",
+      "after": null
+    },
+    "provider_authority.limits.preview": {
+      "before": "Canlı provider gerçeğinden türetildi:\n  provider={provider} authMode={authMode} transport={transport} backend={executionBackend}\n  tenant={tenantId} accountRefHash={accountRefHash} quotaScopeRefHash={quotaScopeRefHash}\n  pencereler={windows}\n  ratioEnforcement={ratioEnforcement} warnAtRatio={warnAtRatio} blockAtRatio={blockAtRatio}\n  eylem={action} expectedAuthorityRef={expectedAuthorityRef}\n  authorityRef={authorityRef} policyRef={policyRef}",
+      "after": null
+    },
+    "provider_authority.limits.refused": {
+      "before": "Reddedildi ({reasonCode}): {detail}. Hiçbir provider-limit authority değiştirilmedi.",
+      "after": null
+    },
+    "provider_authority.limits.sources_unavailable": {
+      "before": "HOLD: bu host'ta kayıtlı canlı provider evidence kaynak yetkisi yok, bu yüzden hesap ve kota kimliği gözlemlenemiyor. Politika bilinçli olarak yer-tutucu değerlerden YAZILMAZ — önce canlı evidence kaynak paketi kaydedin.",
+      "after": null
+    },
+    "provider_authority.limits.written": {
+      "before": "Uygulandı ({action}): provider_limits authority {authorityRef} — {configPath}.",
+      "after": null
+    },
+    "xverify.remedy.provider_authority_unavailable": {
+      "before": "Eksik authority: provider-limit authority runtime'ı. Owner config'inde provider_limits envelope'unu yazın ki runtime açılsın, sonra yeniden deneyin.",
+      "after": null
+    },
+    "doctor.provider_limit_authority_absent": {
+      "before": "Global config katmanında owner-yazarı provider_limits bloğu yok — composition provider-authority-unavailable ile durur. Çare: `deckent provider-authority limits init` (`keyring init` DEĞİL; keyring farklı bir authority'dir).",
+      "after": null
+    },
+    "doctor.provider_limit_authority_authored_empty": {
+      "before": "provider_limits bloğu var ama sıfır policy taşıyor (authored-empty) — validator reddeder, composition durmaya devam eder. Authoring akışını `deckent provider-authority limits init` ile tamamlayın.",
+      "after": null
+    },
+    "doctor.provider_limit_authority_name": {
+      "before": "Provider limit authority",
+      "after": null
+    },
+    "doctor.provider_limit_authority_ok": {
+      "before": "Global provider_limits bloğu mevcut ({policies} policy) — xverify/execution composition limit scope çözebilir.",
+      "after": null
+    },
+    "config.field.provider_limits": {
+      "before": "Provider kullanım ve bütçe politikaları.",
+      "after": null
     }
   }
 }

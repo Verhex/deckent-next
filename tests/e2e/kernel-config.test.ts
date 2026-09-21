@@ -73,10 +73,19 @@ describe('K1 real binary journeys', () => {
     const admitted = JSON.parse((await f.run(['doctor', '--json'], { DECKENT_TENANT_ID: 'explicit-tenant' })).stdout);
     expect(admitted.principal.tenantId).toBe('explicit-tenant');
   });
-  it('registers the provider limit section before loading CLI config and rejects project-only authority', async () => {
+  it.each(['global', 'project', 'both'] as const)('rejects removed provider limits through the real CLI in %s config without changing bytes', async placement => {
     const f = await fixture('project-override');
-    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ provider_limits: { schemaVersion: 1, policies: [{ selector: { tenantId: 'local' }, values: { warnAtRatio: 0.5, blockAtRatio: 0.8 } }] } }));
-    await expect(f.run(['config', 'get', '--json'])).rejects.toMatchObject({ code: 78, stdout: '' });
+    const projectPath = join(f.project, '.deckent/config.json'), globalPath = resolveGlobalConfigPaths(f.env).platformPath;
+    const authored = JSON.stringify({ provider_limits: { schemaVersion: 1, policies: [{ selector: { provider: 'fixture' },
+      values: { warnAtRatio: 0.5, blockAtRatio: 0.8 } }] } });
+    const paths = placement === 'both' ? [globalPath, projectPath] : [placement === 'global' ? globalPath : projectPath];
+    for (const path of paths) await writeFile(path, authored);
+    try { await f.run(['config', 'get', '--json']); expect.fail('must reject unenforced limits'); }
+    catch (error) {
+      expect(error).toMatchObject({ code: 78, stdout: '' });
+      expect(JSON.parse((error as { stderr: string }).stderr).code).toBe('CONFIG_VALIDATION');
+    }
+    for (const path of paths) expect(await readFile(path, 'utf8')).toBe(authored);
   });
   it('renders errors using the effective config locale and lets explicit language override it', async () => {
     const f = await fixture('global-only');
