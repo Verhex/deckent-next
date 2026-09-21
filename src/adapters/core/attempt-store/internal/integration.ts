@@ -24,7 +24,13 @@ export class SqliteIntegrationJournal {
     const intent = integrationIntentSchema.parse(input);
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.bound(intent); const existing = this.read(intent);
+      this.bound(intent);
+      if (intent.command.replacesCommandId) {
+        if (intent.command.replacesCommandId === intent.command.commandId) throw new WorkspacePatchError('PATCH_CONFLICT');
+        const old = readIntegration(this.db, { schemaVersion: 1, identity: intent.command.identity, commandId: intent.command.replacesCommandId });
+        if (!old || JSON.stringify(old.intent.patch) !== JSON.stringify(intent.patch)) throw new WorkspacePatchError('PATCH_CONFLICT');
+      }
+      const existing = this.read(intent);
       if (existing) { this.db.exec('COMMIT'); return { acquired: false, record: existing }; }
       this.db.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,NULL)')
         .run(intent.command.identity.scopeId, intent.command.commandId, JSON.stringify(intent));

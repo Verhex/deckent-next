@@ -22,11 +22,11 @@ export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifie
   private last: ClockSample;
   private constructor(private readonly principal: ReturnType<typeof verifiedPrincipalSchema.parse>,
     private readonly session: VerifiedSession, private readonly clock: TrustedClock, private readonly issued: ClockSample,
-    private readonly pid: number, private readonly evidence: ProcessEvidence, private readonly connection?: AbortSignal) { this.last = issued; }
+    private readonly pid: number, private readonly evidence: ProcessEvidence, private readonly connection?: AbortSignal, private readonly isConnectionActive?: () => boolean) { this.last = issued; }
   static async create(scopeIds: readonly string[], lifetimeMs: number, clock: TrustedClock,
-    source: Readonly<{ pid: number; uid: number; connection?: AbortSignal }> = { pid: process.pid, uid: process.getuid?.() ?? -1 }) {
+    source: Readonly<{ pid: number; uid: number; connection?: AbortSignal; isConnectionActive?: () => boolean }> = { pid: process.pid, uid: process.getuid?.() ?? -1 }) {
     try {
-      if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 1 || source.connection?.aborted) throw new Error('invalid');
+      if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 1 || source.connection?.aborted || (source.isConnectionActive && !source.isConnectionActive())) throw new Error('invalid');
       const identity = readLocalOsIdentity();
       if (source.uid !== Number(identity.subject)) throw new Error('foreign');
       const evidence = await processEvidence(source.pid, source.uid);
@@ -36,7 +36,7 @@ export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifie
       const session = verifiedSessionSchema.parse({ schemaVersion: 1, sessionId: randomUUID(), authorityRef: randomUUID(),
         kind: 'os-user', principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, scopeIds,
         authenticatedAt: issued.wallMs, expiresAt: issued.wallMs + lifetimeMs });
-      return new LocalOsSessionAuthority(principal, session, clock, issued, source.pid, evidence, source.connection);
+      return new LocalOsSessionAuthority(principal, session, clock, issued, source.pid, evidence, source.connection, source.isConnectionActive);
     } catch { throw new SessionAuthenticationError('SESSION_REQUIRED'); }
   }
   async verifySession(credential: unknown) {
@@ -48,13 +48,14 @@ export class LocalOsSessionAuthority implements SessionAuthority, SessionVerifie
     if (JSON.stringify(input) !== JSON.stringify(this.session)) return false;
     if (this.revoked || this.connection?.aborted) { this.revoked = true; return false; }
     try {
+      if (this.isConnectionActive && !this.isConnectionActive()) { this.revoked = true; return false; }
       const evidence = await processEvidence(this.pid, Number(this.principal.subject));
       const now = this.clock.sample();
       const invalidClock = !Number.isSafeInteger(now.wallMs) || !Number.isFinite(now.monotonicMs)
         || now.monotonicMs < this.last.monotonicMs || now.wallMs < this.last.wallMs;
       const expired = now.wallMs >= this.session.expiresAt || now.monotonicMs - this.issued.monotonicMs >= this.session.expiresAt - this.session.authenticatedAt;
       this.last = now;
-      if (invalidClock || expired || this.connection?.aborted || JSON.stringify(evidence) !== JSON.stringify(this.evidence)) this.revoked = true;
+      if (invalidClock || expired || this.connection?.aborted || (this.isConnectionActive && !this.isConnectionActive()) || JSON.stringify(evidence) !== JSON.stringify(this.evidence)) this.revoked = true;
     } catch { this.revoked = true; }
     return !this.revoked;
   }

@@ -1,33 +1,36 @@
-# Anlık iş akışı — geçici
+# Anlık iş akışı — dört iş tamamlandı
 
-Owner dört işi art arda tamamlama izni verdi: O3 onay/rezervasyon, O6 canlı oturum,
-güvenli worker teslimi ve gerçek çoklu worker. Jev north star + durum + seçeneklerle kullanılır.
-Yerel commit var, push yok. Owner/Fable PLAN.md WIP'i değiştirilmez ve commitlenmez.
+Owner'ın sıralı dört iş izni tamamlandı. Jev'e ortak north star, durum, seçenekler ve kaynak
+kanıtı taşındı; karar/outcome kayıtları var. Yerel commit var, push yok. PLAN.md owner/Fable
+WIP'i değiştirilmedi ve commitlere alınmadı. Fable kanalı kapalı, bağımsız PASS iddiası yok.
 
-## Tamamlanan doğrulama
+## Doğrulanmış sonuçlar
 
-O3/O6: pending onay aday/pool slotu tüketmez; allow sonrası yeni commandId gerekir.
-Eski rezervasyon replay genişlemez. Scope/policy/action bağlı MAC, kalıcı karar/receipt/outbox,
-expiry ve açık renewal; CLI/MCP/SDK tek uygulama. Ayrı process/TTY/connection canlı session,
-wall+monotonic kontrol; token-verified yalnız port. Pure launch değişmedi. Ledger31.
-Tam verify: 1536 ürün/265 dosya,24 native,36 host geçti; sıfır skip/fail.
-Gerçek servis: eşzamanlı CLI/MCP tek karar, eski replay korunuyor, yeni komut Docker işi çalıştırıyor.
-Sınır: outbox notifier/uzak token doğrulayıcı/ayrı approval revocation yüzeyi henüz yok.
+1. O3: pending onay aday/pool slotu tüketmez; allow sonrası yeni commandId; replay genişlemez.
+   Tek scoped MAC broker, kalıcı request/decision/receipt/outbox, expiry ve açık renewal.
+   SDK/CLI/MCP aynı application; task-admission:2 tam policy içeriğine bağlıdır.
+2. O6: principal ayrı; process-birth/TTY/session, socket ve wall/monotonic tazelik.
+   Native kernel probe normal half-close ile full-disconnect'i ayırır; geciken Node close
+   olayı karar yetkisi vermez. Privileged approval ve delivery canlı session tüketir.
+3. Teslim: eski writer/intent/bytes korunarak ayrı linked replacement. Retained patch →
+   deterministic Git commit → refs/deckent/deliveries create-only ref; atomik HEAD kontrolü.
+   Kaynak HEAD/index/WIP değişmez. Git sonrası gerçek SIGKILL, receipt öncesi kopma ve
+   yeniden başlatma exact ref/commit'ten tamamlanır; provider tekrar çağrılmaz. Ledger32.
+4. Gerçek Codex/Claude/Cursor paralel çalıştı; üçü exact file/patch ve exit0. Ortak3 slot,
+   ikinci Run beklemesi, accepted sonrası join, canlı .hb gözlemi ve gerçek iptal doğrulandı.
+   Host credential değişmedi;6 sahipli container kaldırıldı; kanıt/workspace korunuyor.
 
-Üç gerçek native sağlayıcı geçici projede eşzamanlı çalıştı: Codex,Claude,Cursor exact dosya+patch,
-network-none/geçit ve mount sınırları, host credential ve kaynak WIP korundu.
-Ortak3 slot ikinci Run'ı bekletti; bağımlı join sonra başladı; gerçek iptal terminal oldu.
-Bu bounded yerel kanıt; ölçek sertifikasyonu veya DOGFOOD açılışı değildir.
+## Doğrulama ve açık kapsam
 
-## Devam eden iş
+Nihai npm run verify:1541 ürün/265 dosya,25 native,36 host; fail/skip0; build/lint/smoke geçti.
+İlk onay/oturum commit'i dcab7e6. Teslim ve kernel witness ikinci yerel commit'te.
+Paket kontrolü:1059 dosya, özel host/refactor/worker state hariç. AGENTS/CLAUDE46 satır;
+70 sınırı korunuyor. Pure launch reducer değişmedi; legacy yürütülmedi.
 
-Güvenli teslim: ayrı aday replacement, eski intent/bytes değişmeden link.
-Doğrulanmış patch → deterministic Git commit → refs/deckent/deliveries altında create-only ref;
-aynı ref transaction içinde kaynak HEAD kontrolü. Kaynak HEAD/index/WIP değişmez.
-Canlı dala otomatik merge ayrı kapsam; teslim reference-only olarak açıkça adlandırılır.
-Jev111d95ee-87e0-4e50-88db-f2fae4f01c58 önerdi; gerçek crash/replay/negatif kanıt bekliyor.
-Önce kaynak bağlantıları ve testler, sonra saklanan üç native patch'i sağlayıcıyı yeniden çağırmadan teslim.
-Son tam verify ve yerel commit sonrası dört madde sonuçları owner'a raporlanır.
+DOGFOOD_MODE=OFF. Bu dört dilim için gerçek yerel kanıt var; genel ürün/ölçek kabulü değil.
+Live-worktree merge/branch adoption ayrı; teslim reference-only. Remote token verifier,
+approval notification consumer/ayrı revocation API, native-tool callback onayı ve ontoloji O4 açık.
+Sonraki ana sıra owner/Fable'ın güncel PLAN çalışması ve kabul edilmiş DOGFOOD kartından seçilir;
+bu sonuçlar PLAN'deki tarihsel O3/O6/açık teslim ifadeleriyle owner koordinasyonunda eşlenmeli.
 
-Kanıt: /home/alperen/deckent-refactor-work/proof/FOUR-STEP-EXECUTION/.
-DOGFOOD_MODE=OFF; legacy yürütülmez; Fable kanalı kapalı; bağımsız PASS iddiası yok.
+Kanıt ve ayrıntılı eşleme: /home/alperen/deckent-refactor-work/proof/FOUR-STEP-EXECUTION/review.md.

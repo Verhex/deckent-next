@@ -6,3 +6,5 @@ export { WorkspaceIntegrationApplication, integrationCommandSchema, integrationI
 export type { IntegrationCommand, IntegrationIntent, IntegrationManifest, IntegrationRecord, IntegrationStore, IntegrationTarget, IntegrationObservation } from './internal/integration.js';
 export { WorkspaceIntegrationInspection, integrationQuerySchema } from './internal/inspection.js';
 export type { IntegrationQuery, IntegrationReader } from './internal/inspection.js';
+export { WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from './internal/delivery.js';
+export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/delivery.js';

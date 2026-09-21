@@ -6,7 +6,7 @@ import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.
 import { WorkspacePatchApplication } from './application.js';
 import { patchDigest, WorkspacePatchError, type WorkspacePatch } from './contract.js';
 export const integrationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
-  identity: attemptIdentitySchema, proposal: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/) }).strict().readonly();
+  identity: attemptIdentitySchema, replacesCommandId: identitySchema.optional(), proposal: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{20}$/) }).strict().readonly();
 export type IntegrationCommand = z.infer<typeof integrationCommandSchema>;
 export interface IntegrationObservation { readonly digest: string; readonly source: string; readonly head: string }
 export const integrationManifestSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('integration-candidate'),

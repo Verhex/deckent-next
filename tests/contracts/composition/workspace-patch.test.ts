@@ -1,14 +1,14 @@
-import { execFile } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, chmod, stat } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
+import { deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { DockerSupervisor, GitIntegrationTarget } from '#adapters/index.js';
+import { DockerSupervisor, GitIntegrationTarget, GitIntegrationDelivery } from '#adapters/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { WorkspacePatchApplication, patchPathSchema } from '#engine/index.js';
@@ -135,7 +135,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('gates version28 writers, explicitly migrates without changing old records, and enforces configured entry bounds', async () => {
     const f = await fixture(); await f.run(); const before = await f.runtime.store.loadBoundDispatch(f.identity);
     const path = productResourcePath(f.runtime.layout, 'ledger');
-    const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
+    const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
     // Resolve actual configured storage settings rather than assume adapter defaults.
     const { loadConfig } = await import('#platform/index.js'); const config = await loadConfig(f.project, f.options);
     await expect(openSqliteAttemptStore(path, config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
@@ -282,5 +282,105 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const reader = new DatabaseSync(path, { readOnly: true });
     expect(reader.prepare('PRAGMA user_version').get()?.user_version).toBe(29);
     expect(reader.prepare("SELECT name FROM sqlite_master WHERE name='workspace_integrations'").get()).toBeUndefined(); reader.close();
+  });
+});
+
+async function readyDeliveryFixture() {
+  const f = await fixture(); await f.run(); await f.prepare();
+  await writeFile(join(f.project, 'note.txt'), 'before\n');
+  await f.policy(['read-output', 'prepare-integration', 'deliver-integration']);
+  const checked = await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+  const command = { schemaVersion: 1 as const, commandId: 'candidate', identity: f.identity, proposal: checked.proposal };
+  return { ...f, command };
+}
+async function pausedWriter(f: Awaited<ReturnType<typeof readyDeliveryFixture>>, mode: 'candidate' | 'delivery', command: unknown) {
+  const marker = join(f.root, mode + '-marker.json');
+  const script = join(f.root, mode + '-writer.mjs');
+  const method = mode === 'candidate' ? 'verify' : 'publish';
+  const type = mode === 'candidate' ? 'GitIntegrationTarget' : 'GitIntegrationDelivery';
+  const call = mode === 'candidate' ? 'prepareConfiguredWorkspaceIntegration' : 'deliverConfiguredWorkspaceIntegration';
+  await writeFile(script, `import { ${type} } from ${JSON.stringify(resolve('dist/adapters/index.js'))};
+import { ${call} } from ${JSON.stringify(resolve('dist/index.js'))};
+import { writeFile } from 'node:fs/promises';
+const original = ${type}.prototype.${method};
+${type}.prototype.${method} = async function(...args) { await original.apply(this,args); await writeFile(${JSON.stringify(marker)},JSON.stringify(args[0])); await new Promise(()=>{setInterval(()=>{},1000);}); };
+await ${call}(${JSON.stringify(f.project)},${JSON.stringify(command)},${JSON.stringify(f.options)});`);
+  const child = spawn(process.execPath, [script], { cwd: f.project, env: { ...process.env, ...f.options.env }, stdio: 'ignore' });
+  const closed = new Promise(resolve => child.once('close', resolve));
+  const stop = async () => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed; };
+  try {
+    for (let n = 0; n < 100; n++) {
+      try { return { child, stop, marker: JSON.parse(await readFile(marker, 'utf8')) }; } catch { /* wait for exact owned writer */ }
+      if (child.exitCode !== null || child.signalCode !== null) throw new Error('DELIVERY_WRITER_EXITED');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('DELIVERY_WRITER_TIMEOUT');
+  } catch (error) { await stop(); throw error; }
+}
+describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('safe Git reference delivery and replacement', () => {
+  it('delivers an exact commit through competing SDK/CLI with source HEAD/index/WIP unchanged', async () => {
+    const f = await readyDeliveryFixture();
+    const candidate = await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
+    await writeFile(join(f.project, 'unrelated.txt'), 'staged-owner\n'); await f.git('add', 'unrelated.txt');
+    await writeFile(join(f.project, 'unrelated.txt'), 'unstaged-owner\n');
+    const index = await readFile(join(f.project, '.git/index'));
+    const command = { schemaVersion: 1 as const, commandId: 'delivery', identity: f.identity, integrationCommandId: 'candidate' };
+    const [sdk, cli] = await Promise.all([deliverConfiguredWorkspaceIntegration(f.project, command, f.options),
+      f.cli('integration-deliver', ['--command-id', 'delivery', '--candidate-command-id', 'candidate'])]);
+    expect(cli).toEqual(sdk); expect(sdk.application).toBe('reference-only');
+    expect(await f.git('show', sdk.plan.ref + ':note.txt')).toBe('after');
+    expect(await f.git('show', sdk.plan.ref + ':added.txt')).toBe('new');
+    await expect(f.git('show', sdk.plan.ref + ':removed.txt')).rejects.toBeDefined();
+    expect(await f.git('rev-parse', sdk.plan.ref + '^')).toBe(f.base);
+    expect(await f.git('rev-parse', 'HEAD')).toBe(f.base);
+    expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
+    expect(await readFile(join(f.project, 'unrelated.txt'), 'utf8')).toBe('unstaged-owner\n');
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');
+    expect(await deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).toEqual(sdk);
+    await f.policy(['read-output', 'prepare-integration']);
+    await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(candidate.manifest.snapshotDigest).toBe(sdk.plan.snapshotDigest);
+  });
+  it('replaces a live held writer with a separate linked candidate and preserves the old bytes/state', async () => {
+    const f = await readyDeliveryFixture(); const paused = await pausedWriter(f, 'candidate', f.command);
+    try {
+      const oldBytes = await readFile(join(paused.marker.workspace, 'note.txt'));
+      const command = { ...f.command, commandId: 'replacement', replacesCommandId: f.command.commandId };
+      const replacement = await prepareConfiguredWorkspaceIntegration(f.project, command, f.options);
+      expect(replacement.manifest.workspace).not.toBe(paused.marker.workspace);
+      expect(replacement.manifest.command.replacesCommandId).toBe('candidate');
+      expect(await readFile(join(paused.marker.workspace, 'note.txt'))).toEqual(oldBytes);
+      expect((await inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: f.identity, commandId: 'candidate' }, f.options)).status).toBe('pending');
+      expect(await prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).toEqual(replacement);
+      await expect(prepareConfiguredWorkspaceIntegration(f.project, { ...command, commandId: 'bad', replacesCommandId: 'missing' }, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    } finally { await paused.stop(); }
+  });
+  it('reconciles real SIGKILL after Git publication before ledger settlement without reapplying or moving newer HEAD', async () => {
+    const f = await readyDeliveryFixture(); await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
+    const command = { schemaVersion: 1 as const, commandId: 'interrupted-delivery', identity: f.identity, integrationCommandId: 'candidate' };
+    const paused = await pausedWriter(f, 'delivery', command); await paused.stop();
+    expect(paused.child.signalCode).toBe('SIGKILL');
+    const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'));
+    expect(db.prepare('SELECT delivered FROM workspace_deliveries WHERE command_id=?').get(command.commandId)?.delivered).toBe(0); db.close();
+    await f.git('commit', '--allow-empty', '-m', 'owner moves after publication'); const head = await f.git('rev-parse', 'HEAD');
+    const result = await deliverConfiguredWorkspaceIntegration(f.project, command, f.options);
+    expect(result.plan).toEqual(paused.marker); expect(await f.git('rev-parse', 'HEAD')).toBe(head);
+    expect(await f.git('rev-parse', result.plan.ref)).toBe(result.plan.commit);
+    expect(await deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).toEqual(result);
+  });
+  it('rejects drift and atomically refuses a changed HEAD at publication', async () => {
+    const f = await readyDeliveryFixture(); const candidate = await prepareConfiguredWorkspaceIntegration(f.project, f.command, f.options);
+    const command = { schemaVersion: 1 as const, commandId: 'guarded', identity: f.identity, integrationCommandId: 'candidate' };
+    await writeFile(join(candidate.manifest.workspace, 'note.txt'), 'drift\n');
+    await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await writeFile(join(candidate.manifest.workspace, 'note.txt'), 'after\n');
+    const publish = GitIntegrationDelivery.prototype.publish;
+    const spy = vi.spyOn(GitIntegrationDelivery.prototype, 'publish').mockImplementationOnce(async function(plan) {
+      await f.git('commit', '--allow-empty', '-m', 'owner wins'); await publish.call(this, plan);
+    });
+    try { await expect(deliverConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); }
+    finally { spy.mockRestore(); }
+    expect(await f.git('for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries')).toBe('');
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');
   });
 });

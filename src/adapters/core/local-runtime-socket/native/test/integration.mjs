@@ -268,3 +268,27 @@ test('throwing lifecycle callback cannot escape or prevent native close settleme
   listener.close();
   assert.throws(() => createListener(path, 8, () => {}, () => {}), { code: 'LOCAL_PEER_LISTEN' });
 }));
+
+
+test('kernel connection witness accepts half-close and rejects full-close, wrong peer and invalid fd', () => fixture(async path => {
+  let received; const accepted = new Promise(resolve => { received = resolve; });
+  let server; let fd; let peer;
+  const listener = createListener(path, 8, handoff => {
+    peer = handoff.peer; fd = handoff.takeFd();
+    server = new Socket({ fd, readable: true, writable: true, allowHalfOpen: true });
+    server.on('error', () => {}); received();
+  });
+  const client = new Socket({ allowHalfOpen: true }); client.on('error', () => {});
+  try {
+    client.connect(path); await once(client, 'connect'); await accepted;
+    const active = () => addon.isConnectionActive(fd, peer.pid, peer.uid, peer.gid);
+    assert.equal(active(), true);
+    assert.equal(addon.isConnectionActive(fd, peer.pid + 1, peer.uid, peer.gid), false);
+    assert.equal(addon.isConnectionActive(-1, peer.pid, peer.uid, peer.gid), false);
+    assert.equal(addon.isConnectionActive('invalid', peer.pid, peer.uid, peer.gid), false);
+    const ended = once(server, 'end'); server.resume(); client.end(); await ended;
+    assert.equal(active(), true);
+    const closed = once(client, 'close'); client.destroy(); await closed;
+    assert.equal(active(), false);
+  } finally { client.destroy(); server?.destroy(); listener.close(); }
+}));

@@ -58,3 +58,4 @@ export { inspectConfiguredWorkers } from '#composition/index.js';
 export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 
 export { configuredApproval } from '#composition/index.js';
+export { deliverConfiguredWorkspaceIntegration } from '#composition/index.js';

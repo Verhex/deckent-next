@@ -79,7 +79,7 @@ function raceChild(path: string, value: ReturnType<typeof receipt>) {
 
 it('migrates a schema-21 ledger forward without inventing an audit', async () => {
   const { path } = await fixture(), db = new DatabaseSync(path);
-  try { db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=21'); } finally { db.close(); }
+  try { db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=21'); } finally { db.close(); }
   const store = await openSqliteProviderSpendAuditStore(path, options, 'allow'); store.close();
   const check = new DatabaseSync(path, { readOnly: true });
   try {

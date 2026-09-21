@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ISOLATION/DELIVERY: linked replacement candidates preserve old writers/state; shared SDK/CLI reference-only Git delivery with dedicated create-only ref, atomic HEAD check, private index, live session and crash reconciliation; ledger32. Real concurrent Codex/Claude/Cursor edits, DAG join, shared pool, cancellation and retained-patch delivery verified. Approval action binding now includes full validated policy content even when a revision label is reused; native peer polling rejects full disconnect before delayed socket events. Source HEAD/index/WIP preserved; DOGFOOD remains OFF.
+
+- APPROVAL/SESSION: durable task-admission approval before candidate/pool reservation, immutable command replay, explicit expiry renewal, scoped HMAC custody and live process/connection sessions; shared SDK/CLI/MCP path, ledger31. Full verification: 1536 product,24 native,36 host tests. Remote token verification and notification delivery remain separate work.
+
 - FOUNDATION/MEMORY: permanent product-development contracts in AGENTS/CLAUDE with a 70-line architecture gate; normalized legacy lessons and shared Agent OS north star. Logged Jev case v2 requires current process and option impact, includes the curated charter text/hash, and preserves historical journal interpretation. Host governance only; no product-model or recovery authority change.
 
 - NEXT-HOST: CLI/MCP host routing and independent `DECKENT_GLOBAL_HOME`; legacy checkout is read-only reference, per-project runtime roots are retained.

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openSqliteAttemptStore, openSqliteApprovalStore, LocalOsSessionAuthority } from '#adapters/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { RunReservationApplication, ApprovalApplication, TaskApprovalAdmission } from '#engine/index.js';
+import { RunReservationApplication, ApprovalApplication, TaskApprovalAdmission, assertApprovalPolicyCurrent } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 it('pending approval occupies no candidate slot; allow requires a fresh reservation and replay cannot expand', async () => {
@@ -37,6 +37,12 @@ it('pending approval occupies no candidate slot; allow requires a fresh reservat
     const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'sdk', 10);
     await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: pending[0]!.request.approvalId,
       commandId: 'approve-a', expectedRevision: 0, decision: 'allow', reason: 'Reviewed action' });
+    const changedPolicy = { ...policy, grants: [...policy.grants, { ...policy.grants[0]!, id: 'another-task', resource: { kind: 'task', ids: ['unrelated'] } }] };
+    const changedGate = new TaskApprovalAdmission(changedPolicy, principal, journal.store, integrity, 1000);
+    const current = (await store.loadRun('scope', 'run'))!;
+    expect(changedGate.excluded(current, actor, 1000)).toEqual(['a']);
+    expect(() => assertApprovalPolicyCurrent(policy, changedPolicy)).toThrow('APPROVAL_STALE');
+    expect(gate.excluded(current, actor, 1000)).toEqual([]);
     expect(await app.reserve(command)).toEqual(first); expect(generated).toBe(1);
     const next = await app.reserve({ ...command, commandId: 'reserve-after', expectedRevision: 1 });
     expect(next.identities.map(v => v.taskId)).toEqual(['a']); expect(generated).toBe(2);

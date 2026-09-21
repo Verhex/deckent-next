@@ -22,7 +22,7 @@ async function seedVersionTwelve(path: string) {
   try {
     db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state;
       DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations;
-      DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=12`);
+      DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=12`);
   } finally { db.close(); }
 }
 function executionEvidence(path: string) {

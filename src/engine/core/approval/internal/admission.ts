@@ -25,7 +25,7 @@ export class TaskApprovalAdmission {
       if (this.decision(run, task.taskId).decision !== 'require-approval') continue;
       const request = requestTaskApproval(this.store, this.integrity, { scopeId: run.identity.scopeId,
         runId: run.identity.runId, taskId: task.taskId, requester: this.actor(),
-        actionDigest: approvalActionDigest(run, task.taskId, this.actor(), this.policy.revision), policyRevision: this.policy.revision,
+        actionDigest: approvalActionDigest(run, task.taskId, this.actor(), this.policy), policyRevision: this.policy.revision,
         summary: task.taskId, createdAt: now, expiresAt: now + this.ttlMs });
       if (request.status === 'pending' && now >= request.request.expiresAt) this.store.transition(request,
         sealApproval({ request: request.request, status: 'expired', revision: 1, decision: null }, this.integrity));
@@ -40,7 +40,7 @@ export class TaskApprovalAdmission {
       if (verdict.reason === 'NO_GRANT') return false;
       if (verdict.decision === 'allow') return false;
       if (verdict.decision !== 'require-approval') return true;
-      const digest = approvalActionDigest(run, task.taskId, actor, this.policy.revision);
+      const digest = approvalActionDigest(run, task.taskId, actor, this.policy);
       const stored = this.store.find(run.identity.scopeId, run.identity.runId, task.taskId, digest);
       if (!stored) return true;
       const record = verifyApproval(stored, this.integrity);

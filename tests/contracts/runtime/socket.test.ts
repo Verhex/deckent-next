@@ -145,6 +145,28 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket peer identit
     } finally { await server.dispose(); }
   });
 
+  it('rejects a fully disconnected live client before a privileged mutation while allowing request half-close', async () => {
+    const { options } = await fixture(); const clock = new SystemTrustedClock();
+    let ready!: () => void; const admitted = new Promise<void>(resolve => { ready = resolve; });
+    let proceed!: () => void; const barrier = new Promise<void>(resolve => { proceed = resolve; });
+    let finish!: (value: { active: boolean; eventAborted: boolean }) => void;
+    const active = new Promise<{ active: boolean; eventAborted: boolean }>(resolve => { finish = resolve; });
+    const server = await startLocalRuntimeSocketServer(options, async (request, peer) => {
+      const authority = await createLocalPeerSession(peer, ['scope'], 10_000, clock);
+      const verified = await authenticateSession(authority, authority, clock, undefined, 'scope');
+      ready(); await barrier;
+      finish({ active: await authority.isSessionActive(verified.session), eventAborted: peer.connection!.aborted });
+      return { schemaVersion: 10, requestId: request.requestId, ok: true, result: null };
+    });
+    const client = await connect(options.endpoint); client.on('error', () => undefined);
+    try {
+      client.end(encodeServiceFrame({ schemaVersion: 10, requestId: 'disconnect', operation: 'inspectRun', input: {} }, options.inputMaxBytes));
+      await admitted;
+      const closed = once(client, 'close'); client.destroy(); await closed; proceed();
+      expect(await active).toEqual({ active: false, eventAborted: false }); // Kernel witness rejects before the delayed Node close event.
+    } finally { proceed(); client.destroy(); await server.dispose(); }
+  });
+
   it('releases the guard when endpoint cleanup is refused without deleting the replacement', async () => {
     const { options } = await fixture();
     const handler = async (request: { requestId: string }) => ({ schemaVersion: 10 as const,

@@ -7,6 +7,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <string>
 #include <unistd.h>
 #include <cerrno>
@@ -315,8 +316,30 @@ napi_value create_listener(napi_env env, napi_callback_info info) {
   }
   return object;
 }
+napi_value connection_active(napi_env env, napi_callback_info info) {
+  size_t count = 5; napi_value args[5];
+  napi_get_cb_info(env, info, &count, args, nullptr, nullptr);
+  double values[4]{}; bool valid = count == 4;
+  for (size_t i = 0; valid && i < 4; i++) {
+    valid = napi_get_value_double(env, args[i], &values[i]) == napi_ok && std::isfinite(values[i])
+      && values[i] >= 0 && std::floor(values[i]) == values[i] && values[i] <= (i < 2 ? INT_MAX : UINT_MAX);
+  }
+  bool active = false;
+  if (valid && values[1] > 0) {
+    const int fd = static_cast<int>(values[0]); struct ucred peer{}; socklen_t length = sizeof(peer);
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &length) == 0 && length == sizeof(peer)
+        && peer.pid == static_cast<pid_t>(values[1]) && peer.uid == static_cast<uid_t>(values[2]) && peer.gid == static_cast<gid_t>(values[3])) {
+      struct pollfd descriptor{}; descriptor.fd = fd;
+      // HUP/ERR/NVAL are reported even with events=0. A normal request half-close is not HUP.
+      active = poll(&descriptor, 1, 0) >= 0 && !(descriptor.revents & (POLLHUP | POLLERR | POLLNVAL));
+    }
+  }
+  napi_value result; napi_get_boolean(env, active, &result); return result;
+}
 }
 NAPI_MODULE_INIT() {
+  napi_property_descriptor witness = {"isConnectionActive", nullptr, connection_active, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &witness);
   napi_property_descriptor method = {"createListener", nullptr, create_listener, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &method);
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS

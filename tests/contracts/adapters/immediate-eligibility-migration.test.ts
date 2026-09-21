@@ -25,7 +25,7 @@ async function seed(path: string, version = 11) {
   if (version < 9) db.exec('DROP TABLE run_workspace_custody');
   if (version < 7) db.exec('DROP TABLE cancellation_deliveries');
   if (version < 4) db.exec('DROP TABLE execution_pools');
-  db.exec(`DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=${version}`); db.close(); return expected;
+  db.exec(`DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=${version}`); db.close(); return expected;
 }
 function dump(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });

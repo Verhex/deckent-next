@@ -2,7 +2,7 @@ import type { WorkerObservationHandler } from './workers.js';
 import type { RunAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
-import type { TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
+import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
@@ -26,6 +26,7 @@ export interface CommandContext {
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
+  deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   inspectWorkspaceIntegration?: TaskIntegrationInspectHandler;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

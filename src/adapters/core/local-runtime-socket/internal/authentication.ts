@@ -38,7 +38,7 @@ export class LocalPeerShutdownAuthentication implements ServiceShutdownAuthentic
 export async function createLocalPeerSession(peer: LocalPeerIdentity, scopeIds: readonly string[],
   lifetimeMs: number, clock: TrustedClock) {
   verifyLocalPeerIdentity(peer);
-  if (!peer.connection || peer.connection.aborted) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
+  if (!peer.connection || peer.connection.aborted || !peer.isConnectionActive?.()) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
   return LocalOsSessionAuthority.create(scopeIds, lifetimeMs, clock,
-    { pid: peer.pid, uid: peer.uid, connection: peer.connection });
+    { pid: peer.pid, uid: peer.uid, connection: peer.connection, isConnectionActive: peer.isConnectionActive });
 }

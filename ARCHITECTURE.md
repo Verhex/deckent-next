@@ -573,3 +573,29 @@ explicit group namespace custody: group members may alter/remove entries. Other 
 (publication, policy, artifacts, gateway, worker workspace) retain their own stricter invariants.
 The proven installation target is an owned 0775 project with private child/data directories, not
 blanket group-writable product state. No ownership repair or host chmod is performed.
+
+## Task approval, live sessions and isolated delivery
+
+Task admission approval is an additional restriction before scheduling's capacity-limited candidate
+selection, rechecked under the reservation transaction. It does not replace execution policy or the
+pure launch reducer. Durable requests/decisions/receipts use the shared ledger (v31), scoped MAC
+custody, explicit expiry renewal and one application across SDK/CLI/MCP. `task-admission:2` binds the
+validated policy content as well as immutable Run/task/execution/requester identity. Pending requests
+consume no reservation slot; approval requires a new reservation command. Old receipts never expand.
+Request expiry bounds decision time; current policy can block future reservations. Notification
+consumption, a separate approval-revocation surface and worker-native callback approval remain open.
+
+A verified principal and a live session are distinct contracts. Local privileged decisions bind the
+OS process birth/TTY/session evidence and, through the native runtime socket, its connection lifetime. A zero-timeout kernel poll and exact SO_PEERCRED check distinguish
+normal request half-close from full disconnect before delayed Node socket events.
+Wall and monotonic deadlines plus revocation are checked before mutation. This Linux local witness
+is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
+
+A replacement integration command explicitly names its predecessor and prepares a separate candidate;
+it never adopts the old directory or declares its writer dead. Git delivery has its own policy action
+and live session check. It records intent in ledger v32, builds a deterministic commit from retained
+patch bytes using a private index, and atomically creates a dedicated `refs/deckent/deliveries/` reference
+while verifying source HEAD. Source branch, index and working files are not modified. Exact ref/commit
+custody reconciles a crash after Git publication before ledger settlement. Receipt replay is historical
+evidence, not verification of today's ref. Checked-out branch adoption and live-worktree merge remain
+separate operations; `reference-only` delivery does not claim either or accept the Task.

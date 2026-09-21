@@ -24,9 +24,11 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 31;
+export const CURRENT_LEDGER_VERSION = 32;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  32: `CREATE TABLE workspace_deliveries(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,
+    intent TEXT NOT NULL,delivered INTEGER NOT NULL CHECK(delivered IN(0,1)),PRIMARY KEY(scope_id,command_id)); PRAGMA user_version=32;`,
   31: `CREATE TABLE approvals(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,run_id TEXT NOT NULL,
     task_id TEXT NOT NULL,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(scope_id,approval_id));

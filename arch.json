@@ -1075,7 +1075,8 @@
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/platform/core/clock"
       ],
       "plan": "ISOLATION"
     },
@@ -1106,7 +1107,9 @@
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
         "src/capabilities/core/artifacts",
-        "src/engine/core/dispatch"
+        "src/engine/core/dispatch",
+        "src/platform/core/clock",
+        "src/adapters/core/local-principal"
       ],
       "plan": "ISOLATION"
     },
