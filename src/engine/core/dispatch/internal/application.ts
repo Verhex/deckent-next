@@ -41,7 +41,7 @@ export class DispatchApplication {
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
     const result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal));
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
-    const output = await retainOutput(this.artifacts, request, result);
+    const output = await retainOutput(this.artifacts, request, result, await this.supervisor.collectOutputFiles?.(request) ?? []);
     await this.store.retainDispatchOutput(claim, output);
     const record = await this.store.finishDispatch(claim, { handle: result.handle, exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted });
     return Object.freeze({ kind: 'terminal', record });
@@ -83,7 +83,7 @@ export class DispatchApplication {
     if (!current?.terminal) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     if (current.output) return current;
     const output = sandboxOutputSchema.parse(await this.supervisor.recoverOutput(request));
-    const receipt = await retainRecoveredOutput(this.artifacts, request, { stdout: output.stdout, stderr: output.stderr });
+    const receipt = await retainRecoveredOutput(this.artifacts, request, { stdout: output.stdout, stderr: output.stderr }, await this.supervisor.collectOutputFiles?.(request) ?? []);
     return this.store.retainDispatchOutput({ request, owner: current.owner }, receipt);
   }
   async release(input: unknown, credential?: unknown): Promise<void> {

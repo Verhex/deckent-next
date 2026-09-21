@@ -23,6 +23,9 @@ export class SqliteExecutionPools {
     } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
   }
   assertAvailable(poolId: string, requested: number): void {
+    if (requested > this.available(poolId)) throw new RunStoreError('RUN_POOL_FULL');
+  }
+  available(poolId: string): number {
     const pool = this.require(poolId); let execution = 0; let inFlight = 0;
     const rows = this.db.prepare("SELECT scope_id,run_id,revision,snapshot,json_extract(policy,'$.poolId') AS assigned_pool FROM runs WHERE json_extract(policy,'$.poolId')=? OR json_extract(policy,'$.poolId') IS NULL").all(poolId);
     for (const row of rows) {
@@ -33,6 +36,6 @@ export class SqliteExecutionPools {
       if (row.assigned_pool === null && (occupancy.execution > 0 || occupancy.inFlight > 0)) throw new RunStoreError('RUN_POOL_REQUIRED');
       execution += occupancy.execution; inFlight += occupancy.inFlight;
     }
-    if (requested > pool.capacity.executionSlots - execution || requested > pool.capacity.inFlightSlots - inFlight) throw new RunStoreError('RUN_POOL_FULL');
+    return Math.min(pool.capacity.executionSlots - execution, pool.capacity.inFlightSlots - inFlight);
   }
 }

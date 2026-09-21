@@ -1,19 +1,16 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createLocalTls } from '../../fixtures/local-tls.js';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 import { createOpenRouterPricedNative, parseOpenRouterChatDefinition } from '#adapters/core/provider-openrouter-chat/index.js';
 import { fetchOpenRouterTariff, type OpenRouterMetadataObservation } from '#adapters/core/provider-openrouter-pricing/index.js';
 
-const execute = promisify(execFile), servers: Server[] = [];
+const servers: Server[] = [];
 let directory = '', certificate = '', privateKey = '';
 beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'deckent-openrouter-chat-')); const key = join(directory, 'key.pem'), cert = join(directory, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', key, '-out', cert,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']); [privateKey, certificate] = await Promise.all([readFile(key, 'utf8'), readFile(cert, 'utf8')]);
+  directory = await mkdtemp(join(tmpdir(), 'deckent-openrouter-chat-')); ({ key: privateKey, caPem: certificate } = await createLocalTls(directory));
 });
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); } });
 afterAll(async () => rm(directory, { recursive: true, force: true }));

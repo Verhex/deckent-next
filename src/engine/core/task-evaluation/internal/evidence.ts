@@ -1,6 +1,6 @@
 import { taskEvaluationSchema, sameAttemptIdentity } from '#domain/index.js';
 import { verifyEvaluationEvidence, type EvaluationEvidenceLimits, type ArtifactStore } from '#capabilities/index.js';
-import { dispatchRecordSchema, verifyRetainedOutputEnvelope, type DispatchStore } from '#engine/core/dispatch/index.js';
+import { dispatchRecordSchema, verifyRetainedOutputEnvelope, verifyRetainedFileReceipts, type DispatchStore } from '#engine/core/dispatch/index.js';
 import { sandboxRequestSchema, sameSandboxRequest } from '#engine/core/supervisor/index.js';
 export class TaskEvidenceError extends Error {
   constructor(readonly code: 'TASK_EVIDENCE_INVALID' | 'TASK_EVIDENCE_UNAVAILABLE' | 'TASK_EVIDENCE_UNLINKED') { super(code); this.name = 'TaskEvidenceError'; }
@@ -34,7 +34,7 @@ export async function verifyDispatchEvaluationEvidence(evaluationInput: unknown,
       },
     }, limits);
     if (retainedBytes) {
-      try { verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity); }
+      try { await verifyRetainedFileReceipts(artifacts, verifyRetainedOutputEnvelope(retainedBytes, record.data.request.identity)); }
       catch { unlinked = true; throw new TaskEvidenceError('TASK_EVIDENCE_UNLINKED'); }
     }
     return verified;

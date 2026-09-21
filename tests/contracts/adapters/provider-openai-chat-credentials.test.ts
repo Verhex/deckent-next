@@ -1,13 +1,12 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createLocalTls } from '../../fixtures/local-tls.js';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server as HttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, type OpenAiChatHttpError } from '#adapters/core/provider-openai-chat/index.js';
 
-const execute = promisify(execFile), servers: HttpsServer[] = [];
+const servers: HttpsServer[] = [];
 let directory = '', certificate = '', privateKey = '';
 const limits = { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 };
 const request = { model: 'configured-model', messages: [{ role: 'user' as const, content: 'native text' }], max_completion_tokens: 12 };
@@ -19,10 +18,7 @@ const response = (content = 'answer') => ({ id: 'chatcmpl-local', object: 'chat.
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'deckent-openai-credential-'));
-  const key = join(directory, 'key.pem'), cert = join(directory, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', key, '-out', cert,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  [privateKey, certificate] = await Promise.all([readFile(key, 'utf8'), readFile(cert, 'utf8')]);
+  ({ key: privateKey, caPem: certificate } = await createLocalTls(directory));
 });
 afterEach(async () => {
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

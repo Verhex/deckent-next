@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Token Pipeline"
+  short_description: "Govern cross-surface design tokens"
+  default_prompt: "Use $design-tokens-pipeline to change and verify these Deckent tokens."
+policy:
+  allow_implicit_invocation: true

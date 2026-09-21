@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "6b1da2c40a352a3ba2c4dd5692621d2e698cb0897dca5aaf29e0f51f79f68846",
-    "src/platform/core/config-fields/internal/fields.ts": "52ec13cb071bccfb939a00c609331b072b49479ae6856c7a37486797ee9bf368",
+    "src/platform/core/config-fields/internal/fields.ts": "934fdf4b615cc7388741530055eaea1e833624ea2c970d4ffed5b44c63d1dfac",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -34,6 +34,7 @@
     "mcp": [],
     "service": [],
     "cancellation": [],
+    "runRuntime": [],
     "cancellationRuntime": [],
     "reconciliationRuntime": [],
     "admission": [

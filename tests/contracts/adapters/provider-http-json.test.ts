@@ -1,23 +1,18 @@
-import { execFile } from 'node:child_process';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 
 const servers: Server[] = [];
 const limits = { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 5000 };
-const execute = promisify(execFile);
 let directory = '', certificate = '', privateKey = '';
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'deckent-provider-http-json-'));
-  const key = join(directory, 'key.pem'), cert = join(directory, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', key, '-out', cert,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  [privateKey, certificate] = await Promise.all([readFile(key, 'utf8'), readFile(cert, 'utf8')]);
+  ({ key: privateKey, caPem: certificate } = await createLocalTls(directory));
 });
 afterEach(async () => Promise.all(servers.splice(0).map(async server => {
   server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));

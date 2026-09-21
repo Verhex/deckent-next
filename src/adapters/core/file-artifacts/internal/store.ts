@@ -55,6 +55,13 @@ export class FileArtifactStore implements ArtifactStore {
       return bytes;
     } finally { await handle.close(); }
   }
+  /** Trusted composition only: verified immutable bytes plus a file for a single read-only mount.
+   * The worker never receives access to the artifact directory. Host filesystem remains trusted. */
+  async prepareReadOnlyFile(scopeId: string, receipt: ArtifactReceipt) {
+    const bytes = await this.read(scopeId, receipt);
+    const path = join(await this.scope(scopeId, false), receipt.digest);
+    return Object.freeze({ bytes, path });
+  }
   async put(scopeId: string, input: Uint8Array): Promise<ArtifactReceipt> {
     identitySchema.parse(scopeId);
     if (!(input instanceof Uint8Array)) throw new ArtifactError('ARTIFACT_INVALID');

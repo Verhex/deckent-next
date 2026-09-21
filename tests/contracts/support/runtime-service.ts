@@ -16,6 +16,8 @@ const observer: ConfiguredCancellationRuntimeObserver = {
 export async function startTestRuntimeService(project: string, env: NodeJS.ProcessEnv): Promise<TestRuntimeService> {
   const configPath = join(project, '.deckent', 'config.json');
   const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+  // These fixtures exercise explicit surface commands. Dedicated automatic-runtime tests use the normal host directly.
+  if (!config.runRuntime) config.runRuntime = { pollIntervalMs: 2147483647 };
   if (!config.cancellation) config.cancellation = { maxConcurrentDeliveries: 1 };
   if (!config.cancellationRuntime) config.cancellationRuntime = {
     scopeIds: ['runtime-test'], pollIntervalMs: 1000, failureBackoffMs: 1000,

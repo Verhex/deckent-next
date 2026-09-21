@@ -1,4 +1,4 @@
-export { TASK_GRAPH_SCHEMA_VERSION, taskDefinitionSchema, taskEligibilitySchema, taskGraphSchema, taskProgressSchema,
+export { taskInputNameSchema, TASK_GRAPH_SCHEMA_VERSION, taskDefinitionSchema, taskEligibilitySchema, taskGraphSchema, taskProgressSchema,
   readinessInputSchema, TaskGraphError } from './internal/contract.js';
 export type { TaskDefinition, TaskEligibility, TaskGraph, TaskProgress, ReadinessInput, TaskGraphErrorCode } from './internal/contract.js';
 export { validateTaskGraph } from './internal/graph.js';
@@ -8,3 +8,6 @@ export { criterionDefinitionSchema } from './internal/criteria.js';
 export type { CriterionDefinition } from './internal/criteria.js';
 export { CRITERION_TEXT_LIMITS } from './internal/criteria.js';
 export { CRITERION_ENCODING_VERSION, encodeCriterionDefinition } from './internal/criterion-encoding.js';
+
+export { branchInputSchema, branchDecisionSchema, resolveAdmissionBranch, assertAdmissionBranch } from './internal/branch.js';
+export type { BranchDecision } from './internal/branch.js';

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Recovery"
+  short_description: "Run one bounded ADR-D-007 recovery package"
+  default_prompt: "Use $deckent-recovery to assess and execute this explicitly authorized bounded recovery package."
+policy:
+  allow_implicit_invocation: true

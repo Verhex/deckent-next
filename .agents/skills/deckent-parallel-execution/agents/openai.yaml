@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Parallel Execution"
+  short_description: "Run independent lanes with exact custody"
+  default_prompt: "Use $deckent-parallel-execution to execute this admitted DAG with exact scopes and evidence custody."
+policy:
+  allow_implicit_invocation: true

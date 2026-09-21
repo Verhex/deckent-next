@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Terminal Design"
+  short_description: "Design first-class CLI and TUI behavior"
+  default_prompt: "Use $deckent-terminal-design to specify and verify this Terminal interaction."
+policy:
+  allow_implicit_invocation: true

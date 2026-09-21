@@ -4,9 +4,17 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
-- PROVIDER-SPEND persistence/inspection foundation (preparation only): add durable monetary record and inspection primitives; production invocation does not yet enforce configured budgets, and no spending config is registered until trusted quote wiring and the mandatory gate land together.
+- EXECUTION/CHECKPOINT: automatic admitted Run progression, completion-driven refill and configurable nonpreemptive Run rotation; named output-file retention and authorized readonly dependency inputs; ledger28. Includes prior branch/pool fixes, host/core-memory source and working-plan cleanup; historical migration fixtures now remove post-v24 tables and retain the full earlier execution schema. Remote transport, hard time fairness and the previously recorded intermittent model unknown remain open.
 
-- PROVIDER-ALLOCATION/CHECKPOINT: replace per-write history scans with transactional quota checkpoints, preserve uncertain capacity, and expose the absence of a recorded full-history audit.
+- EXECUTION/PARTIAL-WAVE: atomically reserve the ordered candidate prefix fitting the shared pool; replay retains exact admitted identities, failed writes roll back, and ledger24 gates older readers.
+
+- MODEL/TLS-DIAGNOSTICS: share test-only TLS generation with bounded validity margins; retain verification and add expiry/before-valid regression plus safe model failure diagnostics. Full verify passed; one prior intermittent unknown remains unexplained.
+
+- FLOW/ADMISSION-CHOICE (full verify passed; intermittent model outcome finding open): persist one admission-time exclusive branch with the Run receipt; expose its summary through shared Run surfaces and CLI --branch. Nonselected work is not accepted; mid-Run gates and general BPM remain open.
+
+- FOUNDATION/A (review): shared 1,500-line source cap and 800-line design target; explicit Go/C/native/app coverage, exact historical evidence exemption, and monotonic build duration.
+
+- ARCH-IMPORTS: cross-unit/package imports now use native subpath imports. Architecture gate enforces public indexes, existing targets and runtime/source mapping consistency; Vitest package list derives from arch.json. Accepted in Fable REVIEW 1332.
 
 - K1-F1/C: pure config-fields unit, registry-backed output defaults, canonical nested provider fields, localized metadata with tier/since, and source-derived config vocabulary checked before lint/build. Accepted (Fable REVIEW1323); parent K1-F1 closed with REVIEW1316. Host-sizing constants remain ASSURANCE work.
 
@@ -24,7 +32,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 - PLAN: K1-F1 (config schema-as-data, owner finding: flow-value literals in defaults) and ARCH-IMPORTS (`#pkg` aliases) cards; both precede K2 landing.
 
-- K2 (review): port 3,374 exact-list legacy keys into ten bilingual JSON families, preserve 444 K1 keys and add tui.switch_unavailable; synchronous immutable registry, manifest defaults, renderer-safe translation and duplicate/placeholder gates; 13,496 oracle comparisons match. Existing CLI help/version format differences are recorded for review.
+- K2 (review): ten immutable bilingual families; canonical run vocabulary without compatibility aliases; remove obsolete migration/mode/adoption messages and stale CLI help. Preserve historical oracle separately; unchanged-template hashes and renderer execution validate the new catalog. Shared static metadata removes the renderer Node dependency.
 
 - PLAN: CL1 closure/settlement ledger card written (Fable); host-scoped custody, single HMAC audit primitive, cross-host UNSUPPORTED in 1.0.
 
@@ -39,9 +47,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 - K0: repository skeleton — package layout, `arch.json` contract, `lint-arch`, eslint size rules, build, CI, i18n kernel, CLI `--version`, first contract/e2e tests, harvested invariant catalog (`tests/contracts/HARVEST.json`, 40,828 titles from legacy HEAD 509fffa64).
 
-- FOUNDATION/A (Fable PASS1340): shared 1,500-line source cap, 800-line design target, native/app coverage and monotonic build duration.
-
 - PATH-LAYOUT/A+B (Fable PASS1349): consolidate durable roots and resource paths; replace plaintext secret-file reads with per-load secret resolution and redaction. No data migration or sandbox claim.
+
+- FOUNDATION/B (review, alpha.2): platform/adapters/composition package mapping, explicit CLI wiring, domain/surface dependency guards, native import maps and build bin registry; PATH-INSPECTION adds shared CLI/API read-only location query.
+
+- PATH-LAYOUT/C (review): fixed project config locator with configurable durable root/resources; queries show real config path, revision and locations. Cache clones retain frozen layouts; config changes cannot mutate an earlier snapshot.
 
 - FOUNDATION/B + PATH-INSPECTION (Fable PASS1357): native package boundaries, explicit CLI composition, domain import guard and shared path query; alpha.2. Unimplemented MCP binary removed.
 
@@ -388,10 +398,6 @@ PROVIDERS/A8B2: recover durable model cancellation intent with bounded scoped sc
 PROVIDERS/A8B3: expose consistent cancellation identity/state in model inspection and CLI, with real CLI/MCP live-cancellation proofs and one current runtime protocol version.
 
 MCP-ENVELOPE: bound complete MCP messages, preserve correlated overflow errors and reject undeliverable model operations before effects.
-
-- Provider native spending candidate: require current scoped budget and adapter-produced tariff evidence before a new model claim; preserve historical replay, metadata cancellation and fresh policy/profile checks; credential values resolve only for transport sends. Missing rates deny; responses without charge evidence remain held.
-
-- Capture native OpenRouter reported-charge evidence without floating-point loss or key-order-dependent identity. Keep reported charge separate from local tariff calculation and invoice reconciliation; missing/invalid evidence holds. Ledger settlement remains pending.
 
 Provider reported settlement: preserve exact fractional minor-unit totals, atomic response/content/money, minimal charge evidence after authorized content purge, validated ledger21 migration and inspection7 across SDK/CLI/MCP. Missing/invalid charge retains reservation; overrun freezes account. This is reported charge, not external invoice verification.
 

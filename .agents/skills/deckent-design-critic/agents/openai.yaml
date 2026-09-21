@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Design Critic"
+  short_description: "Independently review Deckent design evidence"
+  default_prompt: "Use $deckent-design-critic to independently review this Deckent design and its evidence."
+policy:
+  allow_implicit_invocation: true

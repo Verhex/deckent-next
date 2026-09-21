@@ -591,7 +591,7 @@
   "mcp.tool.inspectRun": "Read a recorded Run and its tasks. This is not live worker status or proof of acceptance. Requires current Run inspection policy.",
   "mcp.tool.inspectInventory": "Read a bounded page of recorded execution attempts in one authorized scope. Does not start or stop workers.",
   "mcp.tool.policyVocabulary": "List built-in policy resource and action identifiers. This metadata grants no permissions.",
-  "mcp.tool.createRun": "Create one Run from an explicit Task graph under current create policy. Supply stable commandId, scopeId and runId values; installation configuration pins layout, scheduling policy and execution registry. This does not reserve or execute tasks. Reuse the same command and commandId after an uncertain response.",
+  "mcp.tool.createRun": "Create one Run from an explicit Task graph under current create policy. Supply stable commandId, scopeId and runId values; installation configuration pins layout, scheduling policy and execution registry. New admission also durably requests automatic progression by the common runtime. It may reserve and execute tasks under current per-operation policy; stopping this client does not cancel the Run. Reuse the same command and commandId after an uncertain response.",
   "mcp.tool.reserveRunTasks": "Reserve the next scheduler-selected wave for an existing Run under current reserve policy. Supply the Run identity, current revision and a stable commandId; the service chooses tasks and generates Attempt identities. Do not supply task IDs, Attempt IDs, capacity or ordering. This does not execute tasks. Reuse the same command and commandId after an uncertain response.",
   "mcp.tool.requestRunCancellation": "Record a durable Run cancellation request only. This tool does not deliver cancellation to workers, confirm termination or reverse effects. Inspect the Run first and use its current revision. Keep commandId unchanged when retrying an uncertain response; inspect recorded state because a response failure may follow a committed request. Requires current Run cancellation policy.",
   "config.field.cancellation": "Cancellation delivery concurrency, retry count, retry delay and claim timeout",
@@ -601,7 +601,7 @@
   "mcp.tool.evaluateTask": "Derive and persist a Task verdict from its Run-pinned criteria and verified retained output. Supply the exact Attempt identity, a stable commandId and the current Run revision; never supply a verdict or evaluator. Requires current per-Attempt evaluate permission, including replay. This does not execute or relaunch the task.",
   "cli.run.cancel.prevented": "Launch prevented before permission was granted",
   "inventory.launchPending": "Launch permission pending",
-  "cli.run.create.result": "Run {run} admitted at revision {revision}. Tasks have not started.",
+  "cli.run.create.result": "Run {run} admitted at revision {revision}. The runtime progresses new admissions automatically under current policy.",
   "cli.usage.help": "Run deckent --help.",
   "cli.usage.arguments": "arguments",
   "cli.graph.expected": "valid UTF-8 JSON required",
@@ -616,5 +616,8 @@
   "cli.value.none": "none",
   "config.field.cancellationRuntime": "Automatic cancellation recovery scopes, polling interval and failure backoff",
   "config.field.reconciliationRuntime": "Automatic reconciliation scopes, page size, concurrency, polling and failure backoff",
-  "config.field.installation": "Installation input limits"
+  "config.field.installation": "Installation input limits",
+  "config.field.runRuntime": "Automatic admitted Run progression polling, page size, reservation budget per turn and failure backoff",
+  "cli.runtime.runProgression": "Run {runId}: advanced {count} attempts",
+  "cli.runtime.runProgressionFailed": "Run progression could not continue: {code}"
 }

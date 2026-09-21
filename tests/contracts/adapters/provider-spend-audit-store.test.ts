@@ -1,3 +1,4 @@
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fork } from 'node:child_process';
@@ -78,11 +79,11 @@ function raceChild(path: string, value: ReturnType<typeof receipt>) {
 
 it('migrates a schema-21 ledger forward without inventing an audit', async () => {
   const { path } = await fixture(), db = new DatabaseSync(path);
-  try { db.exec('DROP TABLE provider_spend_audits; PRAGMA user_version=21'); } finally { db.close(); }
+  try { db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=21'); } finally { db.close(); }
   const store = await openSqliteProviderSpendAuditStore(path, options, 'allow'); store.close();
   const check = new DatabaseSync(path, { readOnly: true });
   try {
-    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(22);
+    expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
     expect((check.prepare('SELECT count(*) AS count FROM provider_spend_audits').get() as { count: number }).count).toBe(0);
     expect(check.prepare("SELECT 1 FROM pragma_table_info('provider_spend_audits') WHERE name='budget_id'").get()).toBeTruthy();
     expect(check.prepare("SELECT 1 FROM pragma_index_list('provider_spend_audits') WHERE name='provider_spend_audits_budget_latest'").get()).toBeTruthy();

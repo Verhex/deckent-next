@@ -265,11 +265,15 @@ it('rejects canonical receipt substitution and detects missing canonical history
 });
 
 it('migrates schema13 to current without changing activation rows and read-only access never creates or migrates', async () => {
-  const path = await file(), db = new DatabaseSync(path); db.exec(`PRAGMA user_version=13;
-    CREATE TABLE model_activations(scope_id TEXT NOT NULL,provider_id TEXT NOT NULL,provider_version INTEGER NOT NULL,
-      model_id TEXT NOT NULL,model_version INTEGER NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,
-      PRIMARY KEY(scope_id,provider_id,provider_version,model_id,model_version));
-    CREATE TABLE model_activation_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));`);
+  const path = await file();
+  const current = await openSqliteModelActivationStore(path, options); current.close();
+  const db = new DatabaseSync(path);
+  // Reconstruct a complete v13 ledger, including its existing execution/receipt tables.
+  db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations;
+    DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
+    DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
+    DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
+    DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=13;`);
   db.prepare('INSERT INTO model_activations VALUES(?,?,?,?,?,?,?)').run('scope', 'provider', 1, 'model', 1, 1, '{"preserved":true}'); db.close();
   const beforeDb = new DatabaseSync(path, { readOnly: true }), before = beforeDb.prepare('SELECT * FROM model_activations').all(); beforeDb.close();
   const oldBytes = await readFile(path);

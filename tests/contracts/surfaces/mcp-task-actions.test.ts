@@ -63,3 +63,13 @@ it('forwards only parsed identities and evaluation commands and rejects argv or 
   expect(JSON.stringify(await f.client.callTool({ name: 'evaluate_task', arguments: { ...command, verdict: 'pass' } }))).toContain('MCP_INPUT_INVALID');
   expect(f.calls).toHaveLength(4);
 });
+
+it('advertises and forwards the versioned admission branch without accepting a caller-selected verdict', async () => {
+  const f = await fixture();
+  const branch = { schemaVersion: 1, input: { id: 'fact', revision: '1', value: true }, whenTrue: 'a', whenFalse: 'b', join: 'join' };
+  const command = { schemaVersion: 1, commandId: 'conditional', scopeId: 's', runId: 'r', graph, branch };
+  expect((await f.client.callTool({ name: 'create_run', arguments: command })).isError).not.toBe(true);
+  expect(f.calls).toEqual([{ create: command }]);
+  expect(JSON.stringify(await f.client.callTool({ name: 'create_run', arguments: { ...command, branch: { ...branch, selectedTaskId: 'a' } } }))).toContain('MCP_INPUT_INVALID');
+  expect(f.calls).toHaveLength(1);
+});

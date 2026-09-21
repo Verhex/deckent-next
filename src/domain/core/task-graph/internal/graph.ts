@@ -18,6 +18,8 @@ export function validateTaskGraphStructure(graph: Pick<TaskGraph, 'tasks'>): voi
   for (const task of graph.tasks) {
     if (new Set(task.acceptanceCriteria).size !== task.acceptanceCriteria.length) throw new TaskGraphError('TASK_ACCEPTANCE_DUPLICATE');
     if (new Set(task.dependencies).size !== task.dependencies.length) throw new TaskGraphError('TASK_DEPENDENCY_DUPLICATE');
+    if (new Set((task.inputs ?? []).map(input => input.name)).size !== (task.inputs?.length ?? 0)
+      || task.inputs?.some(input => !task.dependencies.includes(input.taskId))) throw new TaskGraphError('TASK_GRAPH_INVALID');
     remaining.set(task.id, task.dependencies.length);
     if (!task.dependencies.length) ready.push(task.id);
     for (const dependency of task.dependencies) {

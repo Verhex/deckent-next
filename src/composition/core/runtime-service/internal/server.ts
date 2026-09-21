@@ -1,3 +1,4 @@
+import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
@@ -15,6 +16,8 @@ import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
+  onRunProgression?: RunProgressionObserver['onRun'];
+  onRunProgressionError?: RunProgressionObserver['onError'];
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
   onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
@@ -49,6 +52,10 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => { controller.abort(); return recovery; }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
+  const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
+    ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
+    ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
+  }, work => lifecycle.admit(work, 'execution'), options);
   const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async (request, peer) => {
     try {
       if (request.operation === 'describeService') {
@@ -116,6 +123,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     }
   });
   const hostedRecovery = [
+    preparedRunRuntime.run(controller.signal),
     preparedRecovery.run(controller.signal),
     preparedModelCancellation.run(controller.signal),
     ...(preparedReconciliation ? [preparedReconciliation.run(controller.signal)] : []),

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Enterprise UX"
+  short_description: "Design governance, policy, and audit UX"
+  default_prompt: "Use $deckent-enterprise-ux to design this governance and administration workflow."
+policy:
+  allow_implicit_invocation: true

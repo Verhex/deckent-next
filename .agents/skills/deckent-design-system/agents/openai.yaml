@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Design System"
+  short_description: "Govern components, tokens, and parity"
+  default_prompt: "Use $deckent-design-system to specify and govern this Deckent component family."
+policy:
+  allow_implicit_invocation: true

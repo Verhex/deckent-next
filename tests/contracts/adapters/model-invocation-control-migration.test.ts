@@ -70,7 +70,7 @@ async function seedV17(path: string) {
       DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocations;
       ALTER TABLE model_invocations_v17 RENAME TO model_invocations;
       CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state);
-      PRAGMA user_version=17;`);
+      DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=17;`);
   } finally { db.close(); }
 }
 function inventory(path: string) {

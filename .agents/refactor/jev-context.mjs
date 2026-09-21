@@ -7,6 +7,20 @@ const strings = a => Array.isArray(a) && a.every(text);
 const exact = (v, fields) => object(v) && Object.keys(v).every(k => fields.includes(k));
 const id = v => typeof v === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(v);
 const unique = a => new Set(a).size === a.length;
+const instant = value => {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second, , zone] = match;
+  const y = Number(year), m = Number(month), d = Number(day);
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (m < 1 || m > 12 || d < 1 || d > days[m - 1]
+    || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
+  if (zone !== 'Z' && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4, 6)) > 59)) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export function validateReviewConfig(c) {
   ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'templates']), 'JEV_REVIEW_CONFIG');
@@ -16,12 +30,17 @@ export function validateReviewConfig(c) {
   return c;
 }
 
-export function prepare(c, policy) {
+export function prepare(c, policy, requestAt = new Date().toISOString()) {
   validateReviewConfig(policy);
+  const requestTime = instant(requestAt); ensure(requestTime !== null, 'JEV_REQUEST_TIME');
   ensure(exact(c, ['schemaVersion', 'objective', 'scope', 'revision', 'evidence', 'constraints', 'unknowns', 'options', 'checks']) && c.schemaVersion === 1, 'JEV_CASE');
   ensure([c.objective, c.scope, c.revision].every(text) && strings(c.constraints) && c.constraints.length > 0 && strings(c.unknowns), 'JEV_CONTEXT');
   ensure(Array.isArray(c.evidence) && c.evidence.length > 0 && c.evidence.length <= policy.maxEvidence, 'JEV_EVIDENCE');
-  for (const e of c.evidence) ensure(exact(e, ['id', 'source', 'observedAt', 'observation']) && id(e.id) && text(e.source) && text(e.observation) && typeof e.observedAt === 'string' && Number.isFinite(Date.parse(e.observedAt)), 'JEV_EVIDENCE');
+  for (const e of c.evidence) {
+    ensure(exact(e, ['id', 'source', 'observedAt', 'observation']) && id(e.id) && text(e.source) && text(e.observation)
+      && (e.observedAt === null || instant(e.observedAt) !== null), 'JEV_EVIDENCE');
+    ensure(e.observedAt === null || instant(e.observedAt) <= requestTime, 'JEV_EVIDENCE_FUTURE');
+  }
   const ids = c.evidence.map(e => e.id);
   ensure(unique(ids), 'JEV_DUPLICATE_EVIDENCE');
   const refs = a => strings(a) && unique(a) && a.every(x => ids.includes(x));
@@ -39,7 +58,11 @@ export function prepare(c, policy) {
   questions.sufficiency = { type: 'noul', instructions: policy.templates.sufficiency };
   questions.next_action = { type: 'choice', instructions: policy.templates.selection, criteria };
   const input = validateInput({ schemaVersion: 1, state: c, questions });
-  return { input, diagnostics: { evidenceCount: ids.length, optionCount: c.options.length, questionCount: Object.keys(questions).length, optionsWithoutEvidence: c.options.filter(o => !o.evidenceIds.length).map(o => o.id), semanticQuality: 'not-measured', optionSetRejection: 'none_of_the_above', missingEvidenceOption: 'insufficient_information' } };
+  const measuredObservationTimes = c.evidence.filter(e => e.observedAt !== null).length;
+  return { input, diagnostics: { evidenceCount: ids.length, observationTimes: { measured: measuredObservationTimes,
+    unknown: ids.length - measuredObservationTimes, freshness: 'not-measured' }, optionCount: c.options.length,
+    questionCount: Object.keys(questions).length, optionsWithoutEvidence: c.options.filter(o => !o.evidenceIds.length).map(o => o.id),
+    semanticQuality: 'not-measured', optionSetRejection: 'none_of_the_above', missingEvidenceOption: 'insufficient_information' } };
 }
 
 export function validateFollowup(v, type, request) {

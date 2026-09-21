@@ -65,7 +65,7 @@ async function seedV16(path: string) {
         PRIMARY KEY(scope_id,invocation_id),FOREIGN KEY(scope_id,invocation_id) REFERENCES model_invocations(scope_id,invocation_id));
       INSERT INTO model_invocation_contents(scope_id,invocation_id,record)
         SELECT scope_id,invocation_id,record FROM model_invocation_contents_v17 WHERE record IS NOT NULL;
-      DROP TABLE model_invocation_contents_v17; PRAGMA user_version=16;`);
+      DROP TABLE model_invocation_contents_v17; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=16;`);
   } finally { db.close(); }
 }
 

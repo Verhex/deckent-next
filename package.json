@@ -1,7 +1,7 @@
 {
   "name": "deckent",
   "version": "1.0.0-alpha.2",
-  "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal \u00b7 MCP \u00b7 API)",
+  "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal · MCP · API)",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -37,7 +37,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "node scripts/package-metadata.mjs && npm run typecheck && eslint . && node scripts/lint-arch.mjs",
+    "lint": "node scripts/package-metadata.mjs && npm run typecheck && eslint . && node scripts/lint-arch.mjs && node scripts/lint-core-memory.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
     "smoke": "node dist/composition/core/cli/internal/entry.js --version",

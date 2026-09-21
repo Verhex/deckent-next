@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Outcome Ordering"
+  short_description: "Choose outcome order from accepted evidence"
+  default_prompt: "Use $deckent-outcome-ordering to turn the accepted audit into owner-decided work order."
+policy:
+  allow_implicit_invocation: true

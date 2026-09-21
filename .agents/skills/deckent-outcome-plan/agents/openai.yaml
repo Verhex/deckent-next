@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Outcome Plan"
+  short_description: "Plan one admitted outcome and its proof path"
+  default_prompt: "Use $deckent-outcome-plan to create the bounded DAG and proof contract for this admitted outcome."
+policy:
+  allow_implicit_invocation: true

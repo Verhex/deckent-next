@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Read-only Audit"
+  short_description: "Audit full product truth without changing state"
+  default_prompt: "Use $deckent-readonly-audit to audit this Deckent question with read-only disk evidence."
+policy:
+  allow_implicit_invocation: true

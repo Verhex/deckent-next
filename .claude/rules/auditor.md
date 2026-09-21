@@ -1,0 +1,4 @@
+# auditor
+
+Read `deckent-next-refactor` first.
+Fable independently reviews the current card read-only. Verify real wiring, invariants, failure evidence and diff identity. Report PASS/REVISE; ACK is not review.

@@ -23,8 +23,29 @@ export const MODEL_INVOCATION_LEDGER_VERSION = 18;
 export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
-export const CURRENT_LEDGER_VERSION = PROVIDER_SPEND_AUDIT_LEDGER_VERSION;
+// Current durable contract; older writers must not reopen newer records.
+export const CURRENT_LEDGER_VERSION = 28;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Explicit named artifact selectors in task inputs and pinned supervisor bindings.
+  28: 'PRAGMA user_version=28;',
+  // Named output-file declarations and retained artifact references.
+  27: 'PRAGMA user_version=27;',
+  // Optional Task input declarations and pinned Docker read-only input bindings.
+  26: 'PRAGMA user_version=26;',
+  25: `CREATE TABLE run_execution_intents(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,actor_id TEXT NOT NULL,
+    issuer TEXT NOT NULL,subject TEXT NOT NULL,admitted_at INTEGER NOT NULL,command_id TEXT NOT NULL,
+    PRIMARY KEY(scope_id,run_id), UNIQUE(scope_id,command_id));
+    CREATE INDEX run_execution_intents_actor ON run_execution_intents(actor_id,issuer,subject,scope_id,run_id);
+    CREATE TABLE task_evaluation_observations(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,attempt_id TEXT NOT NULL,
+    attempt_revision INTEGER NOT NULL CHECK(attempt_revision>0),PRIMARY KEY(scope_id,run_id,attempt_id,attempt_revision));
+    INSERT INTO task_evaluation_observations
+      SELECT DISTINCT scope_id,json_extract(command,'$.evaluation.identity.runId'),json_extract(command,'$.evaluation.identity.attemptId'),
+      json_extract(command,'$.evaluation.attemptRevision') FROM run_receipts
+      WHERE json_extract(command,'$.action')='apply-task-evaluation';
+    PRAGMA user_version=25;`,
+  // Partial reservation semantics: older writers/readers must not open this ledger.
+  24: 'PRAGMA user_version=24;',
+  23: 'PRAGMA user_version=23;',
   1: `CREATE TABLE attempts(scope_id TEXT NOT NULL, attempt_id TEXT NOT NULL, revision INTEGER NOT NULL,
     snapshot TEXT NOT NULL, PRIMARY KEY(scope_id, attempt_id));
     CREATE TABLE attempt_receipts(scope_id TEXT NOT NULL, command_id TEXT NOT NULL, command TEXT NOT NULL,

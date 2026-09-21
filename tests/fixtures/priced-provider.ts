@@ -1,18 +1,6 @@
-import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
 
-const execute = promisify(execFile);
-
-export async function createPricedProviderTls(root: string): Promise<{ readonly key: string; readonly caPem: string }> {
-  const keyPath = join(root, 'priced-provider-key.pem'), certificatePath = join(root, 'priced-provider-cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1',
-    '-keyout', keyPath, '-out', certificatePath, '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  const [key, caPem] = await Promise.all([readFile(keyPath, 'utf8'), readFile(certificatePath, 'utf8')]);
-  return Object.freeze({ key, caPem });
-}
+export { createLocalTls as createPricedProviderTls } from './local-tls.js';
 
 export function replyPricedProviderMetadata(request: IncomingMessage, response: ServerResponse): boolean {
   if (request.method !== 'GET' || request.url !== '/api/v1/models/vendor/model/endpoints') return false;

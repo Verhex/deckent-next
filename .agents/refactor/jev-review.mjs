@@ -17,12 +17,13 @@ async function optional(directory, name) {
   try { return await readEvent(directory, name); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
 }
 export async function consult(config, policy, authoredCase, root, key, transport) {
-  const prepared = prepare(authoredCase, policy);
+  const requestAt = new Date().toISOString();
+  const prepared = prepare(authoredCase, policy, requestAt);
   safeData(authoredCase, key);
   const wire = { model: config.model, state: prepared.input.state, questions: prepared.input.questions };
   ensure(Buffer.byteLength(JSON.stringify(wire)) <= config.maxRequestBytes, 'JEV_REQUEST_TOO_LARGE');
   const id = callId(); const directory = join(await privateDirectory(root), id);
-  const request = { schemaVersion: 1, callId: id, at: new Date().toISOString(), case: authoredCase, ...prepared, endpoint: config.endpoint, requestedModel: config.model, policySha256: digest(policy), requestSha256: digest(wire) };
+  const request = { schemaVersion: 1, callId: id, at: requestAt, case: authoredCase, ...prepared, endpoint: config.endpoint, requestedModel: config.model, policySha256: digest(policy), requestSha256: digest(wire) };
   await writeEvent(directory, 'request.json', request, key);
   const start = performance.now();
   let response;

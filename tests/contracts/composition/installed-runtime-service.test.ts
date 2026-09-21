@@ -37,7 +37,7 @@ function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } }); return profile;
 }
 
-it.skipIf(process.platform !== 'linux')('runs one installed Run across SDK, CLI and MCP through the configured service', async () => {
+it.skipIf(process.platform !== 'linux').each([false, true])('runs installed conditional=%s across SDK, CLI and MCP through the configured service', async conditional => {
   const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
   if (!imageId) throw new Error('DECKENT_TEST_DOCKER_IMAGE is required');
   const root = await mkdtemp(join(tmpdir(), 'deckent-installed-service-')); roots.push(root); await chmod(root, 0o700);
@@ -96,7 +96,10 @@ it.skipIf(process.platform !== 'linux')('runs one installed Run across SDK, CLI 
     runtimeClient = createConfiguredRuntimeClient(project, options);
     const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'task-1', kind: 'kind-1', dependencies: [], acceptanceCriteria: ['exit'] }],
       criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero', evaluator: { id: 'custom-exit', version: 7 }, parameters: { acceptedExitCodes: [0] } }] };
-    await runtimeClient.createRun({ schemaVersion: 1, commandId: 'create', scopeId: 'scope-1', runId: 'run-1', graph });
+    if (conditional) graph.tasks.push({ ...graph.tasks[0]!, id: 'not-selected' }, { ...graph.tasks[0]!, id: 'join', dependencies: ['task-1', 'not-selected'] });
+    const branch = { schemaVersion: 1 as const, input: { id: 'fact', revision: 'fact-1', value: true }, whenTrue: 'task-1', whenFalse: 'not-selected', join: 'join' };
+    const created = await runtimeClient.createRun({ schemaVersion: 1, commandId: 'create', scopeId: 'scope-1', runId: 'run-1', graph, ...(conditional ? { branch } : {}) });
+    if (conditional) expect(created.admission.run.branch?.notSelectedTaskId).toBe('not-selected');
     const reservation = JSON.parse((await exec(process.execPath, [cli, 'run', 'reserve', '--scope', 'scope-1', '--id', 'run-1', '--command-id', 'reserve', '--expected-revision', '0', '--json'], { cwd: project, env })).stdout);
     identity = reservation.reservation.identities[0];
     await client.connect(transport);
@@ -108,6 +111,12 @@ it.skipIf(process.platform !== 'linux')('runs one installed Run across SDK, CLI 
     record = await runtime.store.loadBoundDispatch(identity); lease = await runtime.workspaces.openRecorded(identity);
     const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('scope-1', record!.output!)));
     expect(output.stdout).toBe('base\n'); expect(output.stdout).not.toContain('owner-wip');
+    if (conditional) {
+      const next = await runtimeClient.reserveRunTasks({ schemaVersion: 1, commandId: 'reserve-join', scopeId: 'scope-1', runId: 'run-1', expectedRevision: 3 });
+      expect(next.reservation.identities.map(item => item.taskId)).toEqual(['join']);
+      const inspected = await runtimeClient.inspectRun({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1' });
+      expect(inspected.run?.tasks.some(task => task.id === 'not-selected')).toBe(false);
+    }
     const descriptor = await runtimeClient.describeService();
     await runtimeClient.shutdownService({ schemaVersion: 1, commandId: 'shutdown', serviceId: 'service-1', instanceId: descriptor.instanceId, reason: 'test complete' });
     expect(await bounded(serviceClosed)).toBe(0);

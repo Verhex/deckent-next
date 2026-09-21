@@ -5,6 +5,19 @@ description: Plan, implement, review and hand off Deckent Next refactor cards fr
 
 # Deckent Next refactor
 
+## Owner override — 2026-09-20: coordination closed
+
+Owner closed the Fable communication protocol until explicitly reopened. Do not read/write communication.md, send REQUEST_REVIEW, or wait for Fable. Older channel/review requirements below are suspended. Use Jev for decision support with none-of-the-above and insufficient-information alternatives; verify with source and executable evidence, never label self-review as independent PASS. Work in short owner-visible slices; the long goal is canceled.
+
+## Owner override — 2026-09-21: working documentation
+
+PLAN.md holds main product workstreams, durable decisions and material open findings only.
+Keep small slices, current progress and next-step details in `follow-up-works/current-flow.md`;
+replace/delete its completed content rather than append history or create a document per small job.
+Historical/canceled work and necessary proof remain in the external refactor workspace.
+The tracker is optional development-only material, not product state or durable scope authority.
+Earlier per-card instructions to append detailed PLAN entries are superseded by this rule.
+
 ## Workspace and authority
 
 Operator workspace: `/home/alperen/deckent-dev`; product destination: `/home/alperen/deckent-next`.

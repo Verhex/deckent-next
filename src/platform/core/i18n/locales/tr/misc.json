@@ -591,7 +591,7 @@
   "mcp.tool.inspectRun": "Kayıtlı Run ve görevlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme Attempt’lerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
   "mcp.tool.policyVocabulary": "Yerleşik politika kaynak ve işlem kimliklerini listele. Bu bilgi yetki vermez.",
-  "mcp.tool.createRun": "Güncel oluşturma politikası altında açık bir Task grafından tek bir Run oluştur. Kararlı commandId, scopeId ve runId değerleri gönderin; kurulum yapılandırması yerleşimi, zamanlama politikasını ve yürütme kaydını sabitler. Bu araç görev ayırmaz veya yürütmez. Belirsiz yanıttan sonra aynı komutu ve commandId değerini yeniden kullanın.",
+  "mcp.tool.createRun": "Güncel oluşturma politikası altında açık bir Task grafından tek bir Run oluştur. Kararlı commandId, scopeId ve runId değerleri gönderin; kurulum yapılandırması yerleşimi, zamanlama politikasını ve yürütme kaydını sabitler. Yeni kabul, ortak runtime için kalıcı otomatik ilerleme niyeti de kaydeder. Runtime güncel işlem yetkileriyle görev ayırıp çalıştırabilir; bu istemcinin kapanması Run iptali değildir. Belirsiz yanıttan sonra aynı komutu ve commandId değerini yeniden kullanın.",
   "mcp.tool.reserveRunTasks": "Güncel ayırma politikası altında var olan bir Run için zamanlayıcının seçtiği sonraki dalgayı ayır. Run kimliğini, güncel revizyonu ve kararlı commandId değerini gönderin; servis görevleri seçer ve Attempt kimliklerini üretir. Görev kimlikleri, Attempt kimlikleri, kapasite veya sıralama göndermeyin. Bu araç görevleri yürütmez. Belirsiz yanıttan sonra aynı komutu ve commandId değerini yeniden kullanın.",
   "mcp.tool.requestRunCancellation": "Yalnız kalıcı Run iptal isteği kaydeder. İptali worker’lara iletmez, durmayı doğrulamaz ve etkileri geri almaz. Önce Run durumunu okuyup güncel revizyonunu kullanın. Belirsiz yanıtı tekrar denerken commandId değişmemeli; yanıt hatası kaydedilmiş bir isteğin ardından gelebileceğinden kayıtlı durumu inceleyin. Güncel Run iptal izni gerektirir.",
   "config.field.cancellation": "İptal teslim eşzamanlılığı, deneme sayısı, yeniden deneme gecikmesi ve teslim sahipliği süresi",
@@ -601,7 +601,7 @@
   "mcp.tool.evaluateTask": "Run’a sabitlenmiş ölçütlerden ve doğrulanmış saklanan çıktıdan görev hükmü türetip kalıcı kayda işler. Tam Attempt kimliğini, kararlı commandId değerini ve güncel Run revizyonunu gönderin; hüküm veya değerlendirici göndermeyin. Tekrar dahil güncel Attempt değerlendirme izni gerekir. Görevi yürütmez veya yeniden başlatmaz.",
   "cli.run.cancel.prevented": "Başlatma izni verilmeden yürütme engellendi",
   "inventory.launchPending": "Başlatma izni bekliyor",
-  "cli.run.create.result": "Run {run}, {revision} revizyonuyla yürütmeye kabul edildi. Görevler henüz başlatılmadı.",
+  "cli.run.create.result": "Run {run}, {revision} revizyonuyla kabul edildi. Runtime yeni kabulleri güncel policy ile otomatik ilerletir.",
   "cli.usage.help": "deckent --help komutuyla yardımı açın.",
   "cli.usage.arguments": "argümanlar",
   "cli.graph.expected": "geçerli UTF-8 JSON gerekli",
@@ -616,5 +616,8 @@
   "cli.value.none": "yok",
   "config.field.cancellationRuntime": "Otomatik iptal kurtarma kapsamları, tarama aralığı ve hata sonrası bekleme süresi",
   "config.field.reconciliationRuntime": "Otomatik uzlaştırma kapsamları, sayfa boyutu, eşzamanlılık, tarama ve hata sonrası bekleme",
-  "config.field.installation": "Kurulum girdi sınırları"
+  "config.field.installation": "Kurulum girdi sınırları",
+  "config.field.runRuntime": "Kabul edilen Run otomatik ilerleme taraması, sayfa boyutu, tur başına rezervasyon bütçesi ve hata sonrası bekleme",
+  "cli.runtime.runProgression": "Run {runId}: {count} deneme ilerletildi",
+  "cli.runtime.runProgressionFailed": "Run ilerlemesi sürdürülemedi: {code}"
 }

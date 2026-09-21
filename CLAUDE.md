@@ -1,4 +1,5 @@
-# deckent — host pointer
-Read ARCHITECTURE.md (package contract + decision log) and PLAN.md (port ledger) before any change.
-Rules: file ≤800 lines · packages import only via index.ts · no hardcoded user strings/model ids · no new .md files.
-Gate before landing: `npm run verify`. Roles: Astra implements, Fable analyses/reviews. Owner: Alperen.
+# Deckent Next — refactor host pointer
+Read `.agents/skills/deckent-next-refactor/SKILL.md` for every Next card; operator cwd may be legacy, product writes belong here.
+Authority: live owner instructions, then `ARCHITECTURE.md` and `PLAN.md`. Core-memory authority is `.deckent/docs/core-memory/MEMORY.md` **in this repo** — read that copy, not a host HOME projection. The canonical set lives in the legacy operator repo; this copy is deliberate so Next stands alone, and `scripts/lint-core-memory.mjs` fails the build if the two diverge (set `DECKENT_CORE_MEMORY_CANONICAL` to compare against the canonical directory; a memory change is landed by refreshing the manifest with `--write`). Preserve existing WIP and read relevant legacy ADRs.
+Current machine gates remain enforced; host-kit skill/reference Markdown is an explicit owner-authorized exception. Product says run; mutable policy and strings use registries/catalogs.
+Astra implements; Fable independently reviews. The legacy `communication.md` channel was closed by the owner on 2026-09-20 (archived, 348 records); until a new coordination path is opened, review findings reach the owner directly. Run `npm run verify` before landing; commit/publish only on owner request.

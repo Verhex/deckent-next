@@ -1,11 +1,10 @@
-import { execFile } from 'node:child_process';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { auditConfiguredProviderSpendAccount, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -16,7 +15,7 @@ import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSq
 import { ProviderSpendAuditApplication, ModelActivationApplication, ModelBindingApplication, ModelInvocationPurgeApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
-const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [];
+const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => {
   server.closeAllConnections(); server.close(() => resolve());
@@ -26,10 +25,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-composition-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
-  const keyPath = join(root, 'key.pem'), certPath = join(root, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', keyPath, '-out', certPath,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  const [key, caPem] = await Promise.all([readFile(keyPath, 'utf8'), readFile(certPath, 'utf8')]);
+  const { key, caPem } = await createLocalTls(root);
   let metadataGets = 0, posts = 0;
   let nativeUsage: Record<string, unknown> | undefined;
   const server = createServer({ key, cert: caPem }, (request, response) => {
@@ -185,14 +181,44 @@ it.each(['throws', 'wrong-request', 'malformed-amount'] as const)('keeps a valid
 });
 
 it('atomically persists exact native charges, aggregates before rounding, and retains only financial evidence across content purge', async () => {
+  const failures: { stage: string; code: string; clock?: readonly number[] }[] = [];
+  const record = (stage: string, error: unknown, clock?: readonly number[]) => {
+    const code = error instanceof Error && 'code' in error && typeof error.code === 'string'
+      && /^[A-Z0-9_]{1,80}$/.test(error.code) ? error.code : 'UNCLASSIFIED';
+    failures.push({ stage, code, ...(clock ? { clock } : {}) });
+  };
+  const fetchMetadata = adapters.fetchOpenRouterTariff;
+  vi.spyOn(adapters, 'fetchOpenRouterTariff').mockImplementation(async (options, now, signal) => {
+    const clock: number[] = [];
+    try { return await fetchMetadata(options, () => { const value = now(); clock.push(value); return value; }, signal); }
+    catch (error) { record('metadata', error, clock); throw error; }
+  });
+  const createNative = adapters.createOpenRouterPricedNative;
+  vi.spyOn(adapters, 'createOpenRouterPricedNative').mockImplementation(options => {
+    const priced = createNative(options);
+    return { ...priced, quote(input) {
+      try { return priced.quote(input); } catch (error) { record('quote', error); throw error; }
+    }, native: { ...priced.native, async prepare(...args) {
+      try { return await priced.native.prepare(...args); } catch (error) { record('prepare', error); throw error; }
+    }, async send(...args) {
+      try { return await priced.native.send(...args); } catch (error) { record('send', error); throw error; }
+    } } };
+  });
   const f = await fixture(), policy = f.policy(true);
   policy.grants[0]!.actions.push('inspect', 'inspect-content', 'purge-content');
   await writeFile(f.policyPath, JSON.stringify(policy), { mode: 0o600 });
   f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002,
     debug_prompt: 'sensitive-usage-payload', cost_details: { upstream_inference_cost: 99 } });
-  const first = await invokeConfiguredModel(f.project, f.command, { env: f.env });
-  const second = await invokeConfiguredModel(f.project, { ...f.command, commandId: 'second' }, { env: f.env });
-  expect(first.receipt.outcome?.state).toBe('responded'); expect(second.receipt.outcome?.state).toBe('responded');
+  const invoke = async (command: typeof f.command) => {
+    try { return await invokeConfiguredModel(f.project, command, { env: f.env }); }
+    catch (error) {
+      record('application', error);
+      throw new Error(JSON.stringify({ failures }), { cause: error }); // Public composition errors are already redacted.
+    }
+  };
+  const first = await invoke(f.command), second = await invoke({ ...f.command, commandId: 'second' });
+  expect(first.receipt.outcome?.state, JSON.stringify({ failures })).toBe('responded');
+  expect(second.receipt.outcome?.state, JSON.stringify({ failures })).toBe('responded');
   const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.command.reference };
   const inspected = await inspectConfiguredModelInvocation(f.project, query, { env: f.env });
   expect(inspected).toMatchObject({ schemaVersion: 7, spending: { schemaVersion: 2,

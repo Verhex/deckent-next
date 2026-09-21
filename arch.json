@@ -74,6 +74,960 @@
     "enforce": true,
     "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
   },
+  "units": {
+    "src/adapters/core/attempt-store": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/engine/core/attempts",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/scheduling",
+        "src/engine/core/supervisor",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/workspaces",
+        "src/engine/core/run-progression"
+      ],
+      "plan": "STORE"
+    },
+    "src/adapters/core/contract": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/common",
+        "src/platform/core/config",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/docker-supervisor": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/engine/core/supervisor",
+        "src/platform/core/config-fields",
+        "src/engine/core/task-inputs"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/adapters/core/file-artifacts": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/primitives",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/file-policy": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/engine/core/policy"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/git-workspace": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/engine/core/workspaces",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/adapters/core/local-principal": {
+      "dependencies": [
+        "src/domain/core/principal",
+        "src/engine/core/authentication"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/local-runtime-socket": {
+      "dependencies": [
+        "src/adapters/core/local-principal",
+        "src/engine/core/authentication",
+        "src/engine/core/runtime"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/process-runner": {
+      "dependencies": [
+        "src/adapters/core/docker-supervisor"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/adapters/core/process-supervisor": {
+      "dependencies": [
+        "src/engine/core/supervisor"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/capabilities/core/artifacts": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/capabilities/core/evaluation-evidence": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/artifacts": {
+      "dependencies": [
+        "src/adapters/core/file-artifacts",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/cli": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/installation-profile-file",
+        "src/composition/core/installation",
+        "src/composition/core/model-activation",
+        "src/composition/core/provider-catalog",
+        "src/composition/core/query-errors",
+        "src/composition/core/runtime-service",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/host",
+        "src/surfaces/core/cli"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/execution": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/git-workspace",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
+        "src/domain/core/attempt",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/workspaces",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files",
+        "src/engine/core/task-inputs"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/inventory": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/domain/core/policy",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/mcp": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/mcp-transport",
+        "src/composition/core/model-activation",
+        "src/composition/core/provider-catalog",
+        "src/composition/core/runtime-service",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/surfaces/core/mcp"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/policy": {
+      "dependencies": [
+        "src/adapters/core/file-policy",
+        "src/platform/core/host"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/composition/core/query-errors": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/installation-artifacts",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/installation-journal",
+        "src/adapters/core/installation-profile-file",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/provider-openai-chat",
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/task-evaluation",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/installation",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/workspaces",
+        "src/platform/core/bootstrap-state",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/provider-openrouter-chat",
+        "src/adapters/core/provider-openrouter-pricing"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/composition/core/runs": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/file-artifacts",
+        "src/capabilities/core/evaluation-evidence",
+        "src/composition/core/inventory",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
+        "src/domain/core/attempt",
+        "src/domain/core/principal",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/supervisor",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/runtime": {
+      "dependencies": [
+        "src/composition/core/model-invocation",
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/engine/core/model-invocation",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/platform/core/config",
+        "src/platform/core/errors"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/runtime-service": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-runtime-socket",
+        "src/composition/core/execution",
+        "src/composition/core/inventory",
+        "src/composition/core/model-invocation",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/runs",
+        "src/composition/core/runtime",
+        "src/domain/core/attempt",
+        "src/domain/core/model-invocation",
+        "src/domain/core/policy",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend",
+        "src/composition/core/provider-spend",
+        "src/composition/core/run-progression"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/storage": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "STORE"
+    },
+    "src/composition/core/workspaces": {
+      "dependencies": [
+        "src/adapters/core/git-workspace",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/domain/core/attempt": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/policy": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/primitives": {
+      "dependencies": [],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/principal": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/run": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/task-evaluation": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/task-graph": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/attempts": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/engine/core/authentication"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/authentication": {
+      "dependencies": [
+        "src/domain/core/principal"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/dispatch": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/engine/core/authentication",
+        "src/engine/core/supervisor"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/policy": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/supervisor",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/runs": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/policy",
+        "src/engine/core/scheduling"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/runtime": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/domain/core/provider-spend"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/scheduling": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/supervisor": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/engine/core/task-evaluation": {
+      "dependencies": [
+        "src/capabilities/core/artifacts",
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation",
+        "src/domain/core/task-graph",
+        "src/engine/core/attempts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/supervisor"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/workspaces": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives"
+      ],
+      "plan": "ISOLATION"
+    },
+    "src/platform/core/common": {
+      "dependencies": [],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/config": {
+      "dependencies": [
+        "src/platform/core/bootstrap-state",
+        "src/platform/core/common",
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/utils"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/config-fields": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/i18n"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/crash-reporting": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/errors": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/i18n"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/host": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/errors"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/i18n": {
+      "dependencies": [
+        "src/platform/core/common"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/identity": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/validate"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/managed-files": {
+      "dependencies": [
+        "src/platform/core/host"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/output": {
+      "dependencies": [
+        "src/platform/core/common",
+        "src/platform/core/config-fields",
+        "src/platform/core/host",
+        "src/platform/core/i18n"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/utils": {
+      "dependencies": [
+        "src/platform/core/errors"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/platform/core/validate": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/host"
+      ],
+      "plan": "FOUNDATION"
+    },
+    "src/surfaces/core/cli": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/task-graph",
+        "src/engine/core/dispatch",
+        "src/engine/core/installation",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-catalog",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/common",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/crash-reporting",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/i18n",
+        "src/platform/core/identity",
+        "src/platform/core/output",
+        "src/engine/core/provider-spend",
+        "src/domain/core/provider-spend",
+        "src/engine/core/run-progression"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/mcp": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/policy",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-catalog",
+        "src/engine/core/runs",
+        "src/engine/core/runtime",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/installation-profile-file": {
+      "dependencies": [],
+      "plan": "INSTALLATION"
+    },
+    "src/engine/core/installation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/policy",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/platform/core/bootstrap-state"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/installation": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/installation-artifacts",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/installation-journal",
+        "src/adapters/core/local-principal",
+        "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/primitives",
+        "src/engine/core/installation",
+        "src/platform/core/bootstrap-state",
+        "src/platform/core/common",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/platform/core/bootstrap-state": {
+      "dependencies": [
+        "src/platform/core/host"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/installation-artifacts": {
+      "dependencies": [],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/installation-journal": {
+      "dependencies": [
+        "src/platform/core/bootstrap-state",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/errors"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/installation-files": {
+      "dependencies": [],
+      "plan": "INSTALLATION"
+    },
+    "src/domain/core/provider-catalog": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/provider-catalog": {
+      "dependencies": [
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/provider-catalog": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/sqlite-ledger": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/engine/core/attempts",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-invocation",
+        "src/engine/core/runs",
+        "src/engine/core/task-evaluation",
+        "src/platform/core/config-fields",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-allocation",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "STORE"
+    },
+    "src/domain/core/model-activation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/model-activation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/sqlite-model-activation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/scoped-request": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-runtime-socket",
+        "src/composition/core/policy",
+        "src/domain/core/policy",
+        "src/engine/core/policy",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/model-activation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/engine/core/policy",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/domain/core/model-invocation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/model-invocation": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/model-activation",
+        "src/engine/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/sqlite-model-invocation": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/engine/core/dispatch",
+        "src/engine/core/model-activation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend",
+        "src/engine/core/model-allocation",
+        "src/domain/core/provider-spend"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-openai-chat": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/model-invocation",
+        "src/adapters/core/provider-http-json"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/model-invocation": {
+      "dependencies": [
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/sqlite-model-activation",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/provider-openrouter-chat",
+        "src/adapters/core/provider-openrouter-pricing",
+        "src/adapters/core/contract",
+        "src/adapters/core/provider-http-json"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/mcp-transport": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
+    "src/domain/core/provider-spend": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/provider-spend": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/provider-spend",
+        "src/domain/core/model-invocation",
+        "src/engine/core/authentication",
+        "src/domain/core/principal"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/model-allocation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-openrouter-pricing": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-http-json": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/engine/core/model-invocation"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/provider-openrouter-chat": {
+      "dependencies": [
+        "src/adapters/core/provider-http-json",
+        "src/adapters/core/provider-openrouter-pricing",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/provider-spend": {
+      "dependencies": [
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend",
+        "src/engine/core/policy",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/adapters/core/contract"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/run-progression": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/task-evaluation",
+        "src/domain/core/primitives"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/run-progression": {
+      "dependencies": [
+        "src/adapters/core/attempt-store",
+        "src/composition/core/execution",
+        "src/composition/core/runs",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/engine/core/authentication",
+        "src/engine/core/policy",
+        "src/engine/core/runs",
+        "src/engine/core/run-progression",
+        "src/platform/core/config",
+        "src/adapters/core/local-principal",
+        "src/platform/core/managed-files",
+        "src/platform/core/errors"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/task-inputs": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/domain/core/primitives",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/authentication",
+        "src/engine/core/dispatch",
+        "src/engine/core/runs",
+        "src/engine/core/attempts",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "EXECUTION"
+    }
+  },
+  "composition": {
+    "enforceDomainDecisionImports": true
+  },
   "vocabulary": {
     "canonicalChain": [
       "Goal",
@@ -93,7 +1047,7 @@
       "scripts"
     ],
     "enforce": true,
-    "note": "Catalog uses canonical run terminology. Code-wide vocabulary enforcement and the accepted Task/Run/Attempt/Operation/Effect ontology are reconciled in CONTRACT; no legacy aliases."
+    "note": "Canonical run terminology is enforced across product source, tests and scripts; no legacy aliases."
   },
   "budgets": {
     "maxLinesPerFile": 1500,
@@ -181,917 +1135,41 @@
     ],
     "pointerFiles": {
       "CLAUDE.md": 5,
-      "AGENTS.md": 5
+      "AGENTS.md": 5,
+      ".codex/AGENTS.md": 5
     },
     "writerModule": "src/platform/core/docs-authority/",
     "trackedAllowGlobs": [
-      ".agents/skills/deckent-next-refactor/*.md"
+      ".agents/skills/claude-design-sync/*.md",
+      ".agents/skills/deckent-agentic-ux/*.md",
+      ".agents/skills/deckent-authority-bootstrap/*.md",
+      ".agents/skills/deckent-closure/*.md",
+      ".agents/skills/deckent-design-critic/*.md",
+      ".agents/skills/deckent-design-dna/*.md",
+      ".agents/skills/deckent-design-dna/references/*.md",
+      ".agents/skills/deckent-design-system/*.md",
+      ".agents/skills/deckent-enterprise-ux/*.md",
+      ".agents/skills/deckent-next-refactor/*.md",
+      ".agents/skills/deckent-observe/*.md",
+      ".agents/skills/deckent-outcome-ordering/*.md",
+      ".agents/skills/deckent-outcome-plan/*.md",
+      ".agents/skills/deckent-parallel-execution/*.md",
+      ".agents/skills/deckent-product-design/*.md",
+      ".agents/skills/deckent-readonly-audit/*.md",
+      ".agents/skills/deckent-recovery/*.md",
+      ".agents/skills/deckent-terminal-design/*.md",
+      ".agents/skills/deckent-versioned-handoff/*.md",
+      ".agents/skills/deckent-visual-language/*.md",
+      ".agents/skills/deckent-workspace-design/*.md",
+      ".agents/skills/design-system/*.md",
+      ".agents/skills/design-system/references/*.md",
+      ".agents/skills/design-tokens-pipeline/*.md",
+      ".agents/skills/solution-architect/*.md",
+      ".claude/agents/*.md",
+      ".claude/rules/*.md",
+      ".codex/rules/*.md",
+      ".deckent/docs/core-memory/*.md",
+      "follow-up-works/current-flow.md"
     ]
-  },
-  "units": {
-    "src/adapters/core/attempt-store": {
-      "dependencies": [
-        "src/adapters/core/sqlite-ledger",
-        "src/capabilities/core/artifacts",
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/engine/core/attempts",
-        "src/engine/core/dispatch",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/scheduling",
-        "src/engine/core/supervisor",
-        "src/engine/core/task-evaluation",
-        "src/engine/core/workspaces"
-      ],
-      "plan": "STORE/A"
-    },
-    "src/adapters/core/contract": {
-      "dependencies": [
-        "src/domain/core/model-invocation",
-        "src/domain/core/provider-catalog",
-        "src/platform/core/common",
-        "src/platform/core/config",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "P1"
-    },
-    "src/adapters/core/docker-supervisor": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/run",
-        "src/engine/core/supervisor",
-        "src/platform/core/config-fields"
-      ],
-      "plan": "SUPERVISOR/A"
-    },
-    "src/adapters/core/file-artifacts": {
-      "dependencies": [
-        "src/capabilities/core/artifacts",
-        "src/domain/core/primitives",
-        "src/platform/core/config-fields"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/adapters/core/file-policy": {
-      "dependencies": [
-        "src/domain/core/policy",
-        "src/engine/core/policy"
-      ],
-      "plan": "AUTH/A"
-    },
-    "src/adapters/core/git-workspace": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/engine/core/workspaces",
-        "src/platform/core/config-fields"
-      ],
-      "plan": "WORKSPACE/A"
-    },
-    "src/adapters/core/local-principal": {
-      "dependencies": [
-        "src/domain/core/principal",
-        "src/engine/core/authentication"
-      ],
-      "plan": "AUTH/A"
-    },
-    "src/adapters/core/local-runtime-socket": {
-      "dependencies": [
-        "src/adapters/core/local-principal",
-        "src/engine/core/authentication",
-        "src/engine/core/runtime"
-      ],
-      "plan": "R1"
-    },
-    "src/adapters/core/process-runner": {
-      "dependencies": [
-        "src/adapters/core/docker-supervisor"
-      ],
-      "plan": "SUPERVISOR/A"
-    },
-    "src/adapters/core/process-supervisor": {
-      "dependencies": [
-        "src/engine/core/supervisor"
-      ],
-      "plan": "SUPERVISOR/A"
-    },
-    "src/capabilities/core/artifacts": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/capabilities/core/evaluation-evidence": {
-      "dependencies": [
-        "src/capabilities/core/artifacts",
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/run",
-        "src/domain/core/task-evaluation",
-        "src/domain/core/task-graph"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/artifacts": {
-      "dependencies": [
-        "src/adapters/core/file-artifacts",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/cli": {
-      "dependencies": [
-        "src/adapters/core/contract",
-        "src/adapters/core/installation-profile-file",
-        "src/composition/core/installation",
-        "src/composition/core/model-activation",
-        "src/composition/core/provider-catalog",
-        "src/composition/core/query-errors",
-        "src/composition/core/runtime-service",
-        "src/platform/core/config",
-        "src/platform/core/config-fields",
-        "src/platform/core/host",
-        "src/surfaces/core/cli"
-      ],
-      "plan": "S0"
-    },
-    "src/composition/core/execution": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
-        "src/adapters/core/file-artifacts",
-        "src/adapters/core/git-workspace",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/composition/core/scoped-request",
-        "src/domain/core/attempt",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/policy",
-        "src/engine/core/runs",
-        "src/engine/core/workspaces",
-        "src/platform/core/config",
-        "src/platform/core/errors",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/inventory": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
-        "src/adapters/core/local-principal",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/domain/core/policy",
-        "src/engine/core/dispatch",
-        "src/engine/core/policy",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/mcp": {
-      "dependencies": [
-        "src/adapters/core/contract",
-        "src/adapters/core/mcp-transport",
-        "src/composition/core/model-activation",
-        "src/composition/core/provider-catalog",
-        "src/composition/core/runtime-service",
-        "src/platform/core/config",
-        "src/platform/core/host",
-        "src/platform/core/i18n",
-        "src/surfaces/core/mcp"
-      ],
-      "plan": "S1"
-    },
-    "src/composition/core/policy": {
-      "dependencies": [
-        "src/adapters/core/file-policy",
-        "src/platform/core/host"
-      ],
-      "plan": "AUTH/A"
-    },
-    "src/composition/core/query-errors": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
-        "src/adapters/core/installation-artifacts",
-        "src/adapters/core/installation-files",
-        "src/adapters/core/installation-journal",
-        "src/adapters/core/installation-profile-file",
-        "src/adapters/core/local-runtime-socket",
-        "src/adapters/core/provider-openai-chat",
-        "src/capabilities/core/evaluation-evidence",
-        "src/domain/core/model-activation",
-        "src/domain/core/model-invocation",
-        "src/domain/core/task-evaluation",
-        "src/engine/core/attempts",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/installation",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/policy",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/task-evaluation",
-        "src/engine/core/workspaces",
-        "src/platform/core/bootstrap-state",
-        "src/platform/core/errors",
-        "src/platform/core/managed-files",
-        "src/engine/core/provider-spend",
-        "src/adapters/core/provider-openrouter-chat",
-        "src/adapters/core/provider-openrouter-pricing"
-      ],
-      "plan": "K1"
-    },
-    "src/composition/core/runs": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
-        "src/adapters/core/file-artifacts",
-        "src/capabilities/core/evaluation-evidence",
-        "src/composition/core/inventory",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/composition/core/scoped-request",
-        "src/domain/core/attempt",
-        "src/domain/core/principal",
-        "src/engine/core/attempts",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/policy",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/supervisor",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/config",
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/runtime": {
-      "dependencies": [
-        "src/composition/core/model-invocation",
-        "src/composition/core/query-errors",
-        "src/composition/core/runs",
-        "src/engine/core/model-invocation",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/platform/core/config",
-        "src/platform/core/errors"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/runtime-service": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
-        "src/adapters/core/local-principal",
-        "src/adapters/core/local-runtime-socket",
-        "src/composition/core/execution",
-        "src/composition/core/inventory",
-        "src/composition/core/model-invocation",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/composition/core/runs",
-        "src/composition/core/runtime",
-        "src/domain/core/attempt",
-        "src/domain/core/model-invocation",
-        "src/domain/core/policy",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-invocation",
-        "src/engine/core/policy",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/config",
-        "src/platform/core/errors",
-        "src/platform/core/managed-files",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend",
-        "src/composition/core/provider-spend"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/composition/core/storage": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/docker-supervisor",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "STORE/C"
-    },
-    "src/composition/core/workspaces": {
-      "dependencies": [
-        "src/adapters/core/git-workspace",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "WORKSPACE/A"
-    },
-    "src/domain/core/attempt": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "CONTRACT/B"
-    },
-    "src/domain/core/policy": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/principal"
-      ],
-      "plan": "CONTRACT/C"
-    },
-    "src/domain/core/primitives": {
-      "dependencies": [],
-      "plan": "CONTRACT/C"
-    },
-    "src/domain/core/principal": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "CONTRACT/C"
-    },
-    "src/domain/core/run": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/task-graph"
-      ],
-      "plan": "CONTRACT/A"
-    },
-    "src/domain/core/task-evaluation": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/run"
-      ],
-      "plan": "CONTRACT/C"
-    },
-    "src/domain/core/task-graph": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "CONTRACT/A"
-    },
-    "src/engine/core/attempts": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/engine/core/authentication"
-      ],
-      "plan": "CONTRACT/B"
-    },
-    "src/engine/core/authentication": {
-      "dependencies": [
-        "src/domain/core/principal"
-      ],
-      "plan": "AUTH/A"
-    },
-    "src/engine/core/dispatch": {
-      "dependencies": [
-        "src/capabilities/core/artifacts",
-        "src/domain/core/attempt",
-        "src/domain/core/policy",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/engine/core/authentication",
-        "src/engine/core/supervisor"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/engine/core/policy": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/policy",
-        "src/domain/core/principal",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/supervisor",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "AUTH/A"
-    },
-    "src/engine/core/runs": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/policy",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/domain/core/task-graph",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/policy",
-        "src/engine/core/scheduling"
-      ],
-      "plan": "CONTRACT/A"
-    },
-    "src/engine/core/runtime": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-invocation",
-        "src/engine/core/policy",
-        "src/engine/core/runs",
-        "src/domain/core/provider-spend"
-      ],
-      "plan": "EXECUTION"
-    },
-    "src/engine/core/scheduling": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/task-graph"
-      ],
-      "plan": "CONTRACT/A"
-    },
-    "src/engine/core/supervisor": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives"
-      ],
-      "plan": "SUPERVISOR/A"
-    },
-    "src/engine/core/task-evaluation": {
-      "dependencies": [
-        "src/capabilities/core/artifacts",
-        "src/capabilities/core/evaluation-evidence",
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/domain/core/task-evaluation",
-        "src/domain/core/task-graph",
-        "src/engine/core/attempts",
-        "src/engine/core/authentication",
-        "src/engine/core/dispatch",
-        "src/engine/core/runs",
-        "src/engine/core/supervisor"
-      ],
-      "plan": "CONTRACT/C"
-    },
-    "src/engine/core/workspaces": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives"
-      ],
-      "plan": "WORKSPACE/A"
-    },
-    "src/platform/core/common": {
-      "dependencies": [],
-      "plan": "K1"
-    },
-    "src/platform/core/config": {
-      "dependencies": [
-        "src/platform/core/bootstrap-state",
-        "src/platform/core/common",
-        "src/platform/core/config-fields",
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/i18n",
-        "src/platform/core/output",
-        "src/platform/core/utils"
-      ],
-      "plan": "K1-F1"
-    },
-    "src/platform/core/config-fields": {
-      "dependencies": [
-        "src/platform/core/common",
-        "src/platform/core/i18n"
-      ],
-      "plan": "K1-F1"
-    },
-    "src/platform/core/crash-reporting": {
-      "dependencies": [
-        "src/platform/core/common",
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/i18n",
-        "src/platform/core/output"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/errors": {
-      "dependencies": [
-        "src/platform/core/common",
-        "src/platform/core/i18n"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/host": {
-      "dependencies": [
-        "src/platform/core/common",
-        "src/platform/core/errors"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/i18n": {
-      "dependencies": [
-        "src/platform/core/common"
-      ],
-      "plan": "K2"
-    },
-    "src/platform/core/identity": {
-      "dependencies": [
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/validate"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/managed-files": {
-      "dependencies": [
-        "src/platform/core/host"
-      ],
-      "plan": "PATH-LAYOUT/A+B"
-    },
-    "src/platform/core/output": {
-      "dependencies": [
-        "src/platform/core/common",
-        "src/platform/core/config-fields",
-        "src/platform/core/host",
-        "src/platform/core/i18n"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/utils": {
-      "dependencies": [
-        "src/platform/core/errors"
-      ],
-      "plan": "K1"
-    },
-    "src/platform/core/validate": {
-      "dependencies": [
-        "src/platform/core/errors",
-        "src/platform/core/host"
-      ],
-      "plan": "K1"
-    },
-    "src/surfaces/core/cli": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/model-activation",
-        "src/domain/core/model-invocation",
-        "src/domain/core/policy",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog",
-        "src/domain/core/task-graph",
-        "src/engine/core/dispatch",
-        "src/engine/core/installation",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/provider-catalog",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/common",
-        "src/platform/core/config",
-        "src/platform/core/config-fields",
-        "src/platform/core/crash-reporting",
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/i18n",
-        "src/platform/core/identity",
-        "src/platform/core/output",
-        "src/engine/core/provider-spend",
-        "src/domain/core/provider-spend"
-      ],
-      "plan": "S0"
-    },
-    "src/surfaces/core/mcp": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/model-activation",
-        "src/domain/core/model-invocation",
-        "src/domain/core/policy",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/provider-catalog",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/common",
-        "src/platform/core/errors",
-        "src/platform/core/i18n",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "S1"
-    },
-    "src/adapters/core/installation-profile-file": {
-      "dependencies": [],
-      "plan": "REAL-INIT/P3A"
-    },
-    "src/engine/core/installation": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/policy",
-        "src/domain/core/run",
-        "src/engine/core/runs",
-        "src/platform/core/bootstrap-state"
-      ],
-      "plan": "REAL-INIT/P3A"
-    },
-    "src/composition/core/installation": {
-      "dependencies": [
-        "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
-        "src/adapters/core/docker-supervisor",
-        "src/adapters/core/installation-artifacts",
-        "src/adapters/core/installation-files",
-        "src/adapters/core/installation-journal",
-        "src/adapters/core/local-principal",
-        "src/capabilities/core/evaluation-evidence",
-        "src/domain/core/primitives",
-        "src/engine/core/installation",
-        "src/platform/core/bootstrap-state",
-        "src/platform/core/common",
-        "src/platform/core/config",
-        "src/platform/core/config-fields",
-        "src/platform/core/host",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "REAL-INIT/P3A"
-    },
-    "src/platform/core/bootstrap-state": {
-      "dependencies": [
-        "src/platform/core/host"
-      ],
-      "plan": "REAL-INIT/P3B-GATE"
-    },
-    "src/adapters/core/installation-artifacts": {
-      "dependencies": [],
-      "plan": "REAL-INIT/P3C-EVIDENCE"
-    },
-    "src/adapters/core/installation-journal": {
-      "dependencies": [
-        "src/platform/core/bootstrap-state",
-        "src/platform/core/config",
-        "src/platform/core/host",
-        "src/platform/core/errors"
-      ],
-      "plan": "REAL-INIT/P3D-JOURNAL"
-    },
-    "src/adapters/core/installation-files": {
-      "dependencies": [],
-      "plan": "REAL-INIT/P3E-PUBLICATION"
-    },
-    "src/domain/core/provider-catalog": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "PROVIDERS/A0"
-    },
-    "src/engine/core/provider-catalog": {
-      "dependencies": [
-        "src/domain/core/provider-catalog"
-      ],
-      "plan": "PROVIDERS/A0"
-    },
-    "src/composition/core/provider-catalog": {
-      "dependencies": [
-        "src/adapters/core/contract",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/provider-catalog",
-        "src/platform/core/config"
-      ],
-      "plan": "PROVIDERS/A0"
-    },
-    "src/adapters/core/sqlite-ledger": {
-      "dependencies": [
-        "src/domain/core/attempt",
-        "src/domain/core/primitives",
-        "src/domain/core/run",
-        "src/domain/core/task-graph",
-        "src/engine/core/attempts",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-invocation",
-        "src/engine/core/runs",
-        "src/engine/core/task-evaluation",
-        "src/platform/core/config-fields",
-        "src/domain/core/model-invocation",
-        "src/engine/core/model-allocation",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "STORE/LEDGER-OWNER"
-    },
-    "src/domain/core/model-activation": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/provider-catalog"
-      ],
-      "plan": "PROVIDERS/A2A"
-    },
-    "src/engine/core/model-activation": {
-      "dependencies": [
-        "src/domain/core/model-activation",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/authentication",
-        "src/engine/core/provider-catalog"
-      ],
-      "plan": "PROVIDERS/A2A"
-    },
-    "src/adapters/core/sqlite-model-activation": {
-      "dependencies": [
-        "src/adapters/core/sqlite-ledger",
-        "src/domain/core/model-activation",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-activation"
-      ],
-      "plan": "PROVIDERS/A2A"
-    },
-    "src/composition/core/scoped-request": {
-      "dependencies": [
-        "src/adapters/core/contract",
-        "src/adapters/core/local-principal",
-        "src/adapters/core/local-runtime-socket",
-        "src/composition/core/policy",
-        "src/domain/core/policy",
-        "src/engine/core/policy",
-        "src/platform/core/config",
-        "src/platform/core/managed-files"
-      ],
-      "plan": "PROVIDERS/A2B"
-    },
-    "src/composition/core/model-activation": {
-      "dependencies": [
-        "src/adapters/core/sqlite-model-activation",
-        "src/composition/core/scoped-request",
-        "src/composition/core/query-errors",
-        "src/domain/core/model-activation",
-        "src/engine/core/model-activation",
-        "src/engine/core/policy",
-        "src/engine/core/provider-catalog",
-        "src/platform/core/config"
-      ],
-      "plan": "PROVIDERS/A2B"
-    },
-    "src/domain/core/model-invocation": {
-      "dependencies": [
-        "src/domain/core/model-activation",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog"
-      ],
-      "plan": "PROVIDERS/A3A"
-    },
-    "src/engine/core/model-invocation": {
-      "dependencies": [
-        "src/domain/core/model-activation",
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/domain/core/principal",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/authentication",
-        "src/engine/core/model-activation",
-        "src/engine/core/provider-catalog",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "PROVIDERS/A3A"
-    },
-    "src/adapters/core/sqlite-model-invocation": {
-      "dependencies": [
-        "src/adapters/core/sqlite-ledger",
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/engine/core/dispatch",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/model-allocation",
-        "src/engine/core/provider-spend",
-        "src/domain/core/provider-spend"
-      ],
-      "plan": "PROVIDERS/A3A"
-    },
-    "src/adapters/core/provider-openai-chat": {
-      "dependencies": [
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/model-invocation",
-        "src/adapters/core/provider-http-json"
-      ],
-      "plan": "PROVIDERS/A3B"
-    },
-    "src/composition/core/model-invocation": {
-      "dependencies": [
-        "src/adapters/core/local-runtime-socket",
-        "src/adapters/core/provider-openai-chat",
-        "src/adapters/core/sqlite-model-activation",
-        "src/adapters/core/sqlite-model-invocation",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/composition/core/scoped-request",
-        "src/domain/core/model-invocation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/policy",
-        "src/engine/core/provider-catalog",
-        "src/platform/core/config",
-        "src/domain/core/provider-catalog",
-        "src/engine/core/provider-spend",
-        "src/adapters/core/provider-openrouter-chat",
-        "src/adapters/core/provider-openrouter-pricing",
-        "src/adapters/core/contract",
-        "src/adapters/core/provider-http-json"
-      ],
-      "plan": "PROVIDERS/A3B"
-    },
-    "src/adapters/core/mcp-transport": {
-      "dependencies": [],
-      "plan": "MCP-ENVELOPE"
-    },
-    "src/engine/core/model-allocation": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/model-invocation",
-        "src/engine/core/model-invocation"
-      ],
-      "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
-    },
-    "src/domain/core/provider-spend": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "PROVIDER-ALLOCATION/CHECKPOINT"
-    },
-    "src/engine/core/provider-spend": {
-      "dependencies": [
-        "src/domain/core/primitives",
-        "src/domain/core/provider-spend",
-        "src/domain/core/model-invocation",
-        "src/engine/core/authentication",
-        "src/domain/core/principal"
-      ],
-      "plan": "PROVIDER-SPEND/DURABLE-AUDIT"
-    },
-    "src/adapters/core/provider-http-json": {
-      "dependencies": [
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/engine/core/model-invocation"
-      ],
-      "plan": "PROVIDERS/A3B"
-    },
-    "src/adapters/core/provider-openrouter-chat": {
-      "dependencies": [
-        "src/adapters/core/provider-http-json",
-        "src/adapters/core/provider-openrouter-pricing",
-        "src/domain/core/model-invocation",
-        "src/domain/core/primitives",
-        "src/domain/core/provider-catalog",
-        "src/domain/core/provider-spend",
-        "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend"
-      ],
-      "plan": "PROVIDERS/A3B"
-    },
-    "src/adapters/core/provider-openrouter-pricing": {
-      "dependencies": [
-        "src/domain/core/primitives"
-      ],
-      "plan": "PROVIDERS/A3B"
-    },
-    "src/composition/core/provider-spend": {
-      "dependencies": [
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend",
-        "src/engine/core/policy",
-        "src/adapters/core/sqlite-model-invocation",
-        "src/adapters/core/local-runtime-socket",
-        "src/platform/core/config",
-        "src/composition/core/scoped-request",
-        "src/composition/core/policy",
-        "src/composition/core/query-errors",
-        "src/adapters/core/contract"
-      ],
-      "plan": "PROVIDER-SPEND/ACCOUNT-SNAPSHOT"
-    }
-  },
-  "composition": {
-    "enforceDomainDecisionImports": true
   }
 }

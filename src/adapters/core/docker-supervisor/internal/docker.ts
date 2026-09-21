@@ -1,5 +1,6 @@
+import { collectDockerOutputFiles } from './output-files.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
-import { realpath, stat } from 'node:fs/promises';
+import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
@@ -73,6 +74,16 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const observed = this.result(handle, await this.inspect(handle, digest));
     return Object.freeze({ handle: observed.handle, result: observed.result });
   }
+  async collectOutputFiles(input: SandboxRequest) {
+    if (!this.options.outputFiles) return [];
+    const { request, digest, handle } = this.identity(input);
+    const existing = await this.inspect(handle, digest);
+    if (!existing || existing.State.Status !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
+    const root = resolve(this.options.workspaceRoot); const workspace = resolve(request.workspace); const path = relative(root, workspace);
+    if (!isAbsolute(request.workspace) || !path || path === '..' || path.startsWith('..' + sep)
+      || await realpath(root) !== root) throw new SupervisorError('SUPERVISOR_WORKSPACE_INVALID');
+    return collectDockerOutputFiles(workspace, this.options.outputFiles);
+  }
   async recoverOutput(input: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
     if (!existing || existing.State.Status !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
@@ -98,6 +109,17 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const previous = await this.inspect(handle, digest);
     if (previous) return this.result(handle, previous);
     const o = this.options;
+    const inputMounts: string[] = [];
+    const names = new Set<string>();
+    for (const input of o.inputs ?? []) {
+      const local = relative(root, input.path);
+      if (input.receipt.scopeId !== request.identity.scopeId || names.has(input.name) || !isAbsolute(input.path)
+        || input.path.includes(',') || input.path.includes(String.fromCharCode(0))
+        || (local !== '..' && !local.startsWith('..' + sep)) || await realpath(input.path) !== input.path
+        || !(await lstat(input.path)).isFile()) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+      names.add(input.name);
+      inputMounts.push('--mount', `type=bind,src=${input.path},dst=/deckent/inputs/${input.name},readonly`);
+    }
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
         '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
@@ -105,7 +127,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
         '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
         '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
-        '--workdir', '/workspace', '--entrypoint', request.argv[0]!, o.imageId, ...request.argv.slice(1)], o.controlTimeoutMs);
+        ...inputMounts, '--workdir', '/workspace', '--entrypoint', request.argv[0]!, o.imageId, ...request.argv.slice(1)], o.controlTimeoutMs);
     } catch {
       const existing = await this.inspect(handle, digest);
       if (existing) return this.result(handle, existing);

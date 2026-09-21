@@ -5,11 +5,14 @@ import { criterionDefinitionSchema } from './criteria.js';
 // Wire invariants, not configurable scheduling policy. Kind definitions live in registries.
 export const TASK_GRAPH_SCHEMA_VERSION = 2;
 
+export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
+
 export const taskDefinitionSchema = z.object({
   id: identity,
   kind: identity,
   dependencies: z.array(identity).readonly(),
   acceptanceCriteria: z.array(identity).min(1).readonly(),
+  inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
 }).strict().readonly();
 export const taskGraphSchema = z.object({
   schemaVersion: z.literal(TASK_GRAPH_SCHEMA_VERSION),

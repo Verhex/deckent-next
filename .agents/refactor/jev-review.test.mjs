@@ -25,6 +25,31 @@ test('preparation preserves authored evidence/options, rejects dangling referenc
   c.options[0].evidenceIds = ['invented']; assert.throws(() => prepare(c, policy), /JEV_OPTION/);
   c.options[0].evidenceIds = ['test']; c.checks[0].evidenceIds = []; assert.throws(() => prepare(c, policy), /JEV_CHECK/);
 });
+test('observation times accept past, equal and explicit unknown while rejecting future and impossible instants', () => {
+  const at = '2026-09-20T10:00:00.000Z';
+  const c = fixture();
+  c.evidence = [
+    { ...c.evidence[0], id: 'past', observedAt: '2026-09-20T09:59:59Z' },
+    { ...c.evidence[0], id: 'equal', observedAt: at },
+    { ...c.evidence[0], id: 'unknown', observedAt: null },
+  ];
+  c.options.forEach(option => { option.evidenceIds = ['past']; });
+  c.checks[0].evidenceIds = ['past'];
+  const prepared = prepare(c, policy, at);
+  assert.deepEqual(prepared.diagnostics.observationTimes, { measured: 2, unknown: 1, freshness: 'not-measured' });
+  c.evidence[0].observedAt = '2026-09-20T10:00:00.001Z';
+  assert.throws(() => prepare(c, policy, at), /JEV_EVIDENCE_FUTURE/);
+  c.evidence[0].observedAt = '2026-02-30T00:00:00Z';
+  assert.throws(() => prepare(c, policy, at), /JEV_EVIDENCE/);
+});
+test('future evidence is rejected before journal or transport work', async () => sandbox(async root => {
+  let calls = 0;
+  const c = fixture(); c.evidence[0].observedAt = '9999-12-31T23:59:59Z';
+  await assert.rejects(consult(config, policy, c, root, key, async (...args) => { calls++; return transport(...args); }),
+    /JEV_EVIDENCE_FUTURE/);
+  assert.equal(calls, 0);
+  assert.equal((await entries(root, 10)).ids.length, 0);
+}));
 test('duplicate/reserved choices and oversized context cannot reach network', async () => {
   for (const change of [c => { c.options[1].id = 'investigate'; }, c => { c.options[1].id = 'defer'; }, c => { c.options[1].id = 'none_of_the_above'; }, c => { c.options[1].id = 'insufficient_information'; }, c => { c.evidence.push(c.evidence[0]); }, c => { c.objective = 'x'.repeat(policy.maxCaseBytes); }]) {
     const c = fixture(); change(c); assert.throws(() => prepare(c, policy));

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Authority Bootstrap"
+  short_description: "Measure authority and runtime truth before work"
+  default_prompt: "Use $deckent-authority-bootstrap to establish the fresh Deckent-dev authority and runtime snapshot."
+policy:
+  allow_implicit_invocation: true

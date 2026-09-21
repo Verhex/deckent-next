@@ -154,7 +154,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
   raw.end(encodeServiceFrame({ schemaVersion: 10, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
-  await observed; raw.destroy();
+  await within(observed, 'DISCONNECT_HTTP_NOT_OBSERVED'); raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
   await new Promise(resolve => setImmediate(resolve)); expect(drained).toBe(false);
   f.releaseResponse(); expect(await stopping).toMatchObject({ state: 'clean' }); await service.done;
@@ -186,7 +186,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
   expirySocket.end(encodeServiceFrame({ schemaVersion: 10, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
-  await expiryObserved; expirySocket.destroy();
+  await within(expiryObserved, 'GRACE_EXPIRY_HTTP_NOT_OBSERVED'); expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
   expect(f.count('grace-expiry')).toBe(1); f.releaseResponse(); await service.done;
   services.splice(services.indexOf(service), 1); service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);

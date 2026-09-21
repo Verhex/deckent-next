@@ -14,6 +14,7 @@ export function recordedSupervisor(input: SupervisorProfile): ExecutionSuperviso
     async execute(request, signal) { return (await get()).execute(request, signal); },
     async observe(request) { return (await get()).observe(request); },
     async cancel(request) { return (await get()).cancel(request); },
+    async collectOutputFiles(request) { return (await get()).collectOutputFiles(request); },
     async recoverOutput(request) { return (await get()).recoverOutput(request); },
     async release(request) { return (await get()).release(request); },
   };

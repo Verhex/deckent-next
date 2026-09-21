@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Product Design"
+  short_description: "Model journeys, IA, and product complexity"
+  default_prompt: "Use $deckent-product-design to model this Deckent workflow and information architecture."
+policy:
+  allow_implicit_invocation: true

@@ -109,6 +109,8 @@ export class SqliteRunJournal {
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(proposed.snapshot.revision, JSON.stringify(proposed.snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
+      this.db.prepare('INSERT OR IGNORE INTO task_evaluation_observations(scope_id,run_id,attempt_id,attempt_revision) VALUES(?,?,?,?)')
+        .run(scopeId, runId, attemptId, parsed.evaluation.attemptRevision);
       return this.record({ commandId: parsed.commandId, command, snapshot: proposed.snapshot });
     });
   }
@@ -134,12 +136,15 @@ export class SqliteRunJournal {
     const { scopeId, runId } = parsed.identity;
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
-      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution);
+      const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch);
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
       planSchedulingWave(snapshot.graph, { schemaVersion: 2, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
       const row = this.db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING')
         .run(scopeId, runId, snapshot.revision, JSON.stringify(snapshot), JSON.stringify(parsed.policy));
       if (row.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
+      // Admission and automatic progression intent commit together. Migration never retroactively opts in old Runs.
+      this.db.prepare('INSERT INTO run_execution_intents(scope_id,run_id,actor_id,issuer,subject,admitted_at,command_id) VALUES(?,?,?,?,?,?,?)')
+        .run(scopeId, runId, parsed.actor.id, parsed.actor.issuer, parsed.actor.subject, parsed.now, parsed.commandId);
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
@@ -160,9 +165,14 @@ export class SqliteRunJournal {
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) {
         throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));
       }
-      new SqliteExecutionPools(this.db).assertAvailable(policy.poolId, parsed.identities.length);
-      const snapshot = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
-      for (const identity of parsed.identities) {
+      // Validate every candidate before trimming; an invalid suffix must never disappear silently.
+      const proposed = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
+      const available = new SqliteExecutionPools(this.db).available(policy.poolId);
+      if (available <= 0) throw new RunStoreError('RUN_POOL_FULL');
+      const admitted = parsed.identities.slice(0, available);
+      const snapshot = admitted.length === parsed.identities.length ? proposed
+        : reserveRunTasks(current, parsed.expectedRevision, admitted, parsed.now);
+      for (const identity of admitted) {
         const attempt = createAttempt(identity);
         const inserted = this.db.prepare('INSERT INTO attempts(scope_id,attempt_id,revision,snapshot) VALUES(?,?,?,?) ON CONFLICT DO NOTHING')
           .run(scopeId, identity.attemptId, attempt.revision, JSON.stringify(attempt));

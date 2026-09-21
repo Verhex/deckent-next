@@ -1,0 +1,90 @@
+# Owner 2026-09-17: commit requires owner request under the repo contract; push and all kill/cleanup forms prompt.
+# Host rules are not a substitute for product authorization.
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+    match = [
+        "git commit -m example",
+    ],
+    not_match = [
+        "git push",
+        "git status --short",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Push yalnız Alperen isteyince; önce `git branch -vv` ile shared-worktree HEAD-drift kontrol edilir.",
+    match = [
+        "git push",
+        "git push origin main",
+    ],
+    not_match = [
+        "git status --short",
+        "git branch -vv",
+    ],
+)
+
+prefix_rule(
+    pattern = ["deckent", ["kill", "cleanup"]],
+    decision = "prompt",
+    match = [
+        "deckent kill",
+        "deckent cleanup",
+        "deckent kill --task 001-001",
+    ],
+    not_match = [
+        "deckent status",
+        "deckent history",
+    ],
+)
+
+prefix_rule(
+    pattern = ["env", "-u", "ANTHROPIC_API_KEY", "deckent", ["kill", "cleanup"]],
+    decision = "prompt",
+    match = [
+        "env -u ANTHROPIC_API_KEY deckent kill",
+        "env -u ANTHROPIC_API_KEY deckent cleanup",
+    ],
+    not_match = [
+        "env -u ANTHROPIC_API_KEY deckent status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npx", "deckent", ["kill", "cleanup"]],
+    decision = "prompt",
+    match = [
+        "npx deckent kill",
+        "npx deckent cleanup",
+    ],
+    not_match = [
+        "npx deckent status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["./node_modules/.bin/deckent", ["kill", "cleanup"]],
+    decision = "prompt",
+    match = [
+        "./node_modules/.bin/deckent kill",
+        "./node_modules/.bin/deckent cleanup",
+    ],
+    not_match = [
+        "./node_modules/.bin/deckent status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["node", "dist/composition/core/cli/internal/entry.js", ["kill", "cleanup"]],
+    decision = "prompt",
+    match = [
+        "node dist/composition/core/cli/internal/entry.js kill",
+        "node dist/composition/core/cli/internal/entry.js cleanup",
+    ],
+    not_match = [
+        "node dist/composition/core/cli/internal/entry.js status",
+    ],
+)

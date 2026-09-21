@@ -55,6 +55,16 @@ describe('task graph admission and dependency eligibility', () => {
 });
 
 describe('task schema diagnostics', () => {
+  it('binds uniquely named inputs only to direct dependencies and rejects path-like names', () => {
+    const input = { name: 'report', taskId: 'a' };
+    const accepted = validateTaskGraph(graph([task('a'), { ...task('b', ['a']), inputs: [input] }]));
+    expect(accepted.tasks[1]!.inputs).toEqual([input]);
+    for (const consumer of [
+      { ...task('b'), inputs: [input] },
+      { ...task('b', ['a']), inputs: [input, input] },
+      { ...task('b', ['a']), inputs: [{ ...input, name: '../report' }] },
+    ]) expect(() => validateTaskGraph(graph([task('a'), consumer]))).toThrow('TASK_GRAPH_INVALID');
+  });
   it('rejects invalid version, kind and acceptance with sanitized field paths', () => {
     for (const [input, path] of [
       [{ ...graph(), schemaVersion: 1 }, ['schemaVersion']],

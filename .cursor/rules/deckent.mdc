@@ -1,0 +1,8 @@
+---
+description: Deckent Next refactor authority and destination
+alwaysApply: true
+---
+Read `.cursor/skills/deckent-next-refactor/SKILL.md` for all Deckent Next work.
+Operator cwd may be deckent-dev; product writes target /home/alperen/deckent-next.
+Use target ARCHITECTURE.md and PLAN.md; legacy is the read-only behavior source.
+DOGFOOD_MODE=OFF. Astra implements; Fable reviews. Preserve WIP, identity and scope.

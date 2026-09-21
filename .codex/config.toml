@@ -1,0 +1,3 @@
+# Project hooks only; model and permissions remain host/user choices.
+[features]
+hooks = true

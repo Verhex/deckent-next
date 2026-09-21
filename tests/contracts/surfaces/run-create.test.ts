@@ -60,11 +60,23 @@ it('reports missing criterion definitions with a safe graph path and reason befo
   expect(f.calls).toEqual([]); expect(JSON.stringify(f.output)).not.toContain('private-secret-task');
 });
 
-it('uses the configured graph limit and reports admission without claiming execution in English or Turkish', async () => {
+it('uses the configured graph limit and reports automatic progression without claiming task completion in English or Turkish', async () => {
   const f = await fixture({ graphInputMaxBytes: Buffer.byteLength(JSON.stringify(graph)) }); const file = join(f.root, 'graph.json'); await writeFile(file, JSON.stringify(graph));
   await runCommand([...command, file, '--lang', 'en'], f.context);
-  expect(f.output.pop()).toContain('Tasks have not started');
+  expect(f.output.pop()).toContain('progresses new admissions automatically');
   await runCommand([...command, file, '--lang', 'tr'], f.context);
-  expect(f.output.pop()).toContain('Görevler henüz başlatılmadı');
+  expect(f.output.pop()).toContain('yeni kabulleri güncel policy ile otomatik ilerletir');
   expect(f.output).toEqual([]); expect(f.calls).toHaveLength(2);
+});
+
+it('forwards a bounded versioned branch file and refuses ambiguous stdin', async () => {
+  const f = await fixture(); const file = join(f.root, 'graph.json'), branchPath = join(f.root, 'branch.json');
+  const branch = { schemaVersion: 1, input: { id: 'fact', revision: '1', value: false }, whenTrue: 'a', whenFalse: 'b', join: 'join' };
+  await writeFile(file, JSON.stringify(graph)); await writeFile(branchPath, JSON.stringify(branch));
+  await runCommand([...command, file, '--branch', branchPath, '--json'], f.context);
+  expect(f.calls[0]).toMatchObject({ branch });
+  await expect(runCommand([...command, file, '--branch', '-'], f.context)).rejects.toMatchObject({ code: 'CLI_USAGE' });
+  await writeFile(branchPath, JSON.stringify({ ...branch, input: { ...branch.input, value: 'false' } }));
+  await expect(runCommand([...command, file, '--branch', branchPath], f.context)).rejects.toMatchObject({ code: 'CLI_GRAPH_INPUT_INVALID' });
+  expect(f.calls).toHaveLength(1);
 });

@@ -58,11 +58,21 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   port when total complexity/resource/reliability evidence justifies it. No duplicate scheduler, approval or
   acceptance authority, and no automatic full-Go rewrite. Application daemon and supervisor are distinct roles.
 - Accepted size policy: 1,500 lines maximum per file including native C; 800 is a design target, not a second
-  hard ceiling. Current 800-line gates remain until FOUNDATION updates their scope and settings coherently.
+  hard ceiling. FOUNDATION/A applies this limit coherently in ESLint and the source/native/app gate.
   No silent native exemption. Variable product policies/catalogs are data; protocol constants and safety
   invariants are explicit versioned code contracts. Unit cohesion matters beyond the accepted 2,000-line unit budget.
 
 ### Task-centered execution — owner checkpoint 2026-09-17
+
+- Owner 2026-09-21: new Run admission atomically records automatic progression intent; no separate
+  start command. The running common runtime discovers actor-matched intents, rechecks current
+  operation policy and resumes eligible work. Migration never silently activates old admissions.
+  Ledger25 records evaluation observation in the same transaction as its receipt, distinguishing
+  never-evaluated output from an evaluated unknown. Unknown is not automatically re-evaluated.
+  Current local driver refills same-Run capacity after verified acceptance within a configured automatic-turn
+  reservation budget. At the budget boundary it drains existing custody and rotates paged Run intents.
+  This is nonpreemptive allocation-turn fairness, not a time guarantee; slow tails, restart fairness and fleet scale remain open.
+
 
 - Task represents the work. `run` executes a directives-defined workload; `do` admits natural-language,
   AI-produced or structured work; `autonomous` periodically performs/monitors admitted tasks and processes.
@@ -191,24 +201,33 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 ## Packages (current implementation)
 
 ```text
-src/platform/       config, errors, i18n, identity, host paths, shared metadata and utilities
-src/adapters/       provider configuration and credential validation
-src/surfaces/       CLI parsing/rendering and public surface API
-src/composition/    executable wiring: selects adapters, then invokes the CLI surface
+src/platform/       config, errors/i18n, identity/host, product paths, bootstrap state and shared metadata
+src/domain/         pure versioned task/run/policy, provider catalog/binding, model activation and invocation contracts
+src/capabilities/   evaluation evidence contracts and validation; no AI semantic acceptance
+src/engine/         application transitions and ports for runs/attempts, scheduling, workspaces, installation, runtime,
+                    provider inspection, model activation and durable invocation admission/inspection
+src/adapters/       SQLite stores/migrations, Git/Docker execution, local runtime socket/native bridge,
+                    installation custody/evidence and provider-native adapters
+src/surfaces/       shared CLI and MCP parsing/rendering/tool contracts
+src/composition/    executable SDK/CLI/MCP/runtime wiring and adapter selection
 ```
 
-`domain`, `capabilities` and `engine` are declared dependency boundaries for upcoming contracts and
-execution; their runtime capabilities are not implemented by the directory map. Domain cannot import
-platform or other packages, host modules or ambient host globals. This static guard does not prove
-all possible semantic purity. The current adapter registration is wired only by composition.
-Surfaces may consume platform/domain/capabilities/engine, never adapters. Engine may consume
-platform/domain/capabilities; adapters implement ports and may consume engine contracts. Composition
-wires all layers. New package names have no compatibility import aliases.
-Current executable: `dist/composition/core/cli/internal/entry.js`. The unimplemented MCP binary
-is not advertised; its contract and composition entry arrive with the real MCP surface.
+The implemented product includes installed Git/Docker runtime execution and recovery, authenticated local runtime
+control, recoverable custom-profile installation, declared provider/model inspection, scoped model activation and
+standalone durable invocation admission. At HEAD `b1e430f`, A3A persists invocation claims and outcomes; the A3B
+native transport/config composition and A3C public invocation surfaces are not landed, and no real provider,
+Brain/task consumer, human approval/tool loop or dogfood capability is claimed.
 
-`apps/*` import only `surfaces`. Cross-package imports target the package `index.ts` and nothing else;
-`internal/` is package-private.
+Domain cannot import platform or other packages, host modules or ambient host globals. The purity gate also rejects
+composition access to domain decision functions while allowing schema/type wiring; static analysis does not prove
+all semantic purity. Surfaces may consume public platform/domain/capabilities/engine APIs and never adapters.
+Engine consumes public platform/domain/capabilities contracts; adapters implement engine ports. Composition is the
+only layer that wires adapters to applications and surfaces. Cross-unit dependencies and cycles are declared and
+gated in `arch.json`; package imports use public `index.ts` barrels and `internal/` remains package-private.
+
+Current compiled entries include the CLI and MCP composition binaries; the CLI starts the local runtime service. SDK, CLI and
+MCP share the implemented inspection, activation, installation and runtime-control contracts; capability-specific
+linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
 ## Package contract
 
@@ -246,6 +265,10 @@ directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).
 Product code still writes no Markdown; owner-maintained host instructions are a development-only exception.
 Design reasoning goes into the decision log below, not arbitrary new documents.
+Owner 2026-09-21: `follow-up-works/current-flow.md` is an optional, replaceable development tracker;
+its exact path is admitted by the Markdown gate, excluded from product distribution, and may be deleted.
+PLAN.md retains durable roadmap/decisions and material open findings; small work/history lives in the
+transient tracker and external refactor archive, not an append-only product plan.
 
 ## Decision log
 
@@ -269,12 +292,13 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 | 2026-09-17 | Owner accepted consolidated architecture review with deterministic storage, separate workspace/sandbox axes, modular composition and version compatibility; TypeScript retained, Go conditional. | Target amendment above; FOUNDATION and successor rows in PLAN.md track implementation. No runtime/gate completion inferred from this decision. |
 | 2026-09-17 | Refactor host kit tracked; owner exception; product still writes no markdown. | Exact host-kit globs plus pointers/core-memory match the gate; disabled skills excluded and host kit not shipped. |
 | 2026-09-17 | Task-centered work; run/do/autonomous execution, goal-bounded Mission, modular task kinds; IFS ERP first business integration. | Cloud MCP candidate plus Applications 10 native-adapter proof; local 6–8 workers/up to 50 tasks is a workload scenario, not a system ceiling. Historical names/semantics do not override this decision. |
-
-Decision 2026-09-17: pure config-fields SSOT + source-derived literal gate (REVIEW1323); unified .deckent product-state root accepted, implementation tracked separately.
+| 2026-09-17 | Pure config-fields SSOT and source-derived literal gate (REVIEW1323). | Unified .deckent product-state root accepted; implementation tracked separately in PATH-LAYOUT. |
 
 | 2026-09-17 | FOUNDATION/A: 1,500 source lines maximum, 800 design target; native C/Go and application sources included. | Owner size amendment; Fable PASS1340. Historical HARVEST evidence exception is one exact file path. |
 
 | 2026-09-17 | Config stores references; injected SecretResolver retrieves values per load without effective-secret caching or plaintext secret-file reads. | PATH-LAYOUT/A+B, Fable PASS1349; OS keyring backend remains unimplemented. |
+
+| 2026-09-17 | Project .deckent/config.json is the fixed bootstrap locator; layout.root selects durable data root. Expose both locator and resolved paths, pin revision per operation. | Direct owner decision; no recursive config lookup or implicit migration. |
 
 FOUNDATION/B accepted in Fable REVIEW1357: platform/adapters/composition package mapping and read-only CLI path query. Domain boundaries declared; execution is not implemented.
 
@@ -299,8 +323,6 @@ SQLite reader contention is tested by journal mode; ordinary WAL readers do not 
 ExecutionSupervisor v1 now has a real Docker adapter. Process exit is evidence, never Task acceptance. Containers remain until explicit release after durable application receipt. Trusted workspace allocation, dispatch fencing after release, durable output and aggregate scheduler quotas remain prerequisites for public execution.
 
 Execution ledger identity is scope + local ID: attempts use (scope_id, attempt_id), command receipts use (scope_id, command_id); an ID alone carries no cross-scope authority. Fable1484 confirms the existing contract.
-
-ARCH-GATES/E1: unit dependencies are declared in arch.json with owning PLAN references; the gate resolves TypeScript symbol origins through package indexes and rejects observed unit cycles and composition imports of domain decision functions. This is a static gate, not proof against reflection or arbitrary runtime values. No baseline or exception suppresses measured violations.
 
 Local runtime service protocol is one current schema (2). Client shutdown binds an exact per-start instance and a separately authorized service resource; admission is durable before response/disconnect handoff, and accepted does not mean stopped. Missing final audit outcome remains unknown. SQLite ledger schema10 stores canonical service admission and final outcome separately.
 Linux native peer credentials identify the connecting OS principal, not separate applications or admin roles sharing that UID. A root client is rejected when the daemon has a different UID; a root daemon accepts same-UID root peers. Path ownership and policy do not provide isolation from a hostile process under the same UID.

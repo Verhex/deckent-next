@@ -229,6 +229,14 @@ it('prevents real native HTTP when durable cancellation wins the send permission
   const observation = await fetchOpenRouterTariff({ endpoint: `${f.origin}/api/v1/models/vendor/model/endpoints`, modelId: 'vendor/model',
     endpointTag: 'provider/region', maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1_000, caPem: f.caPem }, Date.now);
   const priced = createOpenRouterPricedNative({ currentObservation: () => observation, now: Date.now });
+  const sendFailures: string[] = [];
+  const diagnosticNative = { ...priced.native, async send(...args: Parameters<typeof priced.native.send>) {
+    try { return await priced.native.send(...args); }
+    catch (error) {
+      sendFailures.push(error instanceof Error && 'code' in error ? String(error.code) : 'UNCLASSIFIED_NATIVE_ERROR');
+      throw error;
+    }
+  } };
   const budget = fixtureBudget('scope').budgets[0]!;
   const verifier = { async verify() { return principal; } }, authorization = { async authorize() { return { revision: 'fixture', ruleId: 'permit' }; } };
   let notifyClaim!: () => void, releasePermit!: () => void, first = true, nextId = 0;
@@ -237,7 +245,7 @@ it('prevents real native HTTP when durable cancellation wins the send permission
   const application = new ModelInvocationApplication(verifier, authorization,
     new ModelBindingApplication({ async read() { return catalog; } }),
     async () => openSqliteModelActivationReader(f.ledger, { busyTimeoutMs: sqlite.busyTimeoutMs }),
-    { async resolve() { return f.profile; } }, { resolve() { return priced.native; } },
+    { async resolve() { return f.profile; } }, { resolve() { return diagnosticNative; } },
     async () => {
       const store = await openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid');
       const originalPermit = store.permitSend.bind(store);
@@ -266,7 +274,8 @@ it('prevents real native HTTP when durable cancellation wins the send permission
     expect(await application.invoke(command)).toEqual({ ...completed.result, replayed: true });
     expect(f.requests).toBe(0);
     // The same actual adapter and HTTP fixture remain reachable for a distinct authorized invocation.
-    expect((await application.invoke(f.command('following-http'))).receipt.outcome?.state).toBe('responded');
+    expect((await application.invoke(f.command('following-http'))).receipt.outcome?.state,
+      JSON.stringify({ sendFailures, receivedRequests: f.requests })).toBe('responded');
     expect(f.requests).toBe(1);
   } finally { releasePermit(); await observed; }
 });

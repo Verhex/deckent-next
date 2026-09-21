@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CollectedOutputFile } from './output-files.js';
 import { attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 
 export const sandboxRequestSchema = z.object({
@@ -21,6 +22,8 @@ export const sandboxResultSchema = z.object({ handle: identitySchema, result: su
 }).strict().readonly();
 export type SandboxResult = z.infer<typeof sandboxResultSchema>;
 export interface ExecutionSupervisor {
+  /** Optional local data port; only stopped workers, never a launch or acceptance operation. */
+  collectOutputFiles?(request: SandboxRequest): Promise<readonly CollectedOutputFile[]>;
   cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */

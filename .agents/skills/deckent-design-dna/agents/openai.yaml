@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Design DNA"
+  short_description: "Route and govern Deckent design work"
+  default_prompt: "Use $deckent-design-dna to frame and route this Deckent design task."
+policy:
+  allow_implicit_invocation: true

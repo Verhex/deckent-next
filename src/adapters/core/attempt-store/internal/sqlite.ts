@@ -1,3 +1,5 @@
+import { SqliteRunProgression } from './progression.js';
+import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
@@ -39,6 +41,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async readServiceShutdown(key: import('#engine/index.js').ServiceShutdownKey) { return new SqliteServiceShutdownJournal(this.db).readServiceShutdown(key); }
   async retainServiceShutdownOutcome(outcome: import('#engine/index.js').ShutdownOutcome) { return new SqliteServiceShutdownJournal(this.db).retainServiceShutdownOutcome(outcome); }
   async resolveRunWorkspaceCustody(input: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunWorkspaceCustody(this.db).resolveRunWorkspaceCustody(input); }
+  async listRunProgression(query: ProgressionQuery) { return new SqliteRunProgression(this.db).listRunProgression(query); }
+  async hasTaskEvaluation(identity: unknown, revision: number) { return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }

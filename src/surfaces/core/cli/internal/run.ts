@@ -18,7 +18,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -45,7 +45,10 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         path: ['graph', ...(error.issues[0]?.path ?? [])].join('.'), reason: error.code,
       } });
     }
-    const parsed = runAdmissionSchema.safeParse({ schemaVersion: 1, commandId, scopeId, runId, graph });
+    const branchSource = values.get('--branch');
+    if (branchSource === '-') throw usage('--branch'); // stdin is reserved for the graph.
+    const branch = branchSource ? await readGraphInput(resolve(root, branchSource), config.cli.graphInputMaxBytes) : undefined;
+    const parsed = runAdmissionSchema.safeParse({ schemaVersion: 1, commandId, scopeId, runId, graph, ...(branch === undefined ? {} : { branch }) });
     if (!parsed.success) {
       const issue = sanitizeIssues(parsed.error.issues)[0];
       throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID', { params: { path: issue?.path.join('.') ?? 'graph', reason: issue?.code ?? 'invalid' } });

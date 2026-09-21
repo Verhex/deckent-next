@@ -35,15 +35,25 @@ export class RunReservationApplication {
       throw new RunStoreError('RUN_COMMAND_CONFLICT');
     }
     const run = checkedSnapshot(receipt.snapshot);
+    // The immutable command retains all candidates; its snapshot records the admitted prefix.
+    const firstMissing = recorded.identities.findIndex(identity => !run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)));
+    const admitted = firstMissing < 0 ? recorded.identities : recorded.identities.slice(0, firstMissing);
+    const deferred = recorded.identities.slice(admitted.length);
+    if (!admitted.length || deferred.some(identity => identity.scopeId !== run.identity.scopeId
+      || identity.runId !== run.identity.runId || identity.layoutRevision !== run.identity.layoutRevision
+      || run.bindings.some(binding => binding.identity.taskId === identity.taskId || binding.identity.attemptId === identity.attemptId)
+      || !run.progress.some(task => task.taskId === identity.taskId && task.phase === 'pending'))) {
+      throw new RunStoreError('RUN_STORE_CORRUPT');
+    }
     if (receipt.commandId !== command.commandId || run.cancelRequested || run.identity.scopeId !== command.scopeId || run.identity.runId !== command.runId
       || run.revision !== command.expectedRevision + 1 || new Set(recorded.identities.map(identity => identity.taskId)).size !== recorded.identities.length
-      || recorded.identities.some(identity => !run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)
+      || admitted.some(identity => !run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity)
         && binding.observedRevision === null && binding.observedKind === null)
         || !run.progress.some(task => task.taskId === identity.taskId && task.phase === 'active'))) {
       throw new RunStoreError('RUN_STORE_CORRUPT');
     }
     return Object.freeze({ schemaVersion: 1 as const, commandId: command.commandId,
-      run: projectRunView(run), identities: Object.freeze(recorded.identities) });
+      run: projectRunView(run), identities: Object.freeze(admitted) });
   }
   async reserve(input: unknown, credential?: unknown) {
     const command = runReservationCommandSchema.parse(input);

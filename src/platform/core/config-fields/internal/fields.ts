@@ -19,7 +19,7 @@ export const CONFIG_FIELDS = Object.freeze({
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
   storage: field('config.field.storage', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
   execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   installation: field('config.field.installation', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
@@ -57,6 +57,12 @@ export const CONFIG_FIELDS = Object.freeze({
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  runRuntime: field('config.field.runRuntime', z.object({
+    maxReservationsPerTurn: z.number().int().positive().safe().default(4),
+    pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
+    failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
+    pageSize: z.number().int().positive().max(2147483646).default(64),
+  }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellationRuntime: field('config.field.cancellationRuntime', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
     pollIntervalMs: z.number().int().positive().safe().default(1000), failureBackoffMs: z.number().int().positive().safe().default(5000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),

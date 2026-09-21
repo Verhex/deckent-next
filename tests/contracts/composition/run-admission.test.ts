@@ -123,3 +123,19 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
   });
 
 });
+
+it('SDK admits a conditional graph, retains the decision after config removal and reserves only its selected branch', async () => {
+  const f = await fixture(); await f.policy(true, true);
+  const graph = { ...command.graph, tasks: ['yes', 'no', 'join'].map(id => ({ ...command.graph.tasks[0]!, id, dependencies: id === 'join' ? ['yes', 'no'] : [] })) };
+  const branch = { schemaVersion: 1 as const, input: { id: 'condition', revision: 'fact-1', value: true }, whenTrue: 'yes', whenFalse: 'no', join: 'join' };
+  const first = await createRun(f.project, { ...command, graph, branch }, f.options);
+  expect(first.admission.run.branch?.selectedTaskId).toBe('yes');
+  expect(first.admission.run.tasks.map(t => t.id)).toEqual(['yes', 'join']);
+  expect(JSON.stringify(first)).not.toContain('parameters');
+  const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission = null;
+  await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+  expect(await createRun(f.project, { ...command, graph, branch }, f.options)).toEqual(first);
+  expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run?.branch).toEqual(first.admission.run.branch);
+  const next = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve-branch', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options);
+  expect(next.reservation.identities.map(i => i.taskId)).toEqual(['yes']);
+});

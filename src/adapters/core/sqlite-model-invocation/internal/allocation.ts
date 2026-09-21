@@ -22,7 +22,7 @@ export function readModelAllocationCheckpoint(db: DatabaseSync, scopeId: string,
     return parseModelAllocationCheckpoint({ schemaVersion: 1, revision: row.checkpoint_revision, allocation, digest: row.checkpoint_digest });
   } catch { return invalid(); }
 }
-/** Caller owns BEGIN IMMEDIATE and rollback, including the receipt/control writes. */
+/** Caller owns BEGIN IMMEDIATE and rollback, including the receipt/control/money writes. */
 export function writeModelAllocation(db: DatabaseSync, previous: ModelAllocationCheckpoint | null, input: ModelAllocation): void {
   if (!db.isTransaction) invalid();
   const next = createModelAllocationCheckpoint(input, (previous?.revision ?? 0) + 1), after = next.allocation;

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Versioned Handoff"
+  short_description: "Transfer authority with verified receipts"
+  default_prompt: "Use $deckent-versioned-handoff to prepare and independently verify this exact session authority transfer."
+policy:
+  allow_implicit_invocation: true

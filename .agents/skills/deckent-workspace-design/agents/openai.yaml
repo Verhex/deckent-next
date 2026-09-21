@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Workspace Design"
+  short_description: "Design Desktop workspace interactions"
+  default_prompt: "Use $deckent-workspace-design to design this Deckent Desktop workspace behavior."
+policy:
+  allow_implicit_invocation: true

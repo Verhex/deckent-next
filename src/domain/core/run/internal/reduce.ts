@@ -3,9 +3,9 @@ import { counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { validateTaskGraph, inspectTaskReadiness, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runIdentitySchema, runSnapshotSchema, RunError } from './contract.js';
-export function createRun(identityInput: unknown, graphInput: unknown, nowInput: unknown, execution: unknown) {
+export function createRun(identityInput: unknown, graphInput: unknown, nowInput: unknown, execution: unknown, branch?: unknown) {
   const identity = runIdentitySchema.parse(identityInput); const graph = validateTaskGraph(graphInput); counterSchema.parse(nowInput);
-  return runSnapshotSchema.parse({ schemaVersion: 3, identity, revision: 0, graph, execution, cancelRequested: false, bindings: [],
+  return runSnapshotSchema.parse({ schemaVersion: 3, identity, revision: 0, graph, execution, ...(branch === undefined ? {} : { branch }), cancelRequested: false, bindings: [],
     progress: graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibility: { kind: 'immediate' } })) });
 }
 /** Admission transition only. Application/store must atomically reserve capacity and create these

@@ -1,21 +1,17 @@
-import { execFile } from 'node:child_process';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 import { fetchOpenRouterTariff, quoteOpenRouterText, type OpenRouterPricingError } from '#adapters/core/provider-openrouter-pricing/index.js';
 
-const execute = promisify(execFile), servers: Server[] = [];
+const servers: Server[] = [];
 let directory = '', certificate = '', privateKey = '';
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'deckent-openrouter-metadata-'));
-  const key = join(directory, 'key.pem'), cert = join(directory, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', key, '-out', cert,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  [privateKey, certificate] = await Promise.all([readFile(key, 'utf8'), readFile(cert, 'utf8')]);
+  ({ key: privateKey, caPem: certificate } = await createLocalTls(directory));
 });
 afterEach(async () => {
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

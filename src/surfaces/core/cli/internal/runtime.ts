@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
-  type RuntimeServiceDrainResult, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
+  type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
@@ -11,6 +11,8 @@ export interface RuntimeServiceHost {
   stop(): Promise<RuntimeServiceDrainResult>;
 }
 export interface RuntimeServiceObserver {
+  onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean }>): void | Promise<void>;
+  onRunProgressionError?(query: ProgressionCursor | null, error: { readonly code: string }): void | Promise<void>;
   onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
   onReconciliationError?(command: ReconciliationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
@@ -69,6 +71,16 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
   }
   if (!context.startRuntimeService || !context.signal) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
   const host = await context.startRuntimeService(root, {
+    onRunProgression: async (query, result) => {
+      if (result.attempted || result.run.tasks.every(task => ['accepted', 'failed', 'cancelled'].includes(task.phase))) {
+        output({ schemaVersion: 1, event: 'run-progression', query, result },
+          () => t('cli.runtime.runProgression', { runId: query.runId, count: result.attempted }, locale));
+      }
+    },
+    onRunProgressionError: async (_query, error) => {
+      output({ schemaVersion: 1, event: 'run-progression-failed', code: error.code },
+        () => t('cli.runtime.runProgressionFailed', { code: error.code }, locale), 'error');
+    },
     onReconciliationPage: async (command, result) => {
       const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');
       if (changed.length) output({ schemaVersion: 1, event: 'reconciliation', command, result },

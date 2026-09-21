@@ -2,16 +2,17 @@ import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
-import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness } from '#domain/core/task-graph/index.js';
+import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown']).nullable(),
 }).strict().readonly();
 export const runSnapshotSchema = z.object({ schemaVersion: z.literal(3), identity: runIdentitySchema, revision: counterSchema,
-  graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
+  branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
   try { inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now: 0, progress: run.progress }); } catch { invalid(); return; }
+  if (run.branch) { try { assertAdmissionBranch(run.graph, run.branch); } catch { invalid(); return; } }
   if (run.execution.tasks.length !== run.graph.tasks.length || run.execution.criteria.length !== run.graph.criterionDefinitions.length) invalid();
   const selectedTasks = new Set(run.execution.tasks.map(entry => entry.taskId));
   const selectedCriteria = new Set(run.execution.criteria.map(entry => entry.criterionId));

@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { dockerOutputFilesSchema } from './output-files.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 
 const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
+  outputFiles: dockerOutputFilesSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
     .refine(argv => (argv[0]?.length ?? 0) > 0).readonly(),
 }).strict().readonly();

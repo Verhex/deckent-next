@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "channel": "../../../deckent-dev/communication.md",
+  "historicalThrough": 1286,
+  "productRoot": "../..",
+  "legacyRoot": "../../../deckent-dev",
+  "note": "Development-host tooling only, excluded from product distribution. Relocation requires explicit config update.",
+  "enabled": false
+}

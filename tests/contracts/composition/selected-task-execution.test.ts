@@ -7,12 +7,14 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, executeTask, evaluateTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
+import { advanceConfiguredRun } from '../../../src/composition/core/run-progression/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startConfiguredRuntimeService } from '../../../src/index.js';
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 
 const exec = promisify(execFile); const roots: string[] = [];
 const dockerEnabled = process.platform === 'linux' && !!process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -20,7 +22,7 @@ const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!;
 
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(execute = true, twoTasks = false) {
+async function fixture(execute = true, twoTasks = false, withInputs = false, readOutput = true, fileMode?: 'valid' | 'unsafe') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-selected-task-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -29,6 +31,19 @@ async function fixture(execute = true, twoTasks = false) {
   await writeFile(join(project, 'input'), 'owner-wip\n');
   const registry = fixtureDockerRegistry(['selected']); registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters,
     imageId, argv: ['node', '-e', "process.stdout.write(require('node:fs').readFileSync('/workspace/input','utf8'))"] };
+  if (withInputs) {
+    registry.profiles.push({ ...registry.profiles[0]!, id: 'consumer', parameters: { ...registry.profiles[0]!.parameters,
+      argv: ['node', '-e', "const fs=require('node:fs');const p='/deckent/inputs/report';let denied=false;try{fs.writeFileSync(p,'overwrite')}catch(e){denied=e.code==='EROFS'}if(!denied)process.exit(71);process.stdout.write(JSON.parse(fs.readFileSync(p,'utf8')).stdout)"] } });
+    registry.kinds.push({ kind: 'consumer', profile: { id: 'consumer', version: 1 } });
+  }
+  if (fileMode) {
+    registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters,
+      outputFiles: { maxBytes: 128, maxFiles: 1, files: [{ name: 'report', path: 'report.bin', maxBytes: 128 }] },
+      argv: ['node', '-e', fileMode === 'valid' ? "require('node:fs').writeFileSync('report.bin',Buffer.from([0,255,10]));process.stdout.write('saved')"
+        : "require('node:fs').symlinkSync('/etc/passwd','report.bin');process.stdout.write('saved')"] };
+  }
+  if (fileMode && withInputs) registry.profiles[1]!.parameters.argv = ['node', '-e',
+    "const fs=require('node:fs');const p='/deckent/inputs/report';let denied=false;try{fs.writeFileSync(p,'overwrite')}catch(e){denied=e.code==='EROFS'}if(!denied)process.exit(71);process.stdout.write(fs.readFileSync(p).toString('hex'))"];
   const configPath = join(project, '.deckent/config.json'); const options = { env: { HOME: join(root, 'home') } };
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
@@ -38,15 +53,15 @@ async function fixture(execute = true, twoTasks = false) {
   const policy = async (allowExecute: boolean) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allowExecute ? 'allow' : 'deny', restrictions: [], grants: [
     { id: 'create', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(allowExecute ? [{ id: 'execute', effect: 'allow', actions: ['execute', 'evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
+    ...(allowExecute ? [{ id: 'execute', effect: 'allow', actions: ['execute', 'evaluate', ...(withInputs && readOutput ? ['read-output'] : [])], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } }] : []),
   ] }), { mode: 0o600 });
   await policy(execute);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] },
-    ...(twoTasks ? [{ id: 't2', kind: 'selected', dependencies: ['t'], acceptanceCriteria: ['exit'] }] : [])],
+    ...(twoTasks ? [{ id: 't2', kind: withInputs ? 'consumer' : 'selected', dependencies: ['t'], acceptanceCriteria: ['exit'], ...(withInputs ? { inputs: [{ name: 'report', taskId: 't', ...(fileMode ? { output: 'report' } : {}) }] } : {}) }] : [])],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   const graphPath = join(root, 'graph.json'); await writeFile(graphPath, JSON.stringify(graph));
-  await startTestRuntimeService(project, options.env);
-  return { root, project, data, configPath, options, graph, graphPath, layout: opened.layout, policy };
+  const service = await startTestRuntimeService(project, options.env);
+  return { root, project, data, configPath, options, graph, graphPath, layout: opened.layout, policy, service };
 }
 
 type Identity = { scopeId: string; runId: string; taskId: string; attemptId: string; generation: number; layoutRevision: string };
@@ -294,6 +309,81 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
     }
   }, 30000);
 
+});
+
+describe.skipIf(!dockerEnabled)('configured Run progression', () => {
+  it('advances a supported dependency chain through common composition without surface-owned orchestration', async () => {
+    const f = await fixture(true, true);
+    await createRun(f.project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
+    try {
+      const first = await advanceConfiguredRun(f.project, query, new AbortController().signal, f.options);
+      expect(first.attempted).toBe(2);
+      expect(first.run.tasks.map(task => task.phase)).toEqual(['accepted', 'accepted']);
+      const second = await advanceConfiguredRun(f.project, query, new AbortController().signal, f.options);
+      expect(second.attempted).toBe(0);
+      expect(second.run.tasks.map(task => task.phase)).toEqual(['accepted', 'accepted']);
+      const replay = await advanceConfiguredRun(f.project, query, new AbortController().signal, f.options);
+      expect(replay.attempted).toBe(0); expect(replay.run.revision).toBe(second.run.revision);
+      expect(await readFile(join(f.project, 'input'), 'utf8')).toBe('owner-wip\n');
+    } finally {
+      const run = await runtime.store.loadRun('s', 'r');
+      for (const { identity } of run?.bindings ?? []) {
+        const record = await runtime.store.loadBoundDispatch(identity);
+        if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+        const lease = await runtime.workspaces.openRecorded(identity);
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      }
+      runtime.store.close();
+    }
+  }, 30000);
+
+  it.each([false, true])('automatically progresses admitted work after host start (recover unevaluated=%s)', async recover => {
+    const f = await fixture(true, true); await stopTestRuntimeService(f.service);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    config.runRuntime = { pollIntervalMs: 20, failureBackoffMs: 50, pageSize: 8 };
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    let host: Awaited<ReturnType<typeof startConfiguredRuntimeService>> | undefined;
+    let initialAttempt: string | undefined;
+    const failures: string[] = [];
+    let resolveDone!: () => void;
+    const done = new Promise<void>(resolve => { resolveDone = resolve; });
+    try {
+      if (recover) {
+        await createRun(f.project, { schemaVersion: 1, commandId: 'auto-create', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+        const reserved = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'before-stop', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options);
+        initialAttempt = reserved.reservation.identities[0]!.attemptId;
+        await executeTask(f.project, reserved.reservation.identities[0]!, f.options);
+        expect((await runtime.store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('evaluating');
+      }
+      host = await startConfiguredRuntimeService(f.project, {
+        onPage() {}, onError() {},
+        onRunProgression(_query, result) { if (result.run.tasks.every(task => task.phase === 'accepted')) resolveDone(); },
+        onRunProgressionError(_query, error) { failures.push(error.code); },
+      }, f.options);
+      if (!recover) await createRun(f.project, { schemaVersion: 1, commandId: 'auto-create', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([done, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(JSON.stringify(failures))), 20000); })]); }
+      finally { clearTimeout(timer); }
+      expect(failures).toEqual([]);
+      const run = (await runtime.store.loadRun('s', 'r'))!;
+      expect(run.bindings).toHaveLength(2); expect(run.progress.every(task => task.phase === 'accepted')).toBe(true);
+      if (initialAttempt) expect(run.bindings[0]!.identity.attemptId).toBe(initialAttempt);
+    } finally {
+      if (host) { await host.stop(); await host.done; }
+      const run = await runtime.store.loadRun('s', 'r');
+      for (const { identity } of run?.bindings ?? []) {
+        const record = await runtime.store.loadBoundDispatch(identity);
+        if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+        const lease = await runtime.workspaces.openRecorded(identity);
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      }
+      runtime.store.close();
+    }
+  }, 30000);
+
   it('checks execute policy before allocating a workspace or dispatching', async () => {
     const f = await fixture(false); const publicSurface = await reserveThroughPublicSurface('sdk', f); const identity = publicSurface.identity;
     await expect(executeTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -303,4 +393,179 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
     await expect(executeTask(f.project, Object.assign({}, identity, { argv: ['caller'] }))).rejects.toThrow();
     await publicSurface.client?.close(); await publicSurface.transport?.close();
   });
+});
+
+describe.skipIf(!dockerEnabled)('accepted dependency inputs', () => {
+  it.each([true, false])('binds only explicitly authorized accepted output as a read-only input (permission=%s)', async allowRead => {
+    const f = await fixture(true, true, true, allowRead);
+    await createRun(f.project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    try {
+      const work = advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options);
+      if (!allowRead) await expect(work).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      else expect((await work).run.tasks.every(task => task.phase === 'accepted')).toBe(true);
+      const run = (await runtime.store.loadRun('s', 'r'))!;
+      const source = run.bindings.find(binding => binding.identity.taskId === 't')!.identity;
+      const target = run.bindings.find(binding => binding.identity.taskId === 't2')!.identity;
+      const sourceRecord = (await runtime.store.loadBoundDispatch(source))!;
+      const targetRecord = await runtime.store.loadBoundDispatch(target);
+      if (!allowRead) expect(targetRecord).toBeNull();
+      else {
+        const inputs = (targetRecord!.profile.parameters.options as { inputs: Array<{ name: string; sourceAttemptId: string; receipt: unknown; path: string }> }).inputs;
+        expect(inputs).toHaveLength(1); expect(inputs[0]).toMatchObject({ name: 'report', sourceAttemptId: source.attemptId, receipt: sourceRecord.output });
+        const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', targetRecord!.output!)));
+        expect(output.stdout).toBe('base\n'); expect(output.stderr).toBe('');
+        expect(await readFile(inputs[0]!.path, 'utf8')).not.toBe('overwrite');
+        const replay = await executeTask(f.project, target, f.options);
+        expect(replay.execution.status).toBe('terminal');
+      }
+    } finally {
+      const run = await runtime.store.loadRun('s', 'r');
+      for (const { identity } of run?.bindings ?? []) {
+        const record = await runtime.store.loadBoundDispatch(identity);
+        if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+        const lease = await runtime.workspaces.openRecorded(identity);
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      }
+      runtime.store.close();
+    }
+  }, 30000);
+});
+
+describe.skipIf(!dockerEnabled)('named output artifact collection', () => {
+  it.each(['valid', 'unsafe'] as const)('retains declared files and prevents incomplete acceptance (%s)', async mode => {
+    const f = await fixture(true, false, false, true, mode);
+    const surface = await reserveThroughPublicSurface('sdk', f); const identity = surface.identity;
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    try {
+      expect((await executeTask(f.project, identity, f.options)).execution.status).toBe('terminal');
+      const record = (await runtime.store.loadBoundDispatch(identity))!;
+      const envelope = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record.output!)));
+      expect(envelope.stdout).toBe('saved'); expect(envelope.files).toHaveLength(1);
+      if (mode === 'valid') {
+        expect(envelope.completeness).toBe('complete');
+        expect(envelope.files[0]).toMatchObject({ name: 'report', status: 'collected', receipt: { scopeId: 's', byteLength: 3 } });
+        const receipt = envelope.files[0].receipt;
+        expect(Buffer.from(await runtime.artifacts.read('s', receipt))).toEqual(Buffer.from([0, 255, 10]));
+        await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await runtime.store.loadRun('s', 'r'))!.revision }, f.options);
+        expect((await runtime.store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('accepted');
+        const lease = await runtime.workspaces.openRecorded(identity);
+        await writeFile(join(lease!.workspace, 'report.bin'), 'later change');
+        expect(Buffer.from(await runtime.artifacts.read('s', receipt))).toEqual(Buffer.from([0, 255, 10]));
+      } else {
+        expect(envelope.completeness).toBe('partial');
+        expect(envelope.files[0]).toEqual({ name: 'report', status: 'unavailable', reason: 'unsafe' });
+        await expect(evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate-files', identity, expectedRevision: (await runtime.store.loadRun('s', 'r'))!.revision }, f.options)).rejects.toThrow();
+        expect((await runtime.store.loadRun('s', 'r'))!.progress[0]!.phase).not.toBe('accepted');
+      }
+      const replay = await executeTask(f.project, identity, f.options);
+      expect(replay.execution.status).toBe('terminal');
+      expect((await runtime.store.loadBoundDispatch(identity))!.output).toEqual(record.output);
+    } finally {
+      const record = await runtime.store.loadBoundDispatch(identity);
+      if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+      const lease = await runtime.workspaces.openRecorded(identity);
+      if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      runtime.store.close();
+    }
+  }, 30000);
+});
+
+describe.skipIf(!dockerEnabled)('named artifact dependency inputs', () => {
+  it.each(['valid', 'missing', 'denied', 'corrupt'] as const)('selects only accepted authorized intact named bytes (%s)', async mode => {
+    const f = await fixture(true, true, true, mode !== 'denied', 'valid');
+    if (mode === 'missing') f.graph.tasks[1]!.inputs![0]!.output = 'missing';
+    await createRun(f.project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    try {
+      if (mode === 'corrupt') {
+        const reserved = await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'source', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options);
+        const identity = reserved.reservation.identities[0]!;
+        await executeTask(f.project, identity, f.options);
+        await evaluateTask(f.project, { schemaVersion: 1, commandId: 'source-accepted', identity, expectedRevision: (await runtime.store.loadRun('s', 'r'))!.revision }, f.options);
+        const record = (await runtime.store.loadBoundDispatch(identity))!;
+        const envelope = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record.output!)));
+        const prepared = await runtime.artifacts.prepareReadOnlyFile('s', envelope.files[0].receipt);
+        await writeFile(prepared.path, Buffer.from([1, 255, 10]));
+      }
+      const work = advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options);
+      if (mode === 'valid') expect((await work).run.tasks.every(task => task.phase === 'accepted')).toBe(true);
+      else await expect(work).rejects.toThrow();
+      const run = (await runtime.store.loadRun('s', 'r'))!;
+      expect(run.progress[0]!.phase).toBe('accepted');
+      const target = run.bindings.find(binding => binding.identity.taskId === 't2')!.identity;
+      const record = await runtime.store.loadBoundDispatch(target);
+      if (mode !== 'valid') expect(record).toBeNull();
+      else {
+        const source = run.bindings.find(binding => binding.identity.taskId === 't')!.identity;
+        const sourceRecord = (await runtime.store.loadBoundDispatch(source))!;
+        const sourceEnvelope = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', sourceRecord.output!)));
+        expect((record!.profile.parameters.options as { inputs: unknown[] }).inputs[0]).toMatchObject({
+          name: 'report', output: 'report', sourceAttemptId: source.attemptId, receipt: sourceEnvelope.files[0].receipt });
+        const envelope = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));
+        expect(envelope.stdout).toBe('00ff0a');
+        expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run.tasks[1]!.inputs)
+          .toEqual([{ name: 'report', taskId: 't', output: 'report' }]);
+      }
+    } finally {
+      const run = await runtime.store.loadRun('s', 'r');
+      for (const { identity } of run?.bindings ?? []) {
+        const record = await runtime.store.loadBoundDispatch(identity);
+        if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+        const lease = await runtime.workspaces.openRecorded(identity);
+        if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+      }
+      runtime.store.close();
+    }
+  }, 30000);
+});
+
+describe.skipIf(!dockerEnabled)('automatic Run rotation', () => {
+  it('visits the next paged Run in the same pool before refilling the first Run', async () => {
+    const f = await fixture(true, true);
+    const policyPath = productResourcePath(f.layout, 'policy');
+    const policy = JSON.parse(await readFile(policyPath, 'utf8'));
+    policy.grants.find((grant: { resource: { kind: string } }) => grant.resource.kind === 'run').resource.ids = ['r', 'z'];
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 });
+    await createRun(f.project, { schemaVersion: 1, commandId: 'create-r', scopeId: 's', runId: 'r', graph: f.graph }, f.options);
+    await createRun(f.project, { schemaVersion: 1, commandId: 'create-z', scopeId: 's', runId: 'z', graph: { ...f.graph, tasks: [f.graph.tasks[0]!] } }, f.options);
+    await stopTestRuntimeService(f.service);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    config.runRuntime = { pollIntervalMs: 10, failureBackoffMs: 100, pageSize: 1, maxReservationsPerTurn: 1 };
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    const runtime = await openConfiguredExecution(f.project, f.project, f.options);
+    let host: Awaited<ReturnType<typeof startConfiguredRuntimeService>> | undefined;
+    const turns: Array<{ id: string; phases: string[] }> = [], errors: string[] = [];
+    let finish!: () => void; const done = new Promise<void>(resolve => { finish = resolve; });
+    try {
+      host = await startConfiguredRuntimeService(f.project, { onPage() {}, onError() {},
+        onRunProgression(query, result) {
+          turns.push({ id: query.runId, phases: result.run.tasks.map(task => task.phase) });
+          if (query.runId === 'r' && result.run.tasks.every(task => task.phase === 'accepted')) finish();
+        },
+        onRunProgressionError(_query, error) { errors.push(error.code); },
+      }, f.options);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([done, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(JSON.stringify({ errors, turns }))), 20000); })]); }
+      finally { clearTimeout(timer); }
+      expect(errors).toEqual([]);
+      expect(turns.slice(0, 3)).toEqual([
+        { id: 'r', phases: ['accepted', 'pending'] }, { id: 'z', phases: ['accepted'] }, { id: 'r', phases: ['accepted', 'accepted'] },
+      ]);
+      expect((await runtime.store.loadRun('s', 'r'))!.bindings).toHaveLength(2);
+      expect((await runtime.store.loadRun('s', 'z'))!.bindings).toHaveLength(1);
+    } finally {
+      if (host) { await host.stop(); await host.done; }
+      for (const runId of ['r', 'z']) {
+        const run = await runtime.store.loadRun('s', runId);
+        for (const { identity } of run?.bindings ?? []) {
+          const record = await runtime.store.loadBoundDispatch(identity);
+          if (record) await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
+          const lease = await runtime.workspaces.openRecorded(identity);
+          if (lease) await runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit });
+        }
+      }
+      runtime.store.close();
+    }
+  }, 30000);
 });

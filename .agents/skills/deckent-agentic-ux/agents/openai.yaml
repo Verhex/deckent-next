@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Agentic UX"
+  short_description: "Design trustworthy agent and run interactions"
+  default_prompt: "Use $deckent-agentic-ux to model the states, controls, and recovery for this workflow."
+policy:
+  allow_implicit_invocation: true

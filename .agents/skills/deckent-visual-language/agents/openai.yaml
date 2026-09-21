@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Visual Language"
+  short_description: "Define precise Deckent visual direction"
+  default_prompt: "Use $deckent-visual-language to explore and evaluate visual directions for this surface."
+policy:
+  allow_implicit_invocation: true

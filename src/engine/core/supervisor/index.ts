@@ -4,3 +4,5 @@ export { supervisorCommandSchema, supervisorReplySchema, validateSupervisorReply
 export type { SupervisorCommand, SupervisorReply } from './internal/protocol.js';
 export { supervisorProfileSchema } from './internal/profile.js';
 export type { SupervisorProfile, SupervisorProfileSource } from './internal/profile.js';
+export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchema } from './internal/output-files.js';
+export type { CollectedOutputFile } from './internal/output-files.js';

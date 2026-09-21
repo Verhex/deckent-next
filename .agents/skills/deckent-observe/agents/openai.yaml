@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Observe"
+  short_description: "Observe live work without mutating its truth"
+  default_prompt: "Use $deckent-observe to inspect this Deckent lifecycle through safe runtime and disk evidence."
+policy:
+  allow_implicit_invocation: true

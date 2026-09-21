@@ -1,11 +1,10 @@
-import { execFile } from 'node:child_process';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { promisify } from 'node:util';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createOpenRouterPricedNative } from '#adapters/core/provider-openrouter-chat/index.js';
 import { fetchOpenRouterTariff } from '#adapters/core/provider-openrouter-pricing/index.js';
@@ -13,14 +12,11 @@ import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSq
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/index.js';
 import { ModelInvocationApplication, parseProviderSpendReservation } from '#engine/index.js';
 
-const execute = promisify(execFile), sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
+const sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
 let directory = '', certificate = '', privateKey = '', server: Server | undefined;
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'deckent-openrouter-priced-'));
-  const key = join(directory, 'key.pem'), cert = join(directory, 'cert.pem');
-  await execute('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1', '-keyout', key, '-out', cert,
-    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  [privateKey, certificate] = await Promise.all([readFile(key, 'utf8'), readFile(cert, 'utf8')]);
+  ({ key: privateKey, caPem: certificate } = await createLocalTls(directory));
 });
 afterAll(async () => {
   if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }

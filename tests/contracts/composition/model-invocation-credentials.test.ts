@@ -1,10 +1,9 @@
-import { execFile } from 'node:child_process';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { invokeConfiguredModel, invokePeerConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
@@ -22,12 +21,9 @@ async function fixture() {
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  const key = join(root, 'key.pem'), cert = join(root, 'cert.pem');
-  await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '1',
-    '-keyout', key, '-out', cert, '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  const certificate = await readFile(cert, 'utf8');
+  const { key, caPem: certificate } = await createLocalTls(root);
   const headers: (string | undefined)[] = []; const metadataHeaders: (string | undefined)[] = []; let echo = false;
-  const server = createServer({ key: await readFile(key), cert: certificate }, (request, reply) => {
+  const server = createServer({ key, cert: certificate }, (request, reply) => {
     if (request.url === '/api/v1/models/vendor/model/endpoints' && request.method === 'GET') {
       metadataHeaders.push(request.headers.authorization);
       reply.writeHead(200, { 'content-type': 'application/json' });
