@@ -1,3 +1,7 @@
-# Project hooks only; model and permissions remain host/user choices.
+# Owner-approved interactive approvals for this project; sandbox/model are host choices.
+# Keep git push as a prompt rule: publication still requires the owner's approval.
+approval_policy = "on-request"
+approvals_reviewer = "user"
+
 [features]
 hooks = true
