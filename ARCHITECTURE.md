@@ -559,3 +559,13 @@ Integration inspection uses a separate read-only query port on the same ledger30
 SDK/CLI require current read-output authority and exact Run/Attempt binding; they distinguish
 absent intent, pending preparation and retained manifest. This historical view requires no
 execution profile or Git access and explicitly does not revalidate current candidate files.
+
+### Installation group custody — owner O5, 2026-09-21
+
+Bootstrap observation and journal publication accept owner-uid-checked group-writable directory
+ancestry and reject other-write (mode bit 0002), including an absent journal under unsafe ancestry.
+Journal files remain private, single-linked, owner-checked; new directories remain 0700. This is
+explicit group namespace custody: group members may alter/remove entries. Other resource guards
+(publication, policy, artifacts, gateway, worker workspace) retain their own stricter invariants.
+The proven installation target is an owned 0775 project with private child/data directories, not
+blanket group-writable product state. No ownership repair or host chmod is performed.

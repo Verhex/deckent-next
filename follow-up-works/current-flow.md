@@ -1,75 +1,59 @@
 # Anlık iş akışı — geçici
 
-İş: PROVIDER-LIMITS-REMOVAL (O2). Durum: uygulandı, tam doğrulama geçti; yerel commit.
-Önceki INTEGRATION-INSPECTION + dış belge yolu düzeltmesi: ac44bc6 yerel commit; push yok.
-Owner devam ve yerel commit izni verdi; push yapılmayacak. Tam doğrulama geçti; sıradaki onaylı bağımsız dilim PROVIDER-LIMITS-REMOVAL (O2).
-DOGFOOD_MODE=OFF. Legacy salt okunur eski ürün; Fable kanalı kapalı, owner belge düzenlemesini yürütüyor.
+Owner seyahat sırasında onaylı işleri ilerletme ve yerel commit izni verdi. Push yapılmaz.
+DOGFOOD_MODE=OFF; Fable kanalı kapalı; bağımsız Fable PASS iddiası yok.
+Next tek yürütme/ürün repo'su; legacy salt okunur. Dış belge/proof alanı:
+`/home/alperen/deckent-refactor-work` (Git/npm dışında; owner Fable ile düzenliyor).
 
-## Son yayın ve mevcut WIP
+## Doğrulanmış yerel dilimler
 
-f4d3bba1221d3f3fcd12a333f515243001386d50 commit/push tamam; origin/main eşleşmesi doğrulandı.
-Yayın öncesi tam verify: 1508 ürün/261 dosya, native24, host30, atlanan0.
-Ardından salt okunur integration-inspect uygulandı; bu değişiklikler ve son yol düzeltmeleri
-yerel commit için doğrulandı. Sabit Docker imaj kimliğiyle full verify: 1510 ürün/261 dosya,
-24 native, 30 host, atlanan0; lint/build/smoke geçti. İlk koşudaki etiket hatası
-full-verify.log içinde korunuyor; başarılı koşu full-verify-pinned-image.log. Push yok.
+- ac44bc6: SDK/CLI salt-okunur integration-inspect; dış belge yoluna dönüş; O4 yeniden açık.
+- 7188ed6: O2 uygulanmayan provider_limits kaldırıldı; O1 MEMORY satırı ve O1–O7 plan eşlemesi.
+- 93f5ae1: O7 legacy sözleşmesinden statik yüzey envanteri; eski ürün çalıştırılmaz.
+- Son dilim O5: owned/group-writable bootstrap/journal ancestry kabul, other-write ret;
+  dosya uid/link/private-mode ve diğer kaynak güvenlik kontrolleri korunur. Yerel commit olarak teslim edilir; push yok.
 
-## Çalışan inceleme
+Son tam `npm run verify`: 1517 ürün/261 dosya, 24 native, 34 host; atlanan0, hata0.
+Sabit Docker imajı kullanıldı; lint/typecheck/arch/core-memory/build/smoke geçti.
+O5 hedefli36 test ve gerçek SDK/CLI prova geçti. Linux kanıtıdır; fleet/enterprise yük kabulü değildir.
 
-`task integration-inspect` exact identity + commandId ve güncel read-output policy ile
-absent/pending/manifest-recorded gösterir. Public SDK aynı engine query servisine bağlı.
-Ledger30 readonly; migration, Git çağrısı, source/candidate yazımı veya repair yok.
-Execution config yokken ve source/candidate değişmişken geçmiş kayıt görülebilir.
-Güncel candidate dosyaları yeniden doğrulanmadığı açıkça belirtilir; manifest artifact'i
-ve scope/Run/Attempt bağı doğrulanır. Bu bilgi acceptance veya canlı teslim değildir.
-Gerçek Codex/Claude/Cursor retained manifestleri SDK/CLI ile okundu; gerçek SIGKILL kaydı
-pending görüldü; dosyalar korunuyor, yeni provider çağrısı0.
+## Gerçek kanıt
 
-Kanıt: /home/alperen/deckent-refactor-work/proof/INTEGRATION-INSPECTION/.
+- INTEGRATION-INSPECTION: Codex/Claude/Cursor retained manifestleri SDK/CLI eşit;
+  SIGKILL pending kaydı korunuyor. Yeni native provider çağrısı0, kaynak/candidate yazımı yok.
+- PROVIDER-LIMITS-REMOVAL: aynı config önce kabul, sonra CONFIG_VALIDATION/78; dosya değişmedi.
+  Gerçek yerel HTTP fixture'larında kota ve harcama engelleri korundu; ücretli provider çağrısı yok.
+- LEGACY-SURFACE-INVENTORY: 280 yol;269 CLI/39 MCP/41 REPL;11 yalnız REPL.
+  Kaynak hash'i ve satırları manifestte. Eski282 sayımı düzeltilir; runtime/Next parity iddiası yok.
+- INSTALLATION-GROUP-CUSTODY: 0775 projede SDK installed/CLI replayed;0600 journal aynı baytlar.
+  0777 yazma isteği INSTALLATION_JOURNAL_UNSAFE; ürün dosyası yazılmadı. Host chmod yok.
 
-## Belge alanı — son owner kararı
+Her klasör dış `proof/` altında verification.json ve ilgili günlük/gerçek sonuçları içerir.
+İlk başarısız ortam/lint/proof varsayımı günlükleri saklandı; başarılı koşular açıkça ayrıldı.
 
-/home/alperen/deckent-refactor-work dış konumuna geri dönüldü. Next içinde refactor-work
-klasörü veya symlink bırakılmadı. Dosyalar taşıma öncesi/sonrası hash ile doğrulandı;
-hedef önceden mevcut değildi, Fable dosyası üzerine yazılmadı. Belgeler Git/npm dışında.
-Skill/pointer/PLAN/aktif host planı geri yönlendirildi; Next core-memory otoritesi korunuyor.
-Taşıma kanıtı: /home/alperen/deckent-refactor-work/proof/WORKSPACE-EXTERNAL-RESTORE/.
+## Ana plan ve sonraki kararlar
 
-## Plan otoritesi ve sıradaki iş
+PLAN.md ana iş alanları/kararlar; ARCHITECTURE.md kabul edilmiş mimari otorite.
+O1 ve O2 uygulandı; O5 dar bootstrap kapsamı doğrulandı; O7 envanter üretimi bağlı,
+Next davranış eşlemesi açık. O3 approval/reservation ve O6 session freshness hâlâ açık.
+Memory ana satırı eklendi; memory motoru tamamlandı iddiası yok.
 
-Ana ürün iş alanları ve kalıcı kararlar: PLAN.md (EXECUTION / ISOLATION).
-Mimari sözleşme: ARCHITECTURE.md. Bu dosya yalnız mevcut dar dilim ve kanıt takibidir.
-Dış çalışma alanındaki tarihsel analiz/kartlar referanstır; kendiliğinden yürütme izni vermez.
-Sonraki öneri: pending adaylar için tipli recovery sözleşmesi ve crash/ownership kanıtı.
-Otomatik devralma/onarım ve canlı source landing henüz yok; yeni yazma sınırı kararı owner'a gelir.
-Yeni recovery yazma sınırı için seçenek/kanıt hazırlanabilir; owner kararı olmadan devralma uygulanmaz.
+Owner O4'ü yeniden açtı. Run/Task/Attempt bütün Agent OS modeli kabul edilmedi;
+canonicalChain daraltılmadı. İnceleme taslağı:
+`../deckent-refactor-work/proof/AGENT-OS-MODEL-REVIEW/review.md`.
 
-## Dış refaktör alanı temizliği — owner onayı 2026-09-21
+Sıradaki integration recovery için A ayrı aday/kalıcı ilişki, B fenced yerinde onarım,
+C mevcut manuel yol seçenekleri hazır:
+`../deckent-refactor-work/proof/INTEGRATION-RECOVERY-DESIGN/review.md`.
+Yeni recovery yazma/yetki sözleşmesi owner checkpoint'i bekler; pending takeover, cleanup,
+canlı kaynak teslimi veya otomatik retry uygulanmadı. Jev tavsiye verdi; owner kararı değildir.
+
+## Dış refaktör alanı temizliği — önceki koordinasyon kaydı
+
+Owner/Fable düzenlemesi sırasında bu bölümün güncelliği yeniden doğrulanmadı.
 
 Dört kademe onaylandı; kanıt: /home/alperen/deckent-refactor-work/proof/CLEANUP-2026-09-21/manifest.json.
 Yapıldı: 13 bayat kök belge hash'li `archive/superseded-2026-09-21.tar.gz` içine alındı (bayt doğrulamalı);
 27 biten kart `cards/done/` altına taşındı (30 aktif kart kökte). Bekleyen: 13 asıl belge ve
 `toolchains/{go1.27.1,go-cache,downloads}` silinmesi owner elinde (host sınıflandırıcı `rm`'i engelledi).
 Go/LANG: TypeScript sürüyor; `lang/` ve `proof/LANG-*` gelecekteki ölçüm için korunur.
-
-## Ürün modeli — yeniden değerlendirme
-
-O4 owner tarafından yeniden açıldı; Run/Task/Attempt bütün Agent OS modeli sayılmıyor.
-Üç alternatif ve solo/ekip/ERP yolculuğu taslağı:
-/home/alperen/deckent-refactor-work/proof/AGENT-OS-MODEL-REVIEW/review.md.
-Jev yalnız hazırlık yöntemine danışıldı; final mimari karar veya kapasite kanıtı değildir.
-
-O2: config kaydı/validator/export ve EN/TR 29'ar yetim mesaj kaldırıldı.
-Değişiklik öncesi gerçek CLI config kabulü kaydedildi; sonrası CONFIG_VALIDATION/78 ret ve gerçek kota/harcama
-regresyonu doğrulandı. Hedefli66; full1514 ürün/261 dosya, native24, host34, atlanan0. Kanıt: /home/alperen/deckent-refactor-work/proof/PROVIDER-LIMITS-REMOVAL/.
-O1 MEMORY ana satırı ve O1–O7 karar→plan eşlemesi PLAN.md içinde; kapsam daraltılmadı.
-
-## O7 — statik legacy yüzey envanteri
-
-Next host aracı: `node .agents/refactor/legacy-surface-inventory.mjs /home/alperen/deckent-dev/src/core/cli-command-contract.ts`.
-Legacy import/çalıştırma yok; literal dışı/dinamik satır, tekrar eden path ve tanınmayan surface reddedilir.
-Kaynak hash + satır + yazılmış metadata + CLI/MCP/REPL kapsamı JSON üretilir; default surface
-factory'den okunur. 280 yol ve 11 REPL-only; eski rapordaki282 güncel kaynakla doğrulanmıyor.
-4 host testi ve gerçek kaynaktan manifest geçti; tam verify host34 bu testleri içeriyor.
-Kanıt: /home/alperen/deckent-refactor-work/proof/LEGACY-SURFACE-INVENTORY/.
-Bu bir port envanteridir; eski komutların çalıştığı veya Next'te bulunduğu iddiası değildir.

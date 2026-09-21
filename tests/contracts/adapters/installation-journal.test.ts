@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -141,4 +141,19 @@ it('preflights invalid recovery data without replacing the current journal', asy
     return session.write(current, invalid);
   })).rejects.toMatchObject({ code: 'INSTALLATION_JOURNAL_INVALID' });
   await withInstallationJournal(root, options, async session => { expect((await session.observe()).generation).toBe(current.generation); });
+});
+
+it('writes and reopens group-custodied journal ancestry while keeping journal bytes private', async () => {
+  const root = await project(); await chmod(root, 0o775);
+  const initial = await withInstallationJournal(root, options, async session => session.write(await session.observe(), payload(root)));
+  const bootstrap = join(root, '.deckent'), directory = join(bootstrap, 'installation'), path = join(directory, 'journal.json');
+  await chmod(bootstrap, 0o775); await chmod(directory, 0o775);
+  const updated = await withInstallationJournal(root, options, async session => session.write(initial, payload(root, 2)));
+  await withInstallationJournal(root, options, async session => expect((await session.observe()).generation).toBe(updated.generation));
+  expect((await stat(path)).mode & 0o777).toBe(0o600);
+  for (const parent of [root, bootstrap, directory]) expect((await stat(parent)).mode & 0o777).toBe(0o775);
+  const bytes = await readFile(path);
+  await chmod(directory, 0o777);
+  await expect(withInstallationJournal(root, options, async session => session.observe())).rejects.toMatchObject({ code: 'INSTALLATION_JOURNAL_UNSAFE' });
+  expect(await readFile(path)).toEqual(bytes);
 });

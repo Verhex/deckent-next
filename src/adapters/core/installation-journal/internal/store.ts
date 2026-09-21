@@ -34,8 +34,9 @@ function unavailable(error: unknown): never {
   }
   throw new InstallationJournalError('INSTALLATION_JOURNAL_UNAVAILABLE');
 }
+// Owner O5 allows group namespace writes, never other-writable or foreign-owned directories.
 function validateDirectory(stat: BigIntStats, uid: bigint) {
-  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== uid || (stat.mode & 0o022n) !== 0n) {
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== uid || (stat.mode & 0o002n) !== 0n) {
     throw new InstallationJournalError('INSTALLATION_JOURNAL_UNSAFE');
   }
 }

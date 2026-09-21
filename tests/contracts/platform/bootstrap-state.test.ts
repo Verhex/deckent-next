@@ -35,13 +35,21 @@ it('returns pending state for inspection and makes the load gate reject it', asy
   expect(() => assertBootstrapUsable(observation)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_INSTALLATION_INCOMPLETE' }));
 });
 
-it.skipIf(process.platform === 'win32')('preserves ordinary absence in an owned group-writable project but requires private custody for a journal', async () => {
+it.skipIf(process.platform === 'win32')('reads an owned journal under group-writable ancestry without relaxing its private file mode', async () => {
   const root = await project(); await chmod(root, 0o775);
   await expect(observeBootstrapState(root)).resolves.toEqual({ generation: 'absent', record: null });
-  await publish(root);
-  await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
-  await chmod(root, 0o755);
+  const path = await publish(root);
+  for (const directory of [join(root, '.deckent'), dirname(path)]) await chmod(directory, 0o775);
   await expect(observeBootstrapState(root)).resolves.toMatchObject({ record: { phase: 'pending' } });
+  await chmod(path, 0o660);
+  await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
+});
+
+it.skipIf(process.platform === 'win32')('rejects other-writable ancestry even when the journal is absent', async () => {
+  const root = await project(); await chmod(root, 0o777);
+  await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
+  await chmod(root, 0o775); const path = await publish(root); await chmod(dirname(path), 0o777);
+  await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
 });
 
 it('rejects malformed contracts, invalid commit invariants and bad checksums', async () => {

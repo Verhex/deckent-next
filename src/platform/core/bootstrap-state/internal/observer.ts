@@ -111,14 +111,15 @@ function assertPrivateFile(stat: BigIntStats): void {
     throw new BootstrapStateError('BOOTSTRAP_STATE_UNSAFE');
   }
 }
-async function assertPathSafe(projectRoot: string, path: string, requirePrivateMode = true): Promise<void> {
+// Owner O5: group directory custody is allowed; journal files still require private ownership/mode.
+async function assertPathSafe(projectRoot: string, path: string): Promise<void> {
   const root = resolve(projectRoot), parent = dirname(path), within = relative(root, parent);
   if (within === '..' || within.startsWith(`..${sep}`)) throw new BootstrapStateError('BOOTSTRAP_STATE_UNSAFE');
   let cursor = dirname(root); const segments = [...relative(cursor, root).split(sep), ...within.split(sep)].filter(Boolean);
   for (const segment of segments) {
     cursor = resolve(cursor, segment);
     try { const stat = await lstat(cursor); if (stat.isSymbolicLink() || !stat.isDirectory()
-      || stat.uid !== process.getuid!() || (requirePrivateMode && (stat.mode & 0o022) !== 0)) throw new BootstrapStateError('BOOTSTRAP_STATE_UNSAFE'); }
+      || stat.uid !== process.getuid!() || (stat.mode & 0o002) !== 0) throw new BootstrapStateError('BOOTSTRAP_STATE_UNSAFE'); }
     catch (error) {
       if (error instanceof BootstrapStateError) throw error;
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
@@ -135,7 +136,7 @@ export async function observeBootstrapState(projectRoot: string): Promise<Bootst
   try { linked = await lstat(path, { bigint: true }); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      if (process.platform !== 'win32' && process.getuid) await assertPathSafe(projectRoot, path, false);
+      if (process.platform !== 'win32' && process.getuid) await assertPathSafe(projectRoot, path);
       return Object.freeze({ generation: 'absent', record: null });
     }
     if (['ELOOP', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw new BootstrapStateError('BOOTSTRAP_STATE_UNSAFE');

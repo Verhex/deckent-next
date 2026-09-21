@@ -39,8 +39,8 @@ async function fixture() {
 }
 const unsupported = process.platform !== 'linux';
 
-it.skipIf(unsupported)('publishes a relocated installation through SDK and replays it through compiled CLI without the profile file', async () => {
-  const f = await fixture();
+it.skipIf(unsupported).each([0o700, 0o775])('publishes a relocated installation in project mode %s through SDK and replays through compiled CLI', async mode => {
+  const f = await fixture(); await chmod(f.project, mode);
   const control = { allowShutdown: false, dockerExecutable: '/usr/bin/docker' };
   const evidence = await inspectInstallation(f.project, f.profile, control);
   const installed = await applyInstallation(f.project, f.profile, { ...control, proposalDigest: evidence.proposalDigest, acceptCustom: true });
@@ -49,6 +49,8 @@ it.skipIf(unsupported)('publishes a relocated installation through SDK and repla
       config: join(f.project, '.deckent/config.json'), installationJournal: join(f.project, '.deckent/installation/journal.json'),
       policy: join(f.data, 'policy.json'), ledger: join(f.data, 'state/ledger.db') } });
 
+  expect((await lstat(f.project)).mode & 0o777).toBe(mode);
+  expect((await lstat(join(f.project, '.deckent/installation/journal.json'))).mode & 0o777).toBe(0o600);
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8'));
   const journal = JSON.parse(await readFile(join(f.project, '.deckent/installation/journal.json'), 'utf8'));
   expect(config.layout.root).toBe(f.data);

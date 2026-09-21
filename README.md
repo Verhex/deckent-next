@@ -20,6 +20,13 @@ npm run build
 node dist/composition/core/cli/internal/entry.js --version
 ```
 
+Installation accepts owned group-writable project and bootstrap journal directories (for example,
+`0775`), but rejects directories writable by other users. Group members can alter directory entries;
+this shares custody of the journal namespace with that group. Journal files still require the current
+owner, a single hard link and private `0400`/`0600` permissions. New directories default to `0700`.
+Config publication, policy, artifacts and worker resources retain their separate stricter checks;
+a group-writable project does not imply support for a shared writable product-data root.
+
 ## Next development host
 
 This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
