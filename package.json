@@ -35,13 +35,14 @@
     "LICENSE"
   ],
   "scripts": {
+    "worker:image": "node assets/worker-image/build.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/package-metadata.mjs && npm run typecheck && eslint . && node scripts/lint-arch.mjs && node scripts/lint-core-memory.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
     "smoke": "node dist/composition/core/cli/internal/entry.js --version",
-    "verify": "npm run lint && npm run build && npm run test:native && npm run test && npm run test:host && npm run smoke",
+    "verify": "node scripts/verify-context.mjs && npm run lint && npm run build && npm run test:native && npm run test && npm run test:host && npm run smoke",
     "test:native": "node scripts/test-native.mjs",
     "test:host": "node --test .agents/refactor/*.test.mjs"
   },

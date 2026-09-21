@@ -112,7 +112,8 @@
         "src/domain/core/run",
         "src/engine/core/supervisor",
         "src/platform/core/config-fields",
-        "src/engine/core/task-inputs"
+        "src/engine/core/task-inputs",
+        "src/adapters/core/native-connection"
       ],
       "plan": "ISOLATION"
     },
@@ -203,7 +204,8 @@
         "src/platform/core/config",
         "src/platform/core/config-fields",
         "src/platform/core/host",
-        "src/surfaces/core/cli"
+        "src/surfaces/core/cli",
+        "src/composition/core/native-coding"
       ],
       "plan": "SURFACES"
     },
@@ -225,7 +227,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/managed-files",
-        "src/engine/core/task-inputs"
+        "src/engine/core/task-inputs",
+        "src/adapters/core/native-connection"
       ],
       "plan": "EXECUTION"
     },
@@ -295,7 +298,8 @@
         "src/platform/core/managed-files",
         "src/engine/core/provider-spend",
         "src/adapters/core/provider-openrouter-chat",
-        "src/adapters/core/provider-openrouter-pricing"
+        "src/adapters/core/provider-openrouter-pricing",
+        "src/adapters/core/native-connection"
       ],
       "plan": "FOUNDATION"
     },
@@ -661,7 +665,8 @@
         "src/platform/core/output",
         "src/engine/core/provider-spend",
         "src/domain/core/provider-spend",
-        "src/engine/core/run-progression"
+        "src/engine/core/run-progression",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -1023,6 +1028,25 @@
         "src/domain/core/task-graph"
       ],
       "plan": "EXECUTION"
+    },
+    "src/adapters/core/native-coding": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/adapters/core/docker-supervisor"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/native-coding": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/adapters/core/native-coding",
+        "src/platform/core/errors"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/native-connection": {
+      "dependencies": [],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {

@@ -931,5 +931,11 @@
   "error.PROVIDER_SPEND_CONFLICT": "The budget or quote conflicts with its recorded identity. Existing reservations were preserved.",
   "error.PROVIDER_SPEND_EXHAUSTED": "The shared scope budget cannot cover this reservation. Reserved or uncertain amounts remain held; this is not a provider invoice.",
   "error.PROVIDER_SPEND_FROZEN": "The local spending account is frozen after an unresolved overrun. No new reservation was admitted.",
-  "error.PROVIDER_SPEND_RESULT_LIMIT": "The complete provider-spending audit receipt exceeds this surface's configured capacity. No audit receipt was recorded."
+  "error.PROVIDER_SPEND_RESULT_LIMIT": "The complete provider-spending audit receipt exceeds this surface's configured capacity. No audit receipt was recorded.",
+  "error.CLI_CODING_INPUT_LIMIT": "Coding profile input exceeds the configured limit: {limit} bytes.",
+  "error.CLI_CODING_INPUT_INVALID": "Coding profile input must be valid JSON.",
+  "error.CLI_CODING_INPUT_TTY": "Pipe coding profile JSON to stdin or provide an input file.",
+  "error.CLI_CODING_INPUT_UNAVAILABLE": "Coding profile input could not be read.",
+  "error.NATIVE_CREDENTIAL_UNAVAILABLE": "Native subscription identity is unavailable or expired.",
+  "error.NATIVE_CONNECTION_UNAVAILABLE": "The isolated provider connection is unavailable."
 }

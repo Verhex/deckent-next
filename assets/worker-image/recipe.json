@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "baseImage": "node:24-trixie-slim",
+  "npmProviders": [
+    { "id": "codex", "package": "@openai/codex", "channel": "latest", "command": "codex", "helpArgs": ["exec", "--help"], "requiredFlags": ["--json", "--model", "--dangerously-bypass-approvals-and-sandbox"] },
+    { "id": "claude", "package": "@anthropic-ai/claude-code", "channel": "latest", "command": "claude", "helpArgs": ["--help"], "requiredFlags": ["--output-format", "--model", "--dangerously-skip-permissions"] }
+  ],
+  "cursor": {
+    "id": "cursor",
+    "installer": "https://cursor.com/install",
+    "command": "cursor-agent",
+    "helpArgs": ["--help"],
+    "requiredFlags": ["--output-format", "--model", "--force"]
+  }
+}

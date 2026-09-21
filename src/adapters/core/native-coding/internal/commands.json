@@ -1,0 +1,5 @@
+{
+  "codex": { "executable": "codex", "args": ["exec", "--json", "--color", "never", "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox"], "modelFlag": "--model" },
+  "claude": { "executable": "claude", "args": ["--print", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions"], "modelFlag": "--model" },
+  "cursor": { "executable": "cursor-agent", "args": ["--print", "--output-format", "stream-json", "--force", "--trust"], "modelFlag": "--model" }
+}

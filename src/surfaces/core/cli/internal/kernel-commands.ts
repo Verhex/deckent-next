@@ -1,4 +1,5 @@
 import type { RunAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
+import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
@@ -20,6 +21,7 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 
 export interface CommandContext {
+  prepareCodingProfile?: CodingProfilePreparationHandler;
   invokeModel?: ModelInvocationHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;
   purgeModelInvocationContent?: ModelInvocationPurgeHandler;

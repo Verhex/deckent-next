@@ -9,6 +9,7 @@ const alias = Object.fromEntries(pkgs.map(p => [`#${p}`, fileURLToPath(new URL(`
 export default defineConfig({
   resolve: { alias },
   test: {
+    reporters: ['default', './scripts/verification-reporter.mjs'],
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist', 'apps'],
     pool: 'forks',

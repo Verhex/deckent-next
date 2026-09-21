@@ -2,8 +2,10 @@ import { z } from 'zod';
 import { dockerOutputFilesSchema } from './output-files.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
+import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
 
 const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
+  nativeSubscription: nativeSubscriptionSchema.optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
     .refine(argv => (argv[0]?.length ?? 0) > 0).readonly(),
@@ -28,6 +30,6 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   }
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
-  const { argv, ...options } = parsed.data;
-  return Object.freeze({ argv, options: Object.freeze(options) });
+  const { argv, nativeSubscription, ...options } = parsed.data;
+  return Object.freeze({ argv, nativeSubscription, options: Object.freeze(options) });
 }

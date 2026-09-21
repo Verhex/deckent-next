@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "limits": {
+    "credentialBytes": 65536,
+    "connections": 24,
+    "headerBytes": 8192,
+    "idleMs": 30000,
+    "trafficBytes": 67108864
+  },
+  "providers": {
+    "codex": {
+      "homeOverride": "CODEX_HOME",
+      "home": ".codex",
+      "file": "auth.json",
+      "destinations": [
+        "chatgpt.com",
+        "auth.openai.com",
+        "api.openai.com"
+      ],
+      "environment": {}
+    },
+    "claude": {
+      "homeOverride": "CLAUDE_CONFIG_DIR",
+      "home": ".claude",
+      "file": ".credentials.json",
+      "destinations": [
+        "api.anthropic.com",
+        "platform.claude.com"
+      ],
+      "environment": {
+        "DISABLE_AUTOUPDATER": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+      }
+    },
+    "cursor": {
+      "homeOverride": "",
+      "home": ".config/cursor",
+      "file": "auth.json",
+      "destinations": [
+        "api2.cursor.sh",
+        "api3.cursor.sh",
+        "api4.cursor.sh",
+        "api.cursor.com",
+        "api.cursor.sh",
+        "api5.cursor.sh",
+        "api6.cursor.sh",
+        "api7.cursor.sh",
+        "api8.cursor.sh",
+        "api9.cursor.sh"
+      ],
+      "environment": {
+        "NODE_USE_ENV_PROXY": "1",
+        "AGENT_CLI_CREDENTIAL_STORE": "file"
+      },
+      "credentialEnvironment": "CURSOR_AUTH_TOKEN"
+    }
+  }
+}

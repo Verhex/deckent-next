@@ -1,45 +1,60 @@
 # Anlık iş akışı — geçici
 
-Fable/uzun goal kapalı. Owner checkpoint teslimi; kalıcı yön PLAN/ARCHITECTURE.
+İş: NATIVE-PATCH-PREVIEW. Durum: PLANNED; uygulama başlamadı. DOGFOOD_MODE=OFF.
 
-## Teslim — otomatik Run turlarında sıra devri
+Sonuç hedefi: izole worker değişikliğini, doğru kaynak/base/attempt kimliğine bağlı,
+kalıcı ve sınırlandırılmış patch artifact'ı olarak hazırlayıp SDK/CLI'dan incelemek.
+Ana çalışma alanına uygulama ve otomatik merge bu dilimin parçası değil.
 
-Önce host, bir Run'ın sonlu grafiğini bitirene kadar diğer Run'ı bekletiyordu. Şimdi otomatik
-ilerleme `runRuntime.maxReservationsPerTurn` kadar rezervasyon çağrısından sonra yeni iş
-almayı bırakır; mevcut reserved/started işleri tamamlayıp değerlendirir, sonraki paged Run'a
-geçer. Varsayılan4; worker limiti değildir. Denenen waiting/changed rezervasyon da bütçeyi
-kullanır. Sayfa/cursor mevcut kalıcı niyet listesinden gelir; yeni kuyruk otoritesi kurulmadı.
+## Neden sırada?
 
-- Engine/run-progression: optional tur rezervasyon bütçesi; tamamlanma bazlı refill bütçe
-  içinde devam eder. Eski scheduler, pool, kabul, policy/iptal ve drain sahipliği değişmez.
-- Composition/run-progression host bütçeyi config'den enjekte eder. Açık doğrudan advancement
-  çağrısı tam sonlu tur davranışını korur; public rezervasyon API'sinin yetkileri genişlemez.
-- Config registry + EN/TR alan açıklaması güncellendi. Yeni kalıcı kayıt/migration/protokol yok.
-  Ortak runtime'daki otomatik niyetlere uygulanır; CLI/SDK/MCP ayrı scheduler kurmaz.
+Codex, Claude ve Cursor ortak image/profile/abonelik/geçit yolunda gerçek küçük dosya
+editi yaptı. İsimli çıktı artifact'ı doğrulanıyor; bütün değişikliklerin güvenli teslim
+paketi henüz yok. PLAN'ın canlı teslim işine ilk küçük adım bu paketin hazırlanması.
+Mevcut GitWorkspaceBroker sourceFingerprint, baseCommit ve attempt lease sağlıyor;
+assertSourceBase kaydedilen commit'i doğrular, güncel hedef HEAD/içerik koşulunu değil.
+Legacy ADR-G-037 checkpoint/terminal sonuç ayrımı için kaynak; bütçe devam mekanizması
+ve eski runtime bu dilime taşınmayacak. Patch hazırlamak görev kabulü/teslim onayı değildir.
 
-Kanıt: 28 test/2 dosya (gerçek Docker dahil) geçti. Ortak tek slot ve pageSize1/bütçe1 ile
-r:ilk iş kabul, r:ikinci pending → z:iş kabul → r:ikinci kabul sırası doğrulandı. Tekrarlanan
-binding yok. Bütçe2 ile C'nin alakasız yavaş B bitmeden başlayabildiği ayrıca doğrulandı;
-10 engine testi tekrar geçti (önceki koşumla örtüşür). Build/types, ESLint, mimari0 ve smoke
-geçti; full suite tekrarlanmadı.
-Proof: `/home/alperen/deckent-refactor-work/proof/RUN-FAIR-ROTATION/verification.json`.
+## Sınır ve sahiplik
 
-Jev ilk çağrıda ayrıntılı kontrol sorularının eski artifact bağlamından kaldığı fark edildi;
-o alt skorlarla karar verilmedi, hata/inconclusive loglandı. Gerçek proof + doğru fairness
-sorularıyla yeni çağrı `931f8668-691e-4fdd-be86-cb8931011fb2`: bounded_rotation1.0,
-insufficient_information0, none_of_the_above0; yeterlilik0.64. Bağımsız PASS değildir.
+- Sağlayıcıdan bağımsız tek sözleşme: engine hazırlama kuralları/port; Git adapter sınırlı
+  değişiklik okuması; composition mevcut policy, attempt custody ve artifact depolamayı
+  bağlar. SDK/CLI aynı uygulama yolunu kullanır. Ayrı scheduler/approval sahibi yaratılmaz.
+- Yalnız durduğu doğrulanan, doğru attempt'e ait workspace işlenir. Worker'ın yazabildiği
+  .git/config, hooks, attributes veya diff sürücülerine güvenilmez; host-owned base ve
+  güvenli okuma yolu gerekir. Çıktı base/source/attempt, dosya değişiklikleri ve içerik
+  digest'lerini bağlar; schemaVersion açık olur. Kesin şema uygulama başında netleştirilir.
+- İlk kapsam sınırlı normal dosya ekleme/değiştirme/silme. Untracked dosya açıkça ele alınır;
+  symlink, özel dosya, submodule, binary/limit aşımı desteklenmiyorsa sessiz eksiltmeden reddedilir.
+  Rename ilk sürümde ekleme+silme olarak temsil edilebilir. Metadata/kimlik dosyaları hariçtir.
+- Preview kaynak ağacını değiştirmez ve uygulanabilirlik garantisi vermez. Hedefe koşullu
+  uygulama, hedef değişikliği/yarış ve kısmi uygulama kurtarması ayrı sonraki dilimdir.
+  Ağ/kimlik sınırı, timeout/kaynak limiti, iptal ve custody sözleşmeleri korunur.
 
-## Açık sınır
+## Kabul kanıtı
 
-Çalışan worker kesilmez. Yavaş tek iş ve önceden ayrılmış işler turun dönüşünü geciktirebilir;
-son drain sırasında boş slotlar oluşabilir. Kesin zaman/CPU payı, eşzamanlı çoklu-Run arbiter'ı,
-restartlar arasında kalıcı sıra kredisi ve fleet/HA bu dilimde yapılmadı. Varsayılan4 ölçülmüş
-optimum değildir, dogfood ile ayarlanabilir. Yeni işe başlanmadı.
+1. Gerçek geçici Git workspace'te edit/add/delete → uygulama → kalıcı artifact → SDK/CLI
+   preview; byte/digest/base/attempt eşleşmesi, kaynak çalışma ağacının değişmediği kanıtı.
+2. Yanlış scope/attempt, çalışan worker, bozuk artifact ve oynanmış workspace metadata reddi;
+   path kaçışı, symlink ve boyut sınırı negatifleri. Host hook/diff komutu çalışmamalı.
+3. Tekrarlı hazırlama aynı snapshot için aynı sonucu verir; değişen snapshot eski receipt'e
+   bağlanmaz. Yarım yazma/restart ve artifact okuma yetkisi mevcut sahiplikle doğrulanır.
+4. Üç sağlayıcının aynı hazırlama yolunu kullandığı gösterilir; yeni gerçek native çağrı
+   gerekirse aynı küçük geçici senaryo sırayla çalışır. Token içeriği kanıta yazılmaz.
+5. Hedef HEAD/WIP değişse bile preview bunları korur; güvenli apply tamamlandı denmez.
+   İlgili kontrat testleri, gerçek Git/surface kanıtı ve npm run verify gerekir.
 
-## Checkpoint doğrulaması
+## Karar ve açıklar
 
-Tam verify: 1460 ürün/254 dosya, 24 native, 29 host geçti. İlk koşumda tarihsel DB
-fixture'larındaki 38 hata bulundu; v25 tablolarını bırakan eski sürüm hazırlıkları ve eksik
-v13 execution şeması düzeltildi. 119 ilgili test ve ardından tam verify geçti. Ürün migration'ı
-gevşetilmedi. Canonical core-memory26 dosya birebir eşleşti. Commit/push kimliği Git geçmişi
-ve external CHECKPOINT-2026-09-21 proof'unda tutulur; yeni feature işi başlatılmadı.
+Jev 085ac8e0-ad65-45c9-9adb-b3c7c4f9566e: patch_preview 0.87,
+model_admission 0.11, event_usage 0; none_of_the_above 0.01 (seçilmedi),
+insufficient_information 0.01 (seçilmedi). Öneri kanıt/izin değildir; seçilen plan
+mevcut artifact ve kaynak kimliğini kullanarak incelenebilir teslimi ilerletir.
+Uygulama doğrulanmadığı için Jev outcome henüz yok. Yeni güven sınırı gerekirse somut
+seçeneklerle owner'a getirilir. Model active-set admission, native olay/usage, refresh,
+MCP preparation ve DOGFOOD kabulü açık; bu plan onları tamamlanmış saymaz.
+Fable kanalı kapalı; bağımsız PASS iddiası yok.
+
+Önceki dilimin gerçek kanıtı:
+/home/alperen/deckent-refactor-work/proof/NATIVE-CODING-AUTH-NETWORK/

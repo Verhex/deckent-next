@@ -931,5 +931,11 @@
   "error.PROVIDER_SPEND_CONFLICT": "Bütçe veya fiyatlandırma hesabı kayıtlı kimliğiyle çelişiyor. Mevcut rezervasyonlar korundu.",
   "error.PROVIDER_SPEND_EXHAUSTED": "Ortak kapsam bütçesi bu rezervasyonu karşılamıyor. Ayrılmış veya belirsiz tutarlar tutuluyor; bu kayıt sağlayıcı faturası değildir.",
   "error.PROVIDER_SPEND_FROZEN": "Yerel harcama hesabı çözümlenmemiş aşım nedeniyle durduruldu. Yeni rezervasyon kabul edilmedi.",
-  "error.PROVIDER_SPEND_RESULT_LIMIT": "Tam sağlayıcı-harcama denetim makbuzu bu yüzeyin yapılandırılmış kapasitesini aşıyor. Denetim makbuzu kaydedilmedi."
+  "error.PROVIDER_SPEND_RESULT_LIMIT": "Tam sağlayıcı-harcama denetim makbuzu bu yüzeyin yapılandırılmış kapasitesini aşıyor. Denetim makbuzu kaydedilmedi.",
+  "error.CLI_CODING_INPUT_LIMIT": "Kodlama profili girdisi yapılandırılmış sınırı aşıyor: {limit} bayt.",
+  "error.CLI_CODING_INPUT_INVALID": "Kodlama profili girdisi geçerli JSON olmalıdır.",
+  "error.CLI_CODING_INPUT_TTY": "Kodlama profili JSON verisini stdin üzerinden gönderin veya girdi dosyası belirtin.",
+  "error.CLI_CODING_INPUT_UNAVAILABLE": "Kodlama profili girdisi okunamadı.",
+  "error.NATIVE_CREDENTIAL_UNAVAILABLE": "Native abonelik kimliği kullanılamıyor veya süresi dolmuş.",
+  "error.NATIVE_CONNECTION_UNAVAILABLE": "İzole sağlayıcı bağlantısı kullanılamıyor."
 }

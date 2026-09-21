@@ -105,6 +105,63 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 - Core owns storage ports and security guarantees. Individual database-adapter commercial packaging remains
   an explicit distribution decision; do not infer the edition from database brand or capability alone.
 
+### Subscription coding workers — owner 2026-09-21
+
+Owner selected provider-restricted egress: Docker keeps `network=none`; an attempt-owned Unix
+socket reaches a host CONNECT gateway with an exact provider HTTPS allowlist. The gateway rejects
+non-public/local IPv4 destinations, pins the checked address and requires matching plaintext TLS
+ClientHello SNI; malformed/missing SNI and ECH fail closed. TLS is not terminated. Encrypted HTTP
+paths, bodies and provider-side effects are not inspected or independently authorized by this gate.
+
+The current native-connection adapter projects only the selected provider's unexpired access material
+into private container tmpfs; no host HOME, Docker socket, refresh token or host credential writeback.
+Cursor uses its native ephemeral auth-token input inside the worker process. Provider endpoints and
+connection bounds are versioned adapter catalog data. `nativeSubscription` v1 binds the provider in
+the prepared Docker task profile; configured task execution retains normal policy, reservation,
+workspace, dispatch ownership and artifact collection. Persisted supervisor connection descriptors
+contain paths and bootstrap digest, never credential values. Expired/unavailable credentials fail
+explicitly; subscription refresh and fleet-wide account lifecycle remain open.
+
+Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstructed from a receipt
+to grant new access. Existing Docker custody still supports observation, cancellation and output
+recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output
+is suppressed in favor of a bounded exit/error summary; full native event/usage normalization remains
+open. Full-access worker code can read its own access material and use the allowed provider channel;
+this is not within-worker secret isolation or comprehensive external-effect interception.
+
+Phase 1 integrates supported Codex/Claude/Cursor headless coding executors inside Docker using
+subscription authority, first one verified path then parallel heterogeneous workers. Deckent owns no
+proprietary model: it owns task admission, scheduling, policy, custody and acceptance. Native executor
+semantics stay behind versioned adapters; model/persona/skill bindings are configuration, not grants.
+Credential custody, sandbox confinement, cancellation and outputs must be demonstrated before activation;
+existing host login does not prove container support. Missing simulated API cost never blocks a
+subscription job; actual access/quota limits remain enforced. Local inference and other API/provider
+paths follow in phase 2; existing serving runtimes are preferred to writing a custom serving engine.
+
+Owner 2026-09-21, revised dogfood sequencing: the first isolated coding-worker profile runs
+native unattended/full-access inside its assigned sandbox, without per-tool human prompts.
+Provider-specific flags are adapter-owned and version-verified; the mode is versioned profile data.
+A complete Deckent tool catalog or native-to-Deckent approval bridge is NOT a prerequisite for this
+coding dogfood pilot. Use the executor's own file/shell/test tools; observe bounded native events,
+exit, artifacts and cancellation without claiming exhaustive interception of every effect.
+The pilot covers assigned workspace edits/tests and controlled patch delivery. It does not grant
+host full access, Docker socket access, production/ERP credentials or unrestricted host HOME mounts.
+The necessary provider connection/authentication boundary still needs a concrete implementation;
+permission bypass alone does not establish secret isolation or working network access.
+Runtime custody, capacity, cancellation and honest outcome handling remain mandatory. General tool
+mediation and per-action approvals stay in product scope and will be designed from dogfood evidence;
+privileged external business effects are outside this pilot. Standing grants and action-specific approval
+remain distinct in the target policy model. No approval bridge or automatic native callback is claimed.
+Keep executor integration behind a versioned boundary usable from a future measured Go supervisor;
+Go adoption is not decided by this sequencing change.
+
+An authorized human may approve their own requested operation in solo or enterprise installations,
+subject to explicit organizational separation-of-duties restrictions. Without the relevant authority,
+they wait for an authorized decider. Expiry closes the approval request without permitting execution;
+the Task remains held for explicit renewal under current policy, not an automatic repeated request.
+Human approval remains an accepted target. The bounded native coding connection is wired as described
+above; full agentic acceptance, active-model admission, refresh, usage and dogfood closure remain open.
+
 ### Product data layout — owner 2026-09-17
 
 - Development/dogfood and customer installations use the same product data layout: one project/installation

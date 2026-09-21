@@ -21,3 +21,4 @@ export { admitConfiguredModelActivation, inspectConfiguredModelActivation } from
 export * from '#composition/core/model-invocation/index.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';
 export { auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
+export { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';

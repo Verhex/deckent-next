@@ -15,6 +15,10 @@ function visit(directory) {
     }
     if (manifest.deckentNative.platforms.includes(process.platform)) {
       execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test', '--prefix', child], { stdio: 'inherit' });
+    } else {
+      console.log(`verify-native-skipped: ${JSON.stringify({ name: manifest.name,
+        platform: process.platform, supportedPlatforms: manifest.deckentNative.platforms,
+        reason: 'platform-not-in-native-manifest' })}`);
     }
   }
 }

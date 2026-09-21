@@ -1,7 +1,7 @@
 import { ModelActivationError } from '#domain/index.js';
 import { ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
-import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
+import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
@@ -15,6 +15,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
+  if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
   if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code);
   if (error instanceof OpenRouterPricingError) return ErrorRegistry.createError(error.code === 'INVALID_REQUEST'
     ? 'MODEL_INVOCATION_INVALID' : 'PROVIDER_SPEND_UNAVAILABLE');

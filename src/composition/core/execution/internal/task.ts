@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile } from '#adapters/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -59,12 +59,19 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       const broker = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot });
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
-      const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid, ...(inputs.length ? { inputs } : {}) });
+      // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt.
+      const connection = profile.nativeSubscription ? await openNativeConnection({ binding: profile.nativeSubscription,
+        directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
+        deadlineMs: profile.options.deadlineMs }) : undefined;
+      try {
+      const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
+        ...(inputs.length ? { inputs } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
       for (const { source } of declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const result = await app.execute({ protocolVersion: 1, identity, workspace: lease.workspace, argv: profile.argv });
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: result.kind,
         terminal: result.record.terminal, outputRecorded: !!result.record.output }) });
+      } finally { await connection?.close(); }
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
