@@ -37,7 +37,8 @@ function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } }); return profile;
 }
 
-it.skipIf(process.platform !== 'linux').each([false, true])('runs installed conditional=%s across SDK, CLI and MCP through the configured service', async conditional => {
+it.skipIf(process.platform !== 'linux').each(['plain', 'conditional', 'approval'])('runs installed mode=%s across SDK, CLI and MCP through the configured service', async mode => {
+  const conditional = mode === 'conditional', approvals = mode === 'approval';
   const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
   if (!imageId) throw new Error('DECKENT_TEST_DOCKER_IMAGE is required');
   const root = await mkdtemp(join(tmpdir(), 'deckent-installed-service-')); roots.push(root); await chmod(root, 0o700);
@@ -74,6 +75,10 @@ it.skipIf(process.platform !== 'linux').each([false, true])('runs installed cond
     { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'cancel', 'reconcile', 'recover-output'], scopes: ['scope-1'], principals, resource: { kind: 'attempt', ids: 'all' } },
     { id: 'shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['scope-1'], principals, resource: { kind: 'service', ids: ['service-1'] } },
   ];
+  if (approvals) profile.policy.grants.push(
+    { id: 'approve-task', effect: 'require-approval', actions: ['execute'], scopes: ['scope-1'], principals, resource: { kind: 'task', ids: ['held'] } },
+    { id: 'approval', effect: 'allow', actions: ['inspect', 'decide', 'renew'], scopes: ['scope-1'], principals, resource: { kind: 'approval', ids: 'all' } },
+  );
   await writeFile(profilePath, JSON.stringify(rehash(profile)), { mode: 0o600 });
   const env = { HOME: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' }, options = { env };
   const evidence = await inspectInstallation(project, profile, { allowShutdown: true, dockerExecutable: '/usr/bin/docker' });
@@ -96,6 +101,7 @@ it.skipIf(process.platform !== 'linux').each([false, true])('runs installed cond
     runtimeClient = createConfiguredRuntimeClient(project, options);
     const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 'task-1', kind: 'kind-1', dependencies: [], acceptanceCriteria: ['exit'] }],
       criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero', evaluator: { id: 'custom-exit', version: 7 }, parameters: { acceptedExitCodes: [0] } }] };
+    if (approvals) graph.tasks.unshift({ ...graph.tasks[0]!, id: 'held' });
     if (conditional) graph.tasks.push({ ...graph.tasks[0]!, id: 'not-selected' }, { ...graph.tasks[0]!, id: 'join', dependencies: ['task-1', 'not-selected'] });
     const branch = { schemaVersion: 1 as const, input: { id: 'fact', revision: 'fact-1', value: true }, whenTrue: 'task-1', whenFalse: 'not-selected', join: 'join' };
     const created = await runtimeClient.createRun({ schemaVersion: 1, commandId: 'create', scopeId: 'scope-1', runId: 'run-1', graph, ...(conditional ? { branch } : {}) });
@@ -106,8 +112,8 @@ it.skipIf(process.platform !== 'linux').each([false, true])('runs installed cond
     const execution = await client.callTool({ name: 'execute_task', arguments: identity }); expect(execution.isError).not.toBe(true);
     const evaluation = await client.callTool({ name: 'evaluate_task', arguments: { schemaVersion: 1, commandId: 'evaluate', identity, expectedRevision: 2 } });
     expect(evaluation.isError).not.toBe(true);
-    expect((evaluation.structuredContent as { evaluation: { run: { tasks: { phase: string }[] } } }).evaluation.run.tasks[0]!.phase).toBe('accepted');
-    expect((await runtimeClient.inspectRun({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1' })).run?.tasks[0]?.phase).toBe('accepted');
+    expect((evaluation.structuredContent as { evaluation: { run: { tasks: { id: string; phase: string }[] } } }).evaluation.run.tasks.find(task => 'id' in task && task.id === 'task-1')!.phase).toBe('accepted');
+    expect((await runtimeClient.inspectRun({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1' })).run?.tasks.find(task => task.id === 'task-1')?.phase).toBe('accepted');
     record = await runtime.store.loadBoundDispatch(identity); lease = await runtime.workspaces.openRecorded(identity);
     const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('scope-1', record!.output!)));
     expect(output.stdout).toBe('base\n'); expect(output.stdout).not.toContain('owner-wip');
@@ -116,6 +122,36 @@ it.skipIf(process.platform !== 'linux').each([false, true])('runs installed cond
       expect(next.reservation.identities.map(item => item.taskId)).toEqual(['join']);
       const inspected = await runtimeClient.inspectRun({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1' });
       expect(inspected.run?.tasks.some(task => task.id === 'not-selected')).toBe(false);
+    }
+    if (approvals) {
+      const query = { schemaVersion: 1, scopeId: 'scope-1', afterId: null, limit: 10 };
+      const pending = await runtimeClient.listApprovals(query) as { request: { approvalId: string; taskId: string }; status: string }[];
+      expect(pending).toHaveLength(1); expect(pending[0]).toMatchObject({ status: 'pending', request: { taskId: 'held' } });
+      const command = { schemaVersion: 1, scopeId: 'scope-1', approvalId: pending[0]!.request.approvalId,
+        commandId: 'allow-held', expectedRevision: 0, decision: 'allow', reason: 'Approve exact held task' };
+      const commandPath = join(root, 'approval.json'); await writeFile(commandPath, JSON.stringify(command));
+      const [cliDecision, mcpDecision] = await Promise.all([
+        exec(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env }),
+        client.callTool({ name: 'decide_approval', arguments: command }),
+      ]);
+      expect(mcpDecision.isError).not.toBe(true);
+      expect(JSON.parse(cliDecision.stdout)).toEqual(mcpDecision.structuredContent);
+      const replay = await runtimeClient.reserveRunTasks({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1', commandId: 'reserve', expectedRevision: 0 });
+      expect(replay.reservation.identities.map(value => value.taskId)).toEqual(['task-1']);
+      const fresh = await runtimeClient.reserveRunTasks({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1', commandId: 'reserve-approved', expectedRevision: 3 });
+      expect(fresh.reservation.identities.map(value => value.taskId)).toEqual(['held']);
+      const approvedIdentity = fresh.reservation.identities[0]!;
+      try {
+        expect((await client.callTool({ name: 'execute_task', arguments: approvedIdentity })).isError).not.toBe(true);
+        expect((await client.callTool({ name: 'evaluate_task', arguments: { schemaVersion: 1, commandId: 'evaluate-held', identity: approvedIdentity, expectedRevision: 5 } })).isError).not.toBe(true);
+        expect((await runtimeClient.inspectRun({ schemaVersion: 1, scopeId: 'scope-1', runId: 'run-1' })).run?.tasks.every(task => task.phase === 'accepted')).toBe(true);
+        expect(await git('diff', '--', 'input')).toContain('+owner-wip');
+      } finally {
+        const approvedRecord = await runtime.store.loadBoundDispatch(approvedIdentity);
+        if (approvedRecord) await (await DockerSupervisor.restoreProfile(approvedRecord.profile)).release(approvedRecord.request);
+        const approvedLease = await runtime.workspaces.openRecorded(approvedIdentity);
+        if (approvedLease) await runtime.workspaces.release({ schemaVersion: 1, identity: approvedLease.identity, baseCommit: approvedLease.baseCommit });
+      }
     }
     const descriptor = await runtimeClient.describeService();
     await runtimeClient.shutdownService({ schemaVersion: 1, commandId: 'shutdown', serviceId: 'service-1', instanceId: descriptor.instanceId, reason: 'test complete' });

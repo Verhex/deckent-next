@@ -1,5 +1,6 @@
 import { propagateRunCancellation } from './run-cancellation.js';
 import { SqliteExecutionPools } from './pools.js';
+import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
@@ -8,7 +9,7 @@ import { runCancellationSchema, type RunCancellation, runCreateSchema, runReserv
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteRunJournal {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>) {}
   private transaction<T>(work: () => T): T {
     let active = false;
     try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
@@ -160,7 +161,7 @@ export class SqliteRunJournal {
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;
-      try { wave = planSchedulingWave(current.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
+      try { wave = planSchedulingWave(current.graph, { excludedTaskIds: this.admission?.excluded(current, parsed.actor, parsed.now) ?? [], schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, snapshot: { graphRevision: current.graph.revision, now: parsed.now, progress: current.progress } }); }
       catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (parsed.identities.length > wave.selectedTaskIds.length || parsed.identities.some((id, i) => id.taskId !== wave.selectedTaskIds[i])) {
         throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'transaction-wave-mismatch', parsed.identities.length, policy.capacity));

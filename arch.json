@@ -144,7 +144,9 @@
     "src/adapters/core/local-principal": {
       "dependencies": [
         "src/domain/core/principal",
-        "src/engine/core/authentication"
+        "src/domain/core/session",
+        "src/engine/core/authentication",
+        "src/platform/core/clock"
       ],
       "plan": "SECURITY"
     },
@@ -152,7 +154,8 @@
       "dependencies": [
         "src/adapters/core/local-principal",
         "src/engine/core/authentication",
-        "src/engine/core/runtime"
+        "src/engine/core/runtime",
+        "src/platform/core/clock"
       ],
       "plan": "EXECUTION"
     },
@@ -281,8 +284,12 @@
         "src/adapters/core/installation-journal",
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/native-connection",
         "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-openrouter-chat",
+        "src/adapters/core/provider-openrouter-pricing",
         "src/capabilities/core/evaluation-evidence",
+        "src/domain/core/approval",
         "src/domain/core/model-activation",
         "src/domain/core/model-invocation",
         "src/domain/core/task-evaluation",
@@ -293,27 +300,26 @@
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
+        "src/engine/core/provider-spend",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
+        "src/engine/core/worker-observation",
+        "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
-        "src/platform/core/managed-files",
-        "src/engine/core/provider-spend",
-        "src/adapters/core/provider-openrouter-chat",
-        "src/adapters/core/provider-openrouter-pricing",
-        "src/adapters/core/native-connection",
-        "src/engine/core/workspace-patch",
-        "src/engine/core/worker-observation"
+        "src/platform/core/managed-files"
       ],
       "plan": "FOUNDATION"
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/adapters/core/approval-store",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
+        "src/adapters/core/local-keyring",
         "src/capabilities/core/evaluation-evidence",
         "src/composition/core/inventory",
         "src/composition/core/policy",
@@ -321,6 +327,7 @@
         "src/composition/core/scoped-request",
         "src/domain/core/attempt",
         "src/domain/core/principal",
+        "src/engine/core/approval",
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
@@ -355,29 +362,30 @@
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
+        "src/composition/core/approvals",
         "src/composition/core/execution",
         "src/composition/core/inventory",
         "src/composition/core/model-invocation",
         "src/composition/core/policy",
+        "src/composition/core/provider-spend",
         "src/composition/core/query-errors",
+        "src/composition/core/run-progression",
         "src/composition/core/runs",
         "src/composition/core/runtime",
         "src/domain/core/attempt",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
+        "src/domain/core/provider-spend",
         "src/engine/core/dispatch",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
+        "src/engine/core/provider-spend",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
         "src/platform/core/config",
         "src/platform/core/errors",
-        "src/platform/core/managed-files",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend",
-        "src/composition/core/provider-spend",
-        "src/composition/core/run-progression"
+        "src/platform/core/managed-files"
       ],
       "plan": "EXECUTION"
     },
@@ -454,7 +462,9 @@
     },
     "src/engine/core/authentication": {
       "dependencies": [
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/session",
+        "src/platform/core/clock"
       ],
       "plan": "SECURITY"
     },
@@ -686,18 +696,19 @@
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/approval",
         "src/engine/core/dispatch",
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-catalog",
+        "src/engine/core/provider-spend",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
         "src/platform/core/common",
         "src/platform/core/errors",
-        "src/platform/core/i18n",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
@@ -1129,6 +1140,79 @@
         "src/composition/core/query-errors"
       ],
       "plan": "EXECUTION"
+    },
+    "src/domain/core/session": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/platform/core/clock": {
+      "dependencies": [],
+      "plan": "SECURITY"
+    },
+    "src/domain/core/command": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/platform/core/integrity": {
+      "dependencies": [],
+      "plan": "SECURITY"
+    },
+    "src/domain/core/approval": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/approval": {
+      "dependencies": [
+        "src/domain/core/approval",
+        "src/domain/core/command",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/engine/core/authentication",
+        "src/engine/core/policy",
+        "src/platform/core/clock",
+        "src/platform/core/integrity"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/local-keyring": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/approval-store": {
+      "dependencies": [
+        "src/domain/core/approval",
+        "src/engine/core/approval",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/composition/core/approvals": {
+      "dependencies": [
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/approval",
+        "src/engine/core/runtime",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {

@@ -1,3 +1,5 @@
+import { ApprovalError } from '#domain/index.js';
+import { SessionAuthenticationError } from '#engine/index.js';
 import { WorkerObservationError } from '#engine/index.js';
 import { WorkspacePatchError } from '#engine/index.js';
 import { ModelActivationError } from '#domain/index.js';
@@ -16,6 +18,7 @@ import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } fr
 import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
+  if (error instanceof ApprovalError || error instanceof SessionAuthenticationError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkerObservationError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code);
   if (error instanceof DeckentError) return error;

@@ -53,3 +53,4 @@ export type { CollectedOutputFile } from '#engine/core/supervisor/index.js';
 export * from '#engine/core/workspace-patch/index.js';
 
 export * from '#engine/core/worker-observation/index.js';
+export * from '#engine/core/approval/index.js';

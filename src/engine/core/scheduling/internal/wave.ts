@@ -5,6 +5,7 @@ const schedulingInputSchema = z.object({
   capacity: z.object({ executionSlots: z.number().int().nonnegative().safe(), inFlightSlots: z.number().int().nonnegative().safe() }).strict(),
   /** Complete ordering supplied by scheduling policy, never inferred from task kind or model name. */
   ordering: z.array(identitySchema),
+  excludedTaskIds: z.array(identitySchema).optional(),
   snapshot: readinessInputSchema,
 }).strict();
 export class SchedulingError extends Error {
@@ -24,7 +25,9 @@ export function planSchedulingWave(graphInput: unknown, input: unknown) {
   const { execution: executionOccupied, inFlight: inFlightOccupied } = measureTaskOccupancy(snapshot.progress);
   const available = Math.min(Math.max(0, capacity.executionSlots - executionOccupied), Math.max(0, capacity.inFlightSlots - inFlightOccupied));
   const ready = new Set(readiness.filter(task => task.disposition === 'ready').map(task => task.taskId));
-  const ordered = ordering.filter(id => ready.has(id));
+  const excluded = new Set(parsed.data.excludedTaskIds ?? []);
+  if ([...excluded].some(id => !graphIds.has(id))) throw new SchedulingError('SCHEDULING_INPUT_INVALID');
+  const ordered = ordering.filter(id => ready.has(id) && !excluded.has(id));
   const delayed = new Set(readiness.filter(task => task.disposition === 'delayed').map(task => task.taskId));
   let nextEligibleAt: number | undefined;
   for (const task of snapshot.progress) {

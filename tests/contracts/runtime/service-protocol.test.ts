@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RuntimeServiceProtocolError, classifyRuntimeServiceOperation, parseRuntimeServiceResponse, runtimeServiceOperationSchema,
   runtimeServiceRequestSchema, runtimeServiceResponseSchema, runtimeServiceResultCapacity } from '../../../src/engine/core/runtime/index.js';
 
-const operations = ['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun', 'inspectInventory',
+const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun', 'inspectInventory',
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };

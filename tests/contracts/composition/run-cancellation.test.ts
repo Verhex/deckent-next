@@ -47,7 +47,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK cancellation inten
     expect(await readFile(f.path)).toEqual(before);
   });
   it('never upgrades an older ledger during cancellation', async () => {
-    const f = await fixture(); const db = new DatabaseSync(f.path); db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE execution_pools; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=3'); db.close();
+    const f = await fixture(); const db = new DatabaseSync(f.path); db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE execution_pools; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=3'); db.close();
     const before = await readFile(f.path);
     await expect(requestRunCancellation(f.project, command, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
     expect(await readFile(f.path)).toEqual(before);

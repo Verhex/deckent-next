@@ -33,6 +33,12 @@ export const CONFIG_FIELDS = Object.freeze({
       maxDepth: z.number().int().positive().safe().default(32),
     }).strict().default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  approvals: field('config.field.approvals', z.object({
+    requestTtlMs: z.number().int().positive().safe().default(600000),
+    sessionTtlMs: z.number().int().positive().safe().default(60000),
+    pageSize: z.number().int().positive().safe().default(100),
+    keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/).default('authority.key'),
+  }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cli: field('config.field.cli', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),

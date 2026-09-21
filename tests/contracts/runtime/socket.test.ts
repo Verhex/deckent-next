@@ -1,3 +1,5 @@
+import { authenticateSession } from '../../../src/engine/core/authentication/index.js';
+import { SystemTrustedClock } from '../../../src/platform/core/clock/index.js';
 import { chmod, lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createServer, Socket } from 'node:net';
@@ -7,7 +9,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LocalRuntimeSocketError, requestLocalRuntime, startLocalRuntimeSocketServer,
+import { LocalRuntimeSocketError, createLocalPeerSession, requestLocalRuntime, startLocalRuntimeSocketServer,
   type LocalRuntimeSocketOptions } from '../../../src/adapters/core/local-runtime-socket/index.js';
 import { encodeServiceFrame, ServiceFrameError } from '../../../src/adapters/core/local-runtime-socket/index.js';
 
@@ -122,6 +124,24 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket peer identit
         operation: 'inspectRun', input: { actor: { uid: 0, pid: 1 } } })).resolves.toMatchObject({
         ok: true, result: { uid: process.getuid!(), gid: process.getgid!(), pid: process.pid, assurance: 'linux-so-peercred' },
       });
+    } finally { await server.dispose(); }
+  });
+
+  it('authenticates a live native peer and revokes its session when that connection closes', async () => {
+    const { options } = await fixture(); const clock = new SystemTrustedClock();
+    let retained: Awaited<ReturnType<typeof createLocalPeerSession>> | undefined;
+    let session: Awaited<ReturnType<typeof authenticateSession>>['session'] | undefined;
+    const server = await startLocalRuntimeSocketServer(options, async (request, peer) => {
+      retained = await createLocalPeerSession(peer, ['scope'], 10_000, clock);
+      const authenticated = await authenticateSession(retained, retained, clock, undefined, 'scope');
+      session = authenticated.session;
+      return { schemaVersion: 10, requestId: request.requestId, ok: true, result: { active: true } };
+    });
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 10, requestId: 'session-proof',
+        operation: 'inspectRun', input: {} })).resolves.toMatchObject({ ok: true, result: { active: true } });
+      await server.dispose();
+      expect(await retained!.isSessionActive(session!)).toBe(false);
     } finally { await server.dispose(); }
   });
 

@@ -618,5 +618,10 @@
   "config.field.installation": "Installation input limits",
   "config.field.runRuntime": "Automatic admitted Run progression polling, page size, reservation budget per turn and failure backoff",
   "cli.runtime.runProgression": "Run {runId}: advanced {count} attempts",
-  "cli.runtime.runProgressionFailed": "Run progression could not continue: {code}"
+  "cli.runtime.runProgressionFailed": "Run progression could not continue: {code}",
+  "config.field.approvals": "Approval and live session settings",
+  "mcp.tool.listApprovals": "List scoped approval requests.",
+  "mcp.tool.inspectApproval": "Inspect one approval and its evidence.",
+  "mcp.tool.decideApproval": "Decide an approval from a verified live session.",
+  "mcp.tool.renewApproval": "Explicitly renew a closed approval request."
 }

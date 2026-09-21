@@ -3,7 +3,7 @@ import { closeSync } from 'node:fs';
 import { Socket } from 'node:net';
 import { LocalRuntimeSocketError } from './endpoint.js';
 
-export type LocalPeerIdentity = Readonly<{ pid: number; uid: number; gid: number; assurance: 'linux-so-peercred' }>;
+export type LocalPeerIdentity = Readonly<{ pid: number; uid: number; gid: number; assurance: 'linux-so-peercred'; connection?: AbortSignal }>;
 interface PeerHandoff { peer: { pid: number; uid: number; gid: number }; takeFd(): number }
 export type PeerClosure = Readonly<{ state: 'closed'; reason: 'requested' | 'poll-failed' | 'accept-failed' }>;
 interface PeerAcceptor { close(): void; removeEndpoint(): void }
@@ -29,10 +29,16 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
     let socket: Socket;
     try { socket = new Socket({ fd, readable: true, writable: true, allowHalfOpen: true }); }
     catch { closeSync(fd); return; }
+    const connection = new AbortController();
+    socket.once('close', () => connection.abort());
+    socket.once('error', () => connection.abort());
     clients.add(socket);
     socket.once('close', () => { clients.delete(socket); if (stopped && !clients.size) finish?.(); });
     socket.on('error', () => undefined);
-    try { onConnection(socket, Object.freeze({ pid, uid, gid, assurance: 'linux-so-peercred' })); }
+    try {
+      const identity = Object.defineProperty({ pid, uid, gid, assurance: 'linux-so-peercred' as const }, 'connection', { value: connection.signal });
+      onConnection(socket, Object.freeze(identity));
+    }
     catch { socket.destroy(); }
   }, event => {
     stopped = true; if (!clients.size) finish?.();

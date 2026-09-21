@@ -618,5 +618,10 @@
   "config.field.installation": "Kurulum girdi sınırları",
   "config.field.runRuntime": "Kabul edilen Run otomatik ilerleme taraması, sayfa boyutu, tur başına rezervasyon bütçesi ve hata sonrası bekleme",
   "cli.runtime.runProgression": "Run {runId}: {count} deneme ilerletildi",
-  "cli.runtime.runProgressionFailed": "Run ilerlemesi sürdürülemedi: {code}"
+  "cli.runtime.runProgressionFailed": "Run ilerlemesi sürdürülemedi: {code}",
+  "config.field.approvals": "Onay ve canlı oturum ayarları",
+  "mcp.tool.listApprovals": "Kapsamdaki onay isteklerini listele.",
+  "mcp.tool.inspectApproval": "Bir onayı ve kanıtını incele.",
+  "mcp.tool.decideApproval": "Doğrulanmış canlı oturumdan onay kararı ver.",
+  "mcp.tool.renewApproval": "Kapanmış onay isteğini açıkça yenile."
 }

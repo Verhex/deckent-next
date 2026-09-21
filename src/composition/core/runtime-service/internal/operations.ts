@@ -1,3 +1,5 @@
+import type { RuntimeServiceDelivery } from '#engine/index.js';
+import { configuredApproval } from '#composition/core/approvals/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { cancellationRecoveryCommandSchema, dispatchInventoryInputSchema, runAdmissionSchema, runCommandSchema, runQuerySchema,
@@ -12,6 +14,10 @@ import { createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfigur
 /** Closed local composition map. Each operation revalidates untrusted protocol input before any I/O. */
 export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}) {
   return Object.freeze({
+    renewApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'renew', input, options, undefined, delivery?.maxResultBytes); },
+    listApprovals(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'list', input, options, undefined, delivery?.maxResultBytes); },
+    inspectApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'inspect', input, options, undefined, delivery?.maxResultBytes); },
+    decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) { return configuredApproval(projectRoot, 'decide', input, options, undefined, delivery?.maxResultBytes); },
     createRun(input: Parameters<typeof createConfiguredRun>[1]) { return createConfiguredRun(projectRoot, input, options); },
     reserveRunTasks(input: Parameters<typeof reserveConfiguredRunTasks>[1]) { return reserveConfiguredRunTasks(projectRoot, input, options); },
     executeTask(input: Parameters<typeof executeConfiguredTask>[1]) { return executeConfiguredTask(projectRoot, input, options); },
@@ -43,7 +49,7 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
     deliverRunCancellation: input => operations.deliverRunCancellation(runCommandSchema.parse(input)),
     reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
-  } satisfies Record<Exclude<RuntimeServiceOperation, 'describeService' | 'shutdownService' | 'invokeModel' | 'inspectModelInvocation'
+  } satisfies Record<Exclude<RuntimeServiceOperation, 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'inspectModelInvocation'
     | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount'>, RuntimeOperationHandler>;
   if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
   return handlers[request.operation as keyof typeof handlers](request.input);

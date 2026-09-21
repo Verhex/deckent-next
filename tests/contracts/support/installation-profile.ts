@@ -16,8 +16,8 @@ export function installationProfile(input: { root?: string; shutdown?: boolean; 
   const configuration = { execution: { docker: { executable: 'docker', ...settings }, git: { gitExecutable: 'git', timeoutMs: 1000, outputBytes: 4096 } }, ...(input.root ? { layout: { root: input.root } } : {}), admission: { registry, poolId: 'pool-1',
     executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' as const }, service: { identity: { scopeId: 'scope-1', serviceId: 'service-1' } } };
   const principal = { issuer: 'fixture-issuer', subject: 'fixture-subject' };
-  const grants = [{ id: 'pool', effect: 'allow' as const, actions: ['use'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'pool', ids: ['pool-1'] } },
-    ...(input.shutdown ? [{ id: 'shutdown', effect: 'allow' as const, actions: ['shutdown'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'service', ids: ['service-1'] } }] : [])];
+  const grants = [{ id: 'pool', effect: 'allow' as 'allow' | 'deny' | 'require-approval', actions: ['use'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'pool', ids: ['pool-1'] as string[] | 'all' } },
+    ...(input.shutdown ? [{ id: 'shutdown', effect: 'allow' as 'allow' | 'deny' | 'require-approval', actions: ['shutdown'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'service', ids: ['service-1'] } }] : [])];
   const payload = { schemaVersion: 1 as const, profile: { id: 'fixture', version: 1 }, scopeId: 'scope-1', configuration,
     policy: { schemaVersion: 1 as const, revision: 'policy-1', grants, restrictions: [] }, pool: { schemaVersion: 1 as const, poolId: 'pool-1', capacity: { executionSlots: 1, inFlightSlots: 1 } }, shutdown: { enabled: !!input.shutdown } };
   return { ...payload, profile: { ...payload.profile, digest: hashInstallationProfilePayload(payload) } };

@@ -22,6 +22,10 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 
 export interface CommandContext {
+  renewApproval?: (input: unknown) => Promise<unknown>;
+  listApprovals?: (input: unknown) => Promise<unknown>;
+  inspectApproval?: (input: unknown) => Promise<unknown>;
+  decideApproval?: (input: unknown) => Promise<unknown>;
   inspectWorkspaceIntegration?: TaskIntegrationInspectHandler;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

@@ -1,35 +1,33 @@
 # Anlık iş akışı — geçici
 
-Next tek ürün/yürütme reposu; legacy salt okunur. DOGFOOD OFF, Fable kanalı kapalı.
-Owner yerel commit izni verdi; push yapılmaz. Dış belge/proof alanı:
-`/home/alperen/deckent-refactor-work` (Git/npm dışında; owner/Fable düzenlemesi korunur).
+Owner dört işi art arda tamamlama izni verdi: O3 onay/rezervasyon, O6 canlı oturum,
+güvenli worker teslimi ve gerçek çoklu worker. Jev north star + durum + seçeneklerle kullanılır.
+Yerel commit var, push yok. Owner/Fable PLAN.md WIP'i değiştirilmez ve commitlenmez.
 
-## Son tamamlanan dilim
+## Tamamlanan doğrulama
 
-PRODUCT-NORTH-STAR: kalıcı AGENTS/CLAUDE ürün geliştirme rehberi (46 satır), mevcut gate 70.
-15 kanun ve nedensel dersler normalize; ortak ürün hedefi tek core-memory kaydında.
-Jev case v2 süreç/kararlar/sonraki adım ve seçenek etkisini zorunlu taşır; ortak hedef metni/hash'i
-hazırlamada otomatik eklenir. Eski günlükler okunabilir; yeni eksik context ağdan önce reddedilir.
-Ürün runtime yetkisi veya iş modeli değiştirilmedi; semantik doğruluk yapısal kontrolden çıkarılmaz.
+O3/O6: pending onay aday/pool slotu tüketmez; allow sonrası yeni commandId gerekir.
+Eski rezervasyon replay genişlemez. Scope/policy/action bağlı MAC, kalıcı karar/receipt/outbox,
+expiry ve açık renewal; CLI/MCP/SDK tek uygulama. Ayrı process/TTY/connection canlı session,
+wall+monotonic kontrol; token-verified yalnız port. Pure launch değişmedi. Ledger31.
+Tam verify: 1536 ürün/265 dosya,24 native,36 host geçti; sıfır skip/fail.
+Gerçek servis: eşzamanlı CLI/MCP tek karar, eski replay korunuyor, yeni komut Docker işi çalıştırıyor.
+Sınır: outbox notifier/uzak token doğrulayıcı/ayrı approval revocation yüzeyi henüz yok.
 
-Kanıt: dış `proof/PRODUCT-NORTH-STAR/` — önceki dosyaların hash'li snapshotı,
-70/71 gerçek gate denemesi, hedefli14 test, gerçek Jev request/response hash'i ve tam verify logu.
-Jev bounded devamı önerdi; danışman görüşüdür, bağımsız PASS değildir.
-Tam verify: 261 dosya /1517 ürün,24 native,36 host; hata0, atlanan0; lint/build/smoke geçti.
-Sabit Docker imageId ile Linux doğrulaması; enterprise kapasite ölçümü değildir.
+Üç gerçek native sağlayıcı geçici projede eşzamanlı çalıştı: Codex,Claude,Cursor exact dosya+patch,
+network-none/geçit ve mount sınırları, host credential ve kaynak WIP korundu.
+Ortak3 slot ikinci Run'ı bekletti; bağımlı join sonra başladı; gerçek iptal terminal oldu.
+Bu bounded yerel kanıt; ölçek sertifikasyonu veya DOGFOOD açılışı değildir.
 
-## Devam noktası
+## Devam eden iş
 
-PLAN.md ana iş alanları, ARCHITECTURE.md kabul edilmiş mimari; ortak north star karar ölçütüdür.
-Önceki O1/O2 uygulandı; O5 dar bootstrap custody doğrulandı; O7 statik envanter280 yol üretildi.
-İlgili proof: INTEGRATION-INSPECTION, PROVIDER-LIMITS-REMOVAL, LEGACY-SURFACE-INVENTORY,
-INSTALLATION-GROUP-CUSTODY. O3 approval/reservation ve O6 session freshness açık.
+Güvenli teslim: ayrı aday replacement, eski intent/bytes değişmeden link.
+Doğrulanmış patch → deterministic Git commit → refs/deckent/deliveries altında create-only ref;
+aynı ref transaction içinde kaynak HEAD kontrolü. Kaynak HEAD/index/WIP değişmez.
+Canlı dala otomatik merge ayrı kapsam; teslim reference-only olarak açıkça adlandırılır.
+Jev111d95ee-87e0-4e50-88db-f2fae4f01c58 önerdi; gerçek crash/replay/negatif kanıt bekliyor.
+Önce kaynak bağlantıları ve testler, sonra saklanan üç native patch'i sağlayıcıyı yeniden çağırmadan teslim.
+Son tam verify ve yerel commit sonrası dört madde sonuçları owner'a raporlanır.
 
-O4 ürün modeli owner incelemesinde: Run/Task/Attempt tüm Agent OS modeli değildir;
-eski zorunlu yedili yapı da otomatik geri gelmez. Dış AGENT-OS-MODEL-REVIEW/review.md referans.
-Recovery A ayrı aday/kalıcı ilişki, B fenced yerinde onarım, C manuel yol seçenekleri dış
-INTEGRATION-RECOVERY-DESIGN/review.md içinde. Yeni recovery yetkisi kabul edilmedi.
-Kabul edilmiş işleri sürekli yeniden analiz etme; yeni kanıt/owner yönü varsa sınırlı amendment sun.
-
-Bu dilim sırasında PLAN.md'ye eşzamanlı eklenen fiziksel envanter korunur, bu commit'e alınmaz.
-Dış refaktör alanındaki owner/Fable temizliği bizim yürütme işimiz değildir.
+Kanıt: /home/alperen/deckent-refactor-work/proof/FOUR-STEP-EXECUTION/.
+DOGFOOD_MODE=OFF; legacy yürütülmez; Fable kanalı kapalı; bağımsız PASS iddiası yok.

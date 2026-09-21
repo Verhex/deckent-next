@@ -46,3 +46,6 @@ export * from '#adapters/core/native-connection/index.js';
 export * from '#adapters/core/git-patch/index.js';
 
 export * from '#adapters/core/worker-observation/index.js';
+export * from '#adapters/core/local-keyring/index.js';
+export * from '#adapters/core/approval-store/index.js';
+export { LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js';

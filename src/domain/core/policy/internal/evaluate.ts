@@ -5,7 +5,7 @@ const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).read
 const matchShape = { id: identitySchema, actions: selection, scopes: selection,
   principals: z.union([z.literal('all'), z.array(z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly()).min(1).readonly()]),
   resource: z.object({ kind: identitySchema, ids: selection }).strict().readonly() };
-const grant = z.object({ ...matchShape, effect: z.enum(['allow', 'deny']) }).strict().readonly();
+const grant = z.object({ ...matchShape, effect: z.enum(['allow', 'deny', 'require-approval']) }).strict().readonly();
 const restriction = z.object(matchShape).strict().readonly();
 /** Trusted grants may allow; overlays only restrict. A project/user overlay cannot create authority. */
 export const policySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
@@ -20,7 +20,7 @@ export const policyRequestSchema = z.object({ principal: verifiedPrincipalSchema
   resource: z.object({ kind: identitySchema, id: identitySchema }).strict().readonly() }).strict().readonly();
 export type Policy = z.infer<typeof policySchema>;
 export type PolicyRequest = z.infer<typeof policyRequestSchema>;
-export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE'; ruleId?: string }>;
+export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED'; ruleId?: string }>;
 export class PolicyError extends Error { constructor() { super('POLICY_INVALID'); this.name = 'PolicyError'; } }
 function includes(values: 'all' | readonly string[], value: string) { return values === 'all' || values.includes(value); }
 function matches(rule: z.infer<typeof restriction>, request: PolicyRequest) {
@@ -35,6 +35,8 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
   if (!request.principal.scopeIds.includes(request.scopeId)) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'SCOPE' });
   const denied = policy.grants.find(rule => rule.effect === 'deny' && matches(rule, request)) ?? policy.restrictions.find(rule => matches(rule, request));
   if (denied) return Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'DENIED', ruleId: denied.id });
+  const required = policy.grants.find(rule => rule.effect === 'require-approval' && matches(rule, request));
+  if (required) return Object.freeze({ decision: 'require-approval', revision: policy.revision, reason: 'APPROVAL_REQUIRED', ruleId: required.id });
   const allowed = policy.grants.find(rule => rule.effect === 'allow' && matches(rule, request));
   return allowed ? Object.freeze({ decision: 'allow', revision: policy.revision, reason: 'GRANTED', ruleId: allowed.id })
     : Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'NO_GRANT' });

@@ -4,6 +4,19 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  APPROVAL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INVALID', p, l) }) },
+  APPROVAL_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_DENIED', p, l) }) },
+  APPROVAL_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_MISSING', p, l) }) },
+  APPROVAL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_CONFLICT', p, l) }) },
+  APPROVAL_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_EXPIRED', p, l) }) },
+  APPROVAL_INTEGRITY: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INTEGRITY', p, l) }) },
+  APPROVAL_STALE: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_STALE', p, l) }) },
+  APPROVAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_REQUIRED', p, l) }) },
+  SESSION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_REQUIRED', p, l) }) },
+  SESSION_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_EXPIRED', p, l) }) },
+  SESSION_INACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_INACTIVE', p, l) }) },
+  INTEGRITY_KEY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INTEGRITY_KEY_UNAVAILABLE', p, l) }) },
+
   CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', p, l) }) },
   CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', p, l) }) },
   CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', p, l) }) },

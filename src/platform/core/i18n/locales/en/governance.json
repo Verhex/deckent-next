@@ -922,5 +922,17 @@
   "error.PATCH_CORRUPT": "Workspace patch artifact or producer binding is corrupt.",
   "error.WORKER_OBSERVATION_INVALID": "Worker observation query or source selection is invalid.",
   "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker observation is unavailable; execution state was not changed.",
-  "error.PATCH_INTEGRATION_PENDING": "This preparation has no completed manifest. Its candidate is held; automatic takeover and repair are unavailable."
+  "error.PATCH_INTEGRATION_PENDING": "This preparation has no completed manifest. Its candidate is held; automatic takeover and repair are unavailable.",
+  "error.APPROVAL_INVALID": "Invalid approval command.",
+  "error.APPROVAL_DENIED": "Approval operation is not permitted.",
+  "error.APPROVAL_MISSING": "Approval request was not found.",
+  "error.APPROVAL_CONFLICT": "Approval changed or this command has different contents.",
+  "error.APPROVAL_EXPIRED": "Approval expired without granting permission.",
+  "error.APPROVAL_INTEGRITY": "Approval evidence could not be verified.",
+  "error.APPROVAL_STALE": "Approval no longer matches the action.",
+  "error.APPROVAL_REQUIRED": "The task is waiting for approval.",
+  "error.SESSION_REQUIRED": "A verified live session is required.",
+  "error.SESSION_EXPIRED": "The session expired or its clock evidence changed.",
+  "error.SESSION_INACTIVE": "The session is no longer active.",
+  "error.INTEGRITY_KEY_UNAVAILABLE": "The local integrity key is unavailable or unsafe."
 }

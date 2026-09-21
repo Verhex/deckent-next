@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { counterSchema, identitySchema, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { diagnoseReservationWave, planSchedulingWave } from '#engine/core/scheduling/index.js';
@@ -13,6 +13,10 @@ export type RunReservationCommand = z.infer<typeof runReservationCommandSchema>;
 export interface RunReservationStore extends Pick<RunStore, 'loadRun' | 'loadRunReceipt' | 'reserveRunTasks'> {
   loadRunExecutionPolicy(scopeId: string, runId: string): Promise<z.infer<typeof runExecutionPolicySchema>>;
 }
+export interface RunAdmissionFilter {
+  prepare(run: RunSnapshot, principal: VerifiedPrincipal, now: number): Promise<readonly string[]>;
+  excluded(run: RunSnapshot, actor: RunReservation['actor'], now: number): readonly string[];
+}
 export interface ReservationRuntime { now(): number; attemptId(): string }
 const recordedReservation = runReservationSchema.extend({ action: z.literal('reserve-run-tasks') }).strict();
 function checkedSnapshot(input: unknown) {
@@ -25,7 +29,7 @@ function checkedSnapshot(input: unknown) {
  */
 export class RunReservationApplication {
   constructor(private readonly store: RunReservationStore, private readonly verifier: PrincipalVerifier,
-    private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly runtime: ReservationRuntime) {}
+    private readonly authorization: RunAuthorization, private readonly poolAuthorization: PoolAuthorization, private readonly runtime: ReservationRuntime, private readonly admission?: RunAdmissionFilter) {}
   private project(receipt: RunReceipt, command: RunReservationCommand, actor: RunReservation['actor']) {
     let recorded;
     try { recorded = recordedReservation.parse(JSON.parse(receipt.command)); }
@@ -71,7 +75,8 @@ export class RunReservationApplication {
       }
       const policy = runExecutionPolicySchema.parse(await this.store.loadRunExecutionPolicy(command.scopeId, command.runId));
       const now = counterSchema.parse(this.runtime.now());
-      const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering,
+      const excludedTaskIds = await this.admission?.prepare(run, principal, now) ?? [];
+      const wave = planSchedulingWave(run.graph, { schemaVersion: 2, capacity: policy.capacity, ordering: policy.ordering, excludedTaskIds,
         snapshot: { graphRevision: run.graph.revision, progress: run.progress, now } });
       if (!wave.selectedTaskIds.length) throw new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnoseReservationWave(wave, 'application-empty', 0, policy.capacity));
       const identities = wave.selectedTaskIds.map(taskId => ({ ...run.identity, taskId,

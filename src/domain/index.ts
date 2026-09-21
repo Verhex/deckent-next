@@ -9,3 +9,6 @@ export * from '#domain/core/task-evaluation/index.js';
 export * from '#domain/core/model-activation/index.js';
 export * from '#domain/core/model-invocation/index.js';
 export * from '#domain/core/provider-spend/index.js';
+export * from '#domain/core/session/index.js';
+export * from '#domain/core/command/index.js';
+export * from '#domain/core/approval/index.js';

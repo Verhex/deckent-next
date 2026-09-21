@@ -1,3 +1,4 @@
+import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, approvalCommandSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
@@ -13,6 +14,10 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
 export interface McpApplications {
+  renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  decideApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelInvocation?(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
@@ -48,6 +53,22 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     { readOnly: true, destructive: false, name: 'policy_vocabulary', description: t('mcp.tool.policyVocabulary', {}, locale), schema: z.object({}).strict(),
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
+  const renewApproval = applications.renewApproval;
+  if (renewApproval) definitions.push({ readOnly: false, destructive: false, openWorld: false, name: 'renew_approval',
+    description: t('mcp.tool.renewApproval', {}, locale), schema: approvalRenewalSchema, boundedDelivery: true,
+    invoke: (input, delivery) => renewApproval.call(applications, approvalRenewalSchema.parse(input), delivery) });
+  const listApprovals = applications.listApprovals;
+  if (listApprovals) definitions.push({ readOnly: true, destructive: false, openWorld: false, name: 'list_approvals',
+    description: t('mcp.tool.listApprovals', {}, locale), schema: approvalListSchema, boundedDelivery: true,
+    invoke: (input, delivery) => listApprovals.call(applications, approvalListSchema.parse(input), delivery) });
+  const inspectApproval = applications.inspectApproval;
+  if (inspectApproval) definitions.push({ readOnly: true, destructive: false, openWorld: false, name: 'inspect_approval',
+    description: t('mcp.tool.inspectApproval', {}, locale), schema: approvalQuerySchema, boundedDelivery: true,
+    invoke: (input, delivery) => inspectApproval.call(applications, approvalQuerySchema.parse(input), delivery) });
+  const decideApproval = applications.decideApproval;
+  if (decideApproval) definitions.push({ readOnly: false, destructive: false, openWorld: false, name: 'decide_approval',
+    description: t('mcp.tool.decideApproval', {}, locale), schema: approvalCommandSchema, boundedDelivery: true,
+    invoke: (input, delivery) => decideApproval.call(applications, approvalCommandSchema.parse(input), delivery) });
   const inspectDeclaredModels = applications.inspectDeclaredModels;
   if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, name: 'list_declared_models',
     description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),

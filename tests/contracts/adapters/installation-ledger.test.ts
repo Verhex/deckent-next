@@ -30,7 +30,7 @@ it('rejects foreign transactions, markerless current ledgers, and nonempty schem
   const initialized = await path(); await initializeInstallationLedger(initialized, options, ownership, pool);
   await expect(initializeInstallationLedger(initialized, options, { ...ownership, transactionId: 'tx-2' }, pool))
     .rejects.toMatchObject({ code: 'INSTALLATION_LEDGER_CONFLICT' });
-  const markerless = await path(); const current = new DatabaseSync(markerless); current.exec('DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=11'); current.close();
+  const markerless = await path(); const current = new DatabaseSync(markerless); current.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=11'); current.close();
   await expect(initializeInstallationLedger(markerless, options, ownership, pool)).rejects.toMatchObject({ code: 'INSTALLATION_LEDGER_CONFLICT' });
   const nonempty = await path(); const foreign = new DatabaseSync(nonempty); foreign.exec('CREATE TABLE foreign_data(value TEXT)'); foreign.close();
   const foreignBytes = await readFile(nonempty);

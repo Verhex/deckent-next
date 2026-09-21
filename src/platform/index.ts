@@ -60,3 +60,7 @@ export { prepareProductFile, prepareProductSocket, inspectProductFile, preparePr
 export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from '#platform/core/config-fields/index.js';
 
 export * from '#platform/core/bootstrap-state/index.js';
+export { SystemTrustedClock } from '#platform/core/clock/index.js';
+export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
+export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
+export type { IntegrityAuthority } from '#platform/core/integrity/index.js';

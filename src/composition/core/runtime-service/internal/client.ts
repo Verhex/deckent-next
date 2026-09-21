@@ -33,7 +33,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const config = await loadConfig(projectRoot, { ...options, heal: false });
       const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false);
       const requestId = randomUUID();
-      const capacity = operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
+      const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
@@ -46,7 +46,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
     && operation !== 'invokeModel' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount').map(operation =>
-    [operation, (input: unknown) => call(operation, input)])) as ConfiguredRuntimeOperations;
+    [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {

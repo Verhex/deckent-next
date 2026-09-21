@@ -4,7 +4,7 @@ import { identitySchema, parseModelInvocationCancellationCommand, parseModelInvo
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 10 as const;
 
-export const runtimeServiceOperationSchema = z.enum(['createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
+export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
@@ -12,6 +12,7 @@ export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number(
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
+  || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount';
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
@@ -28,7 +29,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'invokeModel') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
       else if (value.operation === 'purgeModelInvocationContent') parseModelInvocationPurgeCommand(value.input);
-      else parseModelInvocationCancellationCommand(value.input);
+      else if (value.operation === 'cancelModelInvocation') parseModelInvocationCancellationCommand(value.input);
+      // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_FORBIDDEN' });

@@ -922,5 +922,17 @@
   "error.PATCH_CORRUPT": "Workspace patch artifact veya üretici bağı bozuk.",
   "error.WORKER_OBSERVATION_INVALID": "Worker gözlem sorgusu veya kaynak seçimi geçersiz.",
   "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker gözlemi alınamadı; yürütme durumu değiştirilmedi.",
-  "error.PATCH_INTEGRATION_PENDING": "Bu hazırlamanın tamamlanmış manifesti yok. Aday korunuyor; otomatik devralma ve onarım desteklenmiyor."
+  "error.PATCH_INTEGRATION_PENDING": "Bu hazırlamanın tamamlanmış manifesti yok. Aday korunuyor; otomatik devralma ve onarım desteklenmiyor.",
+  "error.APPROVAL_INVALID": "Onay komutu geçersiz.",
+  "error.APPROVAL_DENIED": "Bu onay işlemi için yetki yok.",
+  "error.APPROVAL_MISSING": "Onay isteği bulunamadı.",
+  "error.APPROVAL_CONFLICT": "Onay değişti veya aynı komut farklı içerikle kullanıldı.",
+  "error.APPROVAL_EXPIRED": "Onayın süresi doldu; izin verilmedi.",
+  "error.APPROVAL_INTEGRITY": "Onay kanıtının bütünlüğü doğrulanamadı.",
+  "error.APPROVAL_STALE": "Onay artık bu eylemle eşleşmiyor.",
+  "error.APPROVAL_REQUIRED": "Görev onay bekliyor.",
+  "error.SESSION_REQUIRED": "Doğrulanmış canlı oturum gerekli.",
+  "error.SESSION_EXPIRED": "Oturumun süresi doldu veya saat kanıtı değişti.",
+  "error.SESSION_INACTIVE": "Oturum artık etkin değil.",
+  "error.INTEGRITY_KEY_UNAVAILABLE": "Yerel bütünlük anahtarı kullanılamıyor veya güvenli değil."
 }

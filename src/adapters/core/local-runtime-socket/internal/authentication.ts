@@ -1,4 +1,5 @@
-import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
+import type { TrustedClock } from '#platform/index.js';
+import { LocalOsSessionAuthority, readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { AuthenticationError, serviceActorSchema, type ServiceActor, type ServiceShutdownAuthentication } from '#engine/index.js';
 import type { LocalPeerIdentity } from './peer.js';
 
@@ -31,4 +32,13 @@ export class LocalPeerShutdownAuthentication implements ServiceShutdownAuthentic
       });
     } catch { throw new AuthenticationError('AUTHENTICATION_REQUIRED'); }
   }
+}
+
+/** Privileged decisions require the native connection witness, not a client-supplied PID. */
+export async function createLocalPeerSession(peer: LocalPeerIdentity, scopeIds: readonly string[],
+  lifetimeMs: number, clock: TrustedClock) {
+  verifyLocalPeerIdentity(peer);
+  if (!peer.connection || peer.connection.aborted) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
+  return LocalOsSessionAuthority.create(scopeIds, lifetimeMs, clock,
+    { pid: peer.pid, uid: peer.uid, connection: peer.connection });
 }
