@@ -1,3 +1,4 @@
+# Preserve source ignore boundaries for npm; local refactor material is never shipped.
 node_modules/
 dist/
 coverage/

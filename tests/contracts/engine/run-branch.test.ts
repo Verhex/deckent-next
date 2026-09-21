@@ -138,7 +138,7 @@ it('upgrades ledger22 without fabricating decisions for ordinary Runs or rewriti
   await f.app(f.store).create(ordinary);
   const before = await f.store.loadRunReceipt('s', 'create');
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const db = new DatabaseSync(f.path); db.exec('DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=22'); db.close();
+  const db = new DatabaseSync(f.path); db.exec('DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=22'); db.close();
   await expect(openSqliteAttemptStore(f.path, options, 'forbid')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open();
   expect(await reopened.loadRunReceipt('s', 'create')).toEqual(before);

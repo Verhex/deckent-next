@@ -111,7 +111,7 @@ it('uses the exact budget-revision latest index instead of scanning audit histor
 });
 
 it('rejects an old ledger without changing its bytes', async () => {
-  const path = await ledger(), db = new DatabaseSync(path); db.exec('PRAGMA user_version=20'); db.close();
+  const path = await ledger(), db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=20'); db.close();
   const before = await readFile(path);
   await expect(openSqliteProviderSpendAccountReader(path, readerOptions)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   await expect(readFile(path)).resolves.toEqual(before);
@@ -119,7 +119,7 @@ it('rejects an old ledger without changing its bytes', async () => {
 
 it('rejects a genuine schema-21 ledger without an audit table or changing bytes', async () => {
   const path = await ledger(), db = new DatabaseSync(path);
-  try { db.exec('DROP TABLE provider_spend_audits; PRAGMA user_version=21'); } finally { db.close(); }
+  try { db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=21'); } finally { db.close(); }
   const before = await readFile(path);
   await expect(openSqliteProviderSpendAccountReader(path, readerOptions)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   await expect(readFile(path)).resolves.toEqual(before);

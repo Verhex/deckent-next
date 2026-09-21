@@ -60,3 +60,17 @@ i18n, and the markdown policy are enforced by `scripts/lint-arch.mjs` and fail t
 ## License
 
 MIT
+
+For a retained workspace patch, `deckent task integration-check` checks the recorded base
+against HEAD and the affected index/worktree files. Use the same identity flags as
+`task patch-preview`. `task integration-prepare` additionally takes `--command-id <id>`
+and the check's `--proposal <code>`, and requires `prepare-integration` policy permission.
+Both commands support `--json` and use local storage without a runtime service.
+
+Preparation creates a separate Git candidate under the configured workspaces resource's
+`integrations` directory. It contains the recorded base plus patch and leaves source files,
+HEAD and index unchanged. A prepared candidate is not Task acceptance or live delivery.
+Repeating a completed command verifies its candidate; an interrupted command reports
+`PATCH_INTEGRATION_PENDING` and preserves its files without automatic repair or takeover.
+Existing ledgers require explicit installation/storage migration to version 30 before prepare;
+read-only check and ordinary preparation never silently migrate them.

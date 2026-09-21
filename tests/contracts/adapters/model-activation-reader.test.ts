@@ -42,7 +42,7 @@ it('accepts a genuine historical v13 activation ledger read-only without changin
   db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
     DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
     DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state;
-    DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; PRAGMA user_version=13`);
+    DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=13`);
   db.close();
   const before = await readFile(file), reader = await openSqliteModelActivationReader(file, { busyTimeoutMs: 100 });
   await expect(reader.loadRecord('scope', reference)).resolves.toMatchObject({ revision: 1, state: 'active', binding });
@@ -56,7 +56,7 @@ it('does not create a missing database and rejects an older schema without chang
   await expect(openSqliteModelActivationReader(missing, { busyTimeoutMs: 100 })).rejects.toThrow('MODEL_ACTIVATION_UNAVAILABLE');
   await expect(access(missing)).rejects.toMatchObject({ code: 'ENOENT' });
   expect(await readdir(join(missing, '..'))).not.toContain('ledger.db');
-  const old = await path(), db = new DatabaseSync(old); db.exec('PRAGMA user_version=12'); db.close(); const before = await readFile(old);
+  const old = await path(), db = new DatabaseSync(old); db.exec('DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=12'); db.close(); const before = await readFile(old);
   await expect(openSqliteModelActivationReader(old, { busyTimeoutMs: 100 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(old)).toEqual(before);
   const check = new DatabaseSync(old, { readOnly: true }); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(12); check.close();

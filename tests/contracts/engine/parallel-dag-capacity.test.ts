@@ -142,7 +142,7 @@ it('upgrades the reservation semantics gate without rewriting prior full-wave re
   const f = await fixture(); await f.create('run'); await f.reserve(f.store, 'run', 'full-wave');
   const before = await f.store.loadRunReceipt('s', 'full-wave');
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const db = new DatabaseSync(f.path); db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; PRAGMA user_version=23'); db.close();
+  const db = new DatabaseSync(f.path); db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=23'); db.close();
   await expect(openSqliteAttemptStore(f.path, options, 'forbid', custodyProfiles)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open(); expect(await reopened.loadRunReceipt('s', 'full-wave')).toEqual(before);
   const check = new DatabaseSync(f.path); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { check.close(); }

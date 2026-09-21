@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 // Core-memory sync gate.
 //
-// The owner keeps two copies of the core-memory authority: the canonical set in the legacy
-// operator repo, and this in-repo copy so that Next stands alone (clone, air-gapped, cutover).
-// Two copies only stay trustworthy if divergence is loud, so this gate checks two things:
-//
-//   1. Manifest check (always): every file here matches the recorded digest, and no file was
-//      added or removed. This runs with no external dependency and catches local drift.
-//   2. Canonical check (when resolvable): the canonical directory, given by
-//      DECKENT_CORE_MEMORY_CANONICAL, is byte-identical to this copy. No path is hardcoded;
-//      when the variable is absent the check is skipped and says so.
+// Next owns the canonical in-repository core-memory set. Legacy is a frozen reference.
+// The manifest always verifies local content and membership without an external dependency.
+// DECKENT_CORE_MEMORY_CANONICAL optionally compares an explicitly selected reference copy;
+// it is not a requirement to keep writing the pre-refactor repository.
 //
 // Refreshing the manifest after an authorized memory change: `node scripts/lint-core-memory.mjs --write`.
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';

@@ -4,7 +4,7 @@ import { attemptIdentitySchema } from '#domain/index.js';
 import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
 import rules from './rules.json' with { type: 'json' };
 export class WorkspacePatchError extends Error {
-  constructor(readonly code: 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT') {
+  constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT') {
     super(code); this.name = 'WorkspacePatchError';
   }
 }

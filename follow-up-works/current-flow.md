@@ -1,75 +1,82 @@
 # Anlık iş akışı — geçici
 
-İş: WORKER-OBSERVATION + Next yürütme host geçişi. Durum: kapsam doğrulandı; owner commit/push için onay verdi. Aşağıdaki tekil test bulgusu açık.
-Owner: deckent-next tek yürütme/operatör çalışma alanı; deckent-dev yalnız okunabilir referans.
-DOGFOOD_MODE=OFF. Owner 2026-09-21: doğrulanan mevcut dilimi tamamen commit/push et, sonra devam et.
-Yayın sonucu Git kaydı ve dış proof içindeki publication.json üzerinden doğrulanır.
+İş: PATCH-INTEGRATION. Durum: owner onaylı A uygulandı ve yerel gerçek kanıt/tam verify tamamlandı.
+Bağımsız review yapılmadı; Jev tavsiyesi review/acceptance yerine geçmez.
+DOGFOOD_MODE=OFF. Legacy yalnız okunabilir referans; Fable kanalı kapalı.
+HEAD 7f02a49; mevcut tasarım WIP'si korundu. Owner commit/push istedi; yerel refaktör alanı Git/npm dışında tutularak yayın hazırlanıyor.
 
-## Çalışan yerel yüzey
+## Çalışan yol
 
-`deckent` ve `deckent-mcp` PATH girişleri Next `.agents/refactor/next-entry.mjs` üzerinden
-çalışır. Global npm Deckent bağlantısı ve Claude kayıtlı Deckent MCP girişi de Next'e taşındı.
-Launcher CLI/MCP/SDK için Next cwd ve `.deckent/host/global` global ayar alanını sabitler.
-Ortak `DECKENT_GLOBAL_HOME`, proje `layout.root`/`DECKENT_HOME` alanından bağımsızdır.
-Launcher devralınan DECKENT_HOME'u kaldırır; host HOME ve kimlik bilgileri taşınmaz.
-Eski iki MCP süreci exact PID/start-time/entry denetimiyle SIGTERM aldı ve kapandı;
-worker süreçlerine sinyal verilmedi. Açık istemciler yeniden bağlanmalıdır.
-Eski Git geçmişi, referans skill yolları ve uygulama oturum geçmişi yürütme olarak taşınmadı.
+`task integration-check` → exact patch + source/base/HEAD + dokunulan index/worktree
+kontrolü → kısa öneri kodu. `task integration-prepare --command-id … --proposal …`
+aynı kimlik bayraklarıyla ayrı aday hazırlar. CLI ve public SDK tek engine servisine bağlı;
+MCP/Desktop/HTTP ve otomatik scheduler/acceptance bu dilime dahil değil.
 
-Kullanım: `deckent workers list --scope pilot --json` veya
-`deckent workers watch --scope pilot`; Ctrl+C yalnız görünümü durdurur.
-SDK scripti: `node .agents/refactor/next-entry.mjs node /absolute/script.mjs`.
-Merkez config `.deckent/config.json`; gözlem ledger/policy `.deckent/observability`.
-Merkez yalnız pilot scope inspect yetkili; yeni iş admission/çalıştırma kurulumu yok.
+read-output yanında ayrı prepare-integration policy gerekir. Ledger30 scope+commandId,
+actor, exact attempt, patch receipt ve observation bağını ilk aday etkisinden önce tutar.
+Yalnız kazanan işlem yeni, özel dizin oluşturur. Git broker detached/no-hardlink clone'u
+`<configured workspaces>/integrations/<command digest>/<attempt digest>/tree` altında
+ayırır. Worker checkout'u yeniden kullanılmaz. Dosya yazımı descriptor-relative/no-follow
+ve exclusive create kullanır. Beklenen snapshot iki okumayla, kaynak/policy tekrar kontrolüyle
+manifest artifact'ine bağlanır. Kaynak HEAD/index/WIP yazılmaz; aday canlı WIP'yi içermez.
 
-## Worker yeri ve izleme
-
-Worker Docker'da doğar; /workspace yalnız attempt'e özel bağımsız Git checkout'u mount eder.
-Host yolu `<layout.root>/workspaces/<attempt-hash>/tree`; HOME/socket worker'a açılmaz.
-worker.hb/.log/.result aynı attempt'in host parent dizininde, mount dışında tutulur.
-Heartbeat ve sonuç mevcut dispatch/daemon gözleminin projeksiyonudur, yeni durum sahibi değil.
-Host log yalnız güvenli yapılandırılmış durum/terminal olayları; ham native çıktı taşınmaz.
-
-SDK inspectConfiguredWorkers ve CLI workers list/watch aynı uygulama servisini kullanır.
-inspection.workers.sources: açık id/kind/path/scopeId, next-project veya legacy-tasks.
-Merkez scope inspect; her Next kaynak kendi policy'si; ayrıntıda attempt read-output gerekir.
-Sınırlı dosya/worker/byte ve sayfalama; geniş HOME/tmp keşfi yok.
-Ledger terminal, Docker process, heartbeat freshness ve dosya durumu ayrı eksenlerdir.
-Legacy PID yalnız doğrulanmamış gözlem; .result iddiası görev kabulü değildir.
-Ham log yerine hata/auth/rate-limit/timeout kategorileri ve güvenli olay alanları döner.
-Worker izleme için Desktop/MCP/uzak/Windows yüzeyi bu dilimde eklenmedi.
-
-Yerel kaynaklar: Next içindeki `.deckent/worker-observation/project`, üç native sağlayıcının
-geçici proof projeleri, `/tmp/deckent/-home-alperen-deckent-dev` ve
-`/home/alperen/.local/state/deckent/runtime`. Son iki exact dizinde task sidecar bulunmadı;
-boş kaynak görünür, alt dizinler otomatik taranmaz. Legacy'de yeni yürütme yapılmadı.
+Tamamlanan komut güncel yetki, kaynak, manifest ve aday dosyalarını yeniden doğrular.
+Kesilmiş komut PATCH_INTEGRATION_PENDING verir; dosyaları/intent'i korunur, otomatik
+devralma/onarım/cleanup yoktur. Bu güvenli duruş tam recovery capability'si değildir.
+Normal prepare migration yapmaz; eski ledger explicit storage/installation migration ister.
+Eski sürüm test fixture'ları yeni tabloyu gerçekten çıkaracak şekilde güncellendi.
 
 ## Kanıt
 
-Önceki NATIVE-PATCH-PREVIEW: full verify1498 ürün/258dosya, native24, host29, atlanan0.
-Üç gerçek sağlayıcı küçük dosya değişikliği → immutable patch → release sonrası preview geçti.
-Proof: /home/alperen/deckent-refactor-work/proof/NATIVE-PATCH-PREVIEW/verification.json
+Proof kökü: /home/alperen/deckent-next/refactor-work/proof/PATCH-INTEGRATION/
 
-WORKER-OBSERVATION ilk tam paket: 1502 ürün/260dosya, native24, host29, atlanan0 geçti.
-Gerçek Docker/derlenmiş CLI: canlı/terminal worker, kapsam reddi, watch SIGINT ardından
-worker'ın devamı. Next içindeki gerçek pilot note.txt değişti, kaynak değişmedi, container bırakıldı.
-Merkez CLI list/watch bütün seçili kaynakları okudu; Next MCP PATH ve Claude girişleri bağlandı.
-Son tam verify: 1504 ürün/261 dosya, native24, host30; atlanan0, lint/build/smoke geçti;
-26 core-memory dosyası canonical ile aynı. Komut VITEST_MAX_FORKS=2,
-DECKENT_TEST_DOCKER_IMAGE ve DECKENT_CORE_MEMORY_CANONICAL ile çalıştı.
-SDK Next launcher üzerinden üç sağlayıcının release edilmiş patch kaydını aynı receipt ile açtı.
+- live-results.json: Codex, Claude, Cursor mevcut gerçek native patch'leri sırayla ürün
+  SDK check → compiled CLI prepare → SDK replay yolundan geçti. Exact dosyalar ve source
+  HEAD/index/WIP korunması üçünde doğrulandı. Yeni sağlayıcı çağrısı/token kullanımı yok.
+- crash-result.json: gerçek hazırlayıcı süreç candidate verify sonrasında SIGKILL ile
+  durduruldu. Manifest yayımlanmadı; dosyalar korundu; gerçek SDK tekrarı pending ile durdu.
+- targeted.log: ilk 3 entegrasyon testi geçti (filtrelenen 13 eski test bu koşuda atlandı).
+  İlk denemede public SDK export eksikliği yakalanıp düzeltildi; eski 13 patch testi geçti.
+- workspace-patch.test.ts: CLI/SDK, edit/add/delete/mode, index/WIP/HEAD, scope/policy,
+  symlink/hardlink, command yarış/replay, manifest bozulması, araya giren owner yazısı ve
+  finalization kesintisi. Bu dosyadaki 17 test tam verify içinde geçti.
+- verify.log: npm run verify geçti; 1508 ürün/261 dosya, native24, host30, atlanan0.
+  Lint/typecheck/arch/build/smoke geçti; 26 canonical memory dosyası aynı.
+  İlk full koşuda yalnız CLI yardım beklentisi eksikliği yakalandı (1507 geçti/1 hata);
+  eski oracle korunarak beklenen bilinçli metin güncellendi, hedefli3 ve tam koşu geçti.
 
-Önceki başarısız koşular saklandı: README ölçüm sırasında düzenlendiği için paket değişikliği
-koruması tetiklendi; sabit dosyalı koşulda bu test geçti. Ayrı bir koşulda native harcama
-fixture'ı iki POST yerine bir gördü. Kök neden doğrulanmadı. İki çağrıya responded assertion
-eklendi; dar dosya 5 ayrı koşuda ve son tam pakette geçti. Retry veya beklenti gevşetme yok.
-Bu tekil HTTP bulgusu kapatılmadı; tekrarında doğrudan invocation outcome ile tanı koyulacak.
+## Jev ve sınırlar
 
-Jev e344e6de-7dc6-4ece-a25c-734f07be8349: scoped_observer1.0, none0, insufficient0.
-Jev 02d8c3d9-52ba-4bd8-87e1-ef49d97fe91c: separate_global.99, none0, insufficient.01.
-Jev d9ee2cca-f379-400d-a65b-f02416406fec: retain_finding.98, none0, insufficient.02.
-Üç danışmada da abstention seçilmedi. Tavsiye test/owner onayı değildir. Fable kapalı.
-Proof: /home/alperen/deckent-refactor-work/proof/WORKER-OBSERVATION/
+Tasarım: ae2580f5-0c43-42f1-8d67-4b8d9dde8017, A .97; owner A'yı onayladı.
+Uygulama sınırı: 070172c7-bf68-4936-be12-3080a3faf66c, verify_conservative .97,
+expand_resume 0, none_of_the_above 0, insufficient_information .03; abstention seçimleri
+ayrı 0/0. Context sufficiency .43; bu tavsiye kabul/bağımsız review kanıtı değildir.
+Decision ve evidence-bound outcome kaydedildi; probabilistic cevaplar için yapay
+boolean doğruluk etiketi üretilmedi.
 
-Sonraki iş: tekil HTTP bulgusunu takipte tutmak; çalışan gözlem/patch temelinden kaynak
-HEAD/WIP değişikliklerini koruyan kontrollü patch uygulama ve çakışma gösterimini tasarlamak. Otomatik apply, görev kabulü ve DOGFOOD henüz yok.
+Manifest, patch'in korunan yol istisnaları dışındaki dosya snapshot'ını doğrular;
+Git metadata bütünlüğü veya aynı OS kullanıcısının dış süreçlerine karşı fencing iddiası yok.
+Hazır aday test başarısı, görev kabulü veya canlı teslim değildir. Kısmi aday için tipli
+inspection/recovery ve son fenced landing açık. Mevcut tekil provider HTTP unknown bulgusu
+açık kalır; bu dilimde yeni native çağrıyla geniş teşhis yapılmadı.
+
+## Sonraki adım
+
+Değişen dosyalar/kanıt/sınırlar owner raporuna hazır; HEAD 7f02a49 değişmedi.
+Sonraki dar dilimde pending aday inspection/recovery ve test/kabul/son teslim
+bağını ayrı işler olarak ele al. Yeni kaynak yazma sınırı mevcut A onayından türetilmez.
+
+
+## Next yerel refaktör alanı — owner 2026-09-21
+
+`refactor-work/` tamamıyla Next içine taşındı; 17437 dosya/379156971 bayt taşımada
+hash ile doğrulandı, önceki kardeş dizin kaldırıldı (yönlendirme/symlink yok).
+Owner ek talimatıyla klasörün tamamı Git ve npm dışında. Araç zinciri, dokümanlar,
+kanıtlar ve asıl bayt arşivi yerel olarak korunur. 162 metin yol kopyası güncellendi;
+yeni yol kopyası yeni koşu kanıtı değildir, eski hash'ler arşivlenen asıllara aittir.
+Skill/pointer/PLAN ve aktif host planı güncellendi; hook'larda eski çalışma yolu yok.
+Next kendi canonical core-memory'sini manifest ile doğrular; legacy'ye yazılmaz.
+Taşıma kontrolü: refactor-work/proof/WORKSPACE-CONSOLIDATION/checks.json.
+Yayın öncesi npm run verify geçti: 1508 ürün/261 dosya, native24, host30, atlanan0.
+Next canonical memory manifesti 26 dosyada doğrulandı; legacy eşitliği artık gerekmiyor.
+Commit/push owner tarafından istendi; tam SHA ve uzak eşleşme Git/proof kaydından okunur.

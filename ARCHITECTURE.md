@@ -325,7 +325,7 @@ Design reasoning goes into the decision log below, not arbitrary new documents.
 Owner 2026-09-21: `follow-up-works/current-flow.md` is an optional, replaceable development tracker;
 its exact path is admitted by the Markdown gate, excluded from product distribution, and may be deleted.
 PLAN.md retains durable roadmap/decisions and material open findings; small work/history lives in the
-transient tracker and external refactor archive, not an append-only product plan.
+transient tracker and local ignored refactor-work archive, not an append-only product plan.
 
 ## Decision log
 
@@ -514,3 +514,31 @@ The development host launcher pins Next cwd and global state, and removes inheri
 root overrides. Customer defaults and each source project's layout/policy remain unchanged.
 No legacy runtime migration, old-value conversion, global credential copy or automatic run
 admission follows from cutover. Existing external client processes need reconnection.
+
+### Isolated patch integration candidates — owner 2026-09-21
+
+Owner selected candidate preparation before live-source delivery. The shared workspace-patch
+application checks the exact retained patch, source/base/HEAD and affected index/worktree paths.
+`read-output` permits checking; separate `prepare-integration` authority permits preparation.
+A short proposal code binds this observation and receipt; it grants no permission or writer lock.
+Ledger30 records the scoped command, actor and intent before candidate effects. The existing Git
+broker allocates an independent detached clone under configured workspaces/integrations, distinct
+from worker custody. Candidate files are base plus patch; unrelated live WIP is excluded.
+An immutable artifact manifest binds the projected snapshot to the intent after verification and
+source/policy rechecks. Source HEAD/index/files are never written by this operation.
+
+SDK and local CLI expose check/prepare. A completed command replays only after verifying current
+policy, source observation and candidate bytes. Pending commands explicitly hold; no automatic
+partial-candidate adoption, repair or cleanup is implemented. Git metadata and protected patch
+exclusions are outside the content snapshot. This is neither a fence against other same-OS-user
+processes nor a live landing, test result, Task acceptance, or automatic execution trigger.
+
+
+### Refactor workspace consolidation — owner 2026-09-21
+
+Next is the repository where refactoring and product completion happen. The pre-refactor
+product repository stays read-only reference. Local historical documents, experiments,
+proof and toolchains live in `refactor-work/` beneath Next; the entire directory is excluded
+from Git and npm publication. Skills, hooks and active document links use this local surface.
+Next core-memory is canonical and verified by its local digest manifest; optional comparison
+against a separately selected reference is diagnostic, not legacy write authority.

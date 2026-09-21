@@ -50,7 +50,7 @@ async function seedLedger18(file: string) {
   try {
     db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
-      DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=18;`);
+      DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=18;`);
   } finally { db.close(); }
 }
 function historicalHash(prefix: string, value: unknown) {
@@ -135,7 +135,7 @@ async function seedLedger20(file: string) {
     const reservation = { ...withoutMeasurement, schemaVersion: 1 };
     db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=?')
       .run(JSON.stringify(reservation), historicalHash('deckent.provider-spend-reservation.v1', reservation), reservationRow.scope_id, reservationRow.invocation_id);
-    db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=20');
+    db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=20');
   } finally { db.close(); }
 }
 async function seedLedger19(file: string) {
@@ -146,7 +146,7 @@ async function seedLedger19(file: string) {
     db.exec(`DROP TABLE model_invocation_spend_reservations;
       DROP TABLE provider_spend_accounts;
       DROP TABLE provider_spend_audits;
-      DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; PRAGMA user_version=19;`);
+      DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=19;`);
   } finally { db.close(); }
 }
 function inventory(file: string) {

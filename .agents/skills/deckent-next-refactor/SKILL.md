@@ -14,7 +14,10 @@ Owner closed the Fable communication protocol until explicitly reopened. Do not 
 PLAN.md holds main product workstreams, durable decisions and material open findings only.
 Keep small slices, current progress and next-step details in `follow-up-works/current-flow.md`;
 replace/delete its completed content rather than append history or create a document per small job.
-Historical/canceled work and necessary proof remain in the external refactor workspace.
+Historical/canceled work and necessary proof live in `refactor-work/` inside Next.
+This local refactor surface is excluded from Git and npm; never write to a sibling refactor workspace.
+Next owns refactoring, product completion, execution and its local core-memory authority.
+Legacy is the frozen pre-refactor product reference, not a canonical write target.
 The tracker is optional development-only material, not product state or durable scope authority.
 Earlier per-card instructions to append detailed PLAN entries are superseded by this rule.
 
@@ -147,7 +150,7 @@ An unknown/live owner means leave the lock and report; never use recursive delet
 Use Jev regularly for material development judgments: option tradeoffs, modularity/boundary reviews,
 test coverage gaps, evidence/claim fit, and uncertain next actions. Deterministic checks still run directly;
 do not call for every mechanical edit or repeat the same unchanged question to obtain a preferred answer.
-Use the logged preparation layer from either repository (shared host source, not a product feature):
+Use the logged preparation layer from Next only (host tooling, not a product feature):
 - `node .agents/refactor/jev-review.mjs prepare CASE.json` validates/compiles context offline.
 - `node .agents/refactor/jev-review.mjs ask CASE.json` records request before the bounded external call.
 - `node .agents/refactor/jev-review.mjs decision CALL_ID DECISION.json` records actor, selectedOption,

@@ -114,8 +114,8 @@ Tam alan/ağaç kaynakları: [temel config](src/platform/core/config-fields/inte
 
 ## Önemli açık bulgular
 
-- **PROVIDERS — aralıklı `unknown`: AÇIK.** Teşhis owner kararıyla sınırlandırıldı; hata çözülmüş sayılmaz. 800 tekrarda özgün unknown yakalanmadı; bir çağrı öncesi fiyat yetkisi reddi görüldü. Güvenlik/bütçe denetimi ve belirsiz etki koruması değiştirilmedi. Gerçek tekrar veya yeni kanıtta yeniden açılır. [Kanıt](../deckent-refactor-work/proof/UNKNOWN-BOUNDED-DIAGNOSIS/verification.json).
-- **EXECUTION — kısmi havuz rezervasyonu uygulandı:** ortak havuzun kalan execution/in-flight kapasitesi transaction içinde değerlendirilir; yalnız sığan sıralı adaylar ayrılır, tekrar aynı kimlikleri döndürür. Ledger24. [Kanıt](../deckent-refactor-work/proof/ATOMIC-PARTIAL-WAVE/verification.json).
+- **PROVIDERS — aralıklı `unknown`: AÇIK.** Teşhis owner kararıyla sınırlandırıldı; hata çözülmüş sayılmaz. 800 tekrarda özgün unknown yakalanmadı; bir çağrı öncesi fiyat yetkisi reddi görüldü. Güvenlik/bütçe denetimi ve belirsiz etki koruması değiştirilmedi. Gerçek tekrar veya yeni kanıtta yeniden açılır. [Kanıt](refactor-work/proof/UNKNOWN-BOUNDED-DIAGNOSIS/verification.json).
+- **EXECUTION — kısmi havuz rezervasyonu uygulandı:** ortak havuzun kalan execution/in-flight kapasitesi transaction içinde değerlendirilir; yalnız sığan sıralı adaylar ayrılır, tekrar aynı kimlikleri döndürür. Ledger24. [Kanıt](refactor-work/proof/ATOMIC-PARTIAL-WAVE/verification.json).
 - **EXECUTION — koşullu akış kısmi:** kabul anında tek dal seçimi kalıcıdır; Run ortası koşul, timer/signal, kaynak kilidi henüz tamam değildir; otomatik yerel ilerleme bağlı, Run içi tamamlanmaya göre slot doldurma bağlı; Run'lar arası sınırlı rezervasyon turuyla sıra devri bağlı; uzun worker’ı kesmeden zaman bazlı adalet, dağıtık paylaşım ve genel BPM hâlâ açıktır.
 - **ISOLATION — canlı teslim açık:** Git/ERP başlangıç kanıtı ile t1 hedef koşulu ayrılmalı; kaynak kilidi dış insan/ERP yazıcısının değişikliğini engellemez.
 
@@ -125,13 +125,24 @@ Bu checkpoint’in baz commit’i `8fb7ea7`; teslim commit’i Git geçmişinde 
 1460 ürün/254 dosya, 24 native, 29 host; lint/typecheck/arch/build/smoke geçti. Tarihsel migration
 fixture'ları v25 tablolarını eski sürümde bırakmayacak şekilde düzeltildi; ürün migration'ı gevşetilmedi.
 Bu doğrulama açık model unknown'ının çözüldüğü anlamına gelmez.
-[Checkpoint kanıtı](../deckent-refactor-work/proof/CHECKPOINT-2026-09-21/verification.json).
+[Checkpoint kanıtı](refactor-work/proof/CHECKPOINT-2026-09-21/verification.json).
 DOGFOOD_MODE=OFF. Ağırlıklı yetenek paydası kabul edilmediğinden genel tamamlanma yüzdesi verilmez.
 
-- [Temizlik öncesi eksiksiz plan ve tarihsel kartlar](../deckent-refactor-work/archive/PLAN-before-flow-split-2026-09-21-55a9ec25aa3b.md) — geçmiş/iptal/kanıt; aktif yürütme izni değildir.
-- [İlk onaylı refaktör planı](../deckent-refactor-work/PLAN-APPROVED-2026-09-16.md) ve [backlog kaynağı](../deckent-refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md) — güncel owner kararlarıyla çelişen legacy öneriler uygulanmaz.
+- [Temizlik öncesi eksiksiz plan ve tarihsel kartlar](refactor-work/archive/PLAN-before-flow-split-2026-09-21-55a9ec25aa3b.md) — geçmiş/iptal/kanıt; aktif yürütme izni değildir.
+- [İlk onaylı refaktör planı](refactor-work/PLAN-APPROVED-2026-09-16.md) ve [backlog kaynağı](refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md) — güncel owner kararlarıyla çelişen legacy öneriler uygulanmaz.
 - Yeni kalıcı karar ilgili ana satır/ARCHITECTURE'da güncellenir; küçük iş takibi yalnız current-flow'da tutulur.
 
 Owner decision 2026-09-21: Next is the only execution host; deckent-dev remains read-only
 refactor reference. Local CLI/MCP routing and isolated global configuration belong to Next.
 Worker observation reads explicit local project/task roots without adopting legacy execution authority.
+
+Owner decision 2026-09-21: prepare retained patches in separate host-owned integration candidates
+before live-source delivery. Source HEAD/index/WIP stay unchanged; candidate contains recorded
+base plus patch only. Shared SDK/CLI implementation uses explicit prepare-integration policy and
+ledger30 intent/manifest custody. Pending preparation holds; typed repair and final fenced landing
+remain open. Current validation and concrete proof are tracked in follow-up-works/current-flow.md.
+
+
+Owner decision 2026-09-21: refactoring and product completion belong to Next. Local
+`refactor-work/` contains historical documents/proof/tools and is entirely excluded from
+Git/npm. Legacy remains the read-only pre-refactor product; Next owns canonical core-memory.

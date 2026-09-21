@@ -945,5 +945,6 @@
   "error.PATCH_CONFLICT": "Workspace snapshot kayıtlı patch ile çelişiyor.",
   "error.PATCH_CORRUPT": "Workspace patch artifact veya üretici bağı bozuk.",
   "error.WORKER_OBSERVATION_INVALID": "Worker gözlem sorgusu veya kaynak seçimi geçersiz.",
-  "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker gözlemi alınamadı; yürütme durumu değiştirilmedi."
+  "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker gözlemi alınamadı; yürütme durumu değiştirilmedi.",
+  "error.PATCH_INTEGRATION_PENDING": "Bu hazırlamanın tamamlanmış manifesti yok. Aday korunuyor; otomatik devralma ve onarım desteklenmiyor."
 }

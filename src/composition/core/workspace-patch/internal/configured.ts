@@ -8,7 +8,7 @@ import { DispatchPolicyAuthorization, WorkspacePatchApplication } from '#engine/
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-async function context(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean) {
+export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean) {
   const identity = attemptIdentitySchema.parse(input);
   const context = await loadConfiguredScopeContext(root, identity.scopeId, options);
   const { config, layout, principal } = context;
@@ -20,7 +20,7 @@ async function context(root: string, input: unknown, options: ConfigLoadOptions,
 }
 export async function prepareConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
-    const c = await context(root, input, options, true);
+    const c = await workspacePatchContext(root, input, options, true);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try {
@@ -34,7 +34,7 @@ export async function prepareConfiguredWorkspacePatch(root: string, input: Attem
 }
 export async function previewConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
-    const c = await context(root, input, options, false);
+    const c = await workspacePatchContext(root, input, options, false);
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
     try { return await new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).preview(c.identity); }
     finally { store.close(); }

@@ -116,7 +116,7 @@ it('migrates prior evaluation evidence without retrospectively opting old Runs i
   const run = (await f.store.loadRun('s', 'r'))!;
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   const db = new DatabaseSync(f.path);
-  db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; PRAGMA user_version=24'); db.close();
+  db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=24'); db.close();
   const reopened = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }); stores.push(reopened);
   expect((await reopened.listRunProgression({ actor, after: null, limit: 8 })).items).toEqual([]);
   for (const binding of run.bindings) expect(await reopened.hasTaskEvaluation(binding.identity, binding.observedRevision!)).toBe(true);

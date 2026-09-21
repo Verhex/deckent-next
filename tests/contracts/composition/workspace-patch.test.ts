@@ -1,14 +1,14 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, chmod, stat } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '../../../src/index.js';
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor, GitIntegrationTarget } from '#adapters/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { WorkspacePatchApplication, patchPathSchema } from '#engine/index.js';
@@ -60,10 +60,10 @@ async function fixture(restartable = false) {
   };
   const prepare = () => prepareConfiguredWorkspacePatch(project, identity, options);
   const preview = () => previewConfiguredWorkspacePatch(project, identity, options);
-  const cli = async (action: string) => {
+  const cli = async (action: string, extra: string[] = []) => {
     const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'task', action, '--scope', identity.scopeId,
       '--run', identity.runId, '--task', identity.taskId, '--attempt', identity.attemptId, '--generation', String(identity.generation),
-      '--layout-revision', identity.layoutRevision, '--json'], { cwd: project, env: { ...process.env, ...options.env } });
+      '--layout-revision', identity.layoutRevision, '--json', ...extra], { cwd: project, env: { ...process.env, ...options.env } });
     return JSON.parse(result.stdout) as Awaited<ReturnType<typeof prepare>>;
   };
   return { project, root, identity, options, run, prepare, preview, cli, policy, runtime, base, git, configPath };
@@ -135,7 +135,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('gates version28 writers, explicitly migrates without changing old records, and enforces configured entry bounds', async () => {
     const f = await fixture(); await f.run(); const before = await f.runtime.store.loadBoundDispatch(f.identity);
     const path = productResourcePath(f.runtime.layout, 'ledger');
-    const db = new DatabaseSync(path); db.exec('PRAGMA user_version=28;'); db.close();
+    const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=28;'); db.close();
     // Resolve actual configured storage settings rather than assume adapter defaults.
     const { loadConfig } = await import('#platform/index.js'); const config = await loadConfig(f.project, f.options);
     await expect(openSqliteAttemptStore(path, config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
@@ -149,5 +149,93 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   });
   it('requires terminal execution before preparation', async () => {
     const f = await fixture(); await expect(f.prepare()).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
+  });
+});
+
+describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('isolated integration candidates', () => {
+  it('checks touched WIP, prepares a separate candidate through the real CLI, replays, and rejects candidate drift and revoked policy', async () => {
+    const f = await fixture(); const worker = await f.run(); await f.prepare();
+    const check = () => checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+    await expect(check()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await writeFile(join(f.project, 'note.txt'), 'before\n');
+    await writeFile(join(f.project, 'unrelated.txt'), 'owner-only\n');
+    const before = { head: await f.git('rev-parse', 'HEAD'), status: await f.git('status', '--porcelain'), index: await readFile(join(f.project, '.git/index')) };
+    const checked = await check(); expect(checked.proposal).toMatch(/^[0-9A-HJKMNP-TV-Z]{20}$/);
+    const command = { schemaVersion: 1 as const, commandId: 'candidate', identity: f.identity, proposal: checked.proposal };
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await f.policy(['read-output', 'recover-output', 'prepare-integration']);
+    const output = await f.cli('integration-prepare', ['--command-id', command.commandId, '--proposal', command.proposal]) as unknown as Awaited<ReturnType<typeof prepareConfiguredWorkspaceIntegration>>;
+    expect(output.status).toBe('candidate-prepared'); expect(output.manifest.workspace).not.toBe(worker);
+    expect(await readFile(join(output.manifest.workspace, 'note.txt'), 'utf8')).toBe('after\n');
+    expect(await readFile(join(output.manifest.workspace, 'added.txt'), 'utf8')).toBe('new\n');
+    await expect(readFile(join(output.manifest.workspace, 'removed.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(output.manifest.workspace, 'unrelated.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const candidateGit = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', output.manifest.workspace, ...args])).stdout.trim();
+    expect(await candidateGit('rev-parse', 'HEAD')).toBe(f.base); expect(await candidateGit('remote')).toBe('');
+    expect(await prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).toEqual(output);
+    expect({ head: await f.git('rev-parse', 'HEAD'), status: await f.git('status', '--porcelain'), index: await readFile(join(f.project, '.git/index')) }).toEqual(before);
+    await writeFile(join(output.manifest.workspace, 'added.txt'), 'external-edit\n');
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await f.policy(['read-output']);
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  });
+  it('rejects staged, untracked, unsafe and changed-HEAD source states and checks scope', async () => {
+    const f = await fixture(); await f.run(); await f.prepare(); await writeFile(join(f.project, 'note.txt'), 'before\n');
+    const check = () => checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+    const initial = await check();
+    await writeFile(join(f.project, 'note.txt'), 'staged\n'); await f.git('add', 'note.txt'); await writeFile(join(f.project, 'note.txt'), 'before\n');
+    await expect(check()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); await f.git('restore', '--staged', 'note.txt');
+    await writeFile(join(f.project, 'added.txt'), 'untracked\n'); await expect(check()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    await rm(join(f.project, 'added.txt')); await symlink('/etc/passwd', join(f.project, 'added.txt')); await expect(check()).rejects.toMatchObject({ code: 'PATCH_UNSAFE' });
+    await rm(join(f.project, 'added.txt')); await link(join(f.project, 'note.txt'), join(f.project, 'added.txt'));
+    await expect(check()).rejects.toMatchObject({ code: 'PATCH_UNSAFE' }); await rm(join(f.project, 'added.txt'));
+    expect(await check()).toEqual(initial);
+    await expect(checkConfiguredWorkspaceIntegration(f.project, { ...f.identity, scopeId: 'other' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await f.git('commit', '--allow-empty', '-m', 'advance'); await expect(check()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+  });
+  it('serializes separate CLI writers and holds a durable incomplete intent without adopting its directory', async () => {
+    const f = await fixture(); await f.run(); await f.prepare(); await writeFile(join(f.project, 'note.txt'), 'before\n');
+    await f.policy(['read-output', 'prepare-integration']);
+    const check = await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+    const command = { schemaVersion: 1 as const, commandId: 'concurrent', identity: f.identity, proposal: check.proposal };
+    const results = await Promise.allSettled([f.cli('integration-prepare', ['--command-id', command.commandId, '--proposal', command.proposal]),
+      f.cli('integration-prepare', ['--command-id', command.commandId, '--proposal', command.proposal])]);
+    expect(results.some(result => result.status === 'fulfilled')).toBe(true);
+    const complete = await prepareConfiguredWorkspaceIntegration(f.project, command, f.options);
+    const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'));
+    const row = db.prepare('SELECT intent FROM workspace_integrations WHERE scope_id=? AND command_id=?').get('s', 'concurrent')!;
+    const intent = JSON.parse(String(row.intent)); intent.command.commandId = 'interrupted';
+    db.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,NULL)').run('s', 'interrupted', JSON.stringify(intent)); db.close();
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, { ...command, commandId: 'interrupted' }, f.options)).rejects.toMatchObject({ code: 'PATCH_INTEGRATION_PENDING' });
+    expect(await readFile(join(complete.manifest.workspace, 'note.txt'), 'utf8')).toBe('after\n');
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, { ...command, proposal: '00000000000000000000' }, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    const artifact = await f.runtime.artifacts.prepareReadOnlyFile('s', complete.receipt); await writeFile(artifact.path, 'corrupt');
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CORRUPT' });
+  });
+});
+
+describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('integration finalization boundary', () => {
+  it('preserves executable mode and holds an interrupted finalization and a changed source without a manifest', async () => {
+    const f = await fixture(); const worker = await f.run(); await chmod(join(worker, 'note.txt'), 0o755); await f.prepare();
+    await writeFile(join(f.project, 'note.txt'), 'before\n'); await f.policy(['read-output', 'prepare-integration']);
+    const checked = await checkConfiguredWorkspaceIntegration(f.project, f.identity, f.options);
+    const command = { schemaVersion: 1 as const, commandId: 'interrupted-verify', identity: f.identity, proposal: checked.proposal };
+    const verify = GitIntegrationTarget.prototype.verify;
+    const spy = vi.spyOn(GitIntegrationTarget.prototype, 'verify').mockImplementationOnce(async function (manifest, patch) {
+      await verify.call(this, manifest, patch);
+      expect((await stat(join(manifest.workspace, 'note.txt'))).mode & 0o111).not.toBe(0);
+      await writeFile(join(f.project, 'note.txt'), 'intervening-owner-write\n');
+    });
+    try { await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); }
+    finally { spy.mockRestore(); }
+    expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('intervening-owner-write\n');
+    await writeFile(join(f.project, 'note.txt'), 'before\n');
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, command, f.options)).rejects.toMatchObject({ code: 'PATCH_INTEGRATION_PENDING' });
+    const next = { ...command, commandId: 'crashed-verify' };
+    const crash = vi.spyOn(GitIntegrationTarget.prototype, 'verify').mockRejectedValueOnce(new Error('injected-interruption'));
+    try { await expect(prepareConfiguredWorkspaceIntegration(f.project, next, f.options)).rejects.toBeDefined(); } finally { crash.mockRestore(); }
+    await expect(prepareConfiguredWorkspaceIntegration(f.project, next, f.options)).rejects.toMatchObject({ code: 'PATCH_INTEGRATION_PENDING' });
+    const db = new DatabaseSync(productResourcePath(f.runtime.layout, 'ledger'), { readOnly: true });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM workspace_integrations WHERE manifest IS NULL').get()?.n).toBe(2); db.close();
   });
 });

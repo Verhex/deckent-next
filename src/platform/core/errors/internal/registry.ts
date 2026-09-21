@@ -102,6 +102,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
   EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
   PATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CORRUPT', p, l) }) },
+  PATCH_INTEGRATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INTEGRATION_PENDING', p, l) }) },
   PATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CONFLICT', p, l) }) },
   PATCH_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSUPPORTED', p, l) }) },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_LIMIT', p, l) }) },

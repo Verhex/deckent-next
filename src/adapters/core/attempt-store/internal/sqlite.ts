@@ -1,3 +1,5 @@
+import { SqliteIntegrationJournal } from './integration.js';
+import type { IntegrationIntent } from '#engine/index.js';
 import { SqliteRunProgression } from './progression.js';
 import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
@@ -60,6 +62,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async claimDispatch(claim: DispatchAdmission) { return new SqliteDispatchJournal(this.db, this.profiles).claimDispatch(claim); }
   async grantLaunch(input: LaunchRequest) { return new SqliteDispatchJournal(this.db).grantLaunch(input); }
   async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }
+  async claimIntegration(intent: IntegrationIntent) { return new SqliteIntegrationJournal(this.db).claimIntegration(intent); }
+  async finishIntegration(intent: IntegrationIntent, receipt: ArtifactReceipt) { return new SqliteIntegrationJournal(this.db).finishIntegration(intent, receipt); }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {
     let row;

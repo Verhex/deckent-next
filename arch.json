@@ -91,7 +91,8 @@
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",
         "src/engine/core/workspaces",
-        "src/engine/core/run-progression"
+        "src/engine/core/run-progression",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "STORE"
     },
@@ -1062,7 +1063,8 @@
         "src/capabilities/core/artifacts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/domain/core/primitives"
       ],
       "plan": "ISOLATION"
     },
@@ -1092,7 +1094,8 @@
         "src/composition/core/policy",
         "src/composition/core/scoped-request",
         "src/composition/core/query-errors",
-        "src/capabilities/core/artifacts"
+        "src/capabilities/core/artifacts",
+        "src/engine/core/dispatch"
       ],
       "plan": "ISOLATION"
     },

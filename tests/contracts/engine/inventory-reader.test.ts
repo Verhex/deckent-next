@@ -15,7 +15,7 @@ it('does not create missing ledgers or migrate unsupported schemas', async () =>
   await expect(openSqliteInventoryReader(file, { busyTimeoutMs: 20 })).rejects.toThrow();
   await expect(stat(file)).rejects.toMatchObject({ code: 'ENOENT' });
   for (const version of [0, 1, 99]) {
-    const db = new DatabaseSync(file); db.exec(`PRAGMA user_version=${version}`); db.close();
+    const db = new DatabaseSync(file); db.exec(`DROP TABLE IF EXISTS workspace_integrations; PRAGMA user_version=${version}`); db.close();
     const before = await readFile(file);
     await expect(openSqliteInventoryReader(file, { busyTimeoutMs: 20 })).rejects.toThrow('ATTEMPT_STORE_VERSION');
     expect(await readFile(file)).toEqual(before);

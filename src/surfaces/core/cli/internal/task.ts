@@ -2,8 +2,10 @@ import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
-import type { WorkspacePatch } from '#engine/index.js';
+import type { WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
+export type TaskIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
+export type TaskIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
 export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; application: 'not-applied' }>>;
 import type { CommandContext } from './kernel-commands.js';
 
@@ -19,8 +21,8 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview'].includes(action ?? '')) throw usage();
-  const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : identityFlags;
+  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare'].includes(action ?? '')) throw usage();
+  const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -37,6 +39,20 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
+  if (action === 'integration-check') {
+    if (!context.checkWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.checkWorkspaceIntegration(context.root ?? process.cwd(), identity, options);
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
+      t('cli.task.integration.check', { source: data.observation.source, proposal: data.proposal }, locale) }); return;
+  }
+  if (action === 'integration-prepare') {
+    const commandId = values.get('--command-id'), proposal = values.get('--proposal');
+    if (!commandId || !proposal) throw usage(!commandId ? '--command-id' : '--proposal');
+    if (!context.prepareWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.prepareWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, proposal }, options);
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
+      t('cli.task.integration.prepared', { path: data.manifest.workspace }, locale) }); return;
+  }
   if (action === 'patch-prepare' || action === 'patch-preview') {
     const handler = action === 'patch-prepare' ? context.prepareWorkspacePatch : context.previewWorkspacePatch;
     if (!handler) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
