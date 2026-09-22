@@ -192,7 +192,10 @@ eski gövde negatif; iptal hedef digest), Ink render 6 (600 satır, Esc/Ctrl+C i
 CLI 5, **gerçek PTY süreç testi 3** (python3 `pty`: workline render, `/workers` → `POLICY_UNAVAILABLE`, sohbet → `TERMINAL_CHAT_NOT_CONFIGURED`,
 idle Ctrl+C, pipe degrade), **uçtan uca 1** (derlenmiş `terminal session` → gerçek runtime servisi → fiyatlı fixture sağlayıcı: 2 tur 2 istek,
 policy kapatılınca tipli hata ve 0 ek istek). Tam verify koşumu 1: 1617/1618 — tek hata `model-invocation.test.ts` (dokunulmadı, izole 3/3
-geçti; Fable'ın I40 yük-bağımlı notuyla uyumlu). Son tam verify sonucu aşağıda.
+geçti); koşum 2 (commit fe59762): 1617/1619 — `installed-runtime-service` (MCP execute_task, yeni imza) + `model-invocation-spending-native`
+(`STALE_TARIFF`), ikisi izole 2/2 geçti, ilgili modüllerde diff yok; **koşum 3 (fe59762): 1619 ürün/285 dosya, 25 native, 53 host; fail/skip 0,
+smoke geçti.** Üç koşumdaki farklı hatalar runtime/model-invocation ailesinde, yük bağımlı (I40); yeni PTY/uçtan uca testler süite yük ekler.
+Kanıt: `/home/alperen/deckent-refactor-work/proof/E24-TERMINAL-PACKAGE-A-2026-09-22/` (üç verify logu, Jev vakası/yanıtı/kararı).
 
 **Açık / owner kararı:** fiyatsız OpenAI uyumlu profil yönetilen yolda `PROVIDER_SPEND_UNAVAILABLE` ile reddedilir; yerel ücretsiz LLM ile
 terminal sohbeti bu yüzden bugün çalışmaz (harcama politikası kararı: açık sıfır tarife / yerel sağlayıcı sınıfı). Cursor'ın çalışan
