@@ -34,6 +34,7 @@ Owner ile kısa, görünür adımlar; uzun goal ve Fable kanalı kapalı. Jev da
 - **İlk worker izin modu (owner 2026-09-21, güncel):** izole coding worker native unattended/full-access çalışır, kendi dosya/shell/test araçlarını kullanır; işlem başına insan onayı beklemez. Mod sürümlü profil verisidir. İlk kapsam workspace değişikliği/test/kanıt ve kontrollü teslimdir; host tam erişimi, Docker socket ve production/ERP yetkisi değildir. İptal/kurtarma, kaynak sınırları, provider auth ve sandbox sınırı korunur. Native loglar her etkiyi denetleme kanıtı sayılmaz. Genel tool/approval entegrasyonu dogfood sonrası kanıtla ele alınır; Go yönü adapter/protokol sınırından ölçülerek değerlendirilir.
 - **Süre dolması:** request expired kapanır ve izin vermez; Task açık yenilemeye kadar beklemede korunur. Yeni istek güncel policy/eylemle oluşturulur; otomatik bildirim/yeniden-istek döngüsü yok. Çalışan veya etkisi belirsiz worker yalnız status değişikliğiyle kapasiteden düşürülemez.
 - Fable devri yalnız owner açıkça “devret” dediğinde başlar. İş ve kanıt yürütücüden bağımsızdır; iletişim kanalı/uzun goal yeniden açılmaz.
+- **Owner 2026-09-22 geçici devir:** limit yenilenene kadar kabul edilmiş 40 ana maddenin rutin geliştirme yürütücüsü Fable. İlk A02, ardından B05–B07 kabul/kurtarma; Cursor E24/F26 sahipliği korunur. [Devir paketi](../deckent-refactor-work/FABLE-CONTINUATION-2026-09-22.md). Bu devir yeni mimari/yetki/DOGFOOD/push izni veya bağımsız review değildir; eski iletişim kanalı açılmaz.
 
 ## Paralel geliştirme sahipliği — owner 2026-09-22
 

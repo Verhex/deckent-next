@@ -1,5 +1,17 @@
 # Anlık iş akışı — worker prompt kompozisyonu
 
+## Geçici yürütücü devri — owner 2026-09-22
+
+Limit yenilenene kadar kabul edilmiş iş planı Fable'a devredilecek şekilde hazırlandı.
+[40 ana maddelik devir paketi](../../deckent-refactor-work/FABLE-CONTINUATION-2026-09-22.md)
+son teslimi, madde durumlarını, bağımlılıkları ve sınırları içerir. Fable'ın devralıp çalışmaya
+başladığı henüz doğrulanmadı; eski communication.md açılmadı. Astra yeni kod işi başlatmıyor.
+İlk iş A02/W0-3 ölçümü, ardından B05→B06→B07 N/N+1 kabul/kurtarma. Cursor E24/F26 hattı ayrı.
+Ürün HEAD52c11dc393d2b5786757e0ca0648d1b721aab5a5; main upstream'den2 commit ileride,0 geride.
+Devir öncesi ağaç temizdi; bu hazırlık yalnız PLAN/current-flow belge WIP'idir, commit/push yok.
+Tam verify sonucu aşağıdaki ürün HEAD'ine aittir; bu belge düzenlemesinde suite yeniden koşulmadı.
+Limit yenilenme saati bilinmiyor; geri devir owner ile, tek yazarlı yapılacak.
+
 ## Son teslim ve mevcut doğrulama
 
 Baz cef8457 native discovery profilini teslim etti; önceki checkpoint923e5a2 push edilmişti.
