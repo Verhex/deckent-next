@@ -1,4 +1,4 @@
-# Anlık iş akışı — toolchain güncellik raporu ve politika güdümlü rebuild teslim edildi; sıradaki: Cursor terminal işinin main'e kontrollü alınması
+# Anlık iş akışı — Fable dilimleri tamamlandı ve push'landı; süreç Opus 5.5'e devrediliyor (ilk iş: Cursor terminal WIP'inin kontrollü alınması)
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -158,6 +158,13 @@ izole geçti: `openrouter-priced-invocation` (`STALE_TARIFF` zaman penceresi), `
 ilk koşumda eşzamanlı docker build yükü. I40 triyajı için not: bu iki test zaman penceresine duyarlı; kök neden ölçülmedi.
 Düzeltilen gerçek kusur: `runtime serve` açılış raporu host `done` handler'ını geciktiriyordu (unhandled rejection) — yarış önce kurulup
 işlenmiş işaretleniyor. Açık: receipt `sourceRevision` kopyalanan bağlamda `unknown`; öneri uygulama otomasyonu ayrı dilim.
+
+## Devir — Opus 5.5 (owner 2026-09-22)
+
+Owner: dilimler bitince süreç Opus 5.5'e devredilir; Opus Cursor terminal işinin teslim alınmasıyla başlar. Devir paketi:
+`/home/alperen/deckent-refactor-work/OPUS-CONTINUATION-2026-09-22.md` (teslimler, kanıt konumları, çalışma kuralları, Cursor WIP envanteri ve
+kontrollü alma planı). Salt okunur keşif: Cursor dalında commit yok, tüm iş worktree WIP'i (19 izli + 20 untracked yol; `ink`/`react` bağımlılığı,
+`jsx` tsconfig, lint-arch çözücü değişikliği, 10 test); main ile 11 ortak dosya çakışma adayı. Fable worktree'ye yazmadı. `origin/main` = son commit, ağaç temiz.
 
 ## Sıradaki sıra
 
