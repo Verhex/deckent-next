@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
@@ -31,5 +32,7 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
   const { argv, nativeSubscription, ...options } = parsed.data;
+  if (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
+    !== createHash('sha256').update(JSON.stringify(argv)).digest('hex')) throw new DockerTaskProfileError();
   return Object.freeze({ argv, nativeSubscription, options: Object.freeze(options) });
 }

@@ -1,33 +1,42 @@
-# Anlık iş akışı — native discovery profili
+# Anlık iş akışı — worker prompt kompozisyonu
 
-## Son teslim
+## Son teslim ve mevcut doğrulama
 
-Baz checkpoint923e5a2 commit/push edilmişti. Owner devam onayıyla ISOLATION/PROVIDERS profil dilimi
-uygulandı ve doğrulandı; yeni push bu dilime dahil değil. DOGFOOD_MODE=OFF, Fable kanalı kapalı.
+Baz cef8457 native discovery profilini teslim etti; önceki checkpoint923e5a2 push edilmişti.
+Owner şimdi legacy ortak worker prompt kompozisyonunu Next'e alma dilimini onayladı.
+DOGFOOD_MODE=OFF; Fable kanalı kapalı; bu dilimde push yok. Önceki belge WIP'i korundu.
 
-Native authoring invocationv2 CLI sürümünü sabitler; discovery-v1 disabled varsayılanıdır.
-Claude abonelikte safe-mode kullanır. Codex/Cursor disabled reddedilir; açık repository istisnası
-üçünde de mümkündür. Claude repository modunda yalnız tipli disableAllHooks settings kabul edilir;
-key/env/helper/path veya diğer serbest settings alanları ve disabled+settings reddedilir.
-Eski hazırlanmış profiller aynı kalır; authoring-v1 sessizce yükseltilmek yerine reddedilir.
-Worker sürüm/bayrak kontrolünü credential dosyası ve native görev başlamadan önce yapar.
-Uyumsuzlukta preflight78; sessiz API/ücret/kimlik geçişi yok. Aynı policy/reservation/dispatch,
-worktree, Docker ağ geçidi, kaynak sınırları ve iptal/kurtarma otoritesi korunur.
+Native authoringv2 raw prompt veya composition-v1 alır. Tek sürümlü common-core kataloğu;
+açık persona/skill/context seçimi + görev/kapsam/kabul, içerik/argv hash'leri aynı hazırlanmış
+profili kullanır. Tam katalog, otomatik skill seçimi veya yeni yürütme otoritesi açılmadı.
+Claude core'u system-prompt, Codex özel tmpfs instructions-file, Cursor inline alır.
+Worker hash kontrolünden sonra yerel argümanları doldurur; native process spawn olduğunda
+mevcut Attempt çıktısına yalnız hash/kimlik/sürüm receipt'i yazar. Bu model uyumu değildir.
+Unicode bootstrap parçaları UTF-8 decoder ile birleştirilir; secret/prompt gövdesi loga çıkmaz.
 
-Gerçek sıralı koşum: Codex/Claude/Cursor ve Claude settings dosyayı doğru değiştirdi. Settings hook'u
-kapattı, MCP yine başladı; bu tam keşif kapatma değildir. Yanlış sürüm ve eksik bayrak iki negatif
-koşumda dosyaya dokunmadan durdu. Host auth dosyaları ve kaynak HEAD/index/WIP korundu;
-altı worker'ın temizlendiği ayrıca Docker envanterinden doğrulandı. Keşif kapatma otomatik yüklemeyi
-sınırlar; worker'ın workspace içindeki dosyaları araçla okumasını yasakladığı iddia edilmez.
+Son derlemede sıralı Codex/Claude/Cursor koşumları dört ayrı katmandaki rastgele değerleri
+note.txt dosyasına tam yazdı; değerler görev metnine veya workspace fixture dosyalarına sızdırılmadı;
+üçünde tek-dosya patch, receipt hash/selection eşliği ve terminal replay doğrulandı.
+Host credential dosyaları, fixture kaynak HEAD/index/WIP korundu; network none ve kapalı
+mount sınırı korundu. Default core ile ilk üç koşum da dosya işini geçti; kanıt betiğindeki
+JSON alan sırası karşılaştırması false-negative verdi. Kayıt korundu; alan bazlı karşılaştırma
+ile ayrıştırıldı. İkinci üç koşum core içindeki özel talimatı da test etti; hepsi geçti.
+İlk 40 sözleşme testi ve tam verify geçti: **1556 ürün/265 dosya,25 native,44 host; fail/skip0**.
+Lint/build/smoke geçti. Son UTF-8 decoder düzeltmesi gerçek Docker testinde Türkçe/emoji
+ile ve ardından son derlemedeki üç native denemeyle doğrulandı. Toplam dokuz owned worker
+temizliği Docker envanterinden kontrol edildi. Ürün kaynakları tam suite sırasında sabit tutuldu.
 
-Tam verify: **1547 ürün/265 dosya,25 native,44 host; fail/skip0**, lint/build/smoke geçti.
-İlk tam koşuda README'ye eşzamanlı açıklama eklenmesi paket değişim korumasını tetikledi
-(1546pass/1fail). Kaynaklar sabitlenerek tam koşu tekrarlandı; kontrol gevşetilmedi.
-Kanıt: /home/alperen/deckent-refactor-work/proof/NATIVE-DISCOVERY-PROFILE-2026-09-22/
-(review.md, verification.json, profile-live.json, cleanup-check.json, full-verify-rerun.log).
-Jev0e01f990: sürümlü fail-closed yol%99; none0/insufficient%1, seçim her ikisinde0/1.
-Danışma ve kendi doğrulamamız bağımsız Fable PASS'i veya geniş ürün kabulü değildir.
-README/ARCHITECTURE/PLAN/CHANGELOG güncel; AGENTS/CLAUDE52 satır, kalıcı ilkeleri aynı.
+Keşif sınırı ayrı: Claude disabled/safe-mode; Codex/Cursor açık repository istisnası sürer.
+Codex project_doc_max_bytes=0 yalnız proje dokümanı otomatik yüklemesini hedefler; tüm hook/MCP
+kapalı iddiası yok. Prompt persona/skill yetki vermez; auth/API/ücret fallback'i eklenmedi.
+
+Kanıt: /home/alperen/deckent-refactor-work/proof/NATIVE-PROMPT-COMPOSITION-2026-09-22/
+(review.md, verification.json, profile-live.json/mjs, cleanup-check.json, full-verify.log).
+Legacy kaynak analizi: dış proof/LEGACY-PROMPT-COMPOSITION-2026-09-22/review.md; legacy salt okunur incelendi, çalıştırılmadı.
+Jev273914c5 mevcut profil üzerinden dar kompozisyon yolunu %99 önerdi;
+none0/insufficient%1, her iki abstention seçimi0/1. Karar ve bounded verified outcome kaydı var; yeni ürün kabulü anlamına gelmez.
+Jev/kendi doğrulamamız bağımsız Fable PASS'i değildir. README/ARCHITECTURE/PLAN/CHANGELOG güncel;
+AGENTS/CLAUDE52 satır; kalıcı ilke değişmedi, bu dosyalara gereksiz iş geçmişi eklenmedi.
 
 ## Sıradaki sıra
 

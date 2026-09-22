@@ -4,8 +4,10 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import catalog from './providers.json' with { type: 'json' };
+import { nativePromptDeliverySchema } from './prompt.js';
 
 export const nativeSubscriptionSchema = z.object({ schemaVersion: z.literal(1), provider: z.enum(['codex', 'claude', 'cursor']),
+  promptDelivery: nativePromptDeliverySchema.optional(),
   preflight: z.object({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
     discovery: z.enum(['disabled', 'repository']),
     helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),

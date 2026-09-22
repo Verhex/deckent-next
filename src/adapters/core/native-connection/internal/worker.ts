@@ -4,23 +4,47 @@ import { createServer, connect, type Socket } from 'node:net';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
   const payload = await new Promise<string>((resolve, reject) => {
     const request = get({ socketPath, path: '/bootstrap', timeout: 10000 }, response => {
       let text = '';
-      response.on('data', (part: Buffer) => { text += part.toString('utf8'); if (text.length > 131072) request.destroy(); });
+      response.setEncoding('utf8');
+      response.on('data', (part: string) => { text += part; if (Buffer.byteLength(text) > 131072) request.destroy(new Error()); });
       response.on('error', reject); response.on('end', () => response.statusCode === 200 ? resolve(text) : reject(new Error()));
     });
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; home: string; file: string;
     credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
-    preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] } };
+    preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
+    promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
+      segments: { kind: string; id: string; version: number; sha256: string }[]; sha256: string; argvSha256: string } };
   const home = '/tmp/deckent-home';
   if (setup.schemaVersion !== 1 || setup.home.includes('..') || setup.home.startsWith('/') || setup.file.includes('/')) throw new Error();
   const [executable, ...argv] = process.argv.slice(2); if (!executable) throw new Error();
+  const hash = (text: string) => createHash('sha256').update(text).digest('hex');
+  const delivery = setup.promptDelivery;
+  if (delivery) {
+    // Validate custody before writing credentials or executing any native tools.
+    const { sha256, argvSha256, ...body } = delivery;
+    const channel = { claude: 'claude-system-prompt', codex: 'codex-instructions-file', cursor: 'inline' }[setup.provider];
+    if (delivery.schemaVersion !== 1 || delivery.channel !== channel || !setup.preflight
+      || hash(JSON.stringify(body)) !== sha256 || hash(JSON.stringify([executable, ...argv])) !== argvSha256
+      || argv.at(-2) !== '--' || argv.at(-1) !== '__DECKENT_TASK_PROMPT__') throw new Error();
+    const root = '/tmp/deckent-prompt'; await mkdir(root, { mode: 0o700 });
+    await writeFile(join(root, 'core.txt'), delivery.core, { mode: 0o600, flag: 'wx' });
+    argv[argv.length - 1] = channel === 'inline' ? delivery.core + '\n\n' + delivery.task : delivery.task;
+    if (channel === 'claude-system-prompt') {
+      const index = argv.indexOf('--system-prompt');
+      if (index < 0 || argv[index + 1] !== '__DECKENT_CORE_PROMPT__') throw new Error();
+      argv[index + 1] = delivery.core;
+    }
+    if (channel === 'codex-instructions-file' && (!argv.includes('model_instructions_file="/tmp/deckent-prompt/core.txt"')
+      || !argv.includes('project_doc_max_bytes=0'))) throw new Error();
+  }
   if (setup.preflight) {
     // Probe in a clean directory before credentials are written or task tools can run.
     const probe = '/tmp/deckent-preflight'; await mkdir(probe, { mode: 0o700 });
@@ -62,6 +86,10 @@ async function main() {
     ...(setup.credentialEnvironment && typeof setup.credential.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),
     HTTP_PROXY: proxy, HTTPS_PROXY: proxy, http_proxy: proxy, https_proxy: proxy,
     NO_PROXY: '', no_proxy: '' } });
+  if (delivery) child.once('spawn', () => process.stdout.write(JSON.stringify({ schemaVersion: 1,
+    kind: 'native-prompt-delivery', phase: 'spawned', channel: delivery.channel, sha256: delivery.sha256,
+    argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(delivery.task),
+    segments: delivery.segments }) + '\n'));
   // Native events can contain tool output and request headers. Never forward raw events.
   let tail = ''; let bytes = 0;
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };

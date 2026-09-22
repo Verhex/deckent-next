@@ -160,6 +160,18 @@ Mismatch is a sanitized preflight failure. Old authoring v1 is rejected; already
 profiles without preflight retain exact replay, without an implicit upgrade or retroactive claim.
 Adapter flags and the pinned image remain the execution mechanism; no new state owner or ledger.
 
+Native authoring v2 also accepts mutually exclusive raw prompt or structured composition-v1.
+A packaged versioned common core plus explicitly selected persona/skills/context and task/scope/
+acceptance compile deterministically; no catalog discovery or new routing/admission owner is added.
+Content is bounded task data, never credential storage. Optional prompt-delivery-v1 metadata binds
+the rendered content, selected-part identifiers/versions/hashes and original argv. Resolution and
+worker bootstrap reject integrity mismatches. Claude receives the core through system-prompt;
+Codex through a private tmpfs instructions file with project-document loading disabled; Cursor
+receives core and task inline. These are delivery capabilities, not complete discovery suppression.
+Existing raw prepared profiles remain unchanged. The worker substitutes placeholders internally
+and emits a sanitized spawn receipt into existing Attempt output. It proves process input handoff,
+not provider acknowledgement, model compliance or acceptance. Persona grants no policy authority.
+
 Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstructed from a receipt
 to grant new access. Existing Docker custody still supports observation, cancellation and output
 recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output

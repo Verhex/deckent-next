@@ -1,5 +1,65 @@
 {
-  "codex": { "executable": "codex", "args": ["exec", "--json", "--color", "never", "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox"], "modelFlag": "--model", "helpArgs": ["exec", "--help"], "disabledArgs": null },
-  "claude": { "executable": "claude", "args": ["--print", "--verbose", "--output-format", "stream-json", "--dangerously-skip-permissions"], "modelFlag": "--model", "helpArgs": ["--help"], "disabledArgs": ["--safe-mode"] },
-  "cursor": { "executable": "cursor-agent", "args": ["--print", "--output-format", "stream-json", "--force", "--trust"], "modelFlag": "--model", "helpArgs": ["--help"], "disabledArgs": null }
+  "codex": {
+    "executable": "codex",
+    "args": [
+      "exec",
+      "--json",
+      "--color",
+      "never",
+      "--ignore-user-config",
+      "--dangerously-bypass-approvals-and-sandbox"
+    ],
+    "modelFlag": "--model",
+    "helpArgs": [
+      "exec",
+      "--help"
+    ],
+    "disabledArgs": null,
+    "coreChannel": "codex-instructions-file",
+    "coreArgs": [
+      "-c",
+      "model_instructions_file=\"/tmp/deckent-prompt/core.txt\"",
+      "-c",
+      "project_doc_max_bytes=0"
+    ]
+  },
+  "claude": {
+    "executable": "claude",
+    "args": [
+      "--print",
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--dangerously-skip-permissions"
+    ],
+    "modelFlag": "--model",
+    "helpArgs": [
+      "--help"
+    ],
+    "disabledArgs": [
+      "--safe-mode"
+    ],
+    "coreChannel": "claude-system-prompt",
+    "coreArgs": [
+      "--system-prompt",
+      "__DECKENT_CORE_PROMPT__"
+    ]
+  },
+  "cursor": {
+    "executable": "cursor-agent",
+    "args": [
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--force",
+      "--trust"
+    ],
+    "modelFlag": "--model",
+    "helpArgs": [
+      "--help"
+    ],
+    "disabledArgs": null,
+    "coreChannel": "inline",
+    "coreArgs": []
+  }
 }

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { get } from 'node:http';
 import { connect, createServer } from 'node:net';
 import { connect as tlsConnect } from 'node:tls';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, expect, it, describe } from 'vitest';
 import { openNativeConnection, projectNativeCredential, readLocalNativeCredential, isPublicNativeAddress, inspectNativeClientHello } from '../../../dist/adapters/core/native-connection/index.js';
@@ -17,8 +18,10 @@ const jwt = () => 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.
 const credential = () => ({ tokens: { access_token: jwt(), id_token: 'synthetic-id', refresh_token: 'never-forward' }, apiKey: 'unrelated' });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'dn-')); roots.push(root); return root; }
 type Preflight = Parameters<typeof openNativeConnection>[0]['binding']['preflight'];
-async function gateway(root: string, preflight?: Preflight) {
-  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'codex', ...(preflight ? { preflight } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
+type Delivery = Parameters<typeof openNativeConnection>[0]['binding']['promptDelivery'];
+async function gateway(root: string, preflight?: Preflight, promptDelivery?: Delivery) {
+  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'codex', ...(preflight ? { preflight } : {}),
+    ...(promptDelivery ? { promptDelivery } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
   closes.push(connection.close); return connection;
 }
 function bootstrap(socketPath: string) {
@@ -91,8 +94,8 @@ it('checks a real TLS ClientHello, TCP/record fragmentation, wrong SNI, non-TLS 
   expect(inspectNativeClientHello(fragmented, 'chatgpt.com', 8192)).toBe('accepted');
 });
 describe.skipIf(!imageId)('real connected Docker confinement and custody', () => {
-  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight) {
-    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight);
+  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight, promptDelivery?: Delivery) {
+    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight, promptDelivery);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!,
       uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
       tmpBytes: 67108864, deadlineMs, controlTimeoutMs: 10000, outputBytes: 65536, connection: connection.descriptor });
@@ -100,6 +103,30 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     closes.push(async () => { await supervisor.cancel(request); await supervisor.release(request); });
     return { connection, supervisor, request };
   }
+  it('hands off bound core/task content inside Docker, records only hashes and refuses changed dispatch argv', async () => {
+    const hash = (s: string) => createHash('sha256').update(s).digest('hex');
+    const argv = ['node', '-e', "const fs=require('fs');fs.writeFileSync('received',fs.readFileSync('/tmp/deckent-prompt/core.txt','utf8')+'|'+process.argv.at(-1));console.log('suppressed-native-data')", '--',
+      '-c', 'model_instructions_file="/tmp/deckent-prompt/core.txt"', '-c', 'project_doc_max_bytes=0', '--', '__DECKENT_TASK_PROMPT__'];
+    const body = { schemaVersion: 1 as const, channel: 'codex-instructions-file' as const, core: 'private-core-görev-🧩', task: 'private-task',
+      segments: (['core', 'task', 'scope', 'acceptance'] as const).map(kind => ({ kind, id: kind, version: 1, sha256: hash(kind) })) };
+    const delivery = { ...body, sha256: hash(JSON.stringify(body)), argvSha256: hash(JSON.stringify(argv)) };
+    const cliVersion = execFileSync('/usr/bin/docker', ['run', '--rm', '--network', 'none', '--entrypoint', 'node', imageId!, '--version'], { encoding: 'utf8', timeout: 10000 }).trim();
+    const preflight = { schemaVersion: 1 as const, cliVersion, discovery: 'repository' as const, helpArgs: ['--help'], requiredFlags: ['--help'] };
+    const f = await worker(argv, 20000, preflight, delivery);
+    const result = await f.supervisor.execute(f.request);
+    expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
+    expect(await readFile(join(f.request.workspace, 'received'), 'utf8')).toBe('private-core-görev-🧩|private-task');
+    const receipt = JSON.parse(result.stdout.split('\n')[0]!);
+    expect(receipt).toMatchObject({ kind: 'native-prompt-delivery', phase: 'spawned', sha256: delivery.sha256, coreSha256: hash(body.core), taskSha256: hash(body.task) });
+    expect(receipt.argvSha256).not.toBe(delivery.argvSha256);
+    for (const hidden of ['private-core', 'private-task', 'synthetic', 'suppressed-native-data']) expect(result.stdout).not.toContain(hidden);
+    const bad = await worker([...argv.slice(0, -1), 'changed'], 20000, preflight, delivery);
+    const rejected = await bad.supervisor.execute(bad.request);
+    expect(rejected.result).toEqual({ kind: 'exited', exitCode: 78 });
+    expect(rejected.stdout).not.toContain('native-prompt-delivery');
+    await expect(readFile(join(bad.request.workspace, 'received'))).rejects.toThrow();
+    expect(bad.connection.statistics().connected).toBe(0);
+  });
   it('keeps network none and host/foreign identities hidden; raw native output is suppressed', async () => {
     const f = await worker(['node', '-e', `const fs=require('node:fs');const os=require('node:os');const net=require('node:net');const http=require('node:http');
       (async()=>{const auth=JSON.parse(fs.readFileSync(process.env.HOME+'/.codex/auth.json'));

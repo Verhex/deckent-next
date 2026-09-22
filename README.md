@@ -60,8 +60,24 @@ DOGFOOD remains off. Changing MCP configuration requires reconnecting already-op
 `coding prepare --input <file|-> --json` and SDK `prepareNativeCodingProfile` author a profile;
 preparation does not activate it or grant execution permission. The outer request remains
 `{schemaVersion: 1, template, invocation}`. New `invocation` data requires `schemaVersion: 2`,
-`provider`, `cliVersion`, `permissionMode: "unattended"`, `model` and `prompt`. Use the exact
+`provider`, `cliVersion`, `permissionMode: "unattended"`, `model` and either `prompt` or `composition`. Use the exact
 CLI version string measured in the selected image's preflight receipt, not the host CLI version.
+
+Structured `composition` v1 requires `task`, `scope` and `acceptance` text. It accepts an optional
+`core`, optional `persona`, and `skills`/`context` arrays; each selected part has `{id, version, text}`.
+Omitting `core` selects the packaged, versioned common worker instructions. Selection is explicit:
+no persona/skill catalog or host file is searched. Duplicate persona/skill IDs are rejected.
+Each text is limited to 16 KiB; the serialized composition to 32 KiB, with at most 16 skills and
+8 context parts. Prompts persist as task data: never include credentials in either input form.
+
+The compiler binds content, selected-part hashes and command arguments in the prepared profile.
+The worker verifies the binding, then supplies Claude's core via `--system-prompt`, Codex's via
+an instruction file in private tmpfs, and Cursor's inline with the task. Codex additionally disables
+automatic project-document loading; this does not establish complete discovery suppression.
+Docker command arguments contain placeholders for composed prompt bodies. A bounded
+`native-prompt-delivery` output records hashes and selection metadata when the native process
+spawns, without prompt bodies or credentials. This proves process input handoff, not model
+compliance; acceptance still needs observed task results. Persona and skill content grants no authority.
 
 `discovery` is versioned data: `{schemaVersion: 1, mode: "disabled"}` is the default.
 Claude maps it to subscription-compatible `--safe-mode`. Codex and Cursor currently reject

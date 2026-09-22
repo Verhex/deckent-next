@@ -8,6 +8,52 @@ const template = () => ({ id: 'coding', version: 1, adapter: { id: 'docker', ver
 } });
 const invocation = (provider = 'codex') => ({ schemaVersion: 2, provider, cliVersion: 'fixture-1', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
   model: 'configured-model', prompt: '--config dangerous=true; $(touch /outside)' });
+const composition = () => ({ schemaVersion: 1, persona: { id: 'reviewer', version: 2, text: 'Check the change.' },
+  skills: [{ id: 'editing', version: 1, text: 'Preserve unrelated files.' }],
+  context: [{ id: 'project', version: 3, text: 'A tiny fixture.' }],
+  task: 'Edit note.txt.', scope: 'Only note.txt.', acceptance: 'Exact contents verified.' });
+const composed = (provider = 'codex') => ({ ...invocation(provider), prompt: undefined, composition: composition() });
+
+it.each(['codex', 'claude', 'cursor'])('binds deterministic selected content and native delivery for %s without content in Docker argv', provider => {
+  const profile = compileNativeCodingDockerProfile(template(), composed(provider));
+  const resolved = resolveDockerTaskProfile(profile);
+  const delivery = resolved.nativeSubscription!.promptDelivery!;
+  expect(compileNativeCodingDockerProfile(template(), composed(provider))).toEqual(profile);
+  expect(delivery.core).toContain('deckent-worker-core@1');
+  expect(delivery.task).toContain('persona:reviewer@2');
+  expect(delivery.task).toContain('skill:editing@1');
+  expect(delivery.segments.map(s => s.kind)).toEqual(['core', 'persona', 'skill', 'context', 'task', 'scope', 'acceptance']);
+  expect(resolved.argv.at(-1)).toBe('__DECKENT_TASK_PROMPT__');
+  expect(JSON.stringify(resolved.argv)).not.toContain('Edit note.txt.');
+  expect(delivery.channel).toBe({ codex: 'codex-instructions-file', claude: 'claude-system-prompt', cursor: 'inline' }[provider]);
+  const changed = composed(provider); changed.composition.task = 'A different task.';
+  const next = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), changed)).nativeSubscription!.promptDelivery!;
+  expect(next.sha256).not.toBe(delivery.sha256);
+  expect(next.segments.filter(s => s.kind !== 'task')).toEqual(delivery.segments.filter(s => s.kind !== 'task'));
+});
+
+it('rejects ambiguous, duplicate, oversized or implicit prompt selections', () => {
+  for (const request of [
+    { ...composed(), prompt: 'ambiguous' }, { ...invocation(), prompt: undefined },
+    { ...composed(), composition: { ...composition(), skills: [composition().persona] } },
+    { ...composed(), composition: { ...composition(), context: [composition().context[0], composition().context[0]] } },
+    { ...composed(), composition: { ...composition(), task: 'ü'.repeat(8193) } },
+    { ...composed(), composition: { ...composition(), task: ' '.repeat(10) } },
+    { ...composed(), composition: { ...composition(), catalogPath: '/host/private' } },
+    { ...composed(), composition: { ...composition(), task: 'a'.repeat(16000), scope: 'b'.repeat(16000), acceptance: 'c'.repeat(1000) } },
+  ]) expect(() => compileNativeCodingDockerProfile(template(), request)).toThrow('NATIVE_CODING_INVOCATION_INVALID');
+});
+
+it('refuses changed content, receipt metadata and argv at profile resolution', () => {
+  const original = compileNativeCodingDockerProfile(template(), composed());
+  const p = original.parameters;
+  const binding = resolveDockerTaskProfile(original).nativeSubscription!;
+  for (const parameters of [
+    { ...p, nativeSubscription: { ...binding, promptDelivery: { ...binding.promptDelivery!, core: 'changed' } } },
+    { ...p, nativeSubscription: { ...binding, promptDelivery: { ...binding.promptDelivery!, segments: [] } } },
+    { ...p, argv: ['foreign'] },
+  ]) expect(() => resolveDockerTaskProfile({ ...original, parameters })).toThrow('DOCKER_TASK_PROFILE_INVALID');
+});
 
 it.each(['codex', 'claude', 'cursor'])('compiles %s into the existing pinned Docker execution contract without shell interpretation', provider => {
   const source = template();

@@ -20,8 +20,11 @@ const input = (provider = 'codex') => ({ schemaVersion: 1, template: { id: 'codi
     tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } },
   invocation: { schemaVersion: 2, provider, cliVersion: 'fixture-1', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: 'configured-model', prompt: '--task; $(not-a-command)' } });
 
-it.each(['codex', 'claude', 'cursor'])('compiled CLI stdin and public SDK prepare the same %s profile without creating project state', provider => {
-  const f = fixture(); const request = input(provider);
+it.each(['codex', 'claude', 'cursor', 'composed-codex', 'composed-claude', 'composed-cursor'])('compiled CLI stdin and public SDK prepare the same %s profile without creating project state', provider => {
+  const f = fixture(); const request = provider.startsWith('composed-')
+    ? { ...input(provider.slice(9)), invocation: { ...input(provider.slice(9)).invocation, prompt: undefined,
+      composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'Only note.txt', acceptance: 'Exact result' } } }
+    : input(provider);
   const cliResult = spawnSync(process.execPath, [cli, 'coding', 'prepare', '--input', '-', '--json'], {
     cwd: f.project, env: f.env, input: JSON.stringify(request), encoding: 'utf8', timeout: 10000 });
   expect(cliResult.status, cliResult.stderr).toBe(0);
