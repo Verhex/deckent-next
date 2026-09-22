@@ -1,5 +1,39 @@
 # Anlık iş akışı — Opus 5.5; E24 teslimleri main'de, terminal Cursor'da, sıradaki B06→B07 (Astra/Fable sırası)
 
+## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
+
+Owner "bu kadar memory gerekli mi?" sorusuyla 25 dosyalık seti gözden geçirtti. Bulgu: her dosya 7 satır,
+3 metin satırının 2'si sabit şablon; 5 küme aynı kuralı 2–5 dosyada tekrar ediyordu; `law_scale_no_mvp`
+north star'ın, `project_dev_operating_contract` CLAUDE.md faz bölümünün kopyasıydı; 3 dosyadaki "Fable kanalı
+kapalı" iddiası 60d66ed (owner 2026-09-23) ile eskimişti. Dış referans yalnız `MEMORY.md` ve north star'a.
+Jev f2551a1d: agresif 0.47 / orta 0.37 / none 0.07 / insufficient 0.08 / şablon-temizliği 0.01 (güven 0.34);
+owner agresif birleştirme + yeniden numaralama seçti (decision kaydedildi).
+
+Yapılan: 25 → 9 kanun dosyası (`law_*`), şablon satırları bir kez `MEMORY.md` başlığına, eski→yeni numara
+eşlemesi `MEMORY.md` sonunda; north star byte-aynı (Jev SHA b2691034…). 24 eski dosya `git rm` ile kaldırıldı;
+manifest `scripts/core-memory.sha256` yenilendi, `node scripts/lint-core-memory.mjs` 11 dosya / 0 ihlal.
+Korunan negatif kanıtlar grep ile doğrulandı: 9 dk ölü worker, ~40 GB OOM, Sprint-206/554, 21 dk suite,
+PR127/88637d5d6, dba89c03, ADR-G-036, 2026-08-17 amendment'ları. PLAN.md envanter satırı 26 → 11.
+Sınır: bağımsız inceleme yok (Astra kanalına REQUEST_REVIEW owner'da); `npm run verify` vitest koşarken
+alınmadı, yalnız lint-core-memory koştu. Sonraki adım: owner commit kararı; Astra'nın birleşik metinde
+kayıp ders aramasını istemek.
+
+## Astra inceleme / host kanal — 2026-09-23
+
+Owner: yürütme Opus/Fable, terminal Cursor, Astra analiz/inceleme. `60d66ed` ürün ağacı üzerinden
+2001/2002 okundu. HOME Codex hook'ları kuruldu; kullanıcı güven onayı sonrası gerçek `Stop`
+bildirimi ulaştı. `blocked by hook`, bekleyen incelemeyi işlemeye devam isteğidir, onay reddi değildir.
+Hook ürün paketinde değildir; yalnız Next ana oturumuna kapsamlıdır. Luna izleyicisi bu oturumda
+sınırlı süreli başlatıldı; sürekli servis veya haftalık %5 kota ölçümü kanıtlanmadı.
+
+E24 için ayrı `/tmp/astra-e24-review-60d66ed` Git arşivinde build geçti. Dar test koşumu 15 geçti,
+18 başarısız: 17 yerel socket `EPERM`, 1 pipe stderr beklentisi; host alt süreç testi tanısız başarısız.
+Bu sonuç ürün kusuru veya tam PASS sayılmaz. Cursor aktif olduğundan yeniden test/build başlatılmadı.
+2002 değerlendirmesi: sıfır operatör tarifesi ve ortak runtime kimlik yolu kaynakta tutarlı;
+canlı sohbet sonrası `/exit` sorunu terminal kapanışını açık tutar. B06/B07 ilerlemesine etkisi,
+kabul senaryosunun bu yüzeye bağımlılığına bağlıdır. Sonraki adım Cursor düzeltme/kanıtı geldikten
+sonra uygun boş test penceresinde dar bağımsız doğrulama; ürün kodu ve Cursor worktree'si değişmedi.
+
 ## Yapılan işler — Opus 5.5 (2026-09-22/23, hepsi `origin/main` = `b5806f6`)
 
 | İş | Sonuç | Kanıt |

@@ -8,6 +8,10 @@ Kodun bağlı davranışı, önceki koşum kanıtı ve kabul edilmiş hedef ayr�
 Bir dilim teslim edilirken etkilenen mevcut durum satırı ve mimari sınır birlikte güncellenir; küçük ilerleme current-flow’da kalır.
 Owner ile kısa, görünür adımlar; uzun goal ve Fable kanalı kapalı. Jev danışmandır, kabul otoritesi değildir.
 
+Owner 2026-09-23: Next'te Opus ↔ Astra inceleme kanalı açıldı; geçici yürütme Opus/Fable'da,
+Astra analiz/incelemede, terminal Cursor'dadır. İşlenen kanal kayıtları alıcı tarafından tüketilir.
+Bu rol düzeni yeni ürün kapsamı, DOGFOOD aktivasyonu veya push izni vermez; eski kanal arşivdir.
+
 ## Kalıcı yön ve kararlar
 
 - Müşterinin kurduğu solo/team/on-prem/uzak/air-gapped ürün; Deckent SaaS işletmez. Güvenli Core bağımsız, Enterprise özel dağıtılır.
@@ -132,7 +136,7 @@ Legacy'de var, Next'te fiziksel olarak olmayan katmanlar ve owner kararı. Kayna
 
 | Legacy öğe | Next durumu | Karar | İş alanı |
 |---|---|---|---|
-| `docs/` (271 dosya: en/tr parite, 52 ADR, governance, design, operations) | Yok; README/ARCHITECTURE/PLAN/CHANGELOG + 26 core-memory | Next'te `docs/` açılır; ADR'ler taşınır ama her biri Next kararlarına göre yeniden değerlendirilir, otomatik geçerli sayılmaz. Ürün belgeleri kopyalanmaz, Next sözleşmelerinden yazılır; komut/config referansları registry'den üretilir. | SURFACES / INSTALLATION |
+| `docs/` (271 dosya: en/tr parite, 52 ADR, governance, design, operations) | Yok; README/ARCHITECTURE/PLAN/CHANGELOG + 11 core-memory (9 kanun + north star + indeks; 2026-09-23 birleştirmesi) | Next'te `docs/` açılır; ADR'ler taşınır ama her biri Next kararlarına göre yeniden değerlendirilir, otomatik geçerli sayılmaz. Ürün belgeleri kopyalanmaz, Next sözleşmelerinden yazılır; komut/config referansları registry'den üretilir. | SURFACES / INSTALLATION |
 | `.deck` secrets dosyası (ADR-014, env'i ezer) | Yok; secret referansı çağrı anında çözülür, approval MAC için özel yerel keyring var; genel provider vault/OAuth yaşam döngüsü yok | Düz metin dosya taşınmaz. Yetenek taşınır: dosya tabanlı secret provider adapter'ı (0600, açık config, referansla çözüm). Legacy içerik hiçbir belgeye kopyalanmaz. | SECURITY |
 | 8 ayrı SQLite (identity, models, autonomous, provider-observations, invocations, acceptance-reconciliation, memory, execution-lock) | Transactional ledger v32; Run/Attempt, invocation, approval ve delivery kayıtları bağlı | Yerel principal/session mevcut; uzak kimlik, Mission, kapsamlı provider gözlemi ve memory authority açık. Hepsi ledger sözleşmesi arkasına; Enterprise DB isteği PostgreSQL adapter satırıyla aynı yol. | STORE + ilgili alan |
 | `.brain/memory.db` + ERRORS*.md | Taslak | Ham kopya yok; MEMORY-AUTHORITY/RETRIEVAL kartları üzerinden projeksiyonla göç. | LEARNING / CONTRACT |
