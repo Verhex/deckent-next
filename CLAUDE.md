@@ -12,6 +12,8 @@
 - Reuse one typed application contract across human and AI surfaces; one owner per state transition.
 - Keep domain pure, adapters behind ports and composition explicit; version contracts and migrations.
 - Carry principal, scope, resource and policy through every operation. Persona never grants authority.
+- Target scope is installation > company > optional site/unit > project > session; company policy is Core, customer IdP/SIEM are adapters.
+- `do` proposes and admits Runs independently of Mission; business processes reuse the operation catalog and existing execution authority.
 - Keep secure Core standalone and proprietary Enterprise outside public artifacts and history.
 - Enforce filesystem/process/network/secret boundaries; workspace separation alone is not isolation.
 - Preserve bounded resources, cancellation, recovery and uncertain-effect handling.
@@ -21,7 +23,11 @@
 - Keep modules compact by responsibility, not by dropping capabilities or duplicating mechanisms.
 
 ## Working method
-- Read relevant architecture, plan, memory and source evidence before changing a responsibility.
+- At every task start, read `ARCHITECTURE.md`, `PLAN.md`, `follow-up-works/current-flow.md` and relevant local core-memory; reconcile affected claims with code and evidence.
+- Update affected core documents at task start when stale claims are verified, whenever accepted decisions or scope change, and before delivery or handoff; this is mandatory.
+- Keep durable scope/status in `PLAN.md`, contracts in `ARCHITECTURE.md`, lasting decisions in core-memory, and current work/evidence/next step in `current-flow.md`.
+- Before reporting completion, document implemented behavior, verification, open limits and the concrete next step; documentation reconciliation is part of delivery.
+- Preserve concurrent edits and accepted authority; never promote analysis into a decision or historical proof into a fresh result. Leave unaffected documents unchanged.
 - Preserve other contributors' WIP; work in bounded, complete, reviewable slices.
 - Explain progress and results in plain Turkish, with observable behavior and evidence.
 - Continue authorized work without repeated permission; new scope/authority boundaries need a checkpoint.

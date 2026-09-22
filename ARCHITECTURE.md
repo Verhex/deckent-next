@@ -31,16 +31,15 @@ arch.json and the current source layout change together in that work. Existing W
 scripts/lint-arch.mjs enforces the current machine rules; historical decisions remain in the log.
 No baseline or silent exception is introduced; rule changes remain explicit and versioned.
 
-## Owner checkpoint — 2026-09-21: product model reopened
+## Owner decision — 2026-09-22: Mission target accepted, implementation pending
 
-The owner reopened the proposed reduction of the canonical vocabulary to Run → Task → Attempt.
-These execution concepts do not establish the complete Agent OS product model. The target still
-covers individual users and large enterprises managing business work and long-lived processes;
-millions of users and 10,000-person organizations are design context, not demonstrated capacity.
-Do not remove Goal/Mission/Flow/Operation capabilities or restore the old mandatory hierarchy by
-inference. Compare responsibilities, lifecycle, authorization, scope and concrete business journeys
-before proposing the product model for owner review. Existing runtime contracts remain in force;
-O4 from the external refactor decision record is reopened, not an implementation instruction.
+The 2026-09-21 O4 reopening is superseded by the accepted Mission → Run → Task → Attempt
+coordination model after APPROVAL and POLICY-EFFECT-VERDICT prerequisites. Mission owns bounded
+rounds with mandatory maxRounds and an invocation checkpoint per (mission, round, purpose);
+it calls existing Run applications rather than writing their state or introducing another scheduler.
+Backlog/reactive inputs are versioned Mission sources; periodic autonomous execution follows DOGFOOD.
+The Mission implementation and vocabulary gate update remain pending. This decision neither restores
+the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Operation aggregates.
 
 ## Owner amendment — 2026-09-17 (accepted target, implementation pending)
 
@@ -52,7 +51,11 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
 
 - Customer-installed product: personal computer, team server, on-prem, customer-hosted remote and air-gapped.
   No vendor-operated SaaS tenancy requirement. Core carries principal/scope/resource/policy context end to end;
-  Enterprise maps customer identity, tenant, RBAC/RLS and governance into those contracts.
+  The accepted scope chain is installation > company > optional site/unit > project > session;
+  installation is the hosting/trust boundary, company isolation is enforced in scoped data decisions,
+  not a separate filesystem root. Default is one company. Enterprise maps customer identity,
+  RBAC/RLS and governance into these contracts. Company-aware Core policy precedes M2; IdP/SIEM
+  adapters belong to M4. Current tenant-named config/identity fields await a separate code migration.
 - Development is in deckent-next. Public deckent receives only the completed Core distribution. Proprietary
   Enterprise sources/packages remain separately controlled from their first implementation, consume public Core
   APIs and are excluded from public source, history and package artifacts. Core installs without Enterprise.
@@ -98,8 +101,17 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Use versioned modular definitions/profiles for personal/team/Enterprise use; future purchase refinements
   (internal/external, etc.) can extend the domain without multiplying execution engines. A daily preset
   may propose a schedule; the actual schedule is explicit and separately validated. Kind grants no authority.
-- A separate `process` execution surface is a candidate for deferral, not a deleted business capability.
-  The initial surface proposal uses run/do/autonomous under Mission; revisit process only for a demonstrated gap.
+- Owner 2026-09-22: `do` is intent → versioned, receipted RunProposal → deterministic task-graph
+  compilation → scope/cost/effect gates → existing Run admission, with approval when required.
+  It depends on command/effect-policy contracts, not Mission; planning invocation spends are budgeted.
+  Mission AI author remains a separate extension of deterministic Mission rounds and checkpoints.
+- Owner 2026-09-22: process work uses a versioned business-operation catalog and task kind through
+  existing Run/Task/Attempt and tool invocation claim/settle/unknown recovery; no third engine.
+  Mission templates add ordered steps, external waits and aggregate outcomes. Operations declare
+  scope/field access, effect class, idempotency, compensation availability and cost/row/time limits.
+  Irreversible writes are explicit and approval-gated; ERP company/site authority maps to Deckent
+  company scope. Each ERP retains its integration design behind the shared operation/governance port.
+  IFS is the current target; actual access/scenario and effect boundaries need proof before mutation.
   The old deckent_style enum mixes work unit and execution semantics and is not the target ontology.
 - Legacy is reference only for capabilities, learned invariants and design gaps. Implement new contracts.
   No legacy command/config/value aliases, compatibility parser or migration burden is admitted (owner correction).
@@ -160,8 +172,9 @@ coding dogfood pilot. Use the executor's own file/shell/test tools; observe boun
 exit, artifacts and cancellation without claiming exhaustive interception of every effect.
 The pilot covers assigned workspace edits/tests and controlled patch delivery. It does not grant
 host full access, Docker socket access, production/ERP credentials or unrestricted host HOME mounts.
-The necessary provider connection/authentication boundary still needs a concrete implementation;
-permission bypass alone does not establish secret isolation or working network access.
+The provider connection/authentication boundary is implemented in the restricted gateway and
+ephemeral credential projection described above; refresh and account lifecycle remain open.
+Permission bypass alone does not establish secret isolation or working network access.
 Runtime custody, capacity, cancellation and honest outcome handling remain mandatory. General tool
 mediation and per-action approvals stay in product scope and will be designed from dogfood evidence;
 privileged external business effects are outside this pilot. Standing grants and action-specific approval
@@ -173,8 +186,10 @@ An authorized human may approve their own requested operation in solo or enterpr
 subject to explicit organizational separation-of-duties restrictions. Without the relevant authority,
 they wait for an authorized decider. Expiry closes the approval request without permitting execution;
 the Task remains held for explicit renewal under current policy, not an automatic repeated request.
-Human approval remains an accepted target. The bounded native coding connection is wired as described
-above; full agentic acceptance, active-model admission, refresh, usage and dogfood closure remain open.
+Task-admission human approval is implemented as described in “Task approval, live sessions and
+isolated delivery” below; general native-tool approval callbacks and notification consumption are not.
+The bounded native coding connection is wired; full agentic acceptance, active-model admission,
+refresh, usage and dogfood closure remain open.
 
 ### Product data layout — owner 2026-09-17
 
@@ -285,9 +300,19 @@ src/composition/    executable SDK/CLI/MCP/runtime wiring and adapter selection
 
 The implemented product includes installed Git/Docker runtime execution and recovery, authenticated local runtime
 control, recoverable custom-profile installation, declared provider/model inspection, scoped model activation and
-standalone durable invocation admission. At HEAD `b1e430f`, A3A persists invocation claims and outcomes; the A3B
-native transport/config composition and A3C public invocation surfaces are not landed, and no real provider,
-Brain/task consumer, human approval/tool loop or dogfood capability is claimed.
+durable native model invocation through runtime-backed SDK/CLI/MCP, task-admission approval, Linux
+live sessions, and reference-only Git delivery/recovery. Three subscription coding providers have
+recorded real local parallel execution evidence at `652d1c2`; this is not general provider, platform
+or dogfood acceptance. The former `b1e430f` A3A-only snapshot is historical, not current capability.
+General tool mediation, Brain semantic acceptance and DOGFOOD closure remain open.
+
+Current transport is explicit: CLI Run/Task execution and approval use the runtime client; installation,
+worker inspection and patch/integration operations use direct composition. MCP stdio uses runtime for
+Run/Task/approval/model/spend and direct composition for catalog/activation. SDK exposes both configured
+applications and a runtime client. One application/state owner does not imply one transport; direct SDK
+access alone is not evidence of a policy bypass. Further custody/parity changes need their own proof.
+Only CLI and MCP surfaces are shipped here; Desktop/TUI/HTTP, external MCP client and IFS connectors
+remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
 Domain cannot import platform or other packages, host modules or ambient host globals. The purity gate also rejects
 composition access to domain decision functions while allowing schema/type wiring; static analysis does not prove
@@ -577,8 +602,9 @@ blanket group-writable product state. No ownership repair or host chmod is perfo
 ## Task approval, live sessions and isolated delivery
 
 Task admission approval is an additional restriction before scheduling's capacity-limited candidate
-selection, rechecked under the reservation transaction. It does not replace execution policy or the
-pure launch reducer. Durable requests/decisions/receipts use the shared ledger (v31), scoped MAC
+selection, rechecked under the reservation transaction. Composition installs this additional gate when
+the policy has task-resource rules; absent task restriction is not an execution grant. It does not
+replace execution policy or the pure launch reducer. Durable requests/decisions/receipts use the shared ledger (v31), scoped MAC
 custody, explicit expiry renewal and one application across SDK/CLI/MCP. `task-admission:2` binds the
 validated policy content as well as immutable Run/task/execution/requester identity. Pending requests
 consume no reservation slot; approval requires a new reservation command. Old receipts never expand.

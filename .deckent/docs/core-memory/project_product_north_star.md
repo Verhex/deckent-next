@@ -17,6 +17,8 @@ these names imply neither customers, endorsements nor proven suitability.
   No MVP ceiling, reduced product ambition or permission shortcuts for solo users.
 - Solo, team, on-prem, customer cloud and air-gapped deployment. Secure Core stands alone;
   proprietary Enterprise stays separately distributed. Organization policy can narrow authority.
+  Installation is the hosting/trust boundary; company is a scoped data boundary, not a filesystem root.
+  Accepted scope: installation > company > optional site/unit > project > session; default one company.
 - Human and direct-AI operation share identity, scope, policy, approval, error and result semantics.
   Persona, model advice, UI convenience and timeouts never grant authority.
 - Deterministic validated transitions, scheduling and effects have one owner and durable evidence.
@@ -41,8 +43,12 @@ Proceed through bounded, complete, reviewable responsibilities under ARCHITECTUR
 Small implementation slices do not mean a small product. Avoid perpetual analysis and redesign.
 Reopen accepted decisions only with explicit owner direction or new evidence of a material conflict;
 explain what changed, the gain/loss and the smallest justified amendment before changing the boundary.
-The full business ontology remains open for owner review: neither Run/Task/Attempt alone nor the old
-mandatory seven-level hierarchy is automatically accepted as the final Agent OS model.
+Owner decision 2026-09-22 accepts Mission → Run → Task → Attempt after approval/effect-policy
+prerequisites; implementation remains separate. Additional business aggregates require their own
+justification; the old mandatory seven-level hierarchy is not automatically restored.
+`do` is a proposal/admission capability independent of Mission. Business processes use a versioned
+operation catalog and existing Run/Task/Attempt authority; Mission templates coordinate their rounds
+and waits. These accepted targets are not claims of shipped company/process/do implementations.
 
 Every Jev decision consultation carries this exact shared context plus authored current stage,
 accepted decisions, evidence, unknowns, next step and option tradeoffs. Compare options against

@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CONTRACT/ASSURANCE: reconcile accepted company scope, independent do admission, Mission author and business-operation process targets; tie duration evidence to M1–M5 forecasts and require documentation reconciliation at task start/delivery. Add development-only host guard and tests; provider bare/auth compatibility remains a measured follow-up, not an auth or execution change.
+
 - ISOLATION/DELIVERY: linked replacement candidates preserve old writers/state; shared SDK/CLI reference-only Git delivery with dedicated create-only ref, atomic HEAD check, private index, live session and crash reconciliation; ledger32. Real concurrent Codex/Claude/Cursor edits, DAG join, shared pool, cancellation and retained-patch delivery verified. Approval action binding now includes full validated policy content even when a revision label is reused; native peer polling rejects full disconnect before delayed socket events. Source HEAD/index/WIP preserved; DOGFOOD remains OFF.
 
 - APPROVAL/SESSION: durable task-admission approval before candidate/pool reservation, immutable command replay, explicit expiry renewal, scoped HMAC custody and live process/connection sessions; shared SDK/CLI/MCP path, ledger31. Full verification: 1536 product,24 native,36 host tests. Remote token verification and notification delivery remain separate work.
