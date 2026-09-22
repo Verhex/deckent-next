@@ -99,6 +99,10 @@ describe('terminal chat turn is one governed model invocation', () => {
       .rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
     expect(p.invoked).toEqual([]);
     const f = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 8 } } });
+    const truncated = ports(async () => ({ ...reply(''), response: { schemaVersion: 1, native: { choices: [{ finish_reason: 'length',
+      message: { content: '', reasoning_content: 'thinking that must not be shown as an answer' } }] }, usage: null } }) as unknown as ModelInvocationResult);
+    await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, truncated.value))
+      .rejects.toMatchObject({ code: 'TERMINAL_CHAT_TRUNCATED', params: { maxCompletionTokens: 8 } });
     const empty = ports(async () => reply('   '));
     await expect(completeTerminalChatTurn({ projectRoot: f.projectRoot, scopeId: 's', messages: [{ role: 'user', content: 'x' }], options: f.options }, empty.value))
       .rejects.toMatchObject({ code: 'TERMINAL_CHAT_EMPTY' });

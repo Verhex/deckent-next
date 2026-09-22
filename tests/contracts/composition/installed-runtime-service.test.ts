@@ -109,7 +109,7 @@ it.skipIf(process.platform !== 'linux').each(['plain', 'conditional', 'approval'
     const reservation = JSON.parse((await exec(process.execPath, [cli, 'run', 'reserve', '--scope', 'scope-1', '--id', 'run-1', '--command-id', 'reserve', '--expected-revision', '0', '--json'], { cwd: project, env })).stdout);
     identity = reservation.reservation.identities[0];
     await client.connect(transport);
-    const execution = await client.callTool({ name: 'execute_task', arguments: identity }); expect(execution.isError).not.toBe(true);
+    const execution = await client.callTool({ name: 'execute_task', arguments: identity }); expect(execution.isError, JSON.stringify(execution.content)).not.toBe(true);
     const evaluation = await client.callTool({ name: 'evaluate_task', arguments: { schemaVersion: 1, commandId: 'evaluate', identity, expectedRevision: 2 } });
     expect(evaluation.isError).not.toBe(true);
     expect((evaluation.structuredContent as { evaluation: { run: { tasks: { id: string; phase: string }[] } } }).evaluation.run.tasks.find(task => 'id' in task && task.id === 'task-1')!.phase).toBe('accepted');

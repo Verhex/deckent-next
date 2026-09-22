@@ -879,6 +879,7 @@
   "error.MODEL_ACTIVATION_CATALOG_CONFLICT": "The current catalog no longer matches the requested exact model definition.",
   "error.TERMINAL_CHAT_NOT_CONFIGURED": "Terminal chat is not configured: add a `terminal.chat` section that names a declared catalog model.",
   "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "The terminal chat model is not declared in the current provider catalog.",
+  "error.TERMINAL_CHAT_TRUNCATED": "The model used its whole completion budget ({maxCompletionTokens} tokens) before answering; reasoning models often need more. Raise terminal.chat.maxCompletionTokens (within the profile maxOutputTokens).",
   "error.TERMINAL_CHAT_EMPTY": "The model returned no assistant text for this turn.",
   "error.TERMINAL_CHAT_CANCELLED": "The chat turn was cancelled; cancellation was requested from the model invocation service.",
   "error.TERMINAL_CHAT_UNAVAILABLE": "Terminal chat is unavailable in this executable (no governed model invocation handler).",

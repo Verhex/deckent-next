@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; E24 Cursor Paket A main'e alındı, sıradaki dilim yerel sağlayıcı harcama politikası
+# Anlık iş akışı — Opus 5.5; yerel sağlayıcı sıfır tarifesi teslim, terminal yüzeyi Cursor'a devrediliyor
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -202,13 +202,31 @@ terminal sohbeti bu yüzden bugün çalışmaz (harcama politikası kararı: aç
 `deckent-qwen38-llama` konteyneri `0.0.0.0:18080` ile yerel ağa açık (kimlik doğrulamasız). Paket B: runtime olay aboneliği, Desktop köprüsü,
 sunucu başlatma/metrics adapter'ı, görev→yerel-LLM bağlama ve kapasite kabulü, tam token pipeline.
 
+## E24 ek dilim: yerel/ücretsiz OpenAI uyumlu sağlayıcı — operatör sıfır tarifesi (owner A, Jev 09348842 0,91)
+
+`openai-chat-http` adaptör v4: tanımda zorunlu `tariff {kind operator-static, version 1, currency, input/outputMinorUnitsPerMillionTokens: 0}`
+(v1 yalnız sıfır). Harcama yetkisi saf teklif üretir (`pricing.id operator-static-tariff`, maxCharge 0, tarife/gövde digest'i meter kanıtı),
+scope bütçesine normal rezervasyon yazılır; yanıt alınan çağrı motor kuralı `operatorTariffLocalSettlement` ile `settled-local 0` kapanır;
+unknown/rejected `held` kalır, bütçe para birimi uyuşmazlığı HTTP öncesi `PROVIDER_SPEND_CONFLICT`, v3 profiller kullanılmaz. Pozitif
+maliyet dağıtımı ayrı ölçüm türü ister (kapsam dışı). Terminal: `finish_reason length` + boş içerik → `TERMINAL_CHAT_TRUNCATED`
+(düşünen model bütçeyi tüketti); meşgulken yazılan satır korunur, Enter tur bitince gönderir.
+**Canlı kanıt (gerçek yerel Qwen3.8-27B, loopback 127.0.0.1:18080, RTX 5090):** derlenmiş CLI ile aktivasyon → `runtime serve` →
+`terminal session --scope live` pipe: "pong", "7 times 6 is 42."; gerçek PTY workline: "Ankara"; ledger 3 çağrı `operator-static-tariff`,
+maxCharge 0, `settled-local 0`, bütçe limiti 0. İlk koşumda 256 token'da ikinci tur `finish_reason length` → TRUNCATED düzeltmesinin kaynağı.
+Kanıt: `/home/alperen/deckent-refactor-work/proof/E24-LOCAL-PROVIDER-TARIFF-2026-09-22/`. Verify koşum 4: 1620/1621 — tek hata
+`installed-runtime-service` (MCP execute_task; ikinci kez görüldü, izole+yük altında 3/3 geçti, teşhis için assertion mesajı eklendi, I40).
+
+## Terminal yüzeyi → Cursor devri (owner 2026-09-22)
+
+Owner: terminal işleri Cursor'a devredilir; Cursor yeni main'den bağımsız yeni worktree'de yürür. Referans: `deckent-dev` terminali (salt
+okunur, çalıştırılmaz). Açık terminal bulguları: (1) canlı PTY'de yönetilen sohbet turundan sonra `/exit` süreci kapatmadı (çevrimdışı
+PTY testinde kapatıyor; tekrar betiği `proof/E24-LOCAL-PROVIDER-TARIFF-2026-09-22/pty-debug.py`, kök neden ölçülmedi); (2) asistan etiketi
+`deckent` görünüyor, kullanıcı/asistan ayrımı gözden geçirilmeli; (3) Paket B listesi (PLAN). Main'de terminal için yeni iş açılmaz.
+
 ## Sıradaki sıra
 
-Owner 2026-09-22: E24 onaylandı → main fast-forward `c86ff1a` (push yok, ayrı söz); Cursor Paket B'ye eski WIP'ten değil yeni main'den başlar;
-LAN'a açık `deckent-qwen38-llama` (0.0.0.0:18080, `--rm`) durduruldu, yeniden başlatma yolu `host-tools/inference/start-qwen38.mjs` loopback.
-**Sıradaki dilim (owner "sonraki dilim"):** yerel/ücretsiz OpenAI uyumlu sağlayıcı için harcama politikası (açık sıfır tarife veya yerel
-sağlayıcı sınıfı) — tasarım owner checkpoint'iyle; ardından gerçek yerel Qwen ile yönetilen terminal sohbeti kanıtı. Sonra iş planı: öneri
-uygulama otomasyonu, API şema anlık görüntüleri, run düzeyi kapanış, test artığı/yetim süreç sızıntısı triyajı, **B06/B07**; DOGFOOD OFF.
+Opus iş planı: öneri uygulama otomasyonu (profil revizyonu), API şema anlık görüntüleri, run düzeyi kapanış, test artığı/yetim süreç
+sızıntısı ve `installed-runtime-service` aralıklı hata triyajı, **B06/B07**; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.

@@ -130,13 +130,14 @@ export function WorklineApp(props: WorklineProps) {
   }, [errorText, exit, labels, ledger, line, push, runTurn, watch]);
 
   useInput((input, key) => {
-    if (busy) {
+    if (busy && (key.escape || (key.ctrl && input === 'c'))) {
       // A running turn is cancelled, never abandoned: the governed invocation receives a cancellation request.
-      if ((key.escape || (key.ctrl && input === 'c')) && turn.current && !cancelling) { setCancelling(true); turn.current.abort(); }
+      if (turn.current && !cancelling) { setCancelling(true); turn.current.abort(); }
       return;
     }
     if (key.ctrl && input === 'c') { exit(); return; }
-    if (key.return) { void submit(); return; }
+    // While busy the line stays editable and is kept; it is submitted with Enter once the turn has finished.
+    if (key.return) { if (!busy) void submit(); return; }
     if (key.backspace || key.delete) { setLine(current => current.slice(0, -1)); return; }
     if (input && !key.ctrl && !key.meta) setLine(current => current + input);
   });

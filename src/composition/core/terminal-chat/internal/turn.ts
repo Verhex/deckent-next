@@ -4,7 +4,7 @@ import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engin
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { readTerminalChatConfig, registerProviderConfig } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { extractOpenAiChatTextFromInvocation } from './extract-text.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength } from './extract-text.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 
@@ -69,6 +69,10 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
     throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
   }
   const text = extractOpenAiChatTextFromInvocation(outcome);
-  if (!text) throw ErrorRegistry.createError('TERMINAL_CHAT_EMPTY');
+  if (!text) {
+    throw openAiChatStoppedAtLength(outcome)
+      ? ErrorRegistry.createError('TERMINAL_CHAT_TRUNCATED', { params: { maxCompletionTokens: chat.maxCompletionTokens } })
+      : ErrorRegistry.createError('TERMINAL_CHAT_EMPTY');
+  }
   return text;
 }

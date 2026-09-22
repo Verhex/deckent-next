@@ -23,6 +23,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
   TERMINAL_CHAT_MODEL_NOT_DECLARED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_MODEL_NOT_DECLARED', p, l) }) },
+  TERMINAL_CHAT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_TRUNCATED', p, l) }) },
   TERMINAL_CHAT_EMPTY: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_EMPTY', p, l) }) },
   TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
   TERMINAL_CHAT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_UNAVAILABLE', p, l) }) },
