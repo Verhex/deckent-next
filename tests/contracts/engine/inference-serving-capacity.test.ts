@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InferenceServingProfile } from '#domain/index.js';
-import { buildInferenceServingPlan, capExecutionSlots, estimateReplicaCapacity, InferenceTokenBudget, parseInferencePrometheus, pickServedModelId, roleContextCeiling } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceTokenBudget, roleContextCeiling } from '#engine/index.js';
 
 const profile: InferenceServingProfile = {
   schemaVersion: 1,
@@ -38,18 +38,6 @@ describe('inference serving capacity', () => {
     expect(roleContextCeiling(profile, 'worker')).toBe(65536);
   });
 
-  it('requires exact published model id', () => {
-    expect(pickServedModelId('Qwen3.8-27B-Q4_K_M', ['Qwen3.8-27B-Q4_K_M'])).toBe('Qwen3.8-27B-Q4_K_M');
-    expect(() => pickServedModelId('Qwen3.8-27B', ['Qwen3.8-27B-Q4_K_M'])).toThrow('INFERENCE_MODEL_ID_MISMATCH');
-    expect(() => pickServedModelId('only', ['a', 'b'])).toThrow('INFERENCE_MODEL_ID_MISMATCH');
-  });
-
-  it('caps run execution slots to inference max-num-seqs', () => {
-    const capacity = estimateReplicaCapacity(profile);
-    expect(capExecutionSlots(profile, 64)).toBe(capacity.maxNumSeqs);
-    expect(capExecutionSlots(profile, 1)).toBe(1);
-  });
-
   it('builds docker launcher argv without latest tag drift', () => {
     const plan = buildInferenceServingPlan(profile);
     expect(plan.launcher.kind).toBe('docker');
@@ -65,11 +53,18 @@ describe('inference serving capacity', () => {
     expect(second).toBe('wait');
   });
 
-  it('parses prometheus metric aliases', () => {
-    const body = 'vllm:kv_cache_usage_perc 42.5\nvllm:num_requests_running 3\nvllm:num_requests_waiting 1\n';
-    const snapshot = parseInferencePrometheus(body);
-    expect(snapshot.kvCacheUsageRatio).toBeCloseTo(0.425);
-    expect(snapshot.running).toBe(3);
-    expect(snapshot.waiting).toBe(1);
+  it('rejects a request above its role ceiling instead of silently clamping it', () => {
+    const budget = new InferenceTokenBudget(10_000_000, role => roleContextCeiling(profile, role));
+    expect(budget.tryReserve({ id: 'big', role: 'auditor', estimatedTokens: 32769 })).toBe('rejected');
+    expect(budget.tryReserve({ id: 'fit', role: 'auditor', estimatedTokens: 32768 })).toBe('admitted');
+    expect(budget.snapshot().reserved).toBe(32768);
+  });
+
+  it('publishes launchers on loopback only', () => {
+    const docker = buildInferenceServingPlan(profile, 18080).launcher.argv;
+    expect(docker.slice(0, 5)).toEqual(['docker', 'run', '--rm', '-p', '127.0.0.1:18080:8000']);
+    const process = buildInferenceServingPlan({ ...profile, serving: { ...profile.serving, imageRef: undefined } } as InferenceServingProfile, 18081).launcher.argv;
+    expect(process[0]).toBe('vllm');
+    expect(process.slice(process.indexOf('--host'), process.indexOf('--host') + 4)).toEqual(['--host', '127.0.0.1', '--port', '18081']);
   });
 });

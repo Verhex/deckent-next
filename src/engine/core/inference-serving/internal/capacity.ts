@@ -37,8 +37,3 @@ export function estimateReplicaCapacity(profile: InferenceServingProfile): Repli
 export function roleContextCeiling(profile: InferenceServingProfile, role: 'brain' | 'worker' | 'auditor'): number {
   return profile.workload.roleMaxCtx[role];
 }
-
-export function capExecutionSlots(profile: InferenceServingProfile, executionSlots: number): number {
-  const capacity = estimateReplicaCapacity(profile);
-  return Math.max(1, Math.min(executionSlots, capacity.maxNumSeqs));
-}

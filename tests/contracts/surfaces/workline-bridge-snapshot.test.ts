@@ -21,15 +21,12 @@ const profile: InferenceServingProfile = {
 };
 
 describe('workline bridge snapshot', () => {
-  it('builds desktop-shaped snapshot with tail cap', () => {
+  it('builds desktop-shaped snapshot with a work-only tail cap and no chat content', () => {
     const plan = buildInferenceServingPlan(profile);
-    const entries = Array.from({ length: 5 }, (_, index) => ({
-      schemaVersion: 1 as const,
-      kind: 'chat' as const,
-      id: `c-${index}`,
-      role: 'user' as const,
-      text: `m${index}`,
-    }));
+    const entries = Array.from({ length: 5 }, (_, index) => [
+      { schemaVersion: 1 as const, kind: 'chat' as const, id: `c-${index}`, role: 'user' as const, text: `secret prompt ${index}` },
+      { schemaVersion: 1 as const, kind: 'notice' as const, id: `n-${index}`, level: 'info' as const, text: `notice ${index}` },
+    ]).flat();
     const snapshot = buildWorklineBridgeSnapshot({
       profile,
       plan,
@@ -39,8 +36,8 @@ describe('workline bridge snapshot', () => {
       observedAtMs: 1000,
     });
     expect(snapshot.profileId).toBe('host-qwen');
-    expect(snapshot.ledgerTail).toHaveLength(3);
-    expect(snapshot.ledgerTail[0]!.id).toBe('c-2');
+    expect(snapshot.ledgerTail.map(entry => entry.id)).toEqual(['n-2', 'n-3', 'n-4']);
+    expect(JSON.stringify(snapshot)).not.toContain('secret prompt');
     expect(snapshot.observedAtMs).toBe(1000);
   });
 

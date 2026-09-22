@@ -1,5 +1,8 @@
 import type { WorkLedgerWorkerEntry } from './work-ledger.js';
 
+/** Remembered identities are bounded; the oldest are forgotten first (a forgotten worker may be shown again). */
+export const WATCH_SEEN_LIMIT = 4096;
+
 export function newWorkerTaskIds(
   seen: ReadonlySet<string>,
   workers: readonly WorkLedgerWorkerEntry[],
@@ -12,5 +15,6 @@ export function newWorkerTaskIds(
     next.add(key);
     fresh.push(worker);
   }
+  for (const key of next) { if (next.size <= WATCH_SEEN_LIMIT) break; next.delete(key); }
   return { seen: next, fresh: Object.freeze(fresh) };
 }

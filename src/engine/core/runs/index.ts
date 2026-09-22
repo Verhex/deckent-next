@@ -17,7 +17,6 @@ export type { ExecutionRegistryValidation } from './internal/registry.js';
 export { selectReservedTaskProfile } from './internal/execution.js';
 export { RunReservationApplication, runReservationCommandSchema } from './internal/reservation.js';
 export type { RunReservationCommand, RunReservationStore, ReservationRuntime, RunAdmissionFilter } from './internal/reservation.js';
-export { composeRunAdmissionFilters } from './internal/admission-compose.js';
 export type { PoolAuthorization } from '#engine/core/policy/index.js';
 export { cancellationRecoveryQuerySchema, cancellationRecoveryPageSchema, cancellationRecoveryPage } from './internal/recovery-query.js';
 export type { CancellationRecoveryQuery, CancellationRecoveryPage, CancellationRecoveryQueryStore } from './internal/recovery-query.js';

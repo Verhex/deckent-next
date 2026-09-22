@@ -317,34 +317,21 @@
       ],
       "plan": "FOUNDATION"
     },
-    "src/composition/core/inference-serving": {
-      "dependencies": [
-        "src/domain/core/inference-serving",
-        "src/domain/core/principal",
-        "src/domain/core/run",
-        "src/engine/core/inference-serving",
-        "src/engine/core/runs",
-        "src/platform/core/config"
-      ],
-      "plan": "PROVIDERS"
-    },
     "src/composition/core/terminal-chat": {
       "dependencies": [
-        "src/composition/core/model-invocation",
-        "src/domain/core/inference-serving",
-        "src/domain/core/model-activation",
+        "src/adapters/core/contract",
+        "src/composition/core/provider-catalog",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
-        "src/engine/core/inference-serving",
         "src/engine/core/model-invocation",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },
     "src/composition/core/runs": {
       "dependencies": [
-        "src/composition/core/inference-serving",
         "src/adapters/core/approval-store",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -361,7 +348,6 @@
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
-        "src/engine/core/inference-serving",
         "src/engine/core/policy",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -695,8 +681,7 @@
         "src/domain/core/inference-serving",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
-        "src/engine/core/worker-observation",
-        "src/platform/core/i18n"
+        "src/engine/core/worker-observation"
       ],
       "plan": "SURFACES"
     },

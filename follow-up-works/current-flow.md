@@ -1,4 +1,4 @@
-# Anlık iş akışı — Fable dilimleri tamamlandı ve push'landı; süreç Opus 5.5'e devrediliyor (ilk iş: Cursor terminal WIP'inin kontrollü alınması)
+# Anlık iş akışı — Opus 5.5 devraldı; E24 Cursor Paket A (yerel çıkarım + Ink terminal) main'e alınıyor
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -159,25 +159,58 @@ ilk koşumda eşzamanlı docker build yükü. I40 triyajı için not: bu iki tes
 Düzeltilen gerçek kusur: `runtime serve` açılış raporu host `done` handler'ını geciktiriyordu (unhandled rejection) — yarış önce kurulup
 işlenmiş işaretleniyor. Açık: receipt `sourceRevision` kopyalanan bağlamda `unknown`; öneri uygulama otomasyonu ayrı dilim.
 
-## Devir — Opus 5.5 (owner 2026-09-22)
+## Devir — Opus 5.5 (owner 2026-09-22, devralındı)
 
-Owner: dilimler bitince süreç Opus 5.5'e devredilir; Opus Cursor terminal işinin teslim alınmasıyla başlar. Devir paketi:
-`/home/alperen/deckent-refactor-work/OPUS-CONTINUATION-2026-09-22.md` (teslimler, kanıt konumları, çalışma kuralları, Cursor WIP envanteri ve
-kontrollü alma planı). Salt okunur keşif: Cursor dalında commit yok, tüm iş worktree WIP'i (19 izli + 20 untracked yol; `ink`/`react` bağımlılığı,
-`jsx` tsconfig, lint-arch çözücü değişikliği, 10 test); main ile 11 ortak dosya çakışma adayı. Fable worktree'ye yazmadı. `origin/main` = son commit, ağaç temiz.
+Opus [devir paketini](../../deckent-refactor-work/OPUS-CONTINUATION-2026-09-22.md) devraldı; main = origin/main = f9f1926, ağaç temiz.
+Temizlik silmeleri (refactor-work arşivli 13 belge, Go toolchain, eski `/tmp/deckent-*`/`/tmp/dn-*` test artıkları, çıkmış test
+konteynerleri, yetim `node -e setInterval` test süreci) owner'a bırakıldı ("sonra ben yaparım"). Test artığı sızıntısı ayrı bulgudur.
+
+## E24 teslim: Cursor Paket A main'e alma (owner 1-a, ink/react kabul, host betikleri Opus kararı)
+
+Cursor durdu; commit'lenmemiş WIP `1da40c8` olarak (geçici index, worktree dokunulmadan) alındı, `integrate/terminal-package-a`
+(`/home/alperen/deckent-next-wt-terminal-merge`) dalında main üzerine uygulandı; 3 çakışma (current-flow main, cli.help en/tr +2 satır).
+Baseline commit c220673; düzeltmeler ayrı commit. Jev c8f5bb72: integrator_fixes_then_land 0,88 (none 0,03, insufficient 0,04); karar kayıtlı.
+
+**Bulunan ve düzeltilen kusurlar (inceleme Opus alt ajanı = self-review, bağımsız değil):** (1) `terminal` config bölümü kayıtlı değildi,
+`terminal.chat` yükleyicide `unrecognized_keys` ile reddediliyordu — yönetilen sohbet hiç yapılandırılamıyordu; (2) istek gövdesi
+`max_tokens`+`max_completion_tokens` taşıyordu, OpenAI ve OpenRouter adaptör şemaları reddederdi; (3) handler yoksa yüzey denetimsiz HTTP'ye
+düşüyordu, engine `fetch` + `process.env` anahtar okuyordu; (4) scope çıkarım profilinden geliyordu, `--scope`/principal yoktu;
+(5) `inference_serving` varsa tüm Run'ların slotu yerel LLM kapasitesiyle kısılıyor, token filtresi bekleyenleri biriktirmiyordu;
+(6) Ink `Static` 400 kırpmasından sonra yeni satır basmıyordu; (7) tur iptal edilemiyordu, Ctrl+C busy'de yutuluyordu; (8) izleme sorguları
+üst üste biniyordu, hatalar yutuluyordu; (9) `NO_COLOR`'da çerçeve rengi sabitti, TTY yalnız stdin'den; (10) köprü dosyası: env yolu,
+tahmin edilebilir tmp, her render'da yazım, sohbet içeriği saklama/purge dışında; (11) `inference serve` yüzeyden süreç, `metrics`
+yüzeyden HTTP; vLLM `0.0.0.0` publish; ürün metinleri host betiklerine atıf yapıyordu.
+
+**Sonuç davranış:** her sohbet turu `models invoke` ile aynı runtime client'tan geçen tek yönetilen model çağrısı (`--scope`, taze katalog
+binding, principal/policy/aktivasyon/harcama runtime'da); Esc/Ctrl+C(busy) → bekleme durur + o çağrı için iptal isteği; `workline` TTY
+stdin+stdout ister (`TERMINAL_TTY_REQUIRED`), `session` pipe'ta satır modu; ledger ekleme-yalnız epoch'lu `Static`; tek-uçuşlu izleme,
+sınırlı hafıza; `inference plan|budget` saf tahmin, loopback publish; Run kabulü main ile aynı; köprü snapshot'ı sohbet metni taşımaz.
+Host betikleri `/home/alperen/deckent-refactor-work/host-tools/inference/` altına taşındı (Cursor akış notu dahil). Ink 7.1.1 / React 19.3.0 tam sabit.
+
+**Kanıt:** yeni testler — composition terminal-chat 6 (gerçek config yükleyici; config→chat-plan entegrasyonu; OpenAI adaptör şeması pozitif +
+eski gövde negatif; iptal hedef digest), Ink render 6 (600 satır, Esc/Ctrl+C iptal, idle Ctrl+C çıkış, renk yok, tek-uçuş/tek hata bildirimi),
+CLI 5, **gerçek PTY süreç testi 3** (python3 `pty`: workline render, `/workers` → `POLICY_UNAVAILABLE`, sohbet → `TERMINAL_CHAT_NOT_CONFIGURED`,
+idle Ctrl+C, pipe degrade), **uçtan uca 1** (derlenmiş `terminal session` → gerçek runtime servisi → fiyatlı fixture sağlayıcı: 2 tur 2 istek,
+policy kapatılınca tipli hata ve 0 ek istek). Tam verify koşumu 1: 1617/1618 — tek hata `model-invocation.test.ts` (dokunulmadı, izole 3/3
+geçti; Fable'ın I40 yük-bağımlı notuyla uyumlu). Son tam verify sonucu aşağıda.
+
+**Açık / owner kararı:** fiyatsız OpenAI uyumlu profil yönetilen yolda `PROVIDER_SPEND_UNAVAILABLE` ile reddedilir; yerel ücretsiz LLM ile
+terminal sohbeti bu yüzden bugün çalışmaz (harcama politikası kararı: açık sıfır tarife / yerel sağlayıcı sınıfı). Cursor'ın çalışan
+`deckent-qwen38-llama` konteyneri `0.0.0.0:18080` ile yerel ağa açık (kimlik doğrulamasız). Paket B: runtime olay aboneliği, Desktop köprüsü,
+sunucu başlatma/metrics adapter'ı, görev→yerel-LLM bağlama ve kapasite kabulü, tam token pipeline.
 
 ## Sıradaki sıra
 
-Owner 2026-09-22: rebuild dilimi tamamlandı; sıradaki owner kararı: Cursor'ın `feat/local-llm-terminal` işini kontrollü biçimde main'e almak
-(exact diff, gerçek koşum kanıtı, ortak dosyalarda tek yazar denetimi). Sonra: öneri uygulama otomasyonu (profil revizyonu), API şema anlık
-görüntüleri, run düzeyi kapanış, **B06/B07**; DOGFOOD OFF kalır.
+E24: owner onayıyla main'e commit (push ayrı söz); Cursor Paket B'ye yeni main üzerinden başlar (worktree'deki eski WIP yeni main'e
+rebase edilmeli, çakışma beklenir). Sonra iş planı: öneri uygulama otomasyonu (profil revizyonu), API şema anlık görüntüleri, run düzeyi
+kapanış, test artığı/yetim süreç sızıntısı triyajı, **B06/B07**; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
 
 ## Ayrı sahipli Cursor hattı ve host araçları
 
-Cursor localLLM/terminal: /home/alperen/deckent-next-wt-local-llm, feat/local-llm-terminal, başlangıç 652d1c2;
-bu dilimde değiştirilmedi/merge edilmedi. Host guard ve Jev araçları önceki checkpoint'tedir; hook bağlama
+Cursor localLLM/terminal: /home/alperen/deckent-next-wt-local-llm, feat/local-llm-terminal (worktree dokunulmadı; Paket A içeriği
+`integrate/terminal-package-a` üzerinden main'e gider). Host guard ve Jev araçları önceki checkpoint'tedir; hook bağlama
 `.claude/settings.local.json` içinde yerel ve gitignored'dır. Geliştirme kanıtı refactor-work altında, Git/npm dışında.
 Legacy read-only, çalıştırılmaz.

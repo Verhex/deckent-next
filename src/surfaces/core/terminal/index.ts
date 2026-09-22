@@ -1,4 +1,6 @@
-export { runTerminalWorkline, type WorklineCompleteTurn } from './internal/workline.js';
+export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
+export { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
+export { WorklinePaletteProvider } from './internal/ink-palette-context.js';
 export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from './internal/slash-registry.js';
 export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from './internal/ink-palette.js';
 export {

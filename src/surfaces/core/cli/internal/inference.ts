@@ -1,17 +1,14 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseInferenceServingConfig, resolveActiveInferenceProfile } from '#domain/index.js';
-import { spawn } from 'node:child_process';
-import { buildInferenceServingPlan, estimateReplicaCapacity, parseInferencePrometheus, readInferenceServingConfig, roleContextCeiling, InferenceTokenBudget } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingConfig, roleContextCeiling, InferenceTokenBudget } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 interface Parsed {
-  action: 'plan' | 'metrics' | 'budget' | 'serve';
+  action: 'plan' | 'budget';
   json: boolean;
   help: boolean;
-  dryRun: boolean;
   language?: string;
   profileId?: string;
-  metricsUrl?: string;
   reserveId?: string;
   reserveRole?: 'brain' | 'worker' | 'auditor';
   reserveTokens?: number;
@@ -20,13 +17,12 @@ interface Parsed {
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'inference') throw ErrorRegistry.createError('CLI_USAGE');
   const action = argv[1];
-  if (action !== 'plan' && action !== 'metrics' && action !== 'budget' && action !== 'serve') throw ErrorRegistry.createError('CLI_USAGE');
-  const parsed: Parsed = { action, json: false, help: false, dryRun: false };
+  if (action !== 'plan' && action !== 'budget') throw ErrorRegistry.createError('CLI_USAGE');
+  const parsed: Parsed = { action, json: false, help: false };
   const seen = new Set<string>();
   for (let index = 2; index < argv.length; index++) {
     const key = argv[index] === '-h' ? '--help' : argv[index]!;
     if (key === '--help') { parsed.help = true; continue; }
-    if (key === '--dry-run') { parsed.dryRun = true; continue; }
     if (key === '--json') { parsed.json = true; continue; }
     if (key === '--no-color') continue;
     if (key === '--lang') {
@@ -41,10 +37,6 @@ function parse(argv: readonly string[]): Parsed {
       const value = argv[++index];
       if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       parsed.profileId = value;
-    } else if (key === '--metrics-url') {
-      const value = argv[++index];
-      if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
-      parsed.metricsUrl = value;
     } else if (key === '--reserve-id') {
       const value = argv[++index];
       if (!value) throw ErrorRegistry.createError('CLI_USAGE');
@@ -60,6 +52,8 @@ function parse(argv: readonly string[]): Parsed {
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (parsed.help && parsed.json) throw ErrorRegistry.createError('CLI_USAGE');
+  const reserve = [parsed.reserveId, parsed.reserveRole, parsed.reserveTokens].filter(value => value !== undefined).length;
+  if (reserve !== 0 && (reserve !== 3 || parsed.action !== 'budget')) throw ErrorRegistry.createError('CLI_USAGE');
   return parsed;
 }
 
@@ -105,30 +99,9 @@ export async function inferenceCommand(argv: readonly string[], context: Command
     return;
   }
   const profile = resolveProfile(serving, parsed.profileId);
-  if (parsed.action === 'plan' || parsed.action === 'serve') {
+  if (parsed.action === 'plan') {
     const plan = buildInferenceServingPlan(profile);
-    if (parsed.action === 'serve') {
-      if (parsed.dryRun || plan.launcher.argv.length === 0) {
-        emit(plan, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderPlan(value, locale) });
-        return;
-      }
-      const child = spawn(plan.launcher.argv[0]!, plan.launcher.argv.slice(1), { stdio: 'inherit', env: { ...env, ...plan.launcher.env } });
-      await new Promise<void>((resolvePromise, reject) => {
-        child.on('error', reject);
-        child.on('exit', code => { if (code === 0) resolvePromise(); else reject(ErrorRegistry.createError('CLI_USAGE')); });
-      });
-      return;
-    }
     emit(plan, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderPlan(value, locale) });
-    return;
-  }
-  if (parsed.action === 'metrics') {
-    if (!parsed.metricsUrl) throw ErrorRegistry.createError('CLI_USAGE');
-    const response = await fetch(parsed.metricsUrl, context.signal ? { signal: context.signal } : {});
-    if (!response.ok) throw ErrorRegistry.createError('CLI_USAGE');
-    const body = await response.text();
-    const snapshot = parseInferencePrometheus(body);
-    emit(snapshot, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : formatValue(value) });
     return;
   }
   const capacity = estimateReplicaCapacity(profile);

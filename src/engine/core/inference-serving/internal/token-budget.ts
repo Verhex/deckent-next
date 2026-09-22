@@ -35,9 +35,8 @@ export class InferenceTokenBudget {
   }
 
   tryReserve(request: TokenReservationRequest): 'admitted' | 'wait' | 'rejected' {
-    const ceiling = this.roleCeiling(request.role);
-    const tokens = Math.min(Math.max(1, Math.floor(request.estimatedTokens)), ceiling);
-    if (tokens > ceiling) return 'rejected';
+    const tokens = Math.max(1, Math.floor(request.estimatedTokens));
+    if (tokens > this.roleCeiling(request.role)) return 'rejected';
     if (this.holds.has(request.id)) return 'admitted';
     if (this.reserved + tokens > this.capacity) return 'wait';
     this.holds.set(request.id, { role: request.role, tokens });

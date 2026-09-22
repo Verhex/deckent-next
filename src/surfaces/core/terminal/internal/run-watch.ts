@@ -1,6 +1,7 @@
 import type { RunView } from '#engine/index.js';
 import type { WorkLedgerRunEntry } from './work-ledger.js';
 import { runViewToLedgerEntry } from './work-ledger.js';
+import { WATCH_SEEN_LIMIT } from './worker-watch.js';
 
 export function runWatchFingerprint(run: RunView): string {
   const phases = new Map<string, number>();
@@ -20,8 +21,10 @@ export function newRunLedgerEntries(
   for (const run of runs) {
     const fingerprint = runWatchFingerprint(run);
     if (next.get(run.runId) === fingerprint) continue;
+    next.delete(run.runId);
     next.set(run.runId, fingerprint);
     fresh.push(runViewToLedgerEntry(run, `${idPrefix}-run-${run.runId}-${index++}`));
   }
+  for (const key of next.keys()) { if (next.size <= WATCH_SEEN_LIMIT) break; next.delete(key); }
   return { seen: next, fresh: Object.freeze(fresh) };
 }

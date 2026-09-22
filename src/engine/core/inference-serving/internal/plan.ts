@@ -17,12 +17,13 @@ function defaultOpenAiBase(port: number): string {
   return `http://127.0.0.1:${port}/v1`;
 }
 
-function buildVllmArgs(profile: InferenceServingProfile, capacity: ReturnType<typeof estimateReplicaCapacity>): string[] {
+/** Containers listen on all container interfaces behind a loopback-only publish; host processes bind loopback. */
+function buildVllmArgs(profile: InferenceServingProfile, capacity: ReturnType<typeof estimateReplicaCapacity>, host: string, port: number): string[] {
   const model = profile.serving.modelPath ?? profile.model.modelId;
   const args = [
     '--model', model,
-    '--host', '0.0.0.0',
-    '--port', '8000',
+    '--host', host,
+    '--port', String(port),
     '--max-model-len', String(profile.workload.maxCtx),
     '--max-num-seqs', String(capacity.maxNumSeqs),
     '--gpu-memory-utilization', String(profile.serving.gpuMemUtil),
@@ -46,8 +47,8 @@ export function buildInferenceServingPlan(profile: InferenceServingProfile, port
       launcher: { kind: 'process', argv: [], env: {} },
     };
   }
-  const vllmArgs = buildVllmArgs(profile, capacity);
   if (profile.serving.backend === 'vllm' && profile.serving.imageRef) {
+    const vllmArgs = buildVllmArgs(profile, capacity, '0.0.0.0', 8000);
     const gpuFlag = profile.hardware.gpus > 0 ? ['--gpus', `device=${profile.hardware.gpus === 1 ? '0' : 'all'}`] : [];
     return {
       profileId: profile.id,
@@ -56,7 +57,7 @@ export function buildInferenceServingPlan(profile: InferenceServingProfile, port
       openaiBaseUrl,
       launcher: {
         kind: 'docker',
-        argv: ['docker', 'run', '--rm', '-p', `${port}:8000`, ...gpuFlag, profile.serving.imageRef, ...vllmArgs],
+        argv: ['docker', 'run', '--rm', '-p', `127.0.0.1:${port}:8000`, ...gpuFlag, profile.serving.imageRef, ...vllmArgs],
         env: {},
       },
     };
@@ -66,6 +67,6 @@ export function buildInferenceServingPlan(profile: InferenceServingProfile, port
     backend: profile.serving.backend,
     capacity,
     openaiBaseUrl,
-    launcher: { kind: 'process', argv: ['vllm', ...vllmArgs], env: {} },
+    launcher: { kind: 'process', argv: ['vllm', ...buildVllmArgs(profile, capacity, '127.0.0.1', port)], env: {} },
   };
 }

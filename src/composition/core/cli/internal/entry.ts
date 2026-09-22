@@ -13,8 +13,7 @@ import { readInstallationProfileFile } from '#adapters/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
-import { completeTerminalChatTurn, describeTerminalChatPlan, loadTerminalChatTurnPlan } from '#composition/core/terminal-chat/index.js';
-import { loadConfig } from '#platform/index.js';
+import { completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -34,24 +33,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
-    describeTerminalChatPlan: async (projectRoot, options) => {
-      const config = await loadConfig(projectRoot, options);
-      const plan = describeTerminalChatPlan(config as Record<string, unknown>, options.env ?? process.env);
-      return { backend: plan.backend, invokeReady: plan.invokeReady, ...(plan.blockCode ? { blockCode: plan.blockCode } : {}) };
-    },
-    completeTerminalChat: async (projectRoot, profile, messages, options, signal) => {
-      const plan = await loadTerminalChatTurnPlan(projectRoot, profile, messages, options, options.env ?? process.env, signal);
-      if (plan.blockCode) throw new Error(plan.blockCode);
-      return completeTerminalChatTurn({
-        projectRoot,
-        profile,
-        messages,
-        backend: plan.backend,
-        ...(plan.modelInvocation ? { modelInvocation: plan.modelInvocation } : {}),
-        options,
-        ...(signal ? { signal } : {}),
-      });
-    },
+    describeTerminalChatPlan: describeTerminalChat,
+    completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
+      { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
     inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount,

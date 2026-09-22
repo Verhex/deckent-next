@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
 import { createConnection } from 'node:net';
@@ -436,3 +436,27 @@ it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effe
     await normalClient.close().catch(() => undefined); await normalTransport.close().catch(() => undefined);
   }
 }, 20_000);
+
+it.skipIf(process.platform !== 'linux')('completes compiled terminal line-mode turns as governed runtime invocations and stops at policy', async () => {
+  await access(cli).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
+  const f = await fixture(), observer = { async onPage() {}, async onError() {} };
+  const configPath = join(f.project, '.deckent/config.json');
+  const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(configPath, JSON.stringify({ ...config, terminal: { chat: { schemaVersion: 1, reference: f.reference, maxCompletionTokens: 4 } } }), { mode: 0o600 });
+  clearConfigCache();
+  const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
+  const session = (input: string) => new Promise<{ code: number | null; stdout: string; stderr: string }>((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [cli, 'terminal', 'session', '--scope', 'scope', '--lang', 'en'], { cwd: f.project, env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '', stderr = ''; const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
+    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', reject); child.on('close', code => { clearTimeout(timer); resolvePromise({ code, stdout, stderr }); }); child.stdin.end(input);
+  });
+  const answered = await session('first question\nsecond question\n');
+  expect(answered.code, answered.stderr).toBe(0);
+  expect(answered.stdout.split('\n').filter(line => line === 'done')).toHaveLength(2);
+  expect(f.requests).toBe(2); expect(f.totalCount()).toBe(2);
+  await f.policy(false);
+  const denied = await session('third question\n');
+  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/\[[A-Z_]+\]/);
+  expect(denied.stdout).not.toContain('done'); expect(f.requests).toBe(2);
+}, 30_000);

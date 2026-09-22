@@ -2,12 +2,10 @@
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
-  readonly requiresInference?: boolean;
 }
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
-  { name: 'status', descriptionKey: 'terminal.slash.status', requiresInference: true },
-  { name: 'chat-backend', descriptionKey: 'terminal.slash.chatBackend' },
+  { name: 'status', descriptionKey: 'terminal.slash.status' },
   { name: 'workers', descriptionKey: 'terminal.slash.workers' },
   { name: 'watch-workers', descriptionKey: 'terminal.slash.watchWorkers' },
   { name: 'watch-runs', descriptionKey: 'terminal.slash.watchRuns' },

@@ -1,16 +1,22 @@
-import type { InferenceServingProfile } from '#domain/index.js';
+import type { ModelReference } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import type { InferenceChatMessage } from '#engine/index.js';
 
+export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+export type TerminalChatPlanView = Readonly<{
+  schemaVersion: 1;
+  status: 'ready' | 'not-configured' | 'model-not-declared';
+  reference: ModelReference | null;
+  catalogRevision: string | null;
+  maxCompletionTokens: number | null;
+  historyMessages: number | null;
+}>;
+
+/** One governed model invocation per turn in the caller's scope; abort requests cancellation of that invocation. */
 export type TerminalChatTurnHandler = (
   root: string,
-  profile: InferenceServingProfile,
-  messages: readonly InferenceChatMessage[],
+  input: Readonly<{ scopeId: string; messages: readonly TerminalChatMessage[] }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => Promise<string>;
 
-export type TerminalChatPlanHandler = (
-  root: string,
-  options: ConfigLoadOptions,
-) => Promise<{ readonly backend: string; readonly invokeReady: boolean; readonly blockCode?: string }>;
+export type TerminalChatPlanHandler = (root: string, options: ConfigLoadOptions) => Promise<TerminalChatPlanView>;
