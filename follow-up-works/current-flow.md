@@ -1,4 +1,4 @@
-# Anlık iş akışı — A02, B08 ve B05 ilk dilimi teslim edildi; sıradaki iptal/faz düzeltmesi ve B06
+# Anlık iş akışı — B05 bulguları araştırıldı, çözüm tasarımları owner onayı bekliyor; sıradaki adımlar kapalı
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -84,12 +84,24 @@ rezerve olmadı); (3) patch hazırlığı tüm ağacı okuyor, 64 KiB `git.outpu
 Kendi hatam: teslimden önce konteyneri serbest bırakmak patch custody'sini yok etti (tasarım gereği); sıra düzeltildi.
 Eski data/data2 kökleri ve `data2`'deki diag konteyneri (kaldırıldı) kanıt olarak duruyor; silme owner'ın.
 
+## Dördüncü iş: bulguların derin araştırması (owner: bulgular kesinleşmeden sıradaki adım kapalı)
+
+Kod düzeyinde kök nedenler bulundu (progression iptal istenen Run'ı atlıyor; teslim işçisi dispatch'siz attempt'e dokunmuyor; sandbox
+portu yalnız `exited|unknown`; değerlendirme iptal istenen Run'ı reddediyor; `preventRunAttempt` yalnız başlatma kararında; patch
+snapshot dosya başına `cat-file` + catch-all `PATCH_UNAVAILABLE`). Legacy salt okunur: CANCELLED fold + cancelReason + stale-run sweep.
+Vendor dokümanları (context7/web): Claude Code `claude update`/`DISABLE_AUTOUPDATER`/`claude doctor`; Codex `codex update`/`check_for_update_on_startup`;
+Cursor `agent update` (auto-update varsayılan açık, kapatma belgelenmemiş); OpenHands `uv tool upgrade openhands`; Hermes `hermes update [--check]`.
+Üç Jev danışması, kararlar kayıtlı: iptal settlement 1,00 (aa51432f); patch tipli limit + hash-diff 0,98 (d1247cf4); doctor güncellik +
+politika güdümlü sürümlü rebuild 0,97 (64811c47; vendor_mechanisms 0,46 — Cursor kapatması doğrulanmalı). Ürün kodu değişmedi.
+Rapor: `/home/alperen/deckent-refactor-work/proof/FINDINGS-RESEARCH-2026-09-22/review.md`. Uygulama owner onayı bekler.
+
 ## Sıradaki sıra
 
-1. **EXECUTION düzeltmesi (owner onayı gerekir, sözleşme davranışı):** iptal edilen attempt'in `cancelled` fazına inmesi ve kapasiteyi
-   bırakması; başlatma öncesi iptalde prevented→cancelled yolu; `PATCH_LIMIT`/`PATCH_UNAVAILABLE` ayrımı. B07 kurtarma kabulünün önkoşulu.
-2. **B06** doğrulanmış benimseme/terfi + rollback: teslim edilen `refs/deckent/deliveries/…` commit'inin canlı checkout'a kontrollü alınması.
-3. **B07** tekrarlanabilir dogfood kabulü; DOGFOOD OFF kalır. Sonra A03/A04/C10/C11/C12.
+Owner "devam" derse önerilen sıra (her biri ayrı küçük dilim, tam verify + negatif testler):
+1. **İptal settlement** (domain `settleCancelledAttempt` + teslim işçisi/reconcile/progression bağlaması + B05 hold senaryosunun tekrarı).
+2. **Patch tipli limit + hash-diff** (`git-patch` adapter'ı, `git.outputBytes` varsayılanı, büyük depo sözleşme testi).
+3. **Toolchain güncellik raporu** (doctor; yalnız rapor), ardından politika güdümlü sürümlü rebuild ve API şema anlık görüntüleri.
+4. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
