@@ -49,11 +49,22 @@ codex-cli 0.155.1, claude 2.1.278, cursor 2026.09.18 zorunlu bayraklarla; imaj i
 Negatif: aynı sürümü yeniden derleme derleme başlamadan reddedildi, receipt yazılmadı. `--image-id` re-probe yolu
 kaynak-doğrulanmamış receipt üretti, yeniden etiketlemedi. Tam verify: **1556 ürün/265 dosya, 25 native, 53 host; fail/skip 0**.
 Kanıt: `/home/alperen/deckent-refactor-work/proof/B08-WORKER-IMAGE-R2-2026-09-22/` (build.log, receipt'ler, negatif log, verify, review.md).
-Jev 55ee642a %96 (none %1, insufficient %2); karar/outcome kayıtlı. Açık: r2 ile kimlik doğrulamalı gerçek worker koşumu
-yapılmadı (abonelik kotası); mevcut execution profilleri hâlâ r1 imageId'sini gösterir, yeni profil revizyonu ayrı dilimdir;
-provider kanalları `latest` kalır; 16 eski dangling imaj owner'a bırakıldı. Ürün bağlaması imageId; tag/label yetki değildir.
+Jev 55ee642a %96 (none %1, insufficient %2); karar/outcome kayıtlı. Ürün bağlaması imageId; tag/label yetki değildir.
 
-**Ölçüm (effort report):** A02 M1 done active 0,13 s / verify 0,19 s; B08 M2 done active 0,12 s / verify 0,12 s; unknown 0.
+**r2 ile gerçek koşum (owner isteği):** Astra'nın doğrulanmış kompozisyon betiği r2 receipt'ine bağlanarak (`live-r2.mjs`)
+claude → cursor → codex sırayla koştu: üçü de exit 0, note.txt tam eşleşti, tek-dosya patch ve prompt receipt hash'leri eşleşti,
+network none / kapalı mount / salt okunur kök korundu, replay terminal; kaynak HEAD/index/WIP ve host credential dosyaları değişmedi;
+r2 konteyneri kalmadı. Kanıt: `r2-live.json`, `live-r2.log`. Bu abonelik kotasıyla tek sıralı koşumdur; genel dogfood kabulü değildir.
+Açık: execution profilleri hâlâ r1 imageId'sini gösterir (yeni profil revizyonu ayrı küçük dilim); provider kanalları `latest`.
+
+**Dangling imaj envanteri (salt okunur, 16 adet):** 13'ü legacy `Dockerfile.worker` derlemeleri (2026-08-21…09-04; CLAUDE_CODE_VERSION 2.1.259,
+INSTALL_CODEX/CURSOR/GEMINI/OLLAMA build-arg'ları, `/app/dist` + exec-authority native, HEALTHCHECK `claude --version`), 1'i legacy runtime tabanı
+(09-04, 125 MB), 1'i eski llama.cpp CUDA katmanı (08-13, 2,6 GB; Cursor hattının güncel imajı ayrı), 1'i Astra'nın r1'den 3 dk önceki
+ilk Next derlemesi (aa3506…, 09-21 14:47, 910 MB). Hiçbirinin receipt'i/etiketi yok; Next ürünü bunları bağlamaz. Astra'nın bu imajlar
+için yazılı bir planı bulunamadı (PLAN yalnız "eski imajlar korunur" der). Owner kararı: şimdilik kalsın; silme owner'ın komutudur.
+`/tmp/dn-prompt-*` altında 3 küçük fixture dizini (2 Astra, 1 bu koşum) duruyor.
+
+**Ölçüm (effort report):** A02 M1 done active 0,13 s / verify 0,19 s; B08 M2 done active 0,12 s / verify 0,12 s; B08 canlı koşum M2 done active 0,01 s / verify 0,02 s; unknown 0.
 A02 kapanışı ile B08 açılışı arasındaki ~10 dk (commit + ilk inceleme) dilim dışı, kayıtsız.
 
 ## Sıradaki sıra
