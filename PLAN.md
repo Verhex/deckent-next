@@ -172,13 +172,13 @@ Legacy'de var, Next'te fiziksel olarak olmayan katmanlar ve owner kararı. Kayna
 | M4 Enterprise kapısı | company scope/SSO/RBAC, secret, audit, backup, upgrade, supply chain, yük/arıza, SLO + IFS ilk senaryo | 2027-03-15 | 01-31 … 05-31 |
 | M5 Zekâ katmanı | Brain/Auditor/Nervous/learning/connector/catalog | 2027-05-15 | 03-15 … 08-31 |
 
-Ölçüm tabanı 6 gün/211 commit; proof tekrarı %30, düzeltici commit %19,6, kart süresi ölçülmemiş. İlk iş A02/W0-3 süre enstrümanı: her dilim M1–M5 milestone kimliği, startedAt/endedAt, aktif çalışma, BLOCKED/bekleme, doğrulama ve rework süresiyle kaydedilir. Bu ölçümler yukarıdaki temel tarih/aralıkların yeniden hesabına girdidir; commit sayısı efor yerine geçmez, gözlenmeyen süre tahminle doldurulmaz. Tarih/aralıklar iki haftada bir ve her milestone kabulünde ölçüm kaynağıyla yeniden yayımlanır; mevcut tarihler söz değil tahmindir.
+Ölçüm tabanı 6 gün/211 commit; proof tekrarı %30, düzeltici commit %19,6, kart süresi 2026-09-22'ye kadar ölçülmemiş. A02/W0-3 süre enstrümanı 2026-09-22'de kuruldu (`node .agents/refactor/effort.mjs report --format table`); tanım: her dilim M1–M5 milestone kimliği, startedAt/endedAt, aktif çalışma, BLOCKED/bekleme, doğrulama ve rework süresiyle kaydedilir. Bu ölçümler yukarıdaki temel tarih/aralıkların yeniden hesabına girdidir; commit sayısı efor yerine geçmez, gözlenmeyen süre tahminle doldurulmaz. Tarih/aralıklar iki haftada bir ve her milestone kabulünde ölçüm kaynağıyla yeniden yayımlanır; mevcut tarihler söz değil tahmindir.
 
 ### İş listesi eşlemesi — owner/Fable son düzeltmeleri
 
 | İş | Güncel sınır / bağımlılık | Takvim bağı |
 |---|---|---|
-| A02 | Süre/bekleme/doğrulama/rework ölçümü; mevcut kanıt kapısı tekrar yazılmaz. | M1–M5 tahminlerini ölçümle günceller. |
+| A02 | **Enstrüman kuruldu (2026-09-22):** `.agents/refactor/effort.mjs` dilim başına M1–M5, startedAt/endedAt, active/blocked/verification/rework aralıklarını özel immutable journal'a (`.deckent/host/effort`, Git dışı) yazar; pause/açık kuyruk *unknown* kalır, tahmin edilmez; durum enum'ludur; commit sayısı efor değildir. İlk gerçek kayıt A02 diliminin kendisidir. Kart dosyaları yeniden yazılmadı; mevcut kanıt kapısı değişmedi. | Her iki haftada `effort report` çıktısı M1–M5 yeniden yayımına girdidir; tek dilimle tahmin güncellenmez. |
 | D14 | Deterministik Mission, maxRounds ve tur checkpoint'i. | Kabuk/EXECUTION sözleşmeleri. |
 | D15a | Mission AI author; D14 + invocation allocation/spend ve checkpoint gerektirir. | D14 sonrası. |
 | D15b | `do` intent→RunProposal→kapılar→Run admission; D14'ten bağımsız, COMMAND-ENVELOPE/POLICY-EFFECT-VERDICT ve gereken approval sözleşmeleri sonrası. | Mission ile paralel; tam sohbet/TUI kabulü öncesi. |

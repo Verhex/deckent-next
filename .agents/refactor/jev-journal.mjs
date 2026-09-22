@@ -8,7 +8,7 @@ export const callId = () => randomUUID();
 export function validateCallId(id) { ensure(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id), 'JEV_CALL_ID'); return id; }
 export function safeData(data, key) {
   const encoded = JSON.stringify(data);
-  ensure(!encoded.includes(key) && !/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(encoded), 'JEV_SECRET_IN_JOURNAL');
+  ensure((key === undefined || !encoded.includes(key)) && !/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(encoded), 'JEV_SECRET_IN_JOURNAL');
   return encoded;
 }
 export async function privateDirectory(path) {

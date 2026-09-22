@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "journalRoot": "../../.deckent/host/effort",
+  "longIntervalMinutes": 180,
+  "reportLimit": 500
+}

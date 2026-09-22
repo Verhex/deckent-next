@@ -55,6 +55,23 @@ safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the 
 The `pilot` scope and local source catalog are development fixtures, not an installed default.
 DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
 
+### Development duration measurement (A02/W0-3)
+
+`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
+host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
+
+```sh
+node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
+node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
+node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
+node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
+node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
+```
+
+Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
+counted only between explicit events; unobserved time is reported as unknown and never estimated.
+`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
+
 ## Native coding profiles
 
 `coding prepare --input <file|-> --json` and SDK `prepareNativeCodingProfile` author a profile;

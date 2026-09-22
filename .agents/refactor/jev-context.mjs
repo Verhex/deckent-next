@@ -9,7 +9,7 @@ const strings = a => Array.isArray(a) && a.every(text);
 const exact = (v, fields) => object(v) && Object.keys(v).every(k => fields.includes(k));
 const id = v => typeof v === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(v);
 const unique = a => new Set(a).size === a.length;
-const instant = value => {
+export const instant = value => {
   if (typeof value !== 'string') return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
   if (!match) return null;

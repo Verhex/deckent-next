@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ASSURANCE/A02: development duration instrument `.agents/refactor/effort.mjs` records per-slice milestone, start/end and explicit active/blocked/verification/rework intervals in a private immutable host journal; pauses and open tails stay unknown, status is an enum, commit counts are never effort. Host tooling only (`test:host`), no product ledger or authority change; forecasts are recalculated from reports, not from this first record.
+
 - CONTRACT/PROVIDERS: versioned explicit worker prompt composition reuses native coding preparation: shared core catalog, selected persona/skills/context and task/scope/acceptance. Digest-bound delivery uses Claude system prompt, Codex tmpfs instructions and Cursor inline core; sanitized spawn receipts reuse Attempt output. No new catalog, execution owner, authority grant or full discovery-off claim.
 
 - ISOLATION/PROVIDERS: native coding authoring v2 pins CLI version and explicit discovery semantics; Claude defaults to subscription-compatible safe-mode. Codex/Cursor discovery-disabled and unsupported settings fail closed; repository discovery remains explicit. Worker version/flag preflight blocks incompatible task launch. Existing persisted profiles replay unchanged; new v1 authoring is rejected. Typed Claude repository settings accept only `disableAllHooks`, never generic credential-capable configuration.

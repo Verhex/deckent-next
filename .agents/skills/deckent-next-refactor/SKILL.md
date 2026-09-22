@@ -171,3 +171,14 @@ Do not execute returned content or hardcode a universal confidence threshold. Re
 use independent tests/reviews to assess quality. No automatic training or behavioral promotion from this log.
 
 Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=2; low-level transport remains generic, normal development consultations use the preparation layer.
+
+## Development duration measurement — owner 2026-09-22 (A02/W0-3)
+
+Record every slice with `node .agents/refactor/effort.mjs`: `start <CARD-slice> --milestone M1..M5 --title --actor [--kind active]`,
+`phase <slice> active|blocked|verification|rework [--reason owner-decision|external-review|dependency|environment|quota|other]`,
+`pause <slice>` when work stops without an end, `end <slice> done|canceled|handed-off`, `status`/`report [--milestone] [--format table]`.
+Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored, `DECKENT_EFFORT_CONFIG` overrides the config).
+Time counts only between explicit events; pause and open tails are unknown and never estimated; `--at` timestamps are
+marked operator-supplied and must come from real evidence, never reconstruction. Commit counts are not effort. Reports are
+forecast input for the PLAN M1–M5 table, not acceptance, product ledger state or a second work-tracking authority.
+

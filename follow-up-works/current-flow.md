@@ -1,79 +1,51 @@
-# Anlık iş akışı — worker prompt kompozisyonu
+# Anlık iş akışı — A02 süre enstrümanı teslim edildi, sıradaki B05
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
-Limit yenilenene kadar kabul edilmiş iş planı Fable'a devredilecek şekilde hazırlandı.
-[40 ana maddelik devir paketi](../../deckent-refactor-work/FABLE-CONTINUATION-2026-09-22.md)
-son teslimi, madde durumlarını, bağımlılıkları ve sınırları içerir. Fable'ın devralıp çalışmaya
-başladığı henüz doğrulanmadı; eski communication.md açılmadı. Astra yeni kod işi başlatmıyor.
-İlk iş A02/W0-3 ölçümü, ardından B05→B06→B07 N/N+1 kabul/kurtarma. Cursor E24/F26 hattı ayrı.
-Ürün HEAD52c11dc393d2b5786757e0ca0648d1b721aab5a5; main upstream'den2 commit ileride,0 geride.
-Devir öncesi ağaç temizdi; bu hazırlık yalnız PLAN/current-flow belge WIP'idir, commit/push yok.
-Tam verify sonucu aşağıdaki ürün HEAD'ine aittir; bu belge düzenlemesinde suite yeniden koşulmadı.
-Limit yenilenme saati bilinmiyor; geri devir owner ile, tek yazarlı yapılacak.
+Owner limit yenilenene kadar kabul edilmiş 40 ana maddenin rutin yürütücüsü Fable'dır.
+[Devir paketi](../../deckent-refactor-work/FABLE-CONTINUATION-2026-09-22.md) okundu ve devralındı;
+eski communication.md açılmadı, uzun goal yok. Owner isteğiyle devir belgeleri f2bdecb olarak
+commit'lendi ve `origin/main`'e push edildi (0 geride / 0 ileride). Cursor E24/F26 hattı ayrı kaldı.
 
-## Son teslim ve mevcut doğrulama
+## Son teslim: A02/W0-3 süre/bekleme/doğrulama/rework enstrümanı
 
-Baz cef8457 native discovery profilini teslim etti; önceki checkpoint923e5a2 push edilmişti.
-Owner şimdi legacy ortak worker prompt kompozisyonunu Next'e alma dilimini onayladı.
-DOGFOOD_MODE=OFF; Fable kanalı kapalı; bu dilimde push yok. Önceki belge WIP'i korundu.
+`node .agents/refactor/effort.mjs start|phase|pause|end|status|report` dilim başına M1–M5, kart,
+startedAt/endedAt ve açık `active|blocked|verification|rework` aralıklarını `.deckent/host/effort/<dilim>/`
+altında immutable, özel (0700/0600) sıralı olay dosyalarına yazar; jev-journal'ın exclusive-link
+mekanizması yeniden kullanıldı (journal helper'a yalnız anahtarsız çağrı izni ve `instant` export'u eklendi).
+Süre yalnız açık olaylar arasında sayılır; `pause` ve açık kuyruk *unknown* kalır, hiçbir eşikle
+tahmin edilmez; uzun aralıklar yalnız işaretlenir. Durum enum: `started|active|blocked|verification|rework|paused|done|canceled|handed-off`;
+blocked nedeni zorunlu enum. `--at` zaman damgası operator-supplied olarak ayrı sayılır; gelecek/monoton-olmayan
+zaman, bitmiş dilime olay, çift pause, sıra boşluğu ve private-key içeriği reddedilir. Rapor kilometre taşı
+başına gözlenen/unknown süre verir; commit sayısı hiçbir yerde efor değildir. Kart dosyaları yeniden yazılmadı;
+verify-context/reporter değişmedi. 6 node:test vakası (`test:host` 50).
 
-Native authoringv2 raw prompt veya composition-v1 alır. Tek sürümlü common-core kataloğu;
-açık persona/skill/context seçimi + görev/kapsam/kabul, içerik/argv hash'leri aynı hazırlanmış
-profili kullanır. Tam katalog, otomatik skill seçimi veya yeni yürütme otoritesi açılmadı.
-Claude core'u system-prompt, Codex özel tmpfs instructions-file, Cursor inline alır.
-Worker hash kontrolünden sonra yerel argümanları doldurur; native process spawn olduğunda
-mevcut Attempt çıktısına yalnız hash/kimlik/sürüm receipt'i yazar. Bu model uyumu değildir.
-Unicode bootstrap parçaları UTF-8 decoder ile birleştirilir; secret/prompt gövdesi loga çıkmaz.
+**İlk gerçek kayıt (bu dilim, M1):** başlangıç 11:29:06+03:00 (oturum dizini mtime, operator-supplied; öncesi
+gözlenmedi), bitiş 11:48:33+03:00. Gözlenen: active 0,13 s, verification 0,19 s, rework 0,003 s (eslint
+`preserve-caught-error` düzeltmesi), blocked 0, unknown 0. Doğrulama aralığında belge düzenlemesi de yapıldı;
+enstrüman aynı anda tek tür sayar. Tek dilim tahmin güncellemez; PLAN M1–M5 tablosu iki haftada bir
+`effort report` ile yeniden yayımlanır.
 
-Son derlemede sıralı Codex/Claude/Cursor koşumları dört ayrı katmandaki rastgele değerleri
-note.txt dosyasına tam yazdı; değerler görev metnine veya workspace fixture dosyalarına sızdırılmadı;
-üçünde tek-dosya patch, receipt hash/selection eşliği ve terminal replay doğrulandı.
-Host credential dosyaları, fixture kaynak HEAD/index/WIP korundu; network none ve kapalı
-mount sınırı korundu. Default core ile ilk üç koşum da dosya işini geçti; kanıt betiğindeki
-JSON alan sırası karşılaştırması false-negative verdi. Kayıt korundu; alan bazlı karşılaştırma
-ile ayrıştırıldı. İkinci üç koşum core içindeki özel talimatı da test etti; hepsi geçti.
-İlk 40 sözleşme testi ve tam verify geçti: **1556 ürün/265 dosya,25 native,44 host; fail/skip0**.
-Lint/build/smoke geçti. Son UTF-8 decoder düzeltmesi gerçek Docker testinde Türkçe/emoji
-ile ve ardından son derlemedeki üç native denemeyle doğrulandı. Toplam dokuz owned worker
-temizliği Docker envanterinden kontrol edildi. Ürün kaynakları tam suite sırasında sabit tutuldu.
-
-Keşif sınırı ayrı: Claude disabled/safe-mode; Codex/Cursor açık repository istisnası sürer.
-Codex project_doc_max_bytes=0 yalnız proje dokümanı otomatik yüklemesini hedefler; tüm hook/MCP
-kapalı iddiası yok. Prompt persona/skill yetki vermez; auth/API/ücret fallback'i eklenmedi.
-
-Kanıt: /home/alperen/deckent-refactor-work/proof/NATIVE-PROMPT-COMPOSITION-2026-09-22/
-(review.md, verification.json, profile-live.json/mjs, cleanup-check.json, full-verify.log).
-Legacy kaynak analizi: dış proof/LEGACY-PROMPT-COMPOSITION-2026-09-22/review.md; legacy salt okunur incelendi, çalıştırılmadı.
-Jev273914c5 mevcut profil üzerinden dar kompozisyon yolunu %99 önerdi;
-none0/insufficient%1, her iki abstention seçimi0/1. Karar ve bounded verified outcome kaydı var; yeni ürün kabulü anlamına gelmez.
-Jev/kendi doğrulamamız bağımsız Fable PASS'i değildir. README/ARCHITECTURE/PLAN/CHANGELOG güncel;
-AGENTS/CLAUDE52 satır; kalıcı ilke değişmedi, bu dosyalara gereksiz iş geçmişi eklenmedi.
+**Doğrulama:** üç tam verify koşumu. 1) eslint `preserve-caught-error` ile durdu (rework kaydı). 2) `DECKENT_TEST_DOCKER_IMAGE`
+tanımsızken 12 kurulum/servis testi ortam nedeniyle başarısız, 87 skip — enstrüman kusuru değil. 3) Astra'nın
+kullandığı `node:24-trixie-slim` imaj ID'siyle: **1556 ürün/265 dosya, 25 native, 50 host; fail/skip 0**; lint/build/smoke geçti.
+Kanıt: `/home/alperen/deckent-refactor-work/proof/A02-DURATION-INSTRUMENT-2026-09-22/` (üç verify logu, Jev vakası/yanıtı, review.md).
+Jev 40a55451 özel journal + açık pause seçeneğini %99 önerdi; none 0, insufficient %1; karar ve verified outcome kayıtlı.
+Bağımsız inceleme yok; Jev/kendi doğrulama Fable PASS değildir. Yerel commit yapıldı; push için owner sözü gerekir.
 
 ## Sıradaki sıra
 
-1. A02/W0-3 süre/bekleme/doğrulama/rework ölçümünü M1–M5 tarih güncellemelerine bağla;
-   gözlenmeyen süreyi tahminle doldurma, commit sayısını efor yerine koyma.
-2. N/N+1 kabul/kurtarma: mevcut çalışma kaydı ve kayıp/yeniden başlama sınırından ilerle;
-   genel tool/approval, Mission veya Enterprise yüzeylerini gereksiz dogfood kapısı yapma.
-3. Codex/Cursor tam discovery-off ve daha geniş explicit settings yalnız kendi gerçek kanıtıyla
-   desteklenmiş capability olur; mevcut açık repository istisnası kapatma kanıtı sayılmaz.
+1. **B05** N/N+1 paket ve çalışma alanı ayrımı: kararlı N ile izole N+1 kanıtı; mevcut onay broker'ı,
+   session ve reference-only teslim yeniden kurulmaz. Dilim `effort.mjs` ile kaydedilir.
+2. **B06→B07** doğrulanmış benimseme/terfi + rollback, sonra tekrarlanabilir dogfood kabulü; DOGFOOD OFF kalır.
+3. Sonra A03/A04/C10/C11/C12 kalanları; ortak arch/config/migration/CLI dosyalarında tek yazar.
 
-Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız.
-H34 company scope; Core company/RBAC M2 öncesi, IdP/SIEM M4. Process operasyon kataloğu ve
-mevcut yürütme/Mission şablonlarını kullanır; üçüncü motor yok. Yeni yetki sınırı somut seçenekle
-ownera gelir; mevcut worker izinleri tekrar sorulmaz. Önceki dört execution diliminin kanıtı
-FOUR-STEP-EXECUTION'dadır; önceki bare karşılaştırması NATIVE-BARE-COMPAT-2026-09-22'dedir.
+Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
+Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
 
 ## Ayrı sahipli Cursor hattı ve host araçları
 
-Cursor localLLM/terminal: /home/alperen/deckent-next-wt-local-llm, feat/local-llm-terminal,
-başlangıç652d1c2. Bu worktree değiştirilmedi/merge edilmedi; main'in ortak arch/config/CLI/i18n
-kaynaklarında paralel uygulama açılmadı. Exact commit/diff ve gerçek paralel koşum kanıtı geldiğinde
-ortak kaynaklar tek yazarlı birleşir, güncel PLAN'a eşlenir ve birleşen sonuç verify edilir.
-GPU/toolkit ve kapasite teşhisi bu dilimde yeniden ölçülmedi. Legacy read-only, çalıştırılmaz.
-
-Fable host guard .agents/refactor/host-guard.mjs/test.mjs önceki checkpoint'tedir; hook bağlama
-.claude/settings.local.json içinde yerel ve gitignored'dır, ürün yetkisi değildir. Codex/Cursor host
-hook bağlama ve plugin eval açıktır. Geliştirme kanıtı /home/alperen/deckent-refactor-work altında,
-Git/npm dışında tutulur; eski communication.md kanalı kullanılmaz.
+Cursor localLLM/terminal: /home/alperen/deckent-next-wt-local-llm, feat/local-llm-terminal, başlangıç 652d1c2;
+bu dilimde değiştirilmedi/merge edilmedi. Host guard ve Jev araçları önceki checkpoint'tedir; hook bağlama
+`.claude/settings.local.json` içinde yerel ve gitignored'dır. Geliştirme kanıtı refactor-work altında, Git/npm dışında.
+Legacy read-only, çalıştırılmaz.
