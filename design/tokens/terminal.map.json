@@ -1,0 +1,14 @@
+{
+  "$description": "Terminal semantic roles for Ink workline — values mirrored in src/surfaces/core/terminal/internal/generated/palette.ts until DESIGN-SYSTEM token build lands in Next.",
+  "roles": {
+    "success": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental" },
+    "error": { "primitive": "novaAbort", "ansi16": "31", "class": "supplemental" },
+    "warning": { "primitive": "novaAmber", "ansi16": "33", "class": "supplemental" },
+    "info": { "primitive": "novaGlow", "ansi16": "94", "class": "primary" },
+    "muted": { "primitive": "seaTextMuted", "ansi16": "", "class": "primary" },
+    "accent": { "primitive": "novaGlow", "ansi16": "36", "class": "decorative" },
+    "focus": { "ansi16": "", "attrs": ["7"], "class": "primary" },
+    "link": { "primitive": "novaGlow", "ansi16": "94", "attrs": ["4"], "class": "primary" },
+    "code": { "primitive": "novaGlowBright", "ansi16": "94", "class": "primary" }
+  }
+}

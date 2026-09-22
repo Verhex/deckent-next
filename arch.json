@@ -98,6 +98,7 @@
     },
     "src/adapters/core/contract": {
       "dependencies": [
+        "src/domain/core/inference-serving",
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/platform/core/common",
@@ -205,6 +206,7 @@
         "src/composition/core/provider-catalog",
         "src/composition/core/query-errors",
         "src/composition/core/runtime-service",
+        "src/composition/core/terminal-chat",
         "src/platform/core/config",
         "src/platform/core/config-fields",
         "src/platform/core/host",
@@ -315,8 +317,34 @@
       ],
       "plan": "FOUNDATION"
     },
+    "src/composition/core/inference-serving": {
+      "dependencies": [
+        "src/domain/core/inference-serving",
+        "src/domain/core/principal",
+        "src/domain/core/run",
+        "src/engine/core/inference-serving",
+        "src/engine/core/runs",
+        "src/platform/core/config"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/terminal-chat": {
+      "dependencies": [
+        "src/composition/core/model-invocation",
+        "src/domain/core/inference-serving",
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/inference-serving",
+        "src/engine/core/model-invocation",
+        "src/platform/core/config"
+      ],
+      "plan": "SURFACES"
+    },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/composition/core/inference-serving",
         "src/adapters/core/approval-store",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -333,6 +361,7 @@
         "src/engine/core/attempts",
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
+        "src/engine/core/inference-serving",
         "src/engine/core/policy",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -655,9 +684,27 @@
       ],
       "plan": "FOUNDATION"
     },
+    "src/surfaces/core/desktop": {
+      "dependencies": [
+        "src/surfaces/core/terminal"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal": {
+      "dependencies": [
+        "src/domain/core/inference-serving",
+        "src/engine/core/inference-serving",
+        "src/engine/core/runs",
+        "src/engine/core/worker-observation",
+        "src/platform/core/i18n"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/terminal",
         "src/domain/core/attempt",
+        "src/domain/core/inference-serving",
         "src/domain/core/model-activation",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
@@ -666,6 +713,7 @@
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
         "src/engine/core/installation",
+        "src/engine/core/inference-serving",
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-catalog",
@@ -1153,6 +1201,18 @@
         "src/domain/core/primitives"
       ],
       "plan": "SECURITY"
+    },
+    "src/domain/core/inference-serving": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/engine/core/inference-serving": {
+      "dependencies": [
+        "src/domain/core/inference-serving"
+      ],
+      "plan": "PROVIDERS"
     },
     "src/platform/core/clock": {
       "dependencies": [],

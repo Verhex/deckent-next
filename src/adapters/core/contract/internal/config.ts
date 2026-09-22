@@ -2,6 +2,7 @@ import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
 import { registerProviderSpendingConfig } from './spending.js';
 import { registerProviderSpendAuditConfig } from './spend-audit.js';
+import { registerInferenceServingConfig } from './inference-serving.js';
 let registered = false;
 /** Called by application ingress before config resolution; kernel never imports provider policy. */
 export function registerProviderConfig(): void {
@@ -10,6 +11,7 @@ export function registerProviderConfig(): void {
   registerInvocationProfileConfig();
   registerProviderSpendingConfig();
   registerProviderSpendAuditConfig();
+  registerInferenceServingConfig();
   registered = true;
 }
 export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';

@@ -1,0 +1,48 @@
+import type { InferenceServingProfile } from '#domain/index.js';
+import type { InferenceServingPlan } from '#engine/index.js';
+import type { WorkLedgerEntry } from './work-ledger.js';
+
+export const WORKLINE_BRIDGE_SCHEMA_VERSION = 1;
+
+export interface WorklineBridgeSnapshot {
+  readonly schemaVersion: typeof WORKLINE_BRIDGE_SCHEMA_VERSION;
+  readonly profileId: string;
+  readonly openaiBaseUrl: string;
+  readonly publishedModelIds: readonly string[];
+  readonly tty: { readonly columns: number | null; readonly rows: number | null };
+  readonly ledgerTail: readonly WorkLedgerEntry[];
+  readonly observedAtMs: number;
+}
+
+export interface WorklineBridgeSink {
+  readonly onUpdate: (snapshot: WorklineBridgeSnapshot) => void;
+  readonly maxTail?: number;
+  readonly publishedModelIds?: readonly string[];
+}
+
+export interface BuildWorklineBridgeSnapshotInput {
+  readonly profile: InferenceServingProfile;
+  readonly plan: InferenceServingPlan;
+  readonly tty: { readonly columns: number | null; readonly rows: number | null };
+  readonly ledgerTail: readonly WorkLedgerEntry[];
+  readonly publishedModelIds?: readonly string[];
+  readonly maxTail?: number;
+  readonly observedAtMs?: number;
+}
+
+export function buildWorklineBridgeSnapshot(input: BuildWorklineBridgeSnapshotInput): WorklineBridgeSnapshot {
+  const maxTail = input.maxTail ?? 200;
+  const tail = input.ledgerTail.length > maxTail ? input.ledgerTail.slice(-maxTail) : input.ledgerTail;
+  const published = input.publishedModelIds?.length
+    ? input.publishedModelIds
+    : Object.freeze([input.profile.model.modelId]);
+  return Object.freeze({
+    schemaVersion: WORKLINE_BRIDGE_SCHEMA_VERSION,
+    profileId: input.profile.id,
+    openaiBaseUrl: input.plan.openaiBaseUrl ?? '',
+    publishedModelIds: published,
+    tty: input.tty,
+    ledgerTail: Object.freeze([...tail]),
+    observedAtMs: input.observedAtMs ?? Date.now(),
+  });
+}

@@ -8,6 +8,8 @@ import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
 import { toolchainsCommand } from './toolchains.js';
 import { modelsCommand } from './models.js';
+import { inferenceCommand } from './inference.js';
+import { terminalCommand } from './terminal.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
@@ -50,6 +52,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'task') { await taskCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'runtime') { await runtimeCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'models') { await modelsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'inference') { await inferenceCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'terminal') { await terminalCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'policy' || argv[0] === 'config' || argv[0] === 'doctor' || argv[0] === 'paths') {
       await runKernelCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;

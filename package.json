@@ -37,6 +37,7 @@
   "scripts": {
     "worker:image": "node assets/worker-image/build.mjs",
     "build": "node scripts/build.mjs",
+    "build:terminal-tokens": "node scripts/build-terminal-palette.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/package-metadata.mjs && npm run typecheck && eslint . && node scripts/lint-arch.mjs && node scripts/lint-core-memory.mjs",
     "test": "vitest run",
@@ -48,6 +49,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.2.7",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.0"
   },
@@ -55,6 +58,7 @@
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "^25.5.0",
+    "@types/react": "^19.2.7",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
     "typescript": "^5.9.3",

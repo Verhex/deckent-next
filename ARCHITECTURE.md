@@ -348,6 +348,57 @@ access alone is not evidence of a policy bypass. Further custody/parity changes 
 Only CLI and MCP surfaces are shipped here; Desktop/TUI/HTTP, external MCP client and IFS connectors
 remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
+### Operator terminal contract v1 (accepted target, partial implementation)
+
+The operator terminal is not a second product shell. It is a **motor-pluggable presentation** of the same
+typed operator actions as CLI line mode, MCP and (later) Desktop: principal, scope, resource and policy
+travel with every turn; persona does not grant authority. Competitive agent UIs are classified by surface
+type (IDE-first, line CLI, rich TUI, web workspace); Deckent does not copy layouts — it keeps one contract
+and swaps render adapters. External landscape notes live outside the repo in
+`/home/alperen/deckent-refactor-work/proof/TERMINAL-UI-LANDSCAPE/`.
+
+**Regions (layout semantics, not widget names):**
+
+| Region | Responsibility |
+|--------|----------------|
+| Header | Product/scope banner; stable identity for the session |
+| Status strip | Inference endpoint, admission/busy state, capability hints |
+| Work ledger | Append-only transcript of operator-visible turns (chat lines today; run/evaluation cards later) |
+| Input | Single input owner; queued while busy |
+| Footer hints | Slash discovery, degrade notices (`NO_COLOR`, non-TTY) |
+
+**Events (motor-agnostic):** `slash` (parsed command + args), `submit` (natural-language turn),
+`cancel` (interrupt in-flight turn), `exit`; future `drill`/`filter` for keyboard navigation.
+Slash catalog is data (`slash-registry`); behavior ports incrementally from legacy repl evidence.
+
+**Render tiers:** ANSI roles map from design tokens where available; `NO_COLOR` and non-interactive
+stdout must degrade without throwing away semantics (line mode, JSON, MCP).
+
+**Adapters (current / planned):**
+
+| Adapter | When | Module direction |
+|---------|------|------------------|
+| Ink workline | Interactive TTY with raw input | `src/surfaces/core/terminal` |
+| readline session | Same kernel path, minimal capability | `terminal session` CLI |
+| Composition turn owner | HTTP inference today; `invoke_model` when command supplied | `src/composition/core/terminal-chat` |
+| MCP / Desktop | Same events and regions; transport differs | MCP tools; `TerminalWorklineBridgeSnapshot` seed |
+
+**Kernel boundaries (non-negotiable):**
+
+- Chat transcript ≠ run truth. Runs, attempts and worker trees project into the **work ledger** with
+  their own identities; inference chat is a turn carrier, not the audit ledger.
+- Terminal surfaces do not import adapters; composition wires `completeTerminalChat` (shipped CLI entry)
+  and future runtime `invokeModel` parity the same way as other thin clients.
+- `isTTY` alone is insufficient: interactive workline requires TTY; piped/CI uses line mode or non-terminal tools.
+- Local inference (`inference_serving`) is a separate configuration card; terminal code does not embed launcher logic.
+
+**Implementation status (worktree `feat/local-llm-terminal`, not main merge proof):** Ink workline with
+status strip, slash registry (`/workers`, `/run <id>`) and discriminated **work ledger** entries (chat,
+run card, worker card, notice); composition wires worker/run inspect ports; `completeTerminalChatTurn`
+bridge; Desktop bridge carries `ledgerTail`. Workline colors resolve through `design/tokens/terminal.map.json`
+→ `generated/palette.ts` and platform `colorTier` (`NO_COLOR` / `--no-color` → unstyled). Full token build
+pipeline, runtime push run events (today: `/watch-runs` poll via dispatch inventory) and Desktop UI parity remain open.
+
 Domain cannot import platform or other packages, host modules or ambient host globals. The purity gate also rejects
 composition access to domain decision functions while allowing schema/type wiring; static analysis does not prove
 all semantic purity. Surfaces may consume public platform/domain/capabilities/engine APIs and never adapters.
@@ -405,6 +456,7 @@ transient tracker and external refactor archive, not an append-only product plan
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-22 | Operator **Terminal Contract v1**: regions (header, status strip, work ledger, input, hints), motor-agnostic events, ANSI/NO_COLOR tiers, Ink + readline adapters, composition-owned chat turns; chat ≠ run ledger; three-surface parity target (Terminal/MCP/Desktop). | Positions Deckent against ~30 agent terminal UIs without copying layouts; Ink is the Node rich-TTY adapter, not the product authority. Partial implementation on `feat/local-llm-terminal`; landscape proof external. |
 | 2026-09-16 | Clean-room port into this repository instead of in-place refactor of the legacy codebase (587k lines, 24.8k-line spawn backend, 40.9k tests, 5,535 path-keyed lint baselines). | Every in-place move broke 8+ gates and preserved dead code; the owner chose deletion over archive. |
 | 2026-09-16 | File size is a mechanical gate (800 lines) in addition to cohesion-based boundaries. | Cohesion alone did not hold: one file tripled in two weeks. Supersedes legacy ADR-D-006 §2 wording. |
 | 2026-09-16 | Layer direction `kernel ← providers ← runtime ← orchestration ← surfaces`, observability read-only, public-API-only imports. | Carries the legacy ADR-D-004 invariant (lower layers never import upward) into named packages; the legacy graph had only 138 violations out of ~3,400 edges, half of them caused by the i18n catalog living in cli. |

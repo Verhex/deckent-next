@@ -39,6 +39,7 @@ export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js
 export { ProviderSpendAccountPolicyAuthorization } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
+export * from '#engine/core/inference-serving/index.js';
 
 export { RunProgressionTurn } from '#engine/core/run-progression/index.js';
 export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';

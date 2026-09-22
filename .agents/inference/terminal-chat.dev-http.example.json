@@ -1,0 +1,8 @@
+{
+  "terminal": {
+    "chat": {
+      "schemaVersion": 1,
+      "backend": "inference_http"
+    }
+  }
+}

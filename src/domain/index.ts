@@ -12,3 +12,4 @@ export * from '#domain/core/provider-spend/index.js';
 export * from '#domain/core/session/index.js';
 export * from '#domain/core/command/index.js';
 export * from '#domain/core/approval/index.js';
+export * from '#domain/core/inference-serving/index.js';

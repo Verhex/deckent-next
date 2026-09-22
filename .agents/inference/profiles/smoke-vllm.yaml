@@ -1,0 +1,32 @@
+# Host smoke — küçük model; 5090 üretim profili değil.
+profile:
+  id: smoke-vllm
+  scopeId: pilot
+  hardware:
+    gpus: 1
+    vramGbPerGpu: 32
+    arch: blackwell_consumer
+    topology: single
+  model:
+    modelId: Qwen/Qwen2.5-0.5B-Instruct
+    weightGb: 1.0
+    kvBytesPerTokenBf16: 8192
+    kvBytesPerTokenFp8: 4096
+    deltaNetStateGbPerSeq: 0
+  serving:
+    backend: vllm
+    openaiBaseUrl: http://127.0.0.1:8000/v1
+    weightQuant: bf16
+    kvDtype: fp8
+    gpuMemUtil: 0.85
+    overheadGb: 2
+    imageRef: vllm/vllm-openai:v0.10.2
+  workload:
+    maxCtx: 8192
+    avgActiveCtx: 2048
+    roleMaxCtx:
+      brain: 8192
+      worker: 4096
+      auditor: 2048
+  calibration:
+    computeCap: 4

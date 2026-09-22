@@ -20,6 +20,7 @@ import {
 
 import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
+import type { TerminalChatPlanHandler, TerminalChatTurnHandler } from './terminal-chat.js';
 
 export interface CommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
@@ -37,6 +38,8 @@ export interface CommandContext {
   previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   invokeModel?: ModelInvocationHandler;
+  completeTerminalChat?: TerminalChatTurnHandler;
+  describeTerminalChatPlan?: TerminalChatPlanHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;
   purgeModelInvocationContent?: ModelInvocationPurgeHandler;
   cancelModelInvocation?: ModelInvocationCancellationHandler;

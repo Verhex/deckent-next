@@ -105,7 +105,11 @@ function importsOf(file) {
     const aliasPrefix = arch.imports?.aliasPrefix ?? '#';
     let target;
     if (spec.startsWith(aliasPrefix)) target = resolve(ROOT, 'src', spec.slice(aliasPrefix.length).replace(/\.js$/, '.ts'));
-    else if (spec.startsWith('.')) target = resolve(dirname(file), spec.replace(/\.js$/, '.ts'));
+    else if (spec.startsWith('.')) {
+      const base = resolve(dirname(file), spec.replace(/\.js$/, ''));
+      const candidates = [`${base}.ts`, `${base}.tsx`, `${base}.json`, base];
+      target = candidates.find(path => existsSync(path)) ?? `${base}.ts`;
+    }
     else continue;
     out.push({ spec, target, aliased: spec.startsWith(aliasPrefix), line: src.slice(0, m.index).split('\n').length });
   }

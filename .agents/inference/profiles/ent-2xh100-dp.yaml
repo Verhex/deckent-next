@@ -1,0 +1,22 @@
+profile:
+  id: ent-2xh100
+  scopeId: enterprise
+  hardware: { gpus: 2, vramGbPerGpu: 80, arch: hopper, topology: dp }
+  model:
+    modelId: Qwen/Qwen3-Next-27B
+    weightGb: 28
+    kvBytesPerTokenBf16: 65536
+    kvBytesPerTokenFp8: 32768
+    deltaNetStateGbPerSeq: 0.1
+  serving:
+    backend: vllm
+    weightQuant: fp8
+    kvDtype: fp8
+    gpuMemUtil: 0.92
+    overheadGb: 4
+    imageRef: vllm/vllm-openai:v0.10.2
+  workload:
+    maxCtx: 163840
+    avgActiveCtx: 32768
+    roleMaxCtx: { brain: 163840, worker: 65536, auditor: 32768 }
+  calibration: { computeCap: 32 }
