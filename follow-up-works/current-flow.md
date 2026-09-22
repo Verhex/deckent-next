@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5 devraldı; E24 Cursor Paket A (yerel çıkarım + Ink terminal) main'e alınıyor
+# Anlık iş akışı — Opus 5.5; E24 Cursor Paket A main'e alındı, sıradaki dilim yerel sağlayıcı harcama politikası
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -204,9 +204,11 @@ sunucu başlatma/metrics adapter'ı, görev→yerel-LLM bağlama ve kapasite kab
 
 ## Sıradaki sıra
 
-E24: owner onayıyla main'e commit (push ayrı söz); Cursor Paket B'ye yeni main üzerinden başlar (worktree'deki eski WIP yeni main'e
-rebase edilmeli, çakışma beklenir). Sonra iş planı: öneri uygulama otomasyonu (profil revizyonu), API şema anlık görüntüleri, run düzeyi
-kapanış, test artığı/yetim süreç sızıntısı triyajı, **B06/B07**; DOGFOOD OFF kalır.
+Owner 2026-09-22: E24 onaylandı → main fast-forward `c86ff1a` (push yok, ayrı söz); Cursor Paket B'ye eski WIP'ten değil yeni main'den başlar;
+LAN'a açık `deckent-qwen38-llama` (0.0.0.0:18080, `--rm`) durduruldu, yeniden başlatma yolu `host-tools/inference/start-qwen38.mjs` loopback.
+**Sıradaki dilim (owner "sonraki dilim"):** yerel/ücretsiz OpenAI uyumlu sağlayıcı için harcama politikası (açık sıfır tarife veya yerel
+sağlayıcı sınıfı) — tasarım owner checkpoint'iyle; ardından gerçek yerel Qwen ile yönetilen terminal sohbeti kanıtı. Sonra iş planı: öneri
+uygulama otomasyonu, API şema anlık görüntüleri, run düzeyi kapanış, test artığı/yetim süreç sızıntısı triyajı, **B06/B07**; DOGFOOD OFF.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
