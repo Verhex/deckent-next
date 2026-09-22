@@ -1,4 +1,4 @@
-# Anlık iş akışı — B05 bulguları araştırıldı, çözüm tasarımları owner onayı bekliyor; sıradaki adımlar kapalı
+# Anlık iş akışı — iptal settlement düzeltmesi teslim edildi (bulgu 1+2 kapandı); sıradaki: patch limitleri, toolchain güncelliği, B06
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -95,12 +95,28 @@ Cursor `agent update` (auto-update varsayılan açık, kapatma belgelenmemiş); 
 politika güdümlü sürümlü rebuild 0,97 (64811c47; vendor_mechanisms 0,46 — Cursor kapatması doğrulanmalı). Ürün kodu değişmedi.
 Rapor: `/home/alperen/deckent-refactor-work/proof/FINDINGS-RESEARCH-2026-09-22/review.md`. Uygulama owner onayı bekler.
 
+## Beşinci teslim: iptal settlement (bulgu 1+2 düzeltmesi, owner "devam" 2026-09-22)
+
+Ürün kodu (8b96d5d): domain `settleCancelledRunAttempt`; `cancelRun` transaction'ında başlatılmamış bağlı attempt'ler `preventRunAttempt`
+ile, iptal öncesi çıkmış-değerlendirilmemişler settlement ile `cancelled`; iptal istenen worker'ın kaydedilen çıkışı `finishDispatch`
+projeksiyonunda aynı transaction'da `cancelled`; `reconcileAttempt` ve teslim işçisi idempotent `settleCancelledAttempt` uygular ve
+`settlement` raporlar; RunView türetilmiş iptal nedeni (`prevented-before-launch|exited-under-cancellation`). Gözlem uydurulmaz,
+launch/retry yok, accepted/failed dokunulmaz, unknown/unresolved reconciler'da kalır. Ledger şeması değişmedi.
+Testler: domain settle (3), store settlement (3: başlatma-öncesi + kapasite, öldürme-sonrası, iptal-öncesi-çıkış); eski `active`
+beklentileri güncellendi; migration seed'i şema-11 şekline (dispatch claim) alındı, validator gevşetilmedi.
+**Tam verify: 1562 ürün/267 dosya, 25 native, 53 host; fail/skip 0.** Tekrar kanıtı: 8b96d5d'den paketlenen N (`prefix2`, `data4`,
+1 slotlu havuz) `hold-8`'i teslimden hemen sonra `cancelled` yaptı, yeniden başlatma sonrası `echo-8` serbest kalan tek slotla kabul edildi,
+N+1/canlı checkout değişmedi. Kanıt: `proof/B05-N-NPLUS1-2026-09-22/{live-n1-fixed.log,n1-live-fixed.json,review.md}`. Jev aa51432f 1,00.
+Açık: iptal istenen Run'ın hâlâ `pending` görevlerinin run düzeyinde kapanışı (ayrı geçiş); patch limit/hash-diff (bulgu 3) ve toolchain
+güncelliği sıradaki dilimler.
+
 ## Sıradaki sıra
 
-Owner "devam" derse önerilen sıra (her biri ayrı küçük dilim, tam verify + negatif testler):
-1. **İptal settlement** (domain `settleCancelledAttempt` + teslim işçisi/reconcile/progression bağlaması + B05 hold senaryosunun tekrarı).
-2. **Patch tipli limit + hash-diff** (`git-patch` adapter'ı, `git.outputBytes` varsayılanı, büyük depo sözleşme testi).
-3. **Toolchain güncellik raporu** (doctor; yalnız rapor), ardından politika güdümlü sürümlü rebuild ve API şema anlık görüntüleri.
+Owner 2026-09-22: 1 tamamlandı; UPDATE tarafı adapter başına (öncelik Codex + Claude; Cursor istisna kalabilir; OpenHands/Hermes yalnız bilgi).
+1. **Patch tipli limit + hash-diff** (`git-patch` adapter'ı, `git.outputBytes` varsayılanı, büyük depo sözleşme testi).
+2. **Toolchain güncellik raporu** (doctor; Codex + Claude adapter'ları; Cursor "auto-update kapatması belgelenmemiş" istisnası), ardından
+   politika güdümlü sürümlü rebuild ve API şema anlık görüntüleri.
+3. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
 4. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
