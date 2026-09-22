@@ -31,7 +31,7 @@
 - Preserve other contributors' WIP; work in bounded, complete, reviewable slices.
 - Explain progress and results in plain Turkish, with observable behavior and evidence.
 - Continue authorized work without repeated permission; new scope/authority boundaries need a checkpoint.
-- Use logged Jev preparation for uncertain decisions, carrying the north star and current process.
+- Use logged Jev preparation often (options, boundaries, checks, evidence fit), carrying the north star and current process.
 - Include real gains/losses, contrary evidence and both abstention choices; advice is not acceptance.
 - Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure.
 - Run `npm run verify` before landing; no build during an active test suite.
@@ -48,5 +48,5 @@
 - `PLAN.md` holds durable workstreams; `follow-up-works/current-flow.md` is replaceable progress only.
 - Current machine gates remain enforced; host-kit Markdown is an owner-authorized exception.
 - DOGFOOD stays OFF until explicitly admitted; historical receipts do not prove Next completion.
-- Fable coordination is closed until owner reopens it; findings go directly to the owner.
+- Review channel (owner 2026-09-23): Opus implements, Astra reviews via `.agents/refactor/channel.mjs`; recipients consume handled entries.
 - Never fabricate independent review or treat Jev/self-review as independent PASS.
