@@ -101,7 +101,7 @@ it.skipIf(process.platform === 'win32').each(['both', 'cancellation', 'execution
   await writeFile(bootstrap, JSON.stringify(config)); clearConfigCache();
   if (missing === 'execution') {
     const result = await deliverRunCancellation(f.project, f.command, f.options);
-    expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched' }]);
+    expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched', settlement: { status: 'already-cancelled', phase: 'cancelled' } }]);
     expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true);
   } else {
     await expect(deliverRunCancellation(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing: 'cancellation' } });
@@ -120,7 +120,7 @@ it.skipIf(process.platform === 'win32')('records cancellation for an undispatche
     git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } };
   await writeFile(bootstrap, JSON.stringify(config)); clearConfigCache();
   const result = await deliverRunCancellation(f.project, f.command, f.options);
-  expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched' }]);
+  expect(result.delivery.outcomes).toEqual([{ attemptId: f.identity.attemptId, taskId: 't', status: 'not-dispatched', settlement: { status: 'already-cancelled', phase: 'cancelled' } }]);
   expect((await f.store.loadRun('s', 'r'))!.cancelRequested).toBe(true);
   expect((await deliverRunCancellation(f.project, f.command, f.options)).delivery).toEqual(result.delivery);
   await expect(lstat(productResourcePath(f.layout, 'workspaces'))).rejects.toMatchObject({ code: 'ENOENT' });

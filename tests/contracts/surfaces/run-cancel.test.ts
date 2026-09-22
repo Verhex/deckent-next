@@ -33,7 +33,7 @@ describe.skipIf(process.platform === 'win32')('real CLI cancellation-delivery su
     const f = await fixture(); const cli = await f.run(['--json']); expect(cli.stderr).toBe(''); expect(cli.stdout).not.toContain('\u001b');
     const sdk = await deliverRunCancellation(f.project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, f.options);
     expect(JSON.parse(cli.stdout)).toEqual(sdk); expect(sdk.delivery.cancellationRequested).toBe(true);
-    expect(sdk.delivery.outcomes).toEqual([{ attemptId: 'a', taskId: 't', status: 'not-dispatched' }]);
+    expect(sdk.delivery.outcomes).toEqual([{ attemptId: 'a', taskId: 't', status: 'not-dispatched', settlement: { status: 'already-cancelled', phase: 'cancelled' } }]);
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { expect((await store.load('s', 'a'))!.cancelRequested).toBe(true); } finally { store.close(); }
   });

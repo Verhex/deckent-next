@@ -3,13 +3,14 @@ import { type CancellationDeliveryStore, type CancellationDeliveryLimits, type C
 import { counterSchema, type AttemptIdentity } from '#domain/index.js';
 import type { DispatchRecord, DispatchApplication } from '#engine/core/dispatch/index.js';
 import type { RunApplication } from './application.js';
+import type { RunCancellationSettlement, RunCancellationSettlementStore } from './settlement.js';
 export interface RunCancellationDispatchStore { loadCancellationDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
-export type RunCancellationOutcome = Readonly<{ attemptId: string; taskId: string; delivery?: Readonly<Pick<CancellationDelivery, 'state' | 'attempts' | 'nextEligibleAt'>>; status: 'not-dispatched' | 'prevented' | 'terminal' | 'unresolved' | 'denied' | 'unavailable' }>;
+export type RunCancellationOutcome = Readonly<{ attemptId: string; taskId: string; delivery?: Readonly<Pick<CancellationDelivery, 'state' | 'attempts' | 'nextEligibleAt'>>; settlement?: RunCancellationSettlement; status: 'not-dispatched' | 'prevented' | 'terminal' | 'unresolved' | 'denied' | 'unavailable' }>;
 /** Bounded, repeatable delivery after durable Run intent. Never treats a transport failure as termination. */
 export class RunCancellationCoordinator {
   private readonly concurrency: number;
   private readonly worker: CancellationDeliveryWorker;
-  constructor(private readonly runs: Pick<RunApplication, 'execute'>, store: RunCancellationDispatchStore & CancellationDeliveryStore,
+  constructor(private readonly runs: Pick<RunApplication, 'execute'>, store: RunCancellationDispatchStore & CancellationDeliveryStore & Partial<RunCancellationSettlementStore>,
     dispatch: Pick<DispatchApplication, 'cancel' | 'authorizeCancellation'>, options: CancellationDeliveryLimits & { readonly maxConcurrentDeliveries: number },
     runtime: { now(): number; token(): string }) {
     this.concurrency = counterSchema.positive().parse(options.maxConcurrentDeliveries);

@@ -7,6 +7,7 @@ import type { RunAuthorization } from './application.js';
 import { CancellationDeliveryWorker } from './delivery-worker.js';
 import { CancellationDeliveryError, type CancellationDeliveryLimits, type CancellationDeliveryStore } from './delivery-port.js';
 import type { RunCancellationDispatchStore, RunCancellationOutcome } from './cancellation.js';
+import type { RunCancellationSettlementStore } from './settlement.js';
 import { cancellationRecoveryPageSchema, type CancellationRecoveryQueryStore } from './recovery-query.js';
 
 export const cancellationRecoveryCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
@@ -31,7 +32,7 @@ export class CancellationRecoveryApplication {
   private readonly pageSize: number;
   private readonly concurrency: number;
   private readonly worker: CancellationDeliveryWorker;
-  constructor(private readonly store: CancellationRecoveryQueryStore & RunCancellationDispatchStore & CancellationDeliveryStore,
+  constructor(private readonly store: CancellationRecoveryQueryStore & RunCancellationDispatchStore & CancellationDeliveryStore & Partial<RunCancellationSettlementStore>,
     private readonly verifier: PrincipalVerifier, private readonly scopeAuthorization: DispatchInventoryAuthorization,
     private readonly runAuthorization: RunAuthorization, dispatch: Pick<DispatchApplication, 'cancel' | 'authorizeCancellation'>,
     options: CancellationDeliveryLimits & { maxPageSize: number; maxConcurrentDeliveries: number },

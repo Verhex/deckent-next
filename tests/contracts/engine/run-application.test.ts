@@ -26,14 +26,15 @@ async function fixture() {
 }
 it('persists cancellation intent, blocks fresh dispatch and reservations without fabricating worker termination', async () => {
   const { store, app, path } = await fixture();
-  const receipt = await app.execute(command); expect(receipt.snapshot.cancelRequested).toBe(true); expect(receipt.snapshot.revision).toBe(2);
-  expect(receipt.snapshot.progress[0]!.phase).toBe('active'); expect((await store.load('s', 'a'))!.cancelRequested).toBe(true);
+  // Intent plus prevention of the unlaunched attempt commit together (revision 3); no worker termination is fabricated.
+  const receipt = await app.execute(command); expect(receipt.snapshot.cancelRequested).toBe(true); expect(receipt.snapshot.revision).toBe(3);
+  expect(receipt.snapshot.progress[0]).toMatchObject({ phase: 'cancelled', unresolvedEffects: false }); expect((await store.load('s', 'a'))).toMatchObject({ cancelRequested: true, lastObservation: null });
   await expect(store.claimDispatch(dispatchAdmission({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['true'] } }))).rejects.toThrow('DISPATCH_NOT_ADMITTED');
-  await expect(store.reserveRunTasks({ commandId: 'late', actor: { id: 'user', issuer: 'host', subject: '1000' }, scopeId: 's', runId: 'r', now: 0, expectedRevision: 2, identities: [{ ...identity, attemptId: 'b' }] })).rejects.toThrow();
+  await expect(store.reserveRunTasks({ commandId: 'late', actor: { id: 'user', issuer: 'host', subject: '1000' }, scopeId: 's', runId: 'r', now: 0, expectedRevision: 3, identities: [{ ...identity, attemptId: 'b' }] })).rejects.toThrow();
   expect(await app.execute(command)).toEqual(receipt);
   const reopened = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(reopened);
   expect((await reopened.loadRun('s', 'r'))!.cancelRequested).toBe(true);
-  expect((await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' }))!.revision).toBe(2);
+  expect((await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' }))!).toMatchObject({ revision: 3, tasks: [{ phase: 'cancelled', cancellation: { reason: 'prevented-before-launch' } }] });
 });
 it('authenticates and checks current policy before any read, write or replay', async () => {
   const { app, state } = await fixture();
@@ -50,7 +51,7 @@ it('rejects caller identity injection, changed actors and stale revisions', asyn
   await expect(app.execute({ ...command, expectedRevision: 0 })).rejects.toThrow('RUN_STORE_CONFLICT');
   expect((await store.loadRun('s', 'r'))!.cancelRequested).toBe(false);
   await app.execute(command); state.subject = 'other'; await expect(app.execute(command)).rejects.toThrow('RUN_COMMAND_CONFLICT');
-  expect((await store.loadRun('s', 'r'))!.revision).toBe(2);
+  expect((await store.loadRun('s', 'r'))!.revision).toBe(3);
 });
 it('rolls cancellation state back if its durable command receipt cannot be written', async () => {
   const { app, store, path } = await fixture(); const db = new DatabaseSync(path);

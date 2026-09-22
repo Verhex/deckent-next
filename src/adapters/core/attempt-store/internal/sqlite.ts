@@ -6,6 +6,7 @@ import { SqliteRunProgression } from './progression.js';
 import type { ProgressionQuery } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
+import { settleAttemptCancellation } from './run-settlement.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
 import { SqliteCancellationRecoveryQuery } from './cancellation-recovery.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
@@ -31,6 +32,18 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   }
   async loadBoundDispatch(identity: AttemptIdentity) {
     try { return readRunBoundDispatch(this.db, identity).dispatch; } catch (error) { throw sqliteFailure(error); }
+  }
+  /** Settles a cancel-requested attempt from durable intent and recorded terminal evidence; idempotent, never launches or retries. */
+  async settleCancelledAttempt(identity: AttemptIdentity) {
+    let active = false;
+    try {
+      this.db.exec('BEGIN IMMEDIATE'); active = true;
+      const result = settleAttemptCancellation(this.db, identity);
+      this.db.exec('COMMIT'); return result;
+    } catch (error) {
+      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
+      throw sqliteFailure(error);
+    }
   }
   async loadCancellationDispatch(identity: AttemptIdentity) {
     try { return loadCancellationDispatch(this.db, identity); } catch (error) { throw sqliteFailure(error); }

@@ -7,12 +7,16 @@ import { expect, it } from 'vitest';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { downgradeRunEligibilityFixtures } from '../support/legacy-run-eligibility.js';
+import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 
 const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
 const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
 async function seed(path: string, version = 11) {
-  const store = await openSqliteAttemptStore(path, options);
-  await admitRunAttempts(store, [{ scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]);
+  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
+  await admitRunAttempts(store, [identity]);
+  // Schema-11 history could only record cancellation intent (+1 revision); a claimed dispatch keeps the seeded cancel in that historical shape.
+  await store.claimDispatch(dispatchAdmission({ owner: 'fixture', request: { protocolVersion: 1, identity, workspace: '/recorded/workspace', argv: ['recorded-tool'] } }));
   await store.cancelRun({ commandId: 'cancel', actor, scopeId: 's', runId: 'r', expectedRevision: 1 });
   await store.cancelRun({ commandId: 'cancel-again', actor, scopeId: 's', runId: 'r', expectedRevision: 2 });
   const expected = await store.loadRun('s', 'r'); store.close();
@@ -48,7 +52,8 @@ it('creates an empty current ledger directly from version zero', async () => wor
 }));
 it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])('converts evidenced history from version %i and preserves commands, attempts and revisions', async version => workspace(async path => {
   const expected = await seed(path, version), before = dump(path);
-  const store = await openSqliteAttemptStore(path, options);
+  // Pre-v6 dispatch migrations validate recorded profiles; the seeded custody profile must be recognizable.
+  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
   try {
     expect(await store.loadRun('s', 'r')).toEqual(expected);
     const replay = await store.cancelRun({ commandId: 'cancel-again', actor, scopeId: 's', runId: 'r', expectedRevision: 2 });

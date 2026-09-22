@@ -127,7 +127,7 @@ it('upgrades Next schema1 atomically without losing existing attempt and receipt
   const check = new DatabaseSync(f.path); expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); check.close();
 });
 
-it('atomically rolls back terminal projection with journal failure, then preserves cancellation intent on settlement', async () => {
+it('atomically rolls back terminal projection with journal failure, then settles the cancel-requested exit as cancelled', async () => {
   const f = await fixture(); const store = await f.open(); await admit(store); await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   await store.commit({ commandId: 'cancel-after-claim', command: 'cancel', expectedRevision: 0,
     snapshot: { ...createAttempt(identity), revision: 1, cancelRequested: true } });
@@ -143,10 +143,11 @@ it('atomically rolls back terminal projection with journal failure, then preserv
   const settled = await store.load('s', 'a');
   expect(settled).toMatchObject({ revision: 2, cancelRequested: true, lastObservation: { sequence: 1, result: { kind: 'exited', exitCode: 0 } } });
   expect(settled).not.toHaveProperty('accepted');
-  const run = (await store.loadRun('s', 'r'))!; expect(run.revision).toBe(2); expect(run.progress[0]!.phase).toBe('evaluating');
+  // Observation projection and cancellation settlement commit in one transaction: the task never rests in `evaluating`.
+  const run = (await store.loadRun('s', 'r'))!; expect(run.revision).toBe(3); expect(run.progress[0]!.phase).toBe('cancelled');
   await store.finishDispatch(claim, terminal);
   expect(await store.load('s', 'a')).toEqual(settled);
-  expect((await store.loadRun('s', 'r'))!.revision).toBe(2);
+  expect((await store.loadRun('s', 'r'))!.revision).toBe(3);
 });
 
 it('rejects contradictory terminal causes without writing terminal evidence', async () => {

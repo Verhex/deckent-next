@@ -5,6 +5,7 @@ export type { RunCommand, RunQuery, RunAuthorization } from './internal/applicat
 export { runViewSchema, projectRunView } from './internal/view.js';
 export type { RunView } from './internal/view.js';
 export { RunCancellationCoordinator } from './internal/cancellation.js';
+export type { RunCancellationSettlement, RunCancellationSettlementStore } from './internal/settlement.js';
 export type { RunCancellationDispatchStore, RunCancellationOutcome } from './internal/cancellation.js';
 export { RunAdmissionApplication, runAdmissionSchema } from './internal/admission.js';
 export type { RunAdmission, RunAdmissionContext } from './internal/admission.js';

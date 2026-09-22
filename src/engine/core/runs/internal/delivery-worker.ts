@@ -4,11 +4,12 @@ import { AuthenticationError } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 import { cancellationDeliveryLimitsSchema, type CancellationDeliveryStore, type CancellationDeliveryLimits } from './delivery-port.js';
 import type { RunCancellationDispatchStore, RunCancellationOutcome } from './cancellation.js';
+import type { RunCancellationSettlementStore } from './settlement.js';
 
 /** One delivery authority shared by explicit commands and restart recovery. */
 export class CancellationDeliveryWorker {
   private readonly limits: CancellationDeliveryLimits;
-  constructor(private readonly store: RunCancellationDispatchStore & CancellationDeliveryStore,
+  constructor(private readonly store: RunCancellationDispatchStore & CancellationDeliveryStore & Partial<RunCancellationSettlementStore>,
     private readonly dispatch: Pick<DispatchApplication, 'cancel' | 'authorizeCancellation'>,
     limits: CancellationDeliveryLimits, private readonly runtime: { now(): number; token(): string }) {
     this.limits = cancellationDeliveryLimitsSchema.parse(limits);
@@ -36,6 +37,11 @@ export class CancellationDeliveryWorker {
       onFailure?.(error);
       status = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable';
     }
-    return Object.freeze({ attemptId: identity.attemptId, taskId: identity.taskId, status, ...(delivery ? { delivery } : {}) });
+    // Durable intent plus recorded terminal evidence settle the bound task; a failed settlement never changes the delivery status.
+    let settlement: RunCancellationOutcome['settlement'];
+    if (this.store.settleCancelledAttempt && ['not-dispatched', 'terminal', 'prevented'].includes(status)) {
+      try { settlement = await this.store.settleCancelledAttempt(identity); } catch (error) { onFailure?.(error); }
+    }
+    return Object.freeze({ attemptId: identity.attemptId, taskId: identity.taskId, status, ...(delivery ? { delivery } : {}), ...(settlement ? { settlement } : {}) });
   }
 }

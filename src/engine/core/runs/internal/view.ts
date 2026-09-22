@@ -15,6 +15,7 @@ export const runViewSchema = z.object({
     profile: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
     phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling']),
     unresolvedEffects: z.boolean(),
+    cancellation: z.object({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).strict().readonly().optional(),
   }).strict().readonly()).readonly(),
 }).strict().readonly();
 export type RunView = z.infer<typeof runViewSchema>;
@@ -28,6 +29,7 @@ export function projectRunView(input: unknown): RunView {
     revision: run.revision, cancellationRequested: run.cancelRequested,
     tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: [...task.dependencies], acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
-      phase: progress.get(task.id)!.phase, unresolvedEffects: progress.get(task.id)!.unresolvedEffects })),
+      phase: progress.get(task.id)!.phase, unresolvedEffects: progress.get(task.id)!.unresolvedEffects,
+      ...(progress.get(task.id)!.phase === 'cancelled' ? { cancellation: { reason: run.bindings.find(binding => binding.identity.taskId === task.id)?.observedKind === 'exited' ? 'exited-under-cancellation' : 'prevented-before-launch' } } : {}) })),
   });
 }

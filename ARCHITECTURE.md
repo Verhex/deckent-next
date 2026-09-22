@@ -659,3 +659,17 @@ while verifying source HEAD. Source branch, index and working files are not modi
 custody reconciles a crash after Git publication before ledger settlement. Receipt replay is historical
 evidence, not verification of today's ref. Checked-out branch adoption and live-worktree merge remain
 separate operations; `reference-only` delivery does not claim either or accept the Task.
+
+### Cancellation settlement — owner 2026-09-22 (implemented)
+
+Cancellation is durable intent plus a deterministic terminal transition owned by the run reducer. `cancelRun`
+propagates intent to bound attempts and, in the same transaction, prevents attempts that have no dispatch record
+(`preventRunAttempt`, reason prevented-before-launch) and settles attempts that already exited but were not yet
+evaluated (`settleCancelledRunAttempt`). A worker killed after cancellation settles to `cancelled` when its
+terminal exit is projected (`finishDispatch`), never on the kill command alone. Claimed-but-ungranted dispatches
+are prevented by the launch decision; running, unknown or unresolved-effect attempts stay with delivery and the
+reconciler. `reconcileAttempt` and cancellation delivery apply the same idempotent store settlement and report it
+as `settlement`; accepted/failed tasks are never re-marked; no observation is fabricated and nothing is retried.
+Pool occupancy counts only active/evaluating/uncertain tasks, so `cancelled` releases capacity. Run-level closure
+of still-pending tasks in a cancel-requested run remains a separate transition.
+

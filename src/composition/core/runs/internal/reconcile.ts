@@ -28,8 +28,11 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
       const result = await app.reconcile(recorded.request);
+      // Durable cancellation intent plus settled terminal evidence closes the bound task; no launch, retry or acceptance.
+      const settlement = result.kind === 'unresolved' ? undefined : await store.settleCancelledAttempt(identity);
       return Object.freeze({ schemaVersion: 1 as const, layout, reconciliation: Object.freeze({
         identity, status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output,
+        ...(settlement ? { settlement } : {}),
       }) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

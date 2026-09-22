@@ -18,12 +18,12 @@ async function fixture() {
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, ['a', 'b'].map(identity)); return { store, path };
 }
-it('atomically propagates intent to reserved and dispatched work, preserves active state and exact replay', async () => {
+it('atomically propagates intent, prevents the undispatched attempt, keeps the dispatched one active and replays exactly', async () => {
   const { store } = await fixture(); await store.claimDispatch(dispatchAdmission(claim('a')));
   const receipt = await store.cancelRun(cancel);
   for (const id of ['a', 'b']) { expect((await store.load('s', id))!.cancelRequested).toBe(true); expect((await store.load('s', id))!.lastObservation).toBeNull(); }
   expect((await store.readDispatch(claim('a').request))!.cancellation).toEqual(actor);
-  expect(receipt.snapshot.progress.every(p => p.phase === 'active')).toBe(true);
+  expect(Object.fromEntries(receipt.snapshot.progress.map(p => [p.taskId, p.phase]))).toEqual({ a: 'active', b: 'cancelled' });
   expect(await store.cancelRun(cancel)).toEqual(receipt); expect((await store.load('s', 'a'))!.revision).toBe(1);
 });
 it('rolls the entire Run/Attempt/dispatch fanout back when a later binding is corrupt', async () => {

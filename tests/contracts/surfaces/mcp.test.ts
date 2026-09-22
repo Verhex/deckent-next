@@ -53,7 +53,7 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     const cancellation = await client.callTool({ name: 'request_run_cancellation', arguments: command });
     expect(cancellation.isError).not.toBe(true); expect(cancellation.structuredContent).toEqual(await requestRunCancellation(project, command, { env }));
     const recorded = (await inspectRun(project, query, { env })).run!;
-    expect(recorded.cancellationRequested).toBe(true); expect(recorded.tasks[0]!.phase).toBe('active');
+    expect(recorded.cancellationRequested).toBe(true); expect(recorded.tasks[0]!.phase).toBe('cancelled');
     await writePolicy(true, false);
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: command }))).toContain('POLICY_DENIED');
     await writePolicy(false);
