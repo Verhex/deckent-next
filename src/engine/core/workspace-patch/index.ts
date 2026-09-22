@@ -8,3 +8,4 @@ export { WorkspaceIntegrationInspection, integrationQuerySchema } from './intern
 export type { IntegrationQuery, IntegrationReader } from './internal/inspection.js';
 export { WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from './internal/delivery.js';
 export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/delivery.js';
+export type { WorkspacePatchLimitDetail } from './internal/contract.js';

@@ -2,7 +2,7 @@ import { sameAttemptIdentity } from '#domain/index.js';
 import { patchExclusions, workspacePatchSchema, WorkspacePatchError, type DispatchRecord, type PatchLimits, type WorkspacePatchSource, type RunWorkspaceCustodyStore } from '#engine/index.js';
 import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
-import { readBase, readWorkspace, snapshotDigest, SnapshotBudget } from './snapshot.js';
+import { diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace, snapshotDigest, SnapshotBudget } from './snapshot.js';
 /** Trusted composition only: exact ledger record, no caller-provided paths, shell commands or Git config. */
 export class GitWorkspacePatchSource implements WorkspacePatchSource {
   constructor(private readonly options: GitWorkspaceOptions, private readonly limits: PatchLimits,
@@ -26,12 +26,16 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
       };
       await stopped();
       const deadline = Date.now() + this.options.timeoutMs;
-      const base = await readBase(lease, this.options, new SnapshotBudget(this.limits, deadline));
+      // The base is listed once (ids only); only paths whose content, mode or presence differs are read from Git.
+      const listing = await listBase(lease, this.options, new SnapshotBudget(this.limits, deadline));
       const after = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline));
       const again = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline));
       if (snapshotDigest(after) !== snapshotDigest(again)) throw new WorkspacePatchError('PATCH_CONFLICT');
       await stopped();
-      const changes = [...new Set([...base.keys(), ...after.keys()])].sort().flatMap(path => {
+      const changedPaths = diffAgainstBase(listing, after, hashAlgorithmOf(lease.baseCommit));
+      const base = await readBaseBlobs(lease, this.options, new SnapshotBudget(this.limits, deadline),
+        changedPaths.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
+      const changes = changedPaths.flatMap(path => {
         const before = base.get(path) ?? null; const next = after.get(path) ?? null;
         return JSON.stringify(before) === JSON.stringify(next) ? [] : [{ path, before, after: next }];
       });

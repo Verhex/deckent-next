@@ -142,6 +142,10 @@ i18n, and the markdown policy are enforced by `scripts/lint-arch.mjs` and fail t
 
 MIT
 
+Patch capture compares the workspace with the base tree by Git object id and reads only changed base blobs;
+exhausted Git output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`,
+`git-timeout`, `time`, `bytes`, `entries`, `depth`, `path`). `execution.git.outputBytes` defaults to 4 MiB.
+
 For a retained workspace patch, `deckent task integration-check` checks the recorded base
 against HEAD and the affected index/worktree files. Use the same identity flags as
 `task patch-preview`. `task integration-prepare` additionally takes `--command-id <id>`

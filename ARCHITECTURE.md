@@ -546,8 +546,17 @@ reads reject symlinks, hardlinks and special files, and detect changed snapshots
 rules omit Git/product/auth metadata and environment files; exclusions are included in the package.
 Untracked non-excluded files are included. Only regular UTF-8 text files and executable mode are
 supported; binary/submodule/symlink input fails explicitly. Scan bytes/time use artifact/Git limits;
-`artifacts.patchPreview` config bounds entries, depth and path bytes. Bounds apply to the projected
-whole tree, so large/generated repositories may require a future explicit scope contract.
+`artifacts.patchPreview` config bounds entries, depth and path bytes.
+
+Owner 2026-09-22 (B05 finding 3): the base tree is listed once (`ls-tree`: paths, modes, object ids, sizes) and
+compared with the descriptor-relative workspace read by Git blob id (`blob <size>\0` hash with the repository's
+algorithm); only changed, added or removed paths read base content, one bounded `cat-file` per changed blob.
+Candidate preparation and verification likewise validate `before` entries against base object ids and prove the
+candidate equals base + patch by the same hash-diff; manifest digests still cover the whole candidate read.
+Exhausted Git output/time bounds and scan budgets are typed `PATCH_LIMIT` with a bounded `detail`
+(`git-output|git-timeout|time|bytes|entries|depth|path`) surfaced as error params; `PATCH_UNAVAILABLE` means
+missing custody or Git. `execution.git.outputBytes` defaults to 4 MiB, sized for tens of thousands of tracked
+paths; the workspace itself is still read in full (twice) within the byte budget.
 
 Ledger29 protects the new optional dispatch receipt from older writers; explicit existing migration
 moves v28 forward without changing prior records. Preview does not migrate. Live target HEAD and WIP

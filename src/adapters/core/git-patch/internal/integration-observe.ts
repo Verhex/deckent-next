@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fingerprintGitSource, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { patchFile, patchDigest, WorkspacePatchError, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
-import { SnapshotBudget } from './snapshot.js';
+import { gitFailure, SnapshotBudget } from './snapshot.js';
 const exec = promisify(execFile);
 function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }
 /** Read only the affected paths: unrelated source WIP and node_modules are not scanned. */
@@ -47,7 +47,7 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     try { return (await exec(options.gitExecutable, ['--no-replace-objects', '-C', source, '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', ...args],
       { env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' },
         timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer: options.outputBytes, encoding: 'utf8' })).stdout; }
-    catch { throw new WorkspacePatchError('PATCH_UNAVAILABLE'); }
+    catch (error) { throw gitFailure(error); }
   };
   const repository = (await git(['rev-parse', '--show-toplevel'])).trim();
   const head = (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();

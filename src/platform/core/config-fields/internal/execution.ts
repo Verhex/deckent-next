@@ -7,6 +7,7 @@ export const DOCKER_EXECUTION_SETTINGS = z.object({
   tmpBytes: z.number().int().positive().safe(), deadlineMs: z.number().int().positive().max(2_147_483_647),
   controlTimeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe(),
 }).strict();
+/** outputBytes bounds one Git listing/blob read; the default fits repositories with tens of thousands of tracked paths. */
 export const GIT_EXECUTION_SETTINGS = z.object({ gitExecutable: z.string().min(1),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe() }).strict();
+  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe().default(4_194_304) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();

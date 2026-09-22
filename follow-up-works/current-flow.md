@@ -1,4 +1,4 @@
-# Anlık iş akışı — iptal settlement düzeltmesi teslim edildi (bulgu 1+2 kapandı); sıradaki: patch limitleri, toolchain güncelliği, B06
+# Anlık iş akışı — iptal settlement ve patch tipli limit/hash-diff teslim edildi (bulgu 1–3 kapandı); sıradaki: toolchain güncelliği, B06
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -110,14 +110,26 @@ N+1/canlı checkout değişmedi. Kanıt: `proof/B05-N-NPLUS1-2026-09-22/{live-n1
 Açık: iptal istenen Run'ın hâlâ `pending` görevlerinin run düzeyinde kapanışı (ayrı geçiş); patch limit/hash-diff (bulgu 3) ve toolchain
 güncelliği sıradaki dilimler.
 
+## Altıncı teslim: patch tipli limitler + hash-diff (bulgu 3)
+
+Ürün kodu: `git-patch/snapshot.ts` baz ağacını tek `ls-tree` ile listeler (yol/mod/oid/boyut, içerik okumaz), workspace'i fd-relatif
+okuyup Git blob id'siyle (`blob <size>\0` + depo algoritması sha1/sha256) karşılaştırır; yalnız değişen/eklenen/silinen yollar için
+sınırlı `cat-file`. `integration-target.ts` aday hazırlama/doğrulamada `before` girdilerini baz oid'leriyle doğrular ve adayın
+baz + patch olduğunu aynı hash-diff ile kanıtlar (Git içerik okuması yok; manifest digest'i adayın tam okumasını kapsamaya devam eder).
+Git çıktı/süre aşımı ve tarama bütçeleri tipli `PATCH_LIMIT` + sınırlı `detail` (`git-output|git-timeout|time|bytes|entries|depth|path`),
+error params ile yüzeye çıkar; `PATCH_UNAVAILABLE` yalnız custody/Git yokluğu. `execution.git.outputBytes` varsayılanı 4 MiB.
+Testler: 1500 dosyalık depo (64 KiB sınırında `PATCH_LIMIT/git-output`; yalnız 2 değişen blob okunur), Docker workspace-patch süiti 23/23.
+**Tam verify: 1565 ürün/268 dosya, 25 native, 53 host; fail/skip 0** (bir önceki koşumda README'yi suite sırasında düzenlemem paket
+ölçümünü bozdu; suite sırasında paketlenen dosya düzenlenmez). Jev d1247cf4 %98; outcome verified kaydı.
+Not: `cat-file --batch` yerine değişen blob başına tek `cat-file` seçildi; ölçek yine O(değişen).
+
 ## Sıradaki sıra
 
-Owner 2026-09-22: 1 tamamlandı; UPDATE tarafı adapter başına (öncelik Codex + Claude; Cursor istisna kalabilir; OpenHands/Hermes yalnız bilgi).
-1. **Patch tipli limit + hash-diff** (`git-patch` adapter'ı, `git.outputBytes` varsayılanı, büyük depo sözleşme testi).
-2. **Toolchain güncellik raporu** (doctor; Codex + Claude adapter'ları; Cursor "auto-update kapatması belgelenmemiş" istisnası), ardından
+Owner 2026-09-22: 1 ve 2 tamamlandı; UPDATE tarafı adapter başına (öncelik Codex + Claude; Cursor istisna kalabilir; OpenHands/Hermes yalnız bilgi).
+1. **Toolchain güncellik raporu** (doctor; Codex + Claude adapter'ları; Cursor "auto-update kapatması belgelenmemiş" istisnası), ardından
    politika güdümlü sürümlü rebuild ve API şema anlık görüntüleri.
-3. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
-4. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
+2. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
+3. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.

@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ISOLATION/DELIVERY (B06 prep, finding 3): workspace patch capture lists the base tree once and reads only changed base blobs by Git object-id hash-diff; candidate preparation/verification validate `before` against base ids and prove base + patch without Git content reads. Git output/time and scan budget exhaustion are typed `PATCH_LIMIT` with a bounded `detail` param; `git.outputBytes` defaults to 4 MiB. Repository-sized (1500-file) contract test added.
+
 - EXECUTION/B07: cancelled attempts now reach the terminal task phase `cancelled` and free pool capacity. Cancellation intent prevents unlaunched bound attempts in the same transaction; a cancel-requested worker's recorded exit settles to `cancelled` on terminal projection; attempts that exited before cancellation settle at cancel time; reconcile and cancellation delivery apply the same idempotent settlement (`settleCancelledAttempt`, reported as `settlement`). RunView carries a derived cancellation reason. No fabricated observations, no launch/retry, accepted/failed tasks untouched; unknown/unresolved attempts stay with the reconciler.
 
 - ISOLATION/PROVIDERS (B08): versioned `deckent/worker` image build: recipe schema 2 with `imageVersion`/`previousVersion`, newest-first `# version` history comments validated and copied into the image, OCI labels, one immutable imageId per version tag, refusal to rebuild a taken version, schema-2 receipts and archived old receipts; old images/tags retained. Product imageId binding unchanged; r1-20260921 tagged retroactively, r2-20260922 built from current sources.

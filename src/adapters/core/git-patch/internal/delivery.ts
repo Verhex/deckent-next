@@ -5,11 +5,12 @@ import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js'
 import { patchDigest, WorkspacePatchError, type IntegrationDeliveryTarget, type IntegrationDeliveryCommand,
   type IntegrationDeliveryPlan, type IntegrationManifest, type WorkspacePatch } from '#engine/index.js';
 import format from './delivery-format.json' with { type: 'json' };
+import { gitFailure } from './snapshot.js';
 /** Writes Git objects and one create-only dedicated reference, never the source index/checkout. */
 export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
   constructor(private readonly options: GitWorkspaceOptions) {}
   private async git(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs) {
-    if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT');
+    if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time');
     return new Promise<string>((resolve, reject) => {
       const child = execFile(this.options.gitExecutable, ['--no-replace-objects', '-C', this.options.sourceRoot,
         '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', ...args], {
@@ -17,7 +18,7 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
           ...(index ? { GIT_INDEX_FILE: index } : {}), GIT_AUTHOR_NAME: format.authorName, GIT_AUTHOR_EMAIL: format.authorEmail,
           GIT_COMMITTER_NAME: format.authorName, GIT_COMMITTER_EMAIL: format.authorEmail, GIT_AUTHOR_DATE: format.date, GIT_COMMITTER_DATE: format.date },
         timeout: Math.max(1, deadline - Date.now()), maxBuffer: this.options.outputBytes, encoding: 'utf8',
-      }, (error, stdout) => error ? reject(new WorkspacePatchError('PATCH_UNAVAILABLE')) : resolve(stdout.trim()));
+      }, (error, stdout) => error ? reject(gitFailure(error)) : resolve(stdout.trim()));
       child.stdin?.on('error', () => undefined); child.stdin?.end(input);
     });
   }

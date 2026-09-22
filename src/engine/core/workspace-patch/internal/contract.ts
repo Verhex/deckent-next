@@ -3,8 +3,11 @@ import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
 import rules from './rules.json' with { type: 'json' };
+/** Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
+export type WorkspacePatchLimitDetail = 'git-output' | 'git-timeout' | 'time' | 'bytes' | 'entries' | 'depth' | 'path';
 export class WorkspacePatchError extends Error {
-  constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT') {
+  constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT',
+    readonly detail?: WorkspacePatchLimitDetail) {
     super(code); this.name = 'WorkspacePatchError';
   }
 }

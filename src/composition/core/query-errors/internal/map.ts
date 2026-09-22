@@ -20,7 +20,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof ApprovalError || error instanceof SessionAuthenticationError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkerObservationError) return ErrorRegistry.createError(error.code);
-  if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code);
+  if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { detail: error.detail } } : {});
   if (error instanceof DeckentError) return error;
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
   if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code);
