@@ -1,4 +1,4 @@
-# Anlık iş akışı — A02 süre enstrümanı teslim edildi, sıradaki B05
+# Anlık iş akışı — A02 enstrümanı ve B08 sürümlü worker imajı teslim edildi, sıradaki B05
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -31,7 +31,30 @@ tanımsızken 12 kurulum/servis testi ortam nedeniyle başarısız, 87 skip — 
 kullandığı `node:24-trixie-slim` imaj ID'siyle: **1556 ürün/265 dosya, 25 native, 50 host; fail/skip 0**; lint/build/smoke geçti.
 Kanıt: `/home/alperen/deckent-refactor-work/proof/A02-DURATION-INSTRUMENT-2026-09-22/` (üç verify logu, Jev vakası/yanıtı, review.md).
 Jev 40a55451 özel journal + açık pause seçeneğini %99 önerdi; none 0, insufficient %1; karar ve verified outcome kayıtlı.
-Bağımsız inceleme yok; Jev/kendi doğrulama Fable PASS değildir. Yerel commit yapıldı; push için owner sözü gerekir.
+Bağımsız inceleme yok; Jev/kendi doğrulama Fable PASS değildir. Yerel commit e9572fe; push için owner sözü gerekir.
+
+## İkinci teslim: sürümlü `deckent/worker` imajı (owner mid-turn isteği, B08)
+
+Owner isteği: Deckent Docker imajı oluşturulsun, sürümleme imajın içinde yorum satırlarıyla takip edilsin,
+eski sürümler arşivlensin. Uygulama: `recipe.json` schema 2 (`repository deckent/worker`, `imageVersion r2-20260922`,
+`previousVersion r1-20260921`); Dockerfile başında en yeniden eskiye `# version <id> | <tarih> | base <imaj> | supersedes <id|none> | <neden>`
+tarihçesi, `history.mjs` ile recipe'ye karşı doğrulanır ve imajın içine kopyalanır; OCI label'ları build-arg'dan;
+`build.mjs` dolu sürüm etiketini derlemeden önce `WORKER_VERSION_TAKEN` ile reddeder, derlenen ID'yi
+`deckent/worker:<sürüm>` etiketler, schema-2 receipt'e sürüm/etiket/label/tarihçe/kaynak hash/probe manifestini yazar;
+hiçbir şey imaj/etiket/receipt silmez. Eski ae5301… imajı receipt'inden geriye dönük `deckent/worker:r1-20260921`
+etiketlendi, receipt'i `worker-images/archive/r1-20260921.json` olarak arşivlendi (kaynağı doğrulanmamış notu korunur).
+
+**Derleme:** r2-20260922 = `sha256:adfcbe4c56c886d6c97ab6f7fecbf62d70df8c4463e3f4d3394558ebad0c4894`, 910 MB;
+codex-cli 0.155.1, claude 2.1.278, cursor 2026.09.18 zorunlu bayraklarla; imaj içinde 2 `# version` satırı ve r2 recipe doğrulandı.
+Negatif: aynı sürümü yeniden derleme derleme başlamadan reddedildi, receipt yazılmadı. `--image-id` re-probe yolu
+kaynak-doğrulanmamış receipt üretti, yeniden etiketlemedi. Tam verify: **1556 ürün/265 dosya, 25 native, 53 host; fail/skip 0**.
+Kanıt: `/home/alperen/deckent-refactor-work/proof/B08-WORKER-IMAGE-R2-2026-09-22/` (build.log, receipt'ler, negatif log, verify, review.md).
+Jev 55ee642a %96 (none %1, insufficient %2); karar/outcome kayıtlı. Açık: r2 ile kimlik doğrulamalı gerçek worker koşumu
+yapılmadı (abonelik kotası); mevcut execution profilleri hâlâ r1 imageId'sini gösterir, yeni profil revizyonu ayrı dilimdir;
+provider kanalları `latest` kalır; 16 eski dangling imaj owner'a bırakıldı. Ürün bağlaması imageId; tag/label yetki değildir.
+
+**Ölçüm (effort report):** A02 M1 done active 0,13 s / verify 0,19 s; B08 M2 done active 0,12 s / verify 0,12 s; unknown 0.
+A02 kapanışı ile B08 açılışı arasındaki ~10 dk (commit + ilk inceleme) dilim dışı, kayıtsız.
 
 ## Sıradaki sıra
 

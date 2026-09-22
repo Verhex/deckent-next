@@ -160,6 +160,16 @@ Mismatch is a sanitized preflight failure. Old authoring v1 is rejected; already
 profiles without preflight retain exact replay, without an implicit upgrade or retroactive claim.
 Adapter flags and the pinned image remain the execution mechanism; no new state owner or ledger.
 
+Worker image versioning (owner 2026-09-22) is an explicit operator build operation shipped in `assets/worker-image`:
+recipe schema 2 names `repository`, `imageVersion`, `previousVersion` and the base image; the Dockerfile's
+newest-first `# version <id> | <date> | base <image> | supersedes <id|none> | <reason>` comment lines are the
+human-readable history, validated against the recipe before any Docker call and copied into the image. Each
+version maps to exactly one immutable imageId, tagged `<repository>:<imageVersion>` with OCI version/revision/base
+labels; rebuilding a version whose tag already names another image is refused. Receipts (schema 2) record version,
+tag, labels, history, source hashes and the probed provider manifest; earlier receipts are archived, earlier images
+and tags are retained for active Runs and rollback. The product still binds execution only by `imageId`; tags,
+labels and history are operator evidence, not authority, and no image is pulled, activated or removed by the product.
+
 Native authoring v2 also accepts mutually exclusive raw prompt or structured composition-v1.
 A packaged versioned common core plus explicitly selected persona/skills/context and task/scope/
 acceptance compile deterministically; no catalog discovery or new routing/admission owner is added.

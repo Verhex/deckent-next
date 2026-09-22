@@ -1,5 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "repository": "deckent/worker",
+  "imageVersion": "r2-20260922",
+  "previousVersion": "r1-20260921",
   "baseImage": "node:24-trixie-slim",
   "npmProviders": [
     {"id": "codex", "package": "@openai/codex", "channel": "latest", "command": "codex", "helpArgs": ["exec", "--help"], "requiredFlags": ["--json", "--model", "--dangerously-bypass-approvals-and-sandbox", "--ignore-user-config"]},

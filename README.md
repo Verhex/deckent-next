@@ -72,6 +72,18 @@ Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ig
 counted only between explicit events; unobserved time is reported as unknown and never estimated.
 `--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
 
+## Worker image versions
+
+`npm run worker:image -- /abs/path/worker-images/<version>.json` builds the three-provider
+`deckent/worker` image from `assets/worker-image`. `recipe.json` (schema 2) names `imageVersion`
+(`r<N>-<YYYYMMDD>`) and `previousVersion`; the Dockerfile keeps a newest-first `# version …` comment
+history that must match the recipe and is copied into the image at `/opt/deckent-worker/Dockerfile`.
+Each version maps to one immutable imageId tagged `deckent/worker:<version>` with OCI labels; a version
+whose tag already names another image is refused. To update: add a new history line, bump
+`imageVersion`/`previousVersion`, rebuild, then reference the receipt's `imageId` in a new execution
+profile revision. Keep old images, tags and archived receipts (`worker-images/archive/`) for active
+Runs and rollback; the product binds by `imageId` only and never pulls, tags or deletes images.
+
 ## Native coding profiles
 
 `coding prepare --input <file|-> --json` and SDK `prepareNativeCodingProfile` author a profile;

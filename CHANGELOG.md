@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ISOLATION/PROVIDERS (B08): versioned `deckent/worker` image build: recipe schema 2 with `imageVersion`/`previousVersion`, newest-first `# version` history comments validated and copied into the image, OCI labels, one immutable imageId per version tag, refusal to rebuild a taken version, schema-2 receipts and archived old receipts; old images/tags retained. Product imageId binding unchanged; r1-20260921 tagged retroactively, r2-20260922 built from current sources.
+
 - ASSURANCE/A02: development duration instrument `.agents/refactor/effort.mjs` records per-slice milestone, start/end and explicit active/blocked/verification/rework intervals in a private immutable host journal; pauses and open tails stay unknown, status is an enum, commit counts are never effort. Host tooling only (`test:host`), no product ledger or authority change; forecasts are recalculated from reports, not from this first record.
 
 - CONTRACT/PROVIDERS: versioned explicit worker prompt composition reuses native coding preparation: shared core catalog, selected persona/skills/context and task/scope/acceptance. Digest-bound delivery uses Claude system prompt, Codex tmpfs instructions and Cursor inline core; sanitized spawn receipts reuse Attempt output. No new catalog, execution owner, authority grant or full discovery-off claim.
