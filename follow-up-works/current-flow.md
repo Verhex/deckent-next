@@ -1,4 +1,18 @@
-# Anlık iş akışı — Opus 5.5; yerel sağlayıcı sıfır tarifesi teslim, terminal yüzeyi Cursor'a devrediliyor
+# Anlık iş akışı — Opus 5.5; E24 teslimleri main'de, terminal Cursor'da, sıradaki B06→B07 (Astra/Fable sırası)
+
+## Yapılan işler — Opus 5.5 (2026-09-22/23, hepsi `origin/main` = `b5806f6`)
+
+| İş | Sonuç | Kanıt |
+|---|---|---|
+| Devralma | Fable devri temiz alındı (f9f1926); temizlik silmeleri owner'da | [devir](../../deckent-refactor-work/OPUS-CONTINUATION-2026-09-22.md) |
+| E24 Paket A | Cursor terminal WIP'i (1da40c8) main'e alındı + 11 kusur düzeltildi (c220673, fe59762) | `proof/E24-TERMINAL-PACKAGE-A-2026-09-22/`, Jev c8f5bb72 |
+| Yerel model tarifesi (B08) | `openai-chat-http` v4 operatör sıfır tarifesi; gerçek yerel Qwen ile canlı (18d1438) | `proof/E24-LOCAL-PROVIDER-TARIFF-2026-09-22/`, Jev 09348842 |
+| Terminal düzeltmeleri | `TERMINAL_CHAT_TRUNCATED`, meşgulken yazma korunur (b5806f6) | aynı klasör |
+| Güvenlik | LAN'a açık Qwen konteyneri kapatıldı; loopback ile yeniden başlatıldı | current-flow E24 bölümü |
+| Terminal devri | Terminal yüzeyi Cursor'a: `/home/alperen/deckent-next-wt-terminal` (`feat/terminal-package-b`) | [Cursor notu](../../deckent-refactor-work/CURSOR-TERMINAL-HANDOFF-2026-09-22.md) |
+
+Son tam verify (b5806f6 ağacı): 1621 ürün/286 dosya, 25 native, 53 host; fail/skip 0, smoke geçti. Aralıklı: `installed-runtime-service`
+(2 kez), `model-invocation` ve `STALE_TARIFF` (1'er) — izole geçiyor, I40 triyajında.
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -223,10 +237,14 @@ okunur, çalıştırılmaz). Açık terminal bulguları: (1) canlı PTY'de yöne
 PTY testinde kapatıyor; tekrar betiği `proof/E24-LOCAL-PROVIDER-TARIFF-2026-09-22/pty-debug.py`, kök neden ölçülmedi); (2) asistan etiketi
 `deckent` görünüyor, kullanıcı/asistan ayrımı gözden geçirilmeli; (3) Paket B listesi (PLAN). Main'de terminal için yeni iş açılmaz.
 
-## Sıradaki sıra
+## Sıradaki sıra (Astra/Fable devir sırasıyla hizalı; Astra teyidi owner'da)
 
-Opus iş planı: öneri uygulama otomasyonu (profil revizyonu), API şema anlık görüntüleri, run düzeyi kapanış, test artığı/yetim süreç
-sızıntısı ve `installed-runtime-service` aralıklı hata triyajı, **B06/B07**; DOGFOOD OFF kalır.
+1. **B06** doğrulanmış benimseme/terfi + rollback (reference-only teslim üzerine; yeni teslim mekanizması kurulmaz). Önkoşul olarak B05
+   bulgusundan kalan run düzeyi kapanış (iptal istenen Run'ın `pending` görevleri) — dogfood kabulünü doğrudan etkiler.
+2. **B07** tekrarlanabilir gerçek dogfood kabulü/kurtarma; DOGFOOD OFF, aktivasyon owner kararı.
+3. Temel hat **A03/A04/C10/C11/C12** kalanları; sonra D/E/F/G/H kabul edilmiş bağımlılıklarla.
+4. B08 artıkları (profil revizyon önerisinin uygulanması, API şema anlık görüntüleri) ve I40 triyajı (test artığı/yetim süreç sızıntısı,
+   aralıklı runtime testleri) — B06/B07'yi bloklarsa öne alınır, bloklamazsa bu sırada.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
