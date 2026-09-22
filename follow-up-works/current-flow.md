@@ -1,4 +1,4 @@
-# Anlık iş akışı — A02 enstrümanı ve B08 sürümlü worker imajı teslim edildi, sıradaki B05
+# Anlık iş akışı — A02, B08 ve B05 ilk dilimi teslim edildi; sıradaki iptal/faz düzeltmesi ve B06
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -64,15 +64,32 @@ ilk Next derlemesi (aa3506…, 09-21 14:47, 910 MB). Hiçbirinin receipt'i/etike
 için yazılı bir planı bulunamadı (PLAN yalnız "eski imajlar korunur" der). Owner kararı: şimdilik kalsın; silme owner'ın komutudur.
 `/tmp/dn-prompt-*` altında 3 küçük fixture dizini (2 Astra, 1 bu koşum) duruyor.
 
-**Ölçüm (effort report):** A02 M1 done active 0,13 s / verify 0,19 s; B08 M2 done active 0,12 s / verify 0,12 s; B08 canlı koşum M2 done active 0,01 s / verify 0,02 s; unknown 0.
+**Ölçüm (effort report):** A02 M1 done active 0,13 s / verify 0,19 s; B08 M2 done active 0,12 s / verify 0,12 s; B08 canlı koşum M2 done active 0,01 s / verify 0,02 s; B05 M2 done active 0,10 s / verify 0,37 s (döngü içi rework verify altında sayıldı); unknown 0.
 A02 kapanışı ile B08 açılışı arasındaki ~10 dk (commit + ilk inceleme) dilim dışı, kayıtsız.
+
+## Üçüncü teslim: B05 — kararlı N, izole N+1'i yönetti
+
+Paketlenmiş N (`npm pack` e1f1a4d → `/home/alperen/deckent-n/prefix`, symlink bin `--version` çalıştı; global-home ve data kökleri N altında)
+ayrı N+1 klonuna (`/home/alperen/deckent-n1`, e1f1a4d) kurulum uyguladı (operator-custom, r2 imajı, `dogfood` scope, 3/3 havuz).
+N'in paketlenmiş servisi (cmdline N bin, cwd N+1) gerçek Claude worker'ıyla `coding-7` görevini kabul etti (yeni test vakası eklendi),
+patch → aday → **reference-only teslim** `refs/deckent/deliveries/ffc729af…` (commit 58c62107, parent = base); teslim edilen commit
+worker dışında `node --test` ile 4/4 geçti. `hold-7` başlatıldıktan sonra iptal edildi (konteyner 137, teslim terminal). Servis SIGKILL →
+yeniden başlatma → coding kabulü korundu, `echo-7` kabul edildi. N+1 HEAD/index/WIP ve canlı checkout değişmedi; N paket/global-home/data,
+N+1 ve canlı checkout ayrık. Kanıt: `/home/alperen/deckent-refactor-work/proof/B05-N-NPLUS1-2026-09-22/` (n1-live.json, live-n1.log, review.md,
+run1–5 kayıtları, diag-patch.mjs). Jev 7f268e20 %99; karar/outcome kayıtlı. Ürün kodu değişmedi; bağımsız inceleme yok; DOGFOOD OFF.
+
+**Bulgular (PLAN'a yazıldı):** (1) başlatma öncesi iptal görevi `active+cancelRequested` bırakıyor, reconcile/execute kapatamıyor;
+(2) başlatma sonrası iptal `evaluating`'de kalıyor, `TASK_EVALUATION_NOT_READY`; ikisi de havuz slotunu tutuyor (2/2 havuzda yeni Run
+rezerve olmadı); (3) patch hazırlığı tüm ağacı okuyor, 64 KiB `git.outputBytes` Deckent ağacında `PATCH_UNAVAILABLE` verdi; 4 MiB/180 s/32 MiB ile geçti.
+Kendi hatam: teslimden önce konteyneri serbest bırakmak patch custody'sini yok etti (tasarım gereği); sıra düzeltildi.
+Eski data/data2 kökleri ve `data2`'deki diag konteyneri (kaldırıldı) kanıt olarak duruyor; silme owner'ın.
 
 ## Sıradaki sıra
 
-1. **B05** N/N+1 paket ve çalışma alanı ayrımı: kararlı N ile izole N+1 kanıtı; mevcut onay broker'ı,
-   session ve reference-only teslim yeniden kurulmaz. Dilim `effort.mjs` ile kaydedilir.
-2. **B06→B07** doğrulanmış benimseme/terfi + rollback, sonra tekrarlanabilir dogfood kabulü; DOGFOOD OFF kalır.
-3. Sonra A03/A04/C10/C11/C12 kalanları; ortak arch/config/migration/CLI dosyalarında tek yazar.
+1. **EXECUTION düzeltmesi (owner onayı gerekir, sözleşme davranışı):** iptal edilen attempt'in `cancelled` fazına inmesi ve kapasiteyi
+   bırakması; başlatma öncesi iptalde prevented→cancelled yolu; `PATCH_LIMIT`/`PATCH_UNAVAILABLE` ayrımı. B07 kurtarma kabulünün önkoşulu.
+2. **B06** doğrulanmış benimseme/terfi + rollback: teslim edilen `refs/deckent/deliveries/…` commit'inin canlı checkout'a kontrollü alınması.
+3. **B07** tekrarlanabilir dogfood kabulü; DOGFOOD OFF kalır. Sonra A03/A04/C10/C11/C12.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
