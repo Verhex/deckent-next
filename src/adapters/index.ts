@@ -36,6 +36,7 @@ export * from '#adapters/core/sqlite-model-invocation/index.js';
 export * from '#adapters/core/provider-openai-chat/index.js';
 export * from '#adapters/core/provider-openrouter-chat/index.js';
 export * from '#adapters/core/provider-openrouter-pricing/index.js';
+export * from '#adapters/core/npm-registry/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
 export { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js';

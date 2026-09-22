@@ -93,6 +93,12 @@ export const CONFIG_FIELDS = Object.freeze({
         kind: z.enum(['next-project', 'legacy-tasks']), path: z.string().min(1), scopeId: z.string().min(1) }).strict()).max(16).default([]),
     }).strict().refine(value => new Set(value.sources.map(source => source.id)).size === value.sources.length).default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  toolchains: field('config.field.toolchains', z.object({ currency: z.object({
+    mode: z.enum(['off', 'report']).default('report'),
+    registryEndpoint: z.string().url().default('https://registry.npmjs.org'),
+    timeoutMs: z.number().int().positive().max(2_147_483_647).default(5000),
+    responseMaxBytes: z.number().int().positive().safe().default(65536),
+  }).strict().default({}) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),

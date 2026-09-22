@@ -94,6 +94,8 @@
   "doctor.honest_summary_no_fix": "{ready} hazır · {missing} eksik",
   "doctor.honest_summary_with_fix": "{ready} hazır · {missing} eksik ({fixable}'i `deckent doctor --fix` ile düzelir)",
   "doctor.host": "Platform: {platform}\nCPU: {cpu}\nBellek: {memory} MB\nÖnerilen worker: {workers}\nTenant: {tenant}\nPrincipal: {principal}",
+  "doctor.toolchains.header": "Toolchain güncelliği (mod {mode}, registry {endpoint}):",
+  "doctor.toolchains.entry": "{provider}: {status} — kabul edilen {admitted}; en yeni {latest}",
   "doctor.image_build_hint": "Derleme: {cmd}",
   "doctor.image_fix_confirm": "Worker imajı şimdi yeniden derlensin mi? Şu komut çalışır: {cmd}",
   "doctor.image_fix_declined": "İmaj yeniden derlemesi iptal edildi — hiçbir şey derlenmedi.",

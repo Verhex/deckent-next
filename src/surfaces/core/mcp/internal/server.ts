@@ -12,7 +12,7 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
-import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
+import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 export interface McpApplications {
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -28,6 +28,7 @@ export interface McpApplications {
   auditProviderSpendAccount?(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
+  inspectToolchainCurrency?(): Promise<ToolchainCurrencyReport>;
   createRun?(command: RunAdmission): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
@@ -77,6 +78,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectModelBinding) definitions.push({ readOnly: true, destructive: false, name: 'inspect_model_binding',
     description: t('mcp.tool.inspectModelBinding', {}, locale), schema: modelReferenceSchema,
     invoke: (input: unknown) => inspectModelBinding.call(applications, modelReferenceSchema.parse(input)) });
+  const inspectToolchainCurrency = applications.inspectToolchainCurrency;
+  if (inspectToolchainCurrency) definitions.push({ readOnly: true, destructive: false, openWorld: true, name: 'inspect_toolchain_currency',
+    description: t('mcp.tool.inspectToolchainCurrency', {}, locale), schema: z.object({}).strict(),
+    invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectToolchainCurrency.call(applications); } });
   const createRun = applications.createRun;
   if (createRun) definitions.push({ readOnly: false, destructive: false, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });

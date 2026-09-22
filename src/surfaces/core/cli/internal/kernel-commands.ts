@@ -9,7 +9,7 @@ import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, Runt
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler } from './init.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelActivationInspectionHandler, ModelActivationAdmissionHandler } from './model-activation.js';
-import type { DeclaredModelsInspection, ModelBindingInspection } from '#engine/index.js';
+import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -31,6 +31,7 @@ export interface CommandContext {
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectWorkers?: WorkerObservationHandler;
+  inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
@@ -64,14 +65,15 @@ export interface CommandContext {
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
 }
-interface Parsed { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; language?: string }
+interface Parsed { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; toolchains: boolean; language?: string }
 function parse(argv: readonly string[]): Parsed {
-  const result: Parsed = { positionals: [], json: false, global: false, dryRun: false };
+  const result: Parsed = { positionals: [], json: false, global: false, dryRun: false, toolchains: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') result.json = true;
     else if (arg === '--global') result.global = true;
     else if (arg === '--dry-run') result.dryRun = true;
+    else if (arg === '--toolchains') result.toolchains = true;
     else if (arg === '--no-color') continue;
     else if (arg === '--lang') {
       const language = argv[++i];
@@ -85,6 +87,7 @@ function parse(argv: readonly string[]): Parsed {
 export async function runKernelCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
   const args = parse(argv), root = context.root ?? process.cwd(), env = context.env ?? process.env;
   const [command, action, key] = args.positionals;
+  if (args.toolchains && command !== 'doctor') throw ErrorRegistry.createError('CLI_USAGE');
   let locale = resolveLocale(args.language, env);
   context.onLocale?.(locale);
   let mode: OutputMode = getConfigFieldDefault('output_mode');
@@ -127,8 +130,15 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const principal = { ...osPrincipal, ...(claim ? { tenantId: claim } : {}) };
   assertActorAssurance(principalToActor(principal), 'doctor', config.enforce_principal_assurance);
   resolveCallerTenant(principal, config.strict_tenant_isolation);
+  // Explicit opt-in only: default doctor stays network-free; the report never updates, rebuilds or activates a worker.
+  if (args.toolchains && !context.inspectToolchainCurrency) throw ErrorRegistry.createError('CLI_USAGE');
+  const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
   const data = { schemaVersion: 1, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
-    paths: resolveGlobalScopePaths(platform, env), principal, tenant: { tenantId: tenant.tenantId, isolationRoot: tenant.isolationRoot }, status: 'ready' };
-  output(data, result => t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
-    workers: result.host.recommendedMaxWorkers, tenant: result.tenant.tenantId, principal: result.principal.id }, locale));
+    paths: resolveGlobalScopePaths(platform, env), principal, tenant: { tenantId: tenant.tenantId, isolationRoot: tenant.isolationRoot }, status: 'ready',
+    ...(toolchains ? { toolchains } : {}) };
+  output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
+    workers: result.host.recommendedMaxWorkers, tenant: result.tenant.tenantId, principal: result.principal.id }, locale),
+  ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
+    ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
+      admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : [])].join('\n'));
 }

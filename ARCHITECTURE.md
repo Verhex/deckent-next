@@ -682,3 +682,17 @@ as `settlement`; accepted/failed tasks are never re-marked; no observation is fa
 Pool occupancy counts only active/evaluating/uncertain tasks, so `cancelled` releases capacity. Run-level closure
 of still-pending tasks in a cancel-requested run remains a separate transition.
 
+### Worker toolchain currency — owner 2026-09-22 (report slice implemented)
+
+Workers must run the current version of the interface that invokes them; the first slice is an honest report, not an
+update. A versioned catalog (`engine/core/toolchain-currency/internal/catalog.json`) names each provider's distribution
+mechanism: Codex and Claude Code are npm packages with documented self-update controls (`check_for_update_on_startup=false`,
+`DISABLE_AUTOUPDATER=1`); Cursor is an installer script with auto-update on and no documented version endpoint, so its
+currency is `unsupported` until a vendor mechanism exists. Admitted versions are the durable preflight pins of prepared native
+profiles in the admission registry. `doctor --toolchains` (CLI), `inspect_toolchain_currency` (MCP) and
+`inspectToolchainCurrency` (SDK) read `<toolchains.currency.registryEndpoint>/<package>/latest` once per package with a
+timeout and response cap, no credentials, only when `toolchains.currency.mode` is `report`; default `doctor` stays network-free.
+Statuses: `fresh | stale | ahead | unparsed | unknown-offline | unsupported | disabled | not-admitted`; failures carry a bounded
+reason code. Nothing here activates, rebuilds or updates a worker; policy-driven rebuild (next image version, preflight, new
+profile revision, in-flight Runs keep their imageId) and API capability snapshots are the following slices.
+

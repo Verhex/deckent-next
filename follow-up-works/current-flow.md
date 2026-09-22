@@ -1,4 +1,4 @@
-# Anlık iş akışı — iptal settlement ve patch tipli limit/hash-diff teslim edildi (bulgu 1–3 kapandı); sıradaki: toolchain güncelliği, B06
+# Anlık iş akışı — toolchain güncellik raporu teslim edildi; sıradaki: politika güdümlü rebuild, run düzeyi kapanış, B06
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -123,13 +123,28 @@ Testler: 1500 dosyalık depo (64 KiB sınırında `PATCH_LIMIT/git-output`; yaln
 ölçümünü bozdu; suite sırasında paketlenen dosya düzenlenmez). Jev d1247cf4 %98; outcome verified kaydı.
 Not: `cat-file --batch` yerine değişen blob başına tek `cat-file` seçildi; ölçek yine O(değişen).
 
+## Yedinci teslim: toolchain güncellik raporu (owner 2026-09-22, Jev 1990f990 1,00)
+
+Sürümlü mekanizma kataloğu (Codex/Claude npm paketi + self-update kapatma anahtarı; Cursor installer-script, güncellik `unsupported`),
+engine saf karşılaştırma/rapor sözleşmesi (`fresh|stale|ahead|unparsed|unknown-offline|unsupported|disabled|not-admitted`),
+`npm-registry` adapter'ı (sınırlı GET `<endpoint>/<paket>/latest`, kimlik yok, timeout/boyut sınırı, tipli hatalar),
+`toolchains.currency` config verisi (`mode off|report`, `registryEndpoint`, `timeoutMs`, `responseMaxBytes`),
+composition `inspectConfiguredToolchainCurrency` (kabul edilen sürümler = admission registry'deki native profillerin preflight pin'leri),
+CLI `doctor --toolchains` (yalnız bayrakla; varsayılan doctor ağ kullanmaz), MCP `inspect_toolchain_currency`, SDK `inspectToolchainCurrency`.
+Testler: engine 4, adapter 2 (yerel HTTP fixture: durum/boyut/geçersiz/timeout/erişilemez), composition+CLI 3 (fixture registry,
+çevrimdışı, `--toolchains` opt-in ve kullanım hataları). `cli.help` şablon değişikliği i18n oracle'ında (`cli-text-changes.json`) beyan edildi.
+**Tam verify: 1574 ürün/271 dosya, 25 native, 53 host; fail/skip 0.** Gerçek koşum (N+1 kurulumu, `registry.npmjs.org`): claude `fresh`
+(2.1.278 = en yeni), codex/cursor `not-admitted` (o kurulumda yalnız Claude profili). Kanıt: `proof/B08-TOOLCHAIN-CURRENCY-2026-09-22/`.
+Jev 1990f990 1,00; outcome verified. Açık: Cursor kapatma yolu doğrulanmadı (`unsupported` veriyle); npm `latest` GitHub sürümünden geride kalabilir.
+
 ## Sıradaki sıra
 
-Owner 2026-09-22: 1 ve 2 tamamlandı; UPDATE tarafı adapter başına (öncelik Codex + Claude; Cursor istisna kalabilir; OpenHands/Hermes yalnız bilgi).
-1. **Toolchain güncellik raporu** (doctor; Codex + Claude adapter'ları; Cursor "auto-update kapatması belgelenmemiş" istisnası), ardından
-   politika güdümlü sürümlü rebuild ve API şema anlık görüntüleri.
-2. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
-3. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
+Owner 2026-09-22: 1–3 tamamlandı; UPDATE adapter başına (Codex + Claude; Cursor istisna; OpenHands/Hermes yalnız bilgi).
+1. **Politika güdümlü sürümlü rebuild**: `toolchains.update off|report|approve|auto`, otomatik `# version` satırı + mevcut build + preflight +
+   yeni profil revizyonu önerisi; devam eden Run imageId'sini korur; imaj içi self-updater kapatma (Codex/Claude) ve Cursor network-none doğrulaması.
+2. API worker'ları için sağlayıcı yetenek/şema anlık görüntüleri (provider-catalog'a sürümlü veri).
+3. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
+4. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.

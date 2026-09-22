@@ -8,6 +8,7 @@ import { createBoundedMcpTransport, registerProviderConfig } from '#adapters/ind
 import { createMcpServer } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { inspectConfiguredToolchainCurrency } from '#composition/core/toolchains/index.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
   registerProviderConfig(); const config = await loadConfig(root, { heal: false });
@@ -15,6 +16,7 @@ export async function main(root = process.cwd()) {
   const runtime = createConfiguredRuntimeClient(root);
   return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
+    inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),
     inspectModelInvocation: (query, delivery) => runtime.inspectModelInvocation(query, delivery),
     purgeModelInvocationContent: (command, delivery) => runtime.purgeModelInvocationContent(command, delivery),
     cancelModelInvocation: (command, delivery) => runtime.cancelModelInvocation(command, delivery),

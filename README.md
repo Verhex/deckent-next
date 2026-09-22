@@ -55,6 +55,15 @@ safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the 
 The `pilot` scope and local source catalog are development fixtures, not an installed default.
 DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
 
+### Worker toolchain currency
+
+`deckent doctor --toolchains` compares the CLI versions pinned by prepared native profiles with the published
+npm `latest` tag of `@openai/codex` and `@anthropic-ai/claude-code` (one bounded read per package, no credentials).
+It runs only with the flag and only when `toolchains.currency.mode` is `report`; `registryEndpoint` may point at a
+private registry, and unreachable registries report `unknown-offline`. Cursor has no documented version endpoint and
+is reported `unsupported`. The report never updates, rebuilds or activates a worker. The same report is available as
+the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchainCurrency`.
+
 ### Development duration measurement (A02/W0-3)
 
 `node .agents/refactor/effort.mjs` records how long development slices actually take. It is

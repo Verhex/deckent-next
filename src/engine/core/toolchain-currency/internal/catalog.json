@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "note": "Versioned vendor distribution mechanisms per worker provider. Data, not authority: it names where a published version can be read and how self-update is disabled inside images.",
+  "providers": {
+    "codex": {
+      "mechanism": "npm",
+      "package": "@openai/codex",
+      "versionPattern": "^codex-cli (\\d+\\.\\d+\\.\\d+(?:[-+][\\w.-]+)?)$",
+      "update": "codex update",
+      "selfUpdateControl": "check_for_update_on_startup=false"
+    },
+    "claude": {
+      "mechanism": "npm",
+      "package": "@anthropic-ai/claude-code",
+      "versionPattern": "^(\\d+\\.\\d+\\.\\d+(?:[-+][\\w.-]+)?) \\(Claude Code\\)$",
+      "update": "claude update",
+      "selfUpdateControl": "DISABLE_AUTOUPDATER=1"
+    },
+    "cursor": {
+      "mechanism": "installer-script",
+      "versionPattern": "^(\\d{4}\\.\\d{2}\\.\\d{2}(?:[-.][\\w.-]+)?)$",
+      "update": "agent update",
+      "note": "Auto-update is on by default and no version endpoint or disable switch is documented; currency stays unsupported until a vendor mechanism exists. Workers run with network none, so in-image self-update cannot occur."
+    }
+  }
+}

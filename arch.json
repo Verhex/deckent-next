@@ -211,7 +211,8 @@
         "src/surfaces/core/cli",
         "src/composition/core/native-coding",
         "src/composition/core/workspace-patch",
-        "src/composition/core/worker-observation"
+        "src/composition/core/worker-observation",
+        "src/composition/core/toolchains"
       ],
       "plan": "SURFACES"
     },
@@ -264,7 +265,8 @@
         "src/platform/core/config",
         "src/platform/core/host",
         "src/platform/core/i18n",
-        "src/surfaces/core/mcp"
+        "src/surfaces/core/mcp",
+        "src/composition/core/toolchains"
       ],
       "plan": "SURFACES"
     },
@@ -685,7 +687,8 @@
         "src/domain/core/run",
         "src/engine/core/workspace-patch",
         "src/capabilities/core/artifacts",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/engine/core/toolchain-currency"
       ],
       "plan": "SURFACES"
     },
@@ -708,7 +711,8 @@
         "src/engine/core/task-evaluation",
         "src/platform/core/common",
         "src/platform/core/errors",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/engine/core/toolchain-currency"
       ],
       "plan": "SURFACES"
     },
@@ -1216,6 +1220,24 @@
         "src/composition/core/query-errors"
       ],
       "plan": "SECURITY"
+    },
+    "src/engine/core/toolchain-currency": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/npm-registry": {
+      "dependencies": [],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/toolchains": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/npm-registry"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {

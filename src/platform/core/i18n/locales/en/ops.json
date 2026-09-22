@@ -94,6 +94,8 @@
   "doctor.honest_summary_no_fix": "{ready} ready · {missing} missing",
   "doctor.honest_summary_with_fix": "{ready} ready · {missing} missing ({fixable} fixed by `deckent doctor --fix`)",
   "doctor.host": "Platform: {platform}\nCPU: {cpu}\nMemory: {memory} MB\nRecommended workers: {workers}\nTenant: {tenant}\nPrincipal: {principal}",
+  "doctor.toolchains.header": "Toolchain currency (mode {mode}, registry {endpoint}):",
+  "doctor.toolchains.entry": "{provider}: {status} — admitted {admitted}; latest {latest}",
   "doctor.image_build_hint": "Build: {cmd}",
   "doctor.image_fix_confirm": "Rebuild the worker image now? This runs: {cmd}",
   "doctor.image_fix_declined": "Image rebuild cancelled — nothing was built.",

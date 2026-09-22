@@ -55,6 +55,8 @@ export { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegrat
 export type { WorkspacePatch, IntegrationQuery, IntegrationCommand, IntegrationManifest } from '#engine/index.js';
 
 export { inspectConfiguredWorkers } from '#composition/index.js';
+export { inspectConfiguredToolchainCurrency as inspectToolchainCurrency } from '#composition/index.js';
+export type { ToolchainCurrencyReport, ToolchainCurrencyEntry, ToolchainStatus } from '#engine/index.js';
 export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 
 export { configuredApproval } from '#composition/index.js';
