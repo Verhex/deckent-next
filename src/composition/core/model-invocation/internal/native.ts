@@ -7,7 +7,7 @@ import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HT
   parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID,
   OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition,
   type OpenRouterPricedNative, fetchOpenRouterTariff, type OpenRouterMetadataObservation,
-  providerSpendingSchema } from '#adapters/index.js';
+  providerSpendingSchema, quoteOpenAiChatOperatorTariff } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
@@ -67,6 +67,11 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   });
   const spending: ModelInvocationSpendingAuthority = Object.freeze({
     async authorize(input: ModelInvocationSpendingInput) {
+      if (input.profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && input.profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
+        // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
+        const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
+        return Object.freeze({ budget, quote: quoteOpenAiChatOperatorTariff(input) });
+      }
       const current = selected;
       if (!current || input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID
         || !isDeepStrictEqual(input.profile, current.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');

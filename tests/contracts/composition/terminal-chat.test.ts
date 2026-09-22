@@ -67,7 +67,8 @@ describe('terminal chat turn is one governed model invocation', () => {
     const [command] = p.invoked;
     const binding = await inspectModelBinding(f.projectRoot, reference, f.options);
     expect(command).toMatchObject({ schemaVersion: 1, scopeId: 'team-a', reference, catalogRevision: 'catalog-7', expectedBinding: binding.binding });
-    const definition = parseOpenAiChatHttpDefinition({ endpoint: 'http://127.0.0.1:18080/v1/chat/completions', maxOutputTokens: 256, authentication: { type: 'none' } });
+    const definition = parseOpenAiChatHttpDefinition({ endpoint: 'http://127.0.0.1:18080/v1/chat/completions', maxOutputTokens: 256, authentication: { type: 'none' },
+      tariff: { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } });
     expect(parseOpenAiChatTextRequest(command!.nativeRequest, definition)).toEqual({ model: 'Qwen3.8-27B-Q4_K_M', messages, max_completion_tokens: 256, stream: false });
     // Negative proof for the pre-integration request body, which also carried `max_tokens`.
     expect(() => parseOpenAiChatTextRequest({ ...command!.nativeRequest, max_tokens: 256 }, definition)).toThrow('OPENAI_CHAT_REQUEST_INVALID');

@@ -164,20 +164,39 @@ describe('configured native model invocation', () => {
 });
 
 describe('native endpoint version and historical receipt boundaries', () => {
-  it('rejects a current valid unpriced OpenAI profile before HTTP or a durable claim', async () => {
+  it('rejects the unpriced v3 OpenAI profile before HTTP or a durable claim', async () => {
     const f = await fixture();
     f.setProfile({ ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' },
       adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: `${f.origin}/chat`, maxOutputTokens: 8,
         authentication: { type: 'none' as const }, tls: { caPem: f.caPem } } } });
     await f.writeConfig();
-    await expect(invokeConfiguredModel(f.project, f.command('unpriced-openai'), { env: f.env }))
-      .rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE' });
+    await expect(invokeConfiguredModel(f.project, f.command('unpriced-openai'), { env: f.env })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });
     expect(f.requests).toBe(0);
     const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
     try { expect(await reader.loadReceipt('scope', 'unpriced-openai')).toBeNull(); } finally { reader.close(); }
   });
 
-  it('reads an unchanged historical adapter1 claim without executing it; new sends require adapter3', async () => {
+  it('reserves and settles an operator zero tariff at zero in the scope ledger, and rejects a currency mismatch before HTTP', async () => {
+    const f = await fixture();
+    const zero = { kind: 'operator-static' as const, version: 1 as const, currency: 'USD', inputMinorUnitsPerMillionTokens: 0 as const, outputMinorUnitsPerMillionTokens: 0 as const };
+    const local = (currency: string) => ({ ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' },
+      adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint: `${f.origin}/chat`, maxOutputTokens: 8,
+        authentication: { type: 'none' as const }, tls: { caPem: f.caPem }, tariff: { ...zero, currency } } } });
+    f.setProfile(local('EUR')); await f.writeConfig();
+    await expect(invokeConfiguredModel(f.project, f.command('wrong-currency'), { env: f.env })).rejects.toMatchObject({ code: 'PROVIDER_SPEND_CONFLICT' });
+    expect(f.requests).toBe(0);
+    f.setProfile(local('USD')); await f.writeConfig();
+    const result = await invokeConfiguredModel(f.project, f.command('zero-tariff'), { env: f.env });
+    expect(result.receipt.outcome).toMatchObject({ state: 'responded' }); expect(f.requests).toBe(1); expect(f.metadataGets).toBe(0);
+    const inspected = await inspectConfiguredModelInvocation(f.project,
+      { schemaVersion: 2, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference }, { env: f.env });
+    expect(inspected.spending).toMatchObject({ descriptor: { budgetId: 'budget', currency: 'USD',
+      quote: { pricing: { id: 'operator-static-tariff', version: 1, definition: zero }, maxChargeMinorUnits: 0 } },
+    disposition: { state: 'settled-local', amountMinorUnits: 0 }, measurement: null });
+    expect(JSON.parse(f.bodies[0]!)).toEqual({ model: 'vendor/model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4, stream: false });
+  });
+
+  it('reads an unchanged historical adapter1 claim without executing it; new sends require the current adapter', async () => {
     const f = await fixture(), command = f.command('historical');
     const historicalProfile = { ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' },
       adapter: { id: 'openai-chat-http', version: 1,
@@ -210,8 +229,9 @@ describe('native endpoint version and historical receipt boundaries', () => {
 
   it('rejects normalized or credential-bearing endpoints before a durable claim or HTTP request', async () => {
     const f = await fixture(), original = { ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' },
-      adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint: `${f.origin}/chat`, maxOutputTokens: 8,
-        authentication: { type: 'none' as const }, tls: { caPem: f.caPem } } } };
+      adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint: `${f.origin}/chat`, maxOutputTokens: 8,
+        authentication: { type: 'none' as const }, tls: { caPem: f.caPem }, tariff: { kind: 'operator-static', version: 1, currency: 'USD',
+          inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } } } };
     for (const suffix of ['?token=private', '#fragment', '/a/../b']) {
       f.setProfile({ ...original, adapter: { ...original.adapter, definition: { ...original.adapter.definition,
         endpoint: original.adapter.definition.endpoint + suffix } } }); await f.writeConfig();

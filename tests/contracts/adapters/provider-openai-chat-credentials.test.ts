@@ -30,12 +30,13 @@ async function fixture(handler: Parameters<typeof createServer>[1]) {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   return `https://127.0.0.1:${address.port}/`;
 }
+const tariff = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } as const;
 function profile(endpoint: string, authentication: { type: 'none' } | { type: 'bearer'; credentialRef: string }, timeoutMs = 1000,
   responseMaxBytes = limits.responseMaxBytes) {
   return { schemaVersion: 1, id: 'profile', version: 1, scopeId: 'scope',
     reference: { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 }, bindingDigest: 'a'.repeat(64),
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 3,
-      definition: { endpoint, maxOutputTokens: 32, authentication, tls: { caPem: certificate } } },
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
+      definition: { endpoint, maxOutputTokens: 32, authentication, tls: { caPem: certificate }, tariff } },
     allocation: { id: 'allocation', maxCalls: 1, maxInFlight: 1 }, limits: { ...limits, timeoutMs, responseMaxBytes } };
 }
 
@@ -50,8 +51,8 @@ it('resolves one exact bearer reference only during send and verifies the config
 
   const untrusted = createOpenAiChatNativePort({ async resolveCredential() { return secret; } });
   const withoutAuthority = { ...profile(endpoint, { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' }),
-    adapter: { id: 'openai-chat-http', version: 3, definition: { endpoint, maxOutputTokens: 32,
-      authentication: { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' } } } };
+    adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint, maxOutputTokens: 32,
+      authentication: { type: 'bearer', credentialRef: 'PROVIDER_TOKEN' }, tariff } } };
   const token = await untrusted.prepare(withoutAuthority, binding, request);
   await expect(untrusted.send(token)).rejects.toMatchObject({ code: 'OPENAI_CHAT_TRANSPORT_UNKNOWN' } satisfies Partial<OpenAiChatHttpError>);
 
@@ -63,7 +64,7 @@ it('resolves one exact bearer reference only during send and verifies the config
 
 it('accepts one valid public certificate and rejects private, multiple, or malformed TLS material', () => {
   const definition = { endpoint: 'https://provider.example/v1/chat', maxOutputTokens: 1,
-    authentication: { type: 'none' as const }, tls: { caPem: certificate } };
+    authentication: { type: 'none' as const }, tls: { caPem: certificate }, tariff };
   expect(parseOpenAiChatHttpDefinition(definition)).toMatchObject(definition);
   for (const caPem of [privateKey, `${certificate}${certificate}`, '-----BEGIN CERTIFICATE-----\nYWJjZA==\n-----END CERTIFICATE-----\n']) {
     expect(() => parseOpenAiChatHttpDefinition({ ...definition, tls: { caPem } })).toThrow('OPENAI_CHAT_DEFINITION_INVALID');

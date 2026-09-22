@@ -942,11 +942,13 @@
     },
     "src/adapters/core/provider-openai-chat": {
       "dependencies": [
+        "src/adapters/core/provider-http-json",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/adapters/core/provider-http-json"
+        "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS"
     },

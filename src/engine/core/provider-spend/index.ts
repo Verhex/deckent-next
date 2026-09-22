@@ -22,3 +22,4 @@ export { parseProviderSpendAuditResultForCommand } from './internal/audit-result
 export type { ProviderSpendAuditResult } from './internal/audit-result.js';
 export type { ProviderSpendAuditAuthorization, ProviderSpendAuditLimits,
   ProviderSpendAuditStore } from './internal/audit-application.js';
+export { OPERATOR_TARIFF_PRICING_ID, operatorTariffLocalSettlement } from './internal/operator-tariff.js';

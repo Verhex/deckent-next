@@ -39,8 +39,9 @@ async function fixture(timeoutMs = 1000) {
   cleanup.push(() => new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()); server.closeAllConnections(); }));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   let profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 3,
-      definition: { endpoint: `http://127.0.0.1:${address.port}/chat`, maxOutputTokens: 8, authentication: { type: 'none' } } },
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
+      definition: { endpoint: `http://127.0.0.1:${address.port}/chat`, maxOutputTokens: 8, authentication: { type: 'none' },
+        tariff: { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } } },
     allocation: { id: 'calls', maxCalls: 10, maxInFlight: 10 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs } };
   const activations = await openSqliteModelActivationStore(path, sqlite);
   const activation = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope',

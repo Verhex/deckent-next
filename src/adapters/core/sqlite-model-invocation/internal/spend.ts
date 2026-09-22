@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { createProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest,
+import { createProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, operatorTariffLocalSettlement,
   providerSpendReservationDigest, parseProviderSpendReportedMeasurement, ProviderSpendError,
   type ModelInvocationAdmission, type ModelInvocationRecord, type ProviderSpendReportedMeasurement } from '#engine/index.js';
 import { readSpendCheckpoint, writeSpendCheckpoint, decodeSpendReservation, spendOutcomeDigest } from './spend-checkpoint.js';
@@ -72,8 +72,11 @@ export function settleInvocationSpend(db: DatabaseSync, next: ModelInvocationRec
   if (!checkpoint) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const current = decodeSpendReservation(row, { ...next.receipt, outcome: null }, checkpoint);
   const evidenceDigest = spendOutcomeDigest(next.receipt);
+  const local = measurement ? null : operatorTariffLocalSettlement(current.descriptor.quote, outcome.state);
   const result = settleProviderSpend(checkpoint.account, current, measurement
     ? { kind: 'provider-reported', measurement, evidenceDigest }
+    : local !== null
+    ? { kind: 'measured-local', amountMinorUnits: local, evidenceDigest }
     : outcome.state === 'not-sent'
     ? { kind: 'not-sent', evidenceDigest }
     : { kind: 'hold', reason: outcome.state === 'unknown' || outcome.state === 'rejected' ? 'unknown' : 'missing-usage', evidenceDigest });

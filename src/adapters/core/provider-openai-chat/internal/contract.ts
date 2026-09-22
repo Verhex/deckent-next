@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type JsonObject } from '#domain/index.js';
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
-export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 3 as const;
+export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 4 as const;
 export const OPENAI_CHAT_COMPLETIONS_FAMILY = 'openai-chat-completions' as const;
 export const OPENAI_CHAT_COMPLETIONS_VERSION = 'v1' as const;
 export const OPENAI_CHAT_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
@@ -19,8 +19,11 @@ export class OpenAiChatHttpError extends Error {
 }
 
 export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: 'bearer'; credentialRef: string }>;
+/** Operator-declared tariff for servers without a provider price feed. v1 admits only zero rates (free/local models). */
+export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1; currency: string;
+  inputMinorUnitsPerMillionTokens: 0; outputMinorUnitsPerMillionTokens: 0 }>;
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number;
-  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }> }>;
+  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user' | 'assistant'; content: string }>;
 export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly OpenAiChatTextMessage[];
@@ -37,10 +40,12 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
     return canonical(value) === canonical(parsed.toString());
   } catch { return false; }
 });
+const tariffSchema = z.object({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
+  inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) }).strict();
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive,
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
-  tls: z.object({ caPem: certificate }).strict().optional() }).strict();
+  tls: z.object({ caPem: certificate }).strict().optional(), tariff: tariffSchema }).strict();
 const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
   timeoutMs: positive.max(2_147_483_647) }).strict();
 const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z.array(z.object({
@@ -56,7 +61,7 @@ export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDef
   }
   const authentication = Object.freeze({ ...parsed.data.authentication });
   return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens, authentication,
-    ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}) });
+    ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}), tariff: Object.freeze({ ...parsed.data.tariff }) });
 }
 
 export function parseOpenAiChatHttpLimits(input: unknown): OpenAiChatHttpLimits {
