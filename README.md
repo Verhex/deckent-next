@@ -55,6 +55,35 @@ safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the 
 The `pilot` scope and local source catalog are development fixtures, not an installed default.
 DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
 
+## Native coding profiles
+
+`coding prepare --input <file|-> --json` and SDK `prepareNativeCodingProfile` author a profile;
+preparation does not activate it or grant execution permission. The outer request remains
+`{schemaVersion: 1, template, invocation}`. New `invocation` data requires `schemaVersion: 2`,
+`provider`, `cliVersion`, `permissionMode: "unattended"`, `model` and `prompt`. Use the exact
+CLI version string measured in the selected image's preflight receipt, not the host CLI version.
+
+`discovery` is versioned data: `{schemaVersion: 1, mode: "disabled"}` is the default.
+Claude maps it to subscription-compatible `--safe-mode`. Codex and Cursor currently reject
+that mode because complete discovery suppression has not been established for their adapters.
+For an explicitly authorized repository-discovery profile, select
+`{schemaVersion: 1, mode: "repository"}`; this permits repository instructions/configuration
+and can start repository hooks or MCP processes. It does not grant additional host/network access.
+Discovery suppression controls automatic loading; native tools can still read files inside the workspace.
+
+Only Claude repository mode currently accepts `discovery.settings`, with the typed field
+`disableAllHooks: boolean`. This becomes explicit `--settings` JSON; arbitrary settings files,
+helpers, environment variables and credentials are rejected. Disabling hooks alone does not
+suppress repository MCP or instructions. Settings with discovery-disabled mode are rejected.
+
+The worker checks its CLI version and required flags in an empty temporary directory before
+writing its credential file and launching the task. A mismatch exits with a sanitized `preflight`
+failure; there is no API/authentication fallback. Image re-probing uses the current inspector
+and records its hashes even for an existing image. Capability help is not authenticated proof.
+Old invocation-v1 authoring requests are rejected, rather than silently changing their meaning.
+Already persisted execution profiles keep their exact behavior and replay; migration means
+preparing and admitting a new profile revision explicitly.
+
 ## Develop
 
 ```sh

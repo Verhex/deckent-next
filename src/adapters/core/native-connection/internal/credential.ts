@@ -5,7 +5,13 @@ import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import catalog from './providers.json' with { type: 'json' };
 
-export const nativeSubscriptionSchema = z.object({ schemaVersion: z.literal(1), provider: z.enum(['codex', 'claude', 'cursor']) }).strict().readonly();
+export const nativeSubscriptionSchema = z.object({ schemaVersion: z.literal(1), provider: z.enum(['codex', 'claude', 'cursor']),
+  preflight: z.object({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
+    discovery: z.enum(['disabled', 'repository']),
+    helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),
+    requiredFlags: z.array(z.string().regex(/^--[a-z][a-z-]*$/).max(64)).min(1).max(20).readonly(),
+  }).strict().readonly().optional(),
+}).strict().readonly();
 export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export class NativeConnectionError extends Error {
   constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE') { super(code); this.name = 'NativeConnectionError'; }

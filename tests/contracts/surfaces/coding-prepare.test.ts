@@ -18,7 +18,7 @@ const input = (provider = 'codex') => ({ schemaVersion: 1, template: { id: 'codi
   adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64),
     memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2,
     tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } },
-  invocation: { schemaVersion: 1, provider, permissionMode: 'unattended', model: 'configured-model', prompt: '--task; $(not-a-command)' } });
+  invocation: { schemaVersion: 2, provider, cliVersion: 'fixture-1', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: 'configured-model', prompt: '--task; $(not-a-command)' } });
 
 it.each(['codex', 'claude', 'cursor'])('compiled CLI stdin and public SDK prepare the same %s profile without creating project state', provider => {
   const f = fixture(); const request = input(provider);
@@ -39,6 +39,8 @@ it('rejects invalid transport, duplicated flags, unsupported providers and unkno
   for (const [args, body] of [
     [[], '{'],
     [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, provider: 'other' } })],
+    [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, schemaVersion: 1 } })],
+    [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, discovery: { schemaVersion: 1, mode: 'disabled' } } })],
     [['--input', '-'], JSON.stringify(input())],
   ] as const) {
     const result = spawnSync(process.execPath, [cli, 'coding', 'prepare', '--input', '-', '--json', ...args],

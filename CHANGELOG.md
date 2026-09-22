@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ISOLATION/PROVIDERS: native coding authoring v2 pins CLI version and explicit discovery semantics; Claude defaults to subscription-compatible safe-mode. Codex/Cursor discovery-disabled and unsupported settings fail closed; repository discovery remains explicit. Worker version/flag preflight blocks incompatible task launch. Existing persisted profiles replay unchanged; new v1 authoring is rejected. Typed Claude repository settings accept only `disableAllHooks`, never generic credential-capable configuration.
+
+
 - CONTRACT/ASSURANCE: reconcile accepted company scope, independent do admission, Mission author and business-operation process targets; tie duration evidence to M1–M5 forecasts and require documentation reconciliation at task start/delivery. Add development-only host guard and tests; provider bare/auth compatibility remains a measured follow-up, not an auth or execution change.
 
 - ISOLATION/DELIVERY: linked replacement candidates preserve old writers/state; shared SDK/CLI reference-only Git delivery with dedicated create-only ref, atomic HEAD check, private index, live session and crash reconciliation; ledger32. Real concurrent Codex/Claude/Cursor edits, DAG join, shared pool, cancellation and retained-patch delivery verified. Approval action binding now includes full validated policy content even when a revision label is reused; native peer polling rejects full disconnect before delayed socket events. Source HEAD/index/WIP preserved; DOGFOOD remains OFF.

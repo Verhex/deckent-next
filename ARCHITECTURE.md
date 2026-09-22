@@ -148,6 +148,18 @@ workspace, dispatch ownership and artifact collection. Persisted supervisor conn
 contain paths and bootstrap digest, never credential values. Expired/unavailable credentials fail
 explicitly; subscription refresh and fleet-wide account lifecycle remain open.
 
+Native coding authoring v2 pins the observed CLI version and a versioned discovery choice.
+Disabled discovery is the default: Claude uses subscription-compatible safe-mode; unverified
+Codex/Cursor suppression requests fail instead of silently enabling repository discovery.
+Repository discovery is an explicit profile exception for all three providers. Only Claude's
+repository mode accepts typed `disableAllHooks` settings; arbitrary settings/env/helper/path
+injection and disabled-mode/settings combinations are rejected. This is not a general tool gate.
+The binding's optional preflight-v1 metadata records discovery, version and required flags;
+the worker probes in an empty temporary directory before credential-file publication/task start.
+Mismatch is a sanitized preflight failure. Old authoring v1 is rejected; already persisted
+profiles without preflight retain exact replay, without an implicit upgrade or retroactive claim.
+Adapter flags and the pinned image remain the execution mechanism; no new state owner or ledger.
+
 Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstructed from a receipt
 to grant new access. Existing Docker custody still supports observation, cancellation and output
 recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output

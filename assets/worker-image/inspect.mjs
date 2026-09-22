@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdirSync } from 'node:fs';
 const root = '/opt/deckent-worker';
-const recipe = JSON.parse(readFileSync(`${root}/recipe.json`, 'utf8'));
+const recipe = JSON.parse(readFileSync(process.argv[2] ?? `${root}/recipe.json`, 'utf8'));
 if (process.env.HOME) mkdirSync(process.env.HOME, { recursive: true, mode: 0o700 });
 const providers = [...recipe.npmProviders, recipe.cursor].map(provider => {
   const run = args => execFileSync(provider.command, args, {

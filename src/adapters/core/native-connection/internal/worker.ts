@@ -3,7 +3,7 @@ import { get } from 'node:http';
 import { createServer, connect, type Socket } from 'node:net';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
@@ -16,9 +16,27 @@ async function main() {
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; home: string; file: string;
-    credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number } };
+    credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
+    preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] } };
   const home = '/tmp/deckent-home';
   if (setup.schemaVersion !== 1 || setup.home.includes('..') || setup.home.startsWith('/') || setup.file.includes('/')) throw new Error();
+  const [executable, ...argv] = process.argv.slice(2); if (!executable) throw new Error();
+  if (setup.preflight) {
+    // Probe in a clean directory before credentials are written or task tools can run.
+    const probe = '/tmp/deckent-preflight'; await mkdir(probe, { mode: 0o700 });
+    try {
+      const run = (args: string[]) => execFileSync(executable, args, { cwd: probe, timeout: 10000,
+        maxBuffer: 1048576, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        env: { PATH: process.env.PATH, HOME: probe, LANG: 'C.UTF-8', DISABLE_AUTOUPDATER: '1' } });
+      const version = run(['--version']).trim(); const help = run(setup.preflight.helpArgs).split(/[\s,=]+/);
+      if (setup.preflight.schemaVersion !== 1 || version !== setup.preflight.cliVersion
+        || setup.preflight.requiredFlags.some(flag => !help.includes(flag))) throw new Error();
+    } catch {
+      process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 78,
+        signal: null, outputBytes: 0, failure: 'preflight' }) + '\n');
+      process.exitCode = 78; return;
+    }
+  }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
   await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });
   if (setup.provider === 'claude') await writeFile(join(home, '.claude.json'), JSON.stringify({ hasCompletedOnboarding: true }), { mode: 0o600 });
@@ -39,7 +57,6 @@ async function main() {
   await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, '127.0.0.1', resolve); });
   const address = relay.address(); if (!address || typeof address === 'string') throw new Error();
   const proxy = `http://127.0.0.1:${address.port}`;
-  const [executable, ...argv] = process.argv.slice(2); if (!executable) throw new Error();
   const child = spawn(executable, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env.PATH, HOME: home,
     LANG: 'C.UTF-8', ...setup.environment,
     ...(setup.credentialEnvironment && typeof setup.credential.accessToken === 'string' ? { [setup.credentialEnvironment]: setup.credential.accessToken } : {}),

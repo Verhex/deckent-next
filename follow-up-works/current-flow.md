@@ -1,63 +1,58 @@
-# Anlık iş akışı — güncel PLAN / Jev kontrolü
+# Anlık iş akışı — native discovery profili
 
-Owner Fable planını iletti; belge düzeltmeleri ve tam commit/push sonrası sıralı uygulamaya devam
-izni var. Bu checkpoint DOGFOOD açılışı değildir. Fable kanalı kapalı;
-Grok/Jev danışması bağımsız ürün PASS'i veya owner kabulü değildir.
+## Son teslim
 
-## Mevcut kod ve önceki gerçek kanıt
+Baz checkpoint923e5a2 commit/push edilmişti. Owner devam onayıyla ISOLATION/PROVIDERS profil dilimi
+uygulandı ve doğrulandı; yeni push bu dilime dahil değil. DOGFOOD_MODE=OFF, Fable kanalı kapalı.
 
-Baz HEAD 652d1c2; önceki onay commit'i dcab7e6. Dört dar dilim uygulandı: task-policy kaynaklı
-onay bekleyeni kapasite öncesi dışlama; Linux süreç/socket bağlı canlı oturum; ayrı Git referansına
-crash-recoverable teslim; üç native sağlayıcının gerçek paralel yerel çalışması. Kaynak HEAD/index/WIP
-korunur. Genel approval/tool döngüsü, remote token verifier ve canlı branch merge tamam değil; DOGFOOD kapalıdır.
-Önceki verify:1541 ürün/265 dosya,25 native,36 host; fail/skip0. Bu belge adımında yeniden worker koşulmadı.
-Kanıt: /home/alperen/deckent-refactor-work/proof/FOUR-STEP-EXECUTION/{review.md,completion.json}.
+Native authoring invocationv2 CLI sürümünü sabitler; discovery-v1 disabled varsayılanıdır.
+Claude abonelikte safe-mode kullanır. Codex/Cursor disabled reddedilir; açık repository istisnası
+üçünde de mümkündür. Claude repository modunda yalnız tipli disableAllHooks settings kabul edilir;
+key/env/helper/path veya diğer serbest settings alanları ve disabled+settings reddedilir.
+Eski hazırlanmış profiller aynı kalır; authoring-v1 sessizce yükseltilmek yerine reddedilir.
+Worker sürüm/bayrak kontrolünü credential dosyası ve native görev başlamadan önce yapar.
+Uyumsuzlukta preflight78; sessiz API/ücret/kimlik geçişi yok. Aynı policy/reservation/dispatch,
+worktree, Docker ağ geçidi, kaynak sınırları ve iptal/kurtarma otoritesi korunur.
 
-## Bu belge teslimi
+Gerçek sıralı koşum: Codex/Claude/Cursor ve Claude settings dosyayı doğru değiştirdi. Settings hook'u
+kapattı, MCP yine başladı; bu tam keşif kapatma değildir. Yanlış sürüm ve eksik bayrak iki negatif
+koşumda dosyaya dokunmadan durdu. Host auth dosyaları ve kaynak HEAD/index/WIP korundu;
+altı worker'ın temizlendiği ayrıca Docker envanterinden doğrulandı. Keşif kapatma otomatik yüklemeyi
+sınırlar; worker'ın workspace içindeki dosyaları araçla okumasını yasakladığı iddia edilmez.
 
-PLAN mevcut yetenek/O3/O4/O6/teslim/kanıt satırları kodla eşlendi; ARCHITECTURE eski provider/approval
-anlık görüntüsünü güncel davranıştan ayırıyor. Mission hedefi kabul edilmiş, uygulaması bekliyor;
-Jev'e otomatik taşınan north-star metni de bu kabul edilmiş kararla eşlendi. Mevcut PLAN WIP korundu.
-Grok'un SDK-tek-socket ve PostgreSQL→SSO zorunlu sıralaması kabul edilmiş karar olarak alınmadı.
-Handler'sız katalog metinleri ürün kabulü değil; locale silme/yüzey ekleme bu belge diliminde yapılmadı.
-Analiz değerlendirmesi ve kanıt: /home/alperen/deckent-refactor-work/proof/DOC-RECONCILIATION-2026-09-22/review.md.
+Tam verify: **1547 ürün/265 dosya,25 native,44 host; fail/skip0**, lint/build/smoke geçti.
+İlk tam koşuda README'ye eşzamanlı açıklama eklenmesi paket değişim korumasını tetikledi
+(1546pass/1fail). Kaynaklar sabitlenerek tam koşu tekrarlandı; kontrol gevşetilmedi.
+Kanıt: /home/alperen/deckent-refactor-work/proof/NATIVE-DISCOVERY-PROFILE-2026-09-22/
+(review.md, verification.json, profile-live.json, cleanup-check.json, full-verify-rerun.log).
+Jev0e01f990: sürümlü fail-closed yol%99; none0/insufficient%1, seçim her ikisinde0/1.
+Danışma ve kendi doğrulamamız bağımsız Fable PASS'i veya geniş ürün kabulü değildir.
+README/ARCHITECTURE/PLAN/CHANGELOG güncel; AGENTS/CLAUDE52 satır, kalıcı ilkeleri aynı.
 
-## Owner checkpoint ve sıradaki uygulama
+## Sıradaki sıra
 
-Owner 2026-09-22 son düzeltmeleri kabul etti: D15a Mission AI author (D14 sonrası), D15b `do`
-(D14'ten bağımsız); A02 ölçümü M1–M5 tarihlerine kaynak; H34 company scope, Core company/RBAC
-M2 öncesi, IdP/SIEM M4. Process = operasyon kataloğu + business-operation + mevcut yürütme/Mission
-şablonları; üçüncü motor yok. ARCHITECTURE ve talimat/north-star aynı kabul edilmiş hedefe eşlendi.
+1. A02/W0-3 süre/bekleme/doğrulama/rework ölçümünü M1–M5 tarih güncellemelerine bağla;
+   gözlenmeyen süreyi tahminle doldurma, commit sayısını efor yerine koyma.
+2. N/N+1 kabul/kurtarma: mevcut çalışma kaydı ve kayıp/yeniden başlama sınırından ilerle;
+   genel tool/approval, Mission veya Enterprise yüzeylerini gereksiz dogfood kapısı yapma.
+3. Codex/Cursor tam discovery-off ve daha geniş explicit settings yalnız kendi gerçek kanıtıyla
+   desteklenmiş capability olur; mevcut açık repository istisnası kapatma kanıtı sayılmaz.
 
-Önce bu main checkpoint'i tam verify → commit → push (owner açık izni); Cursor worktree’si dahil değil.
-Ardından ilk uygulama: Fable'ın bildirdiği `--bare` uygunluğunu sabitlenmiş imajda kendi kanıtımızla
-kontrol et; ambient keşif, abonelik auth ve explicit settings davranışını ayır. Sessiz API/ücret geçişi yok.
-Sonraki bağımsız hazırlık A02 ve N/N+1 kabul/kurtarma; Cursor localLLM/terminal sahipliği korunur.
-Yeni yetki sınırları somut seçenekle ownera gelir; mevcut worker izinleri tekrar sorulmaz.
-İş listesi ve taze PLAN snapshot/hash: /home/alperen/deckent-refactor-work/proof/PLAN-CHECKPOINT-2026-09-22/.
-DOGFOOD_MODE=OFF; geniş tier/ortak dosya değişiklikleri Cursor ile birleşme sınırında sıralıdır.
+Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız.
+H34 company scope; Core company/RBAC M2 öncesi, IdP/SIEM M4. Process operasyon kataloğu ve
+mevcut yürütme/Mission şablonlarını kullanır; üçüncü motor yok. Yeni yetki sınırı somut seçenekle
+ownera gelir; mevcut worker izinleri tekrar sorulmaz. Önceki dört execution diliminin kanıtı
+FOUR-STEP-EXECUTION'dadır; önceki bare karşılaştırması NATIVE-BARE-COMPAT-2026-09-22'dedir.
 
-## Host guardrail dilimi — 2026-09-22 (Fable, owner talimatı)
+## Ayrı sahipli Cursor hattı ve host araçları
 
-Jev 2be86b6c: local_only_guardrails 0,73 / committed 0,20 / none 0,04 / insufficient 0,02; sufficiency 0,79.
-Yapılan: `.agents/refactor/host-guard.mjs` + `host-guard.test.mjs` (8 test, `npm run test:host` kapsamında);
-`.claude/settings.local.json` (gitignored) PreToolUse/PostToolUse/SessionStart + allow/ask/deny kuralları.
-Kanıt: canlı PreToolUse reddi (legacy dizininde node çalıştırma denemesi); ilk sürümde echo içindeki legacy
-yolu yanlış engellendi, segment tabanlı analizle düzeltildi ve teste eklendi. Repoya hook/.mcp.json konmadı;
-izli worker yolu dosyaları değişmedi. PLAN'a sağlayıcı bulguları aciliyet tablosuyla eklendi (owner talimatı).
-Owner 2026-09-22: worker'lar varsayılan `--bare`, profil bazında istisna; PLAN satırına işlendi.
-Açık: Codex/Cursor hook bağlanması, `--bare`/`--settings` profil alanı ve preflight doğrulaması (ISOLATION kartı), plugin eval.
+Cursor localLLM/terminal: /home/alperen/deckent-next-wt-local-llm, feat/local-llm-terminal,
+başlangıç652d1c2. Bu worktree değiştirilmedi/merge edilmedi; main'in ortak arch/config/CLI/i18n
+kaynaklarında paralel uygulama açılmadı. Exact commit/diff ve gerçek paralel koşum kanıtı geldiğinde
+ortak kaynaklar tek yazarlı birleşir, güncel PLAN'a eşlenir ve birleşen sonuç verify edilir.
+GPU/toolkit ve kapasite teşhisi bu dilimde yeniden ölçülmedi. Legacy read-only, çalıştırılmaz.
 
-
-## Aktif paralel hat — Cursor local LLM / terminal
-
-Owner bu hattı Cursor’a verdi. Worktree `/home/alperen/deckent-next-wt-local-llm`, branch
-`feat/local-llm-terminal`, başlangıç652d1c2; git worktree list ile doğrulandı. Astra aynı kapsamda
-kod yazmaz, Cursor worktree’sini değiştirmez. Main’de belge eşleme ve owner’ın getireceği Fable planı
-üzerinden koordinasyon sürer. Main’deki commitlenmemiş güncel talimatlar eski worktree’ye otomatik geçmez.
-Cursor raporu: /home/alperen/deckent-refactor-work/proof/LOCAL-LLM-INFERENCE/00-current-state.md.
-GPU/toolkit ve tek-worker teşhisi bu oturumda yeniden ölçülmedi; slot eksikliği hipotezi henüz kesin
-kök neden değildir. Legacy çalıştırılmaz; ölçüm Next veya izole test harness’ında yapılır.
-Sonraki entegrasyon: Cursor exact commit/diff ve gerçek paralel koşum/terminal kanıtı sunar; güncel
-main kararlarıyla eşlenir, ortak kaynak/conflict ve custody incelenir, birleşen sonuç verify edilir.
-Şimdi merge/commit/push veya host kurulum yapılmadı; DOGFOOD_MODE=OFF.
+Fable host guard .agents/refactor/host-guard.mjs/test.mjs önceki checkpoint'tedir; hook bağlama
+.claude/settings.local.json içinde yerel ve gitignored'dır, ürün yetkisi değildir. Codex/Cursor host
+hook bağlama ve plugin eval açıktır. Geliştirme kanıtı /home/alperen/deckent-refactor-work altında,
+Git/npm dışında tutulur; eski communication.md kanalı kullanılmaz.

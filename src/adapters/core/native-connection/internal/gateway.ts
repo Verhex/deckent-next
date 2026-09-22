@@ -42,7 +42,8 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, home: spec.home, file: spec.file,
-      credential, ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
+      credential, preflight: binding.preflight,
+      ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
   });
   server.maxConnections = limits.connections;

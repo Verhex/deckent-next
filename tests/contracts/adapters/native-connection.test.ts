@@ -16,8 +16,9 @@ afterEach(async () => { for (const close of closes.splice(0).reverse()) await cl
 const jwt = () => 'header.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.synthetic';
 const credential = () => ({ tokens: { access_token: jwt(), id_token: 'synthetic-id', refresh_token: 'never-forward' }, apiKey: 'unrelated' });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), 'dn-')); roots.push(root); return root; }
-async function gateway(root: string) {
-  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'codex' }, directory: root, credential: credential(), deadlineMs: 20000 });
+type Preflight = Parameters<typeof openNativeConnection>[0]['binding']['preflight'];
+async function gateway(root: string, preflight?: Preflight) {
+  const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider: 'codex', ...(preflight ? { preflight } : {}) }, directory: root, credential: credential(), deadlineMs: 20000 });
   closes.push(connection.close); return connection;
 }
 function bootstrap(socketPath: string) {
@@ -90,8 +91,8 @@ it('checks a real TLS ClientHello, TCP/record fragmentation, wrong SNI, non-TLS 
   expect(inspectNativeClientHello(fragmented, 'chatgpt.com', 8192)).toBe('accepted');
 });
 describe.skipIf(!imageId)('real connected Docker confinement and custody', () => {
-  async function worker(argv: string[], deadlineMs = 10000) {
-    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root);
+  async function worker(argv: string[], deadlineMs = 10000, preflight?: Preflight) {
+    const root = await fixture(); const workspace = join(root, 'work'); await mkdir(workspace); const connection = await gateway(root, preflight);
     const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!,
       uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1,
       tmpBytes: 67108864, deadlineMs, controlTimeoutMs: 10000, outputBytes: 65536, connection: connection.descriptor });
@@ -111,6 +112,15 @@ describe.skipIf(!imageId)('real connected Docker confinement and custody', () =>
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).not.toContain('synthetic-sensitive-output');
     expect(JSON.parse(await readFile(join(f.request.workspace, 'boundary.json'), 'utf8'))).toEqual({ confined: true });
     expect(f.connection.statistics().rejected).toBe(1);
+  });
+  it('refuses a mismatched CLI version before executing a task or using provider egress', async () => {
+    const f = await worker(['node', '-e', "require('fs').writeFileSync('unexpected','executed')"], 20000,
+      { schemaVersion: 1, cliVersion: 'unmatched-version', discovery: 'repository', helpArgs: ['--help'], requiredFlags: ['--help'] });
+    const result = await f.supervisor.execute(f.request);
+    expect(result.result).toEqual({ kind: 'exited', exitCode: 78 });
+    expect(JSON.parse(result.stdout)).toMatchObject({ failure: 'preflight', outputBytes: 0 });
+    await expect(readFile(join(f.request.workspace, 'unexpected'))).rejects.toThrow();
+    expect(f.connection.statistics().connected).toBe(0);
   });
   it('restores exact custody without auth and cancels a live connected worker', async () => {
     const f = await worker(['node', '-e', "require('node:fs').writeFileSync('ready','yes');setInterval(()=>{},1000)"]);

@@ -56,12 +56,17 @@ try {
   }
   const manifest = JSON.parse(command(['run', '--rm', '--cidfile', cidfile, '--pull=never', '--network=none', '--read-only',
     '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=128', '--memory=1g', '--memory-swap=1g',
-    '--cpus=2', '--tmpfs', '/tmp:rw,nosuid,nodev,size=268435456', imageId], 90_000));
+    '--cpus=2', '--tmpfs', '/tmp:rw,nosuid,nodev,size=268435456',
+    '--mount', `type=bind,src=${join(root, 'inspect.mjs')},dst=/run/deckent-inspect.mjs,readonly`,
+    '--mount', `type=bind,src=${join(root, 'recipe.json')},dst=/run/deckent-recipe.json,readonly`,
+    '--entrypoint', 'node', imageId, '/run/deckent-inspect.mjs', '/run/deckent-recipe.json'], 90_000));
   if (command(['info', '--format', '{{.ID}}'], 20_000) !== daemonId) throw new Error('WORKER_DAEMON_CHANGED');
   const sources = existingImage ? null : Object.fromEntries(['Dockerfile', 'recipe.json', 'install.mjs', 'inspect.mjs'].map(name =>
     [name, createHash('sha256').update(readFileSync(join(root, name))).digest('hex')]));
   writeFileSync(resolve(receipt), JSON.stringify({ schemaVersion: 1, measuredAt: new Date().toISOString(),
-    endpoint, daemonId, imageId, sources, manifest, activation: 'not-activated',
+    endpoint, daemonId, imageId, sources, manifest,
+    inspectionSources: Object.fromEntries(['inspect.mjs', 'recipe.json'].map(name =>
+      [name, createHash('sha256').update(readFileSync(join(root, name))).digest('hex')])), activation: 'not-activated',
     provenance: existingImage ? 'existing-image-reprobed-build-sources-unverified' : 'built-from-current-sources',
     update: 'Re-run builder for current releases; use verified imageId in a new execution profile revision. Retain old image IDs for active Runs and rollback.' }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   console.log(JSON.stringify({ imageId, receipt, activation: 'not-activated' }));
