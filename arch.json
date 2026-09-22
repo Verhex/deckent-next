@@ -1233,9 +1233,17 @@
     },
     "src/composition/core/toolchains": {
       "dependencies": [
-        "src/platform/core/config",
+        "src/adapters/core/npm-registry",
+        "src/adapters/core/worker-image",
         "src/engine/core/toolchain-currency",
-        "src/adapters/core/npm-registry"
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/worker-image": {
+      "dependencies": [
+        "src/adapters/core/process-runner"
       ],
       "plan": "PROVIDERS"
     }

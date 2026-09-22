@@ -29,6 +29,7 @@ export interface McpApplications {
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
   inspectToolchainCurrency?(): Promise<ToolchainCurrencyReport>;
+  updateToolchains?(input: Readonly<{ apply?: boolean | undefined }>): Promise<unknown>;
   createRun?(command: RunAdmission): Promise<unknown>;
   reserveRunTasks?(command: RunReservationCommand): Promise<unknown>;
   executeTask?(identity: AttemptIdentity): Promise<unknown>;
@@ -82,6 +83,11 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectToolchainCurrency) definitions.push({ readOnly: true, destructive: false, openWorld: true, name: 'inspect_toolchain_currency',
     description: t('mcp.tool.inspectToolchainCurrency', {}, locale), schema: z.object({}).strict(),
     invoke: async (input: unknown) => { z.object({}).strict().parse(input); return inspectToolchainCurrency.call(applications); } });
+  const updateToolchains = applications.updateToolchains;
+  const updateToolchainsSchema = z.object({ apply: z.boolean().optional() }).strict();
+  if (updateToolchains) definitions.push({ readOnly: false, destructive: false, openWorld: true, name: 'update_toolchains',
+    description: t('mcp.tool.updateToolchains', {}, locale), schema: updateToolchainsSchema,
+    invoke: (input: unknown) => updateToolchains.call(applications, updateToolchainsSchema.parse(input)) });
   const createRun = applications.createRun;
   if (createRun) definitions.push({ readOnly: false, destructive: false, name: 'create_run', description: t('mcp.tool.createRun', {}, locale),
     schema: runAdmissionSchema, invoke: (input: unknown) => createRun.call(applications, runAdmissionSchema.parse(input)) });

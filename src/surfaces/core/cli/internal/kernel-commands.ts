@@ -32,6 +32,7 @@ export interface CommandContext {
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectWorkers?: WorkerObservationHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
+  updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;

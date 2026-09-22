@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand } from '#engine/index.js';
@@ -99,7 +99,20 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
   try {
     output({ schemaVersion: 1, event: 'ready', endpoint: host.endpoint }, () => t('cli.runtime.ready', { endpoint: host.endpoint }, locale));
   } catch (error) { await host.stop(); throw error; }
-  const stoppedBySignal = await Promise.race([waitForStop(context.signal).then(() => true), host.done.then(() => false)]);
+  // Host completion handlers are attached before any other await so a failing host is never an unhandled rejection.
+  const finished = Promise.race([waitForStop(context.signal).then(() => true), host.done.then(() => false)]);
+  finished.catch(() => undefined); // marks an early host failure handled; `await finished` below still surfaces it
+  // Optional startup currency report (policy data, read-only): advisory only; it never builds, updates or affects readiness.
+  try {
+    const startupPolicy = (await loadConfig(root, options)).toolchains.update;
+    if (startupPolicy.atStartup && context.inspectToolchainCurrency) {
+      try { const report = await context.inspectToolchainCurrency(root, options); output({ schemaVersion: 1, event: 'toolchains', report },
+        () => t('cli.runtime.toolchains', { count: report.providers.filter(entry => entry.status === 'stale').length }, locale)); }
+      catch (error) { output({ schemaVersion: 1, event: 'toolchains-failed', code: error instanceof Error && 'code' in error ? String((error as { code: unknown }).code) : 'UNKNOWN' },
+        () => t('cli.runtime.toolchainsFailed', {}, locale)); }
+    }
+  } catch { /* Configuration unavailable to the startup report: silent, the service itself already reported readiness. */ }
+  const stoppedBySignal = await finished;
   if (!stoppedBySignal) return;
   const result = await host.stop();
   output({ schemaVersion: 1, event: 'stopped', ...result }, () => t('cli.runtime.stopped', { state: result.state === 'clean' ? t('cli.runtime.clean', {}, locale) : t('cli.runtime.incomplete', {}, locale) }, locale), result.state === 'clean' ? 'info' : 'error');

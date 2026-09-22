@@ -6,6 +6,7 @@ import { runInventoryCommand } from './inventory.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
+import { toolchainsCommand } from './toolchains.js';
 import { modelsCommand } from './models.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -37,6 +38,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'workers') { await workersCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'toolchains') { await toolchainsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;

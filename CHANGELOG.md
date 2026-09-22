@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PROVIDERS/B08 (toolchain update policy): `toolchains.update {mode off|propose|auto, buildTimeoutMs, outputBytes, atStartup}`; `toolchains update [--apply]`, MCP `update_toolchains`, SDK `updateToolchains` plan the next worker image version from a stale currency report, build it in a product-owned context through the bounded process runner, and write receipt plus a `not-applied` profile-revision proposal. Installed config/package bytes untouched; in-flight Runs keep their imageId. `runtime serve` can emit the currency report at startup (report only). Codex workers run with `check_for_update_on_startup=false`.
+
 - PROVIDERS/B08 (toolchain currency report): versioned provider mechanism catalog, engine comparison/report contract, bounded npm-registry latest lookup, `toolchains.currency` config (mode/endpoint/limits), `doctor --toolchains`, MCP `inspect_toolchain_currency` and SDK `inspectToolchainCurrency`. Admitted versions come from prepared-profile preflight pins; offline installations report `unknown-offline`; Cursor is an explicit `unsupported` exception. Read-only: no update, rebuild or activation.
 
 - ISOLATION/DELIVERY (B06 prep, finding 3): workspace patch capture lists the base tree once and reads only changed base blobs by Git object-id hash-diff; candidate preparation/verification validate `before` against base ids and prove base + patch without Git content reads. Git output/time and scan budget exhaustion are typed `PATCH_LIMIT` with a bounded `detail` param; `git.outputBytes` defaults to 4 MiB. Repository-sized (1500-file) contract test added.

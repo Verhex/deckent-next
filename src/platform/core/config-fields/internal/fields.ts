@@ -98,6 +98,11 @@ export const CONFIG_FIELDS = Object.freeze({
     registryEndpoint: z.string().url().default('https://registry.npmjs.org'),
     timeoutMs: z.number().int().positive().max(2_147_483_647).default(5000),
     responseMaxBytes: z.number().int().positive().safe().default(65536),
+  }).strict().default({}), update: z.object({
+    mode: z.enum(['off', 'propose', 'auto']).default('propose'),
+    buildTimeoutMs: z.number().int().positive().max(2_147_483_647).default(1_800_000),
+    outputBytes: z.number().int().positive().safe().default(1_048_576),
+    atStartup: z.boolean().default(false),
   }).strict().default({}) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),

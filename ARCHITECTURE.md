@@ -696,3 +696,19 @@ Statuses: `fresh | stale | ahead | unparsed | unknown-offline | unsupported | di
 reason code. Nothing here activates, rebuilds or updates a worker; policy-driven rebuild (next image version, preflight, new
 profile revision, in-flight Runs keep their imageId) and API capability snapshots are the following slices.
 
+### Worker toolchain update policy — owner 2026-09-22 (propose/auto slice implemented)
+
+`toolchains.update` is policy data: `mode off | propose | auto` (default propose), `buildTimeoutMs`, `outputBytes`, `atStartup`.
+`toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
+npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
+under `<workspaces>/toolchains/plans/`. In `auto` mode or with an explicit apply, the shipped builder files are copied into an
+exclusive private context `<workspaces>/toolchains/builds/<version>/` with the edited Dockerfile/recipe, run through the bounded
+process runner (environment allowlist, timeout, output cap), and the builder's receipt (`receipts/<version>.json`) yields a
+profile-revision proposal (`proposals/<version>.json`): exact `cliVersion`/`imageId` changes per affected native profile, marked
+`not-applied`. Installed config, policy and package bytes are never modified; the proposal is applied through a new installation
+profile revision, so in-flight Runs keep their imageId and previous versions remain for rollback. No new layout resource is added
+because the layout revision (part of attempt identity) hashes the resource registry; the toolchains custody lives beside integration
+candidates under the workspaces resource. `atStartup` emits the read-only currency report after `runtime serve` is ready and never
+builds. Codex workers now run with `-c check_for_update_on_startup=false`; Claude workers keep `DISABLE_AUTOUPDATER=1`; Cursor stays an
+explicit unsupported exception.
+

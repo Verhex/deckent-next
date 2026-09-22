@@ -64,6 +64,14 @@ private registry, and unreachable registries report `unknown-offline`. Cursor ha
 is reported `unsupported`. The report never updates, rebuilds or activates a worker. The same report is available as
 the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchainCurrency`.
 
+`deckent toolchains update [--apply]` turns a stale report into the next worker image version under
+`toolchains.update.mode` (`off | propose | auto`, default `propose`): a typed plan is written under
+`<data root>/workspaces/toolchains/plans/`; with `auto` or `--apply` the shipped builder is copied into
+`workspaces/toolchains/builds/<version>/`, built with a bounded timeout, and its receipt produces a
+`not-applied` profile-revision proposal (`proposals/<version>.json`). Installed config is never rewritten;
+apply the proposal as a new installation profile revision. Running work keeps its image; old versions stay for
+rollback. `toolchains.update.atStartup` makes `runtime serve` emit the currency report (report only).
+
 ### Development duration measurement (A02/W0-3)
 
 `node .agents/refactor/effort.mjs` records how long development slices actually take. It is

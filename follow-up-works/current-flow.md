@@ -1,4 +1,4 @@
-# Anlık iş akışı — toolchain güncellik raporu teslim edildi; sıradaki: politika güdümlü rebuild, run düzeyi kapanış, B06
+# Anlık iş akışı — toolchain güncellik raporu ve politika güdümlü rebuild teslim edildi; sıradaki: Cursor terminal işinin main'e kontrollü alınması
 
 ## Geçici yürütücü devri — owner 2026-09-22
 
@@ -137,14 +137,33 @@ Testler: engine 4, adapter 2 (yerel HTTP fixture: durum/boyut/geçersiz/timeout/
 (2.1.278 = en yeni), codex/cursor `not-admitted` (o kurulumda yalnız Claude profili). Kanıt: `proof/B08-TOOLCHAIN-CURRENCY-2026-09-22/`.
 Jev 1990f990 1,00; outcome verified. Açık: Cursor kapatma yolu doğrulanmadı (`unsupported` veriyle); npm `latest` GitHub sürümünden geride kalabilir.
 
+## Sekizinci teslim: politika güdümlü sürümlü rebuild (owner 2026-09-22, Jev 450cc23b 1,00)
+
+`toolchains.update {mode off|propose|auto (varsayılan propose), buildTimeoutMs, outputBytes, atStartup}`. Engine: `planToolchainUpdate`
+(stale npm sağlayıcı yoksa `no-change`; varsa tek sonraki sürüm `r<N+1>-<gün>`, tarihçe satırı, recipe deltası, etkilenen native profiller),
+`proposeProfileRevisions` (receipt'ten tam `cliVersion`/`imageId` değişiklikleri, `not-applied`). Adapter `worker-image`: paketteki builder
+dosyalarını özel/exclusive bağlama kopyalar, düzenlenmiş Dockerfile/recipe yazar, `build.mjs`'i sınırlı process runner'la (env allowlist,
+timeout, çıktı sınırı) koşturur; tek başarı kanıtı receipt dosyası. Composition `updateConfiguredToolchains`; CLI `toolchains update [--apply]`;
+MCP `update_toolchains`; SDK `updateToolchains`; `runtime serve` `atStartup` ile yalnız rapor yayar. Kurulu config/policy/paket baytları
+değişmez; artefaktlar `<workspaces>/toolchains/{plans,builds,receipts,proposals}` altında (yeni layout kaynağı eklenmedi: layout revizyonu
+attempt kimliğinin hash'i). Codex komut kataloğuna `-c check_for_update_on_startup=false` eklendi (yeni profiller). Testler: engine 3,
+adapter 2 (gerçek assets'ten bağlam, enjekte runner, env allowlist, hata eşlemeleri), composition/CLI 2 (off/propose/apply/auto/no-change,
+aynı gün ikinci apply `WORKER_IMAGE_CONTEXT_EXISTS`, config'in yazılmadığı). MCP parite testine `update_toolchains` (readOnly false, openWorld true) eklendi.
+**Gerçek `auto` koşumu:** eski Codex pin'li (`codex-cli 0.150.0`) geçici proje → gerçek registry → plan `r3-20260922` → gerçek `docker build`
+(95 sn) → receipt `deckent/worker:r3-20260922` (`sha256:4b2065ea…`; codex-cli 0.155.1 / claude 2.1.278 / cursor 2026.09.18; tarihçe r3→r2→r1) →
+`not-applied` profil revizyon önerisi (codex-stale: 0.150.0 → 0.155.1, imageId r2 → r3). Docker'da r1/r2/r3 üçü de duruyor.
+Kanıt: `proof/B08-TOOLCHAIN-UPDATE-2026-09-22/`. Jev 450cc23b 1,00; outcome verified.
+**Tam verify: 1581 ürün/274 dosya, 25 native, 53 host; fail/skip 0** (temiz koşum). Önceki koşumlarda üç aralıklı, yük-bağımlı hata görüldü ve
+izole geçti: `openrouter-priced-invocation` (`STALE_TARIFF` zaman penceresi), `model-invocation-spending-native` (`unknown` sonuç),
+ilk koşumda eşzamanlı docker build yükü. I40 triyajı için not: bu iki test zaman penceresine duyarlı; kök neden ölçülmedi.
+Düzeltilen gerçek kusur: `runtime serve` açılış raporu host `done` handler'ını geciktiriyordu (unhandled rejection) — yarış önce kurulup
+işlenmiş işaretleniyor. Açık: receipt `sourceRevision` kopyalanan bağlamda `unknown`; öneri uygulama otomasyonu ayrı dilim.
+
 ## Sıradaki sıra
 
-Owner 2026-09-22: 1–3 tamamlandı; UPDATE adapter başına (Codex + Claude; Cursor istisna; OpenHands/Hermes yalnız bilgi).
-1. **Politika güdümlü sürümlü rebuild**: `toolchains.update off|report|approve|auto`, otomatik `# version` satırı + mevcut build + preflight +
-   yeni profil revizyonu önerisi; devam eden Run imageId'sini korur; imaj içi self-updater kapatma (Codex/Claude) ve Cursor network-none doğrulaması.
-2. API worker'ları için sağlayıcı yetenek/şema anlık görüntüleri (provider-catalog'a sürümlü veri).
-3. Run düzeyi kapanış (iptal istenen Run'ın pending görevleri) küçük geçiş.
-4. Sonra **B06** benimseme/terfi + rollback ve **B07** dogfood kabulü; DOGFOOD OFF kalır.
+Owner 2026-09-22: rebuild dilimi tamamlandı; sıradaki owner kararı: Cursor'ın `feat/local-llm-terminal` işini kontrollü biçimde main'e almak
+(exact diff, gerçek koşum kanıtı, ortak dosyalarda tek yazar denetimi). Sonra: öneri uygulama otomasyonu (profil revizyonu), API şema anlık
+görüntüleri, run düzeyi kapanış, **B06/B07**; DOGFOOD OFF kalır.
 
 Kabul edilen plan değişmez: D15a Mission author D14 sonrası; D15b do D14'ten bağımsız. H34 company scope;
 Core company/RBAC M2 öncesi, IdP/SIEM M4. Yeni yetki sınırı somut seçenekle ownera gelir.
