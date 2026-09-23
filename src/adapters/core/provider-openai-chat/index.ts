@@ -6,3 +6,4 @@ export type { OpenAiChatHttpAuthentication, OpenAiChatHttpDefinition, OpenAiChat
 export { createOpenAiChatNativePort, openAiChatProtocol, prepareOpenAiChatHttpRequest } from './internal/transport.js';
 export type { OpenAiChatNativePortOptions, PreparedOpenAiChatRequest } from './internal/transport.js';
 export { OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, quoteOpenAiChatOperatorTariff } from './internal/tariff.js';
+export { createOpenAiChatStream, OPENAI_CHAT_STREAM_WIRE_FACTOR } from './internal/stream.js';

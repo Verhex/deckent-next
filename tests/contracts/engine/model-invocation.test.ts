@@ -35,7 +35,7 @@ function inspectionReader(f: ReturnType<typeof fixture>) { return { async loadIn
   return f.stored ? { record: f.stored, control: { schemaVersion: 1 as const, claim: f.stored.receipt.claim, reference,
     send: { state: 'permitted' as const, ownerId: 'runtime-owner', permittedAtMs: 10 }, cancellation: null }, spending: null } : null;
 }, close() { f.store.close(); } }; }
-function fixture(options: { liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
+function fixture(options: { deltas?: readonly string[]; liveControllers?: boolean; claimError?: boolean; permitError?: boolean; nativeResult?: ModelInvocationNativeResult; profilePadding?: number; responseLimit?: number; prepare?: () => void; sendError?: boolean; responseWriteError?: boolean;
   substituteOutcome?: boolean; denySecond?: boolean; changeProfile?: boolean; concurrentBarrier?: boolean; responseBound?: bigint;
   permission?: 'denied' | 'pending' | 'prevented' | 'prevented-claimed' | 'forged-terminal' | 'foreign-owner' } = {}) {
   const controllers = new ModelInvocationControllers(2), registrations: ModelInvocationClaim[] = [];
@@ -89,7 +89,9 @@ function fixture(options: { liveControllers?: boolean; claimError?: boolean; per
     { async resolve() { calls.profiles++; return selectedProfile; } }, { resolve() { return {
       ...(options.responseBound === undefined ? {} : { responseBytesUpperBound: () => options.responseBound! }),
       async prepare() { options.prepare?.(); if (options.changeProfile) selectedProfile = { ...profile, version: 2 }; return Object.freeze({ body: 'prepared' }); },
-      async send() { calls.sends++; if (options.sendError) throw new Error('RESET');
+      async send(_prepared: unknown, _signal?: AbortSignal, onDelta?: (delta: { kind: 'text' | 'reasoning'; text: string }) => void) { calls.sends++;
+        for (const text of options.deltas ?? []) onDelta?.({ kind: 'text', text });
+        if (options.sendError) throw new Error('RESET');
         return options.nativeResult ?? { schemaVersion: 1 as const, native: { id: 'response' }, usage: null }; },
     }; } }, async () => store, { invocationId: () => `invocation-${++invocationSequence}`, ownerId: () => 'runtime-owner', now: () => 10,
       ...(options.liveControllers ? { register(claim: ModelInvocationClaim, owner: string) { registrations.push(claim); return controllers.register(claim, owner); } } : {}) },
@@ -101,6 +103,20 @@ function fixture(options: { liveControllers?: boolean; claimError?: boolean; per
 }
 
 describe('model invocation application', () => {
+  it('passes streamed deltas only to a fresh send; a replayed command presents none and never sends again', async () => {
+    const f = fixture({ deltas: ['Mer', 'haba'] }), seen: string[] = [], replaySeen: string[] = [];
+    const first = await f.app.invoke(command, undefined, undefined, undefined, delta => seen.push(delta.text));
+    expect(first).toMatchObject({ replayed: false, receipt: { outcome: { state: 'responded' } } });
+    expect(seen).toEqual(['Mer', 'haba']);
+    const replay = await f.app.invoke(command, undefined, undefined, undefined, delta => replaySeen.push(delta.text));
+    expect(replay).toMatchObject({ replayed: true, receipt: { outcome: { state: 'responded' } } });
+    expect(replaySeen).toEqual([]); expect(f.calls.sends).toBe(1);
+    // A send failure after deltas still records the uncertain outcome; deltas are never the record.
+    const failed = fixture({ deltas: ['partial'], sendError: true }), partial: string[] = [];
+    await expect(failed.app.invoke(command, undefined, undefined, undefined, delta => partial.push(delta.text)))
+      .resolves.toMatchObject({ receipt: { outcome: { state: 'unknown', reason: 'transport-error' } } });
+    expect(partial).toEqual(['partial']);
+  });
   it('releases live controller custody on claim/permission failures, prevention, native failure, settlement and concurrent replay', async () => {
     const cases = [{ claimError: true }, { permitError: true }, { permission: 'prevented' as const },
       { sendError: true }, { responseWriteError: true }, {}, { concurrentBarrier: true }];

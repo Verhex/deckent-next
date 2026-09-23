@@ -26,8 +26,9 @@ export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTok
   authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user' | 'assistant'; content: string }>;
+/** `stream: true` requires `stream_options.include_usage` so every streamed call ends with settleable usage. */
 export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly OpenAiChatTextMessage[];
-  max_completion_tokens: number; stream?: false; n?: 1 }>;
+  max_completion_tokens: number; stream?: boolean; stream_options?: Readonly<{ include_usage: true }>; n?: 1 }>;
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
 const positive = z.number().int().positive().safe();
@@ -50,9 +51,16 @@ const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: pos
   timeoutMs: positive.max(2_147_483_647) }).strict();
 const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z.array(z.object({
   role: z.enum(['developer', 'system', 'user', 'assistant']), content: z.string().min(1),
-}).strict()).min(1).max(100_000), max_completion_tokens: positive, stream: z.literal(false).optional(),
-  n: z.literal(1).optional() }).strict();
+}).strict()).min(1).max(100_000), max_completion_tokens: positive, stream: z.boolean().optional(),
+  stream_options: z.object({ include_usage: z.literal(true) }).strict().optional(),
+  n: z.literal(1).optional() }).strict().refine(value => (value.stream === true) === (value.stream_options !== undefined));
 export const openAiChatWireObjectSchema = createImmutableJsonObjectSchema(OPENAI_CHAT_WIRE_LIMITS);
+export const openAiChatFinishReasonSchema = z.enum(['stop', 'length', 'content_filter']);
+export const openAiChatUsageSchema = z.object({ prompt_tokens: z.number().int().nonnegative().safe(),
+  completion_tokens: z.number().int().nonnegative().safe(), total_tokens: z.number().int().nonnegative().safe() }).passthrough()
+  .superRefine((usage, context) => { if (usage.total_tokens < usage.prompt_tokens + usage.completion_tokens) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'USAGE_TOTAL_INVALID' });
+  } });
 
 export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDefinition {
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && definitionSchema.safeParse(copied.data);
@@ -74,7 +82,8 @@ export function parseOpenAiChatTextRequest(input: unknown, definition: OpenAiCha
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && requestSchema.safeParse(copied.data);
   if (!parsed || !parsed.success || parsed.data.max_completion_tokens > definition.maxOutputTokens) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   return Object.freeze({ model: parsed.data.model, messages: Object.freeze(parsed.data.messages.map(message => Object.freeze({ ...message }))),
-    max_completion_tokens: parsed.data.max_completion_tokens, ...(parsed.data.stream === false ? { stream: false as const } : {}),
+    max_completion_tokens: parsed.data.max_completion_tokens, ...(parsed.data.stream === undefined ? {} : { stream: parsed.data.stream }),
+    ...(parsed.data.stream === true ? { stream_options: Object.freeze({ include_usage: true as const }) } : {}),
     ...(parsed.data.n === 1 ? { n: 1 as const } : {}) });
 }
 
