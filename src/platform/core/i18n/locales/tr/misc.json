@@ -575,6 +575,7 @@
   "config.field.storage": "Depolama sürücüsü ve sınırlı SQLite seçenekleri",
   "config.field.artifacts": "Saklanan artifact için bayt cinsinden azami boyut",
   "config.field.execution": "Açıkça tanımlanmış sabit Docker imajı ve Git yürütme ayarları; null yürütmeyi kapatır",
+  "config.field.operations": "Operasyon kataloğu ve etki hedefleri (politika verisi); varsayılan boş, tanımlanmadan hiçbir operasyon çalışmaz",
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
   "config.field.toolchains": "Worker toolchain güncellik kontrolü: mod, registry uç noktası ve sorgu sınırları (salt okunur, güncelleme yapmaz)",
   "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",

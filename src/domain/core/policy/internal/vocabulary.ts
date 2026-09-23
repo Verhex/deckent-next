@@ -5,6 +5,7 @@ export const policyResources = Object.freeze({
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),
+  operation: Object.freeze({ kind: 'operation' as const, actions: Object.freeze(['execute', 'compensate', 'inspect'] as const) }),
   scope: Object.freeze({ kind: 'scope' as const, actions: Object.freeze(['inspect'] as const) }),
   pool: Object.freeze({ kind: 'pool' as const, actions: Object.freeze(['use'] as const) }),
   run: Object.freeze({ kind: 'run' as const, actions: Object.freeze(['create', 'inspect', 'cancel', 'reserve'] as const) }),

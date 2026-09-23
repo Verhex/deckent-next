@@ -345,6 +345,15 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   changes. Every adapter/package declares the ERP product/version range it supports; compatibility is never assumed.
   ERP company/site authority maps to Core company scope. No ERP access exists yet: adapters start against documented
   generic surfaces and are not claimed working until a customer/test environment proves read and conditional write.
+- **C11-1 implemented (2026-09-23, ledger v34).** `domain/core/effect` (operation descriptor, command, intent/record, pure
+  settle/unknown/refuse transitions, compensation check), `engine/core/effect` (`EffectApplication`, ports `OperationCatalog`,
+  `EffectTarget` observe/apply/lookup, `EffectStore`, `EffectApprovalGate`; `OperationPolicyAuthorization` keeps
+  `require-approval` distinct from deny), `effect_intents` table (per-scope idempotency key, per-record sequence, a claimed
+  or unknown intent blocks the record), config section `operations` (catalog + targets, empty by default), Core generic
+  adapter `http-conditional-effect` (ETag/If-Match, Idempotency-Key, idempotency lookup; loopback http or https, no
+  credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. Required approval stops
+  before any effect with `EFFECT_APPROVAL_REQUIRED` until C12. Not claimed: any ERP adapter, credentials, MCP tool, registry
+  resolution of targets (A04), migration of the five existing flows.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
   Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
 

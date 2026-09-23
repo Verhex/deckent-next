@@ -8,6 +8,7 @@ import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
 import { toolchainsCommand } from './toolchains.js';
 import { modelsCommand } from './models.js';
+import { operationCommand } from './operation.js';
 import { inferenceCommand } from './inference.js';
 import { terminalCommand } from './terminal.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
@@ -36,6 +37,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     context.initialize?.();
+    if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'approval') { await approvalsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'workers') { await workersCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }

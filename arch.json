@@ -92,7 +92,8 @@
         "src/engine/core/task-evaluation",
         "src/engine/core/workspaces",
         "src/engine/core/run-progression",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/domain/core/effect"
       ],
       "plan": "STORE"
     },
@@ -104,7 +105,9 @@
         "src/platform/core/common",
         "src/platform/core/config",
         "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/domain/core/effect",
+        "src/adapters/core/http-conditional-effect"
       ],
       "plan": "PROVIDERS"
     },
@@ -214,7 +217,8 @@
         "src/composition/core/native-coding",
         "src/composition/core/workspace-patch",
         "src/composition/core/worker-observation",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/composition/core/operations"
       ],
       "plan": "SURFACES"
     },
@@ -315,7 +319,8 @@
         "src/engine/core/workspaces",
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/domain/core/effect"
       ],
       "plan": "FOUNDATION"
     },
@@ -722,7 +727,9 @@
         "src/engine/core/workspace-patch",
         "src/capabilities/core/artifacts",
         "src/engine/core/worker-observation",
-        "src/engine/core/toolchain-currency"
+        "src/engine/core/toolchain-currency",
+        "src/domain/core/effect",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -1296,6 +1303,47 @@
         "src/adapters/core/process-runner"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/domain/core/effect": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/effect": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/domain/core/command",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/platform/core/clock",
+        "src/engine/core/authentication",
+        "src/engine/core/policy"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/http-conditional-effect": {
+      "dependencies": [
+        "src/engine/core/effect",
+        "src/domain/core/effect"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/composition/core/operations": {
+      "dependencies": [
+        "src/adapters/core/http-conditional-effect",
+        "src/adapters/core/contract",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/local-principal",
+        "src/engine/core/effect",
+        "src/domain/core/effect",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request"
+      ],
+      "plan": "EXECUTION"
     }
   },
   "composition": {

@@ -575,6 +575,7 @@
   "config.field.storage": "Storage driver and bounded SQLite options",
   "config.field.artifacts": "Maximum retained artifact size in bytes",
   "config.field.execution": "Explicit pinned Docker and Git execution capability settings; null disables execution",
+  "config.field.operations": "Operation catalog and effect targets (policy data); empty by default so no operation can run until declared",
   "config.field.inspection": "Read-only inspection page and policy document limits",
   "config.field.toolchains": "Worker toolchain currency check: mode, registry endpoint and probe limits (read-only, no updates)",
   "config.field.admission": "Run admission pool, capacity and scheduling order",

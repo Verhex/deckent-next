@@ -24,6 +24,7 @@ export { auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } 
 export { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 
 export * from '#composition/core/workspace-patch/index.js';
+export * from '#composition/core/operations/index.js';
 
 export * from '#composition/core/worker-observation/index.js';
 export * from '#composition/core/toolchains/index.js';

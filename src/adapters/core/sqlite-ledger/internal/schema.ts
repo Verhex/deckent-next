@@ -24,9 +24,13 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 33;
+export const CURRENT_LEDGER_VERSION = 34;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Generic effect intents (C11): one row per operation command; sequence orders intents per external target record.
+  34: `CREATE TABLE effect_intents(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_kind TEXT NOT NULL,target_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK(sequence>0),idempotency_key_hash TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('claimed','settled','unknown','refused')),
+    record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id),UNIQUE(scope_id,idempotency_key_hash),UNIQUE(target_kind,target_id,sequence)); PRAGMA user_version=34;`,
   // Branch adoption/rollback intents. sequence is the per-target fence; state 0 = claimed (Git effect may be pending), 1 = settled.
   33: `CREATE TABLE workspace_adoptions(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,

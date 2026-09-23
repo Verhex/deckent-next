@@ -4,6 +4,7 @@ import { registerProviderSpendingConfig } from './spending.js';
 import { registerProviderSpendAuditConfig } from './spend-audit.js';
 import { registerInferenceServingConfig } from './inference-serving.js';
 import { registerTerminalConfig } from './terminal.js';
+import { registerOperationsConfig } from './operations.js';
 let registered = false;
 /** Called by application ingress before config resolution; kernel never imports provider policy. */
 export function registerProviderConfig(): void {
@@ -14,8 +15,10 @@ export function registerProviderConfig(): void {
   registerProviderSpendAuditConfig();
   registerInferenceServingConfig();
   registerTerminalConfig();
+  registerOperationsConfig();
   registered = true;
 }
 export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
+export { readOperationsConfig, findOperation, operationsConfigSchema, type OperationsConfig } from './operations.js';
 export { readTerminalChatConfig, terminalConfigSchema, type TerminalChatConfig } from './terminal.js';

@@ -1,4 +1,4 @@
-export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, terminalConfigSchema, type TerminalChatConfig } from '#adapters/core/contract/index.js';
+export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, terminalConfigSchema, type TerminalChatConfig, readOperationsConfig, findOperation, operationsConfigSchema, type OperationsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -46,6 +46,7 @@ export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.
 export * from '#adapters/core/native-connection/index.js';
 
 export * from '#adapters/core/git-patch/index.js';
+export * from '#adapters/core/http-conditional-effect/index.js';
 
 export * from '#adapters/core/worker-observation/index.js';
 export * from '#adapters/core/local-keyring/index.js';

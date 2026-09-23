@@ -1,5 +1,6 @@
 import { SqliteDeliveryJournal } from './delivery.js';
 import { SqliteAdoptionJournal } from './adoption.js';
+import { SqliteEffectJournal } from './effect.js';
 import type { IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent } from '#engine/index.js';
 import { SqliteIntegrationJournal, readIntegration } from './integration.js';
 import type { IntegrationIntent } from '#engine/index.js';
@@ -90,6 +91,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadAdoption(scopeId: string, commandId: string) { return new SqliteAdoptionJournal(this.db).loadAdoption(scopeId, commandId); }
   async claimAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).claimAdoption(intent); }
   async finishAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).finishAdoption(intent); }
+  async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
+  async claimEffect(intent: import('#domain/index.js').EffectIntent) { return new SqliteEffectJournal(this.db).claimEffect(intent); }
+  async saveEffect(previous: import('#domain/index.js').EffectRecord, next: import('#domain/index.js').EffectRecord) { return new SqliteEffectJournal(this.db).saveEffect(previous, next); }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {
     let row;

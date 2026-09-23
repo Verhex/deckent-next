@@ -83,7 +83,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('gates version28 writers, explicitly migrates without changing old records, and enforces configured entry bounds', async () => {
     const f = await fixture(); await f.run(); const before = await f.runtime.store.loadBoundDispatch(f.identity);
     const path = productResourcePath(f.runtime.layout, 'ledger');
-    const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
+    const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
     // Resolve actual configured storage settings rather than assume adapter defaults.
     const { loadConfig } = await import('#platform/index.js'); const config = await loadConfig(f.project, f.options);
     await expect(openSqliteAttemptStore(path, config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
