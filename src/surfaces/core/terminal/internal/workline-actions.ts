@@ -1,5 +1,7 @@
-import type { WorkLedgerEntry } from './work-ledger.js';
+import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
+import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
+import type { WorkerPanelLabels } from './worker-panel.js';
 import { WORKLINE_SLASH_COMMANDS } from './slash-registry.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
@@ -17,6 +19,47 @@ export interface WorklineActionLabels {
   readonly watchStopped: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
+  /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
+  readonly work?: WorkSurfaceLabels;
+}
+
+/** Catalog strings for the work surface (P4). Templates use `{name}` placeholders. */
+export interface WorkSurfaceLabels {
+  readonly workerLine: WorkerLineLabels;
+  readonly panel: WorkerPanelLabels;
+  readonly unavailable: string;
+  readonly transcriptUsage: string;
+  readonly transcriptNotFound: string;
+  readonly transcriptNoAttempt: string;
+  readonly transcriptHeader: string;
+  readonly approvalsNone: string;
+  readonly approvalItem: string;
+  readonly approvalsTruncated: string;
+  readonly approvalNotFound: string;
+  readonly approvalTitle: string;
+  readonly approvalSubject: string;
+  readonly approvalExpires: string;
+  readonly approvalPrompt: string;
+  readonly approvalPending: string;
+  readonly approvalAllowed: string;
+  readonly approvalDenied: string;
+  readonly approvalMore: string;
+  readonly approvalNotify: string;
+  readonly approvalPollFailed: string;
+  readonly cancelUsage: string;
+  readonly cancelTitle: string;
+  readonly cancelDetail: string;
+  readonly cancelAlreadyRequested: string;
+  readonly cancelPrompt: string;
+  readonly cancelPending: string;
+  readonly cancelKept: string;
+}
+
+/** Commands owned by the work surface; they need its labels and their port. */
+export const WORK_SURFACE_COMMANDS = Object.freeze(['transcript', 'approvals', 'cancel'] as const);
+export type WorkSurfaceCommand = typeof WORK_SURFACE_COMMANDS[number];
+export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCommand {
+  return (WORK_SURFACE_COMMANDS as readonly string[]).includes(command);
 }
 
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
@@ -62,11 +105,34 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
   }
   if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
   if (command === 'service-restart') return context.canRestartService ? null : { entries: [notice('error', labels.serviceRestartUnavailable)] };
+  if (isWorkSurfaceCommand(command)) {
+    const wired = command === 'transcript' ? ledger?.inspectTranscript : command === 'approvals' ? ledger?.listApprovalPage && ledger.decideApproval : ledger?.cancelRun;
+    return labels.work && wired ? null : { entries: [notice('error', labels.work?.unavailable ?? labels.ledgerUnavailable)] };
+  }
   return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
 }
 
-export async function runLedgerCommand(command: 'workers' | 'run' | 'runs', args: string, ledger: WorklineLedgerPorts,
+/** `n` is the worker number shown by `/workers` and the live panel; anything else is an attempt id. */
+export function resolveWorkerRef(ref: string, workers: readonly WorkLedgerWorkerEntry[]): WorkLedgerWorkerEntry | null {
+  if (/^[1-9][0-9]*$/.test(ref)) return workers.find(worker => worker.ordinal === Number(ref)) ?? null;
+  return workers.find(worker => worker.attempt?.attemptId === ref) ?? null;
+}
+
+/** Read-only: resolves the worker on a fresh observation and shows its sealed transcript; never prompts. */
+async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<readonly WorkLedgerEntry[]> {
+  if (!ref || /\s/.test(ref)) return [notice('error', work.transcriptUsage)];
+  const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
+  const target = resolveWorkerRef(ref, workers);
+  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref }))];
+  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref }))];
+  const text = await ledger.inspectTranscript!(target.attempt);
+  const header = fillTemplate(work.transcriptHeader, { n: target.ordinal ?? ref, attempt: target.attempt.attemptId, task: target.taskId });
+  return [notice('info', `${header}\n${text}`)];
+}
+
+export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'transcript', args: string, ledger: WorklineLedgerPorts,
   labels: WorklineActionLabels): Promise<readonly WorkLedgerEntry[]> {
+  if (command === 'transcript') return labels.work ? runTranscript(args.trim(), ledger, labels.work) : [notice('error', labels.ledgerUnavailable)];
   if (command === 'runs') {
     const cards = await ledgerEntriesForRuns(ledger, 'runs');
     return cards.length ? cards : [notice('info', labels.runsEmpty)];

@@ -14,6 +14,7 @@ import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
+import { useWorkSurface } from './work-surface.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -87,6 +88,8 @@ export function WorklineApp(props: WorklineProps) {
   const seenRuns = useRef(new Map<string, string>());
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
+  // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
+  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers });
 
   useEffect(() => () => turn.current?.abort(), []);
   const opening = useRef(props.openingNotices);
@@ -104,6 +107,7 @@ export function WorklineApp(props: WorklineProps) {
         for await (const batch of follow(controller.signal)) {
           if (cancelled || controller.signal.aborted) return;
           const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
+          work.observeWorkers(workers);
           const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
           seenWorkers.current = seen;
           push(fresh);
@@ -111,7 +115,7 @@ export function WorklineApp(props: WorklineProps) {
       } catch (error) { if (!cancelled) failed(error); }
     })();
     return () => { cancelled = true; controller.abort(); };
-  }, [failed, ledger, push, watch.workers]);
+  }, [failed, ledger, push, watch.workers, work.observeWorkers]);
   useEffect(() => {
     const follow = ledger?.followRuns;
     if (!watch.runs || !follow) return;
@@ -133,6 +137,7 @@ export function WorklineApp(props: WorklineProps) {
   useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers, pollMs, async current => {
     const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
     if (!current()) return;
+    work.observeWorkers(workers);
     const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
     seenWorkers.current = seen;
     push(fresh);
@@ -193,11 +198,12 @@ export function WorklineApp(props: WorklineProps) {
     setBusy(true);
     try {
       if (slash.command === 'service-restart') push([notice('info', await props.restartService!())]);
-      else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs', slash.args, ledger!, labels));
+      else if (slash.command === 'approvals' || slash.command === 'cancel') await work.run(slash.command, slash.args);
+      else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs' | 'transcript', slash.args, ledger!, labels));
     }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
-  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, setLine, watch]);
+  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, setLine, watch, work.run]);
 
   useInput((input, key) => {
     if (busy && (key.escape || (key.ctrl && input === 'c'))) {
@@ -215,14 +221,16 @@ export function WorklineApp(props: WorklineProps) {
     const submitted = /[\r\n]$/.test(input) && input.length > 1;
     setLine(current => current + input.replace(/[\r\n]+$/, '').replace(/\r\n?/g, '\n'));
     if (submitted) void submit();
-  });
+  }, { isActive: !work.modalOpen }); // an open decision card owns the keys (P4)
 
-  const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant };
+  const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
+    ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   return (
     <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
+      {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy} />
       <Box borderStyle="round" paddingX={1}>

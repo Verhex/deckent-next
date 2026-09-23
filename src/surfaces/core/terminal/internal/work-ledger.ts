@@ -1,6 +1,30 @@
-import type { RunView, WorkerObservation, WorkerObservationReport } from '#engine/index.js';
+import type { RunView, WorkerObservation, WorkerObservationReport, WorkerSidecars } from '#engine/index.js';
 
 export const WORK_LEDGER_SCHEMA_VERSION = 1;
+
+/** Deterministic phase from the worker event contract (`workerActivityPhase`); never a surface interpretation. */
+export type WorkerLivePhase = NonNullable<WorkerSidecars['activity']>['phase'];
+export type WorkerAttemptIdentity = NonNullable<WorkerObservation['identity']>;
+
+/**
+ * What the worker reported about itself (untrusted evidence, never acceptance or terminal truth). `receivedAt` is the
+ * host clock; the worker-relative `atMs` is deliberately not carried so it can never be shown as wall time.
+ */
+export type WorkerLiveActivity = Readonly<{
+  readonly phase: WorkerLivePhase | null;
+  readonly target: string | null;
+  readonly detail: string | null;
+  readonly receivedAt: number | null;
+  /** Provider named by the worker's own session start; shown only when the host does not know the provider. */
+  readonly provider: string | null;
+  readonly model: string | null;
+  readonly outcome: 'success' | 'error' | 'limit' | 'running' | null;
+  readonly tokens: number | null;
+  readonly cacheReadRatio: number | null;
+  readonly dropped: number;
+  readonly unmapped: number;
+  readonly eventsTruncated: boolean;
+}>;
 
 export type WorkLedgerChatEntry = Readonly<{
   readonly schemaVersion: typeof WORK_LEDGER_SCHEMA_VERSION;
@@ -32,6 +56,10 @@ export type WorkLedgerWorkerEntry = Readonly<{
   readonly provider: string;
   readonly authority: string;
   readonly observedAtMs?: number;
+  /** 1-based position in the observation report; `/transcript <n>` resolves against the same numbering. */
+  readonly ordinal?: number;
+  readonly attempt?: WorkerAttemptIdentity | null;
+  readonly live?: WorkerLiveActivity | null;
 }>;
 
 export type WorkLedgerNoticeEntry = Readonly<{
@@ -63,7 +91,20 @@ export function runViewToLedgerEntry(run: RunView, entryId: string): WorkLedgerR
   });
 }
 
-export function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId: string): WorkLedgerWorkerEntry {
+function workerLive(files: WorkerSidecars | null): WorkerLiveActivity | null {
+  if (!files || (!files.activity && !files.usage && !files.eventsTruncated)) return null;
+  const { activity, usage } = files;
+  const tokens = usage ? usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite : null;
+  return Object.freeze({
+    phase: activity?.phase ?? null, target: activity?.target ?? null, detail: activity?.detail ?? null, receivedAt: activity?.receivedAt ?? null,
+    provider: usage?.provider ?? null, model: usage?.model ?? null, outcome: usage?.outcome ?? null, tokens, cacheReadRatio: usage?.cacheReadRatio ?? null,
+    dropped: usage?.dropped ?? 0, unmapped: usage?.unmapped ?? 0, eventsTruncated: files.eventsTruncated,
+  });
+}
+
+export function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, entryId: string,
+  context: { readonly ordinal?: number; readonly observedAtMs?: number } = {}): WorkLedgerWorkerEntry {
+  const live = workerLive(worker.files);
   return Object.freeze({
     schemaVersion: WORK_LEDGER_SCHEMA_VERSION,
     kind: 'worker',
@@ -73,6 +114,10 @@ export function workerToLedgerEntry(scopeId: string, worker: WorkerObservation, 
     process: worker.process,
     provider: worker.provider,
     authority: worker.authority,
+    ...(context.observedAtMs === undefined ? {} : { observedAtMs: context.observedAtMs }),
+    ...(context.ordinal === undefined ? {} : { ordinal: context.ordinal }),
+    ...(worker.identity === undefined ? {} : { attempt: worker.identity }),
+    ...(live ? { live } : {}),
   });
 }
 
@@ -81,7 +126,9 @@ export function workerReportToLedgerEntries(report: WorkerObservationReport, idP
   let index = 0;
   for (const source of report.sources) {
     for (const worker of source.workers) {
-      entries.push(workerToLedgerEntry(report.scopeId, worker, `${idPrefix}-w-${index++}`));
+      const ordinal = index + 1;
+      entries.push(workerToLedgerEntry(report.scopeId, worker, `${idPrefix}-w-${index++}`,
+        { ordinal, ...(Number.isSafeInteger(report.observedAt) ? { observedAtMs: report.observedAt } : {}) }));
     }
   }
   return entries;
@@ -90,6 +137,9 @@ export function workerReportToLedgerEntries(report: WorkerObservationReport, idP
 export function ledgerEntrySummary(entry: WorkLedgerEntry): string {
   if (entry.kind === 'chat') return `${entry.role}: ${entry.text.slice(0, 80)}`;
   if (entry.kind === 'run') return `run ${entry.runId} rev ${entry.revision} ${entry.taskPhases}`;
-  if (entry.kind === 'worker') return `worker ${entry.taskId} ${entry.process}`;
+  if (entry.kind === 'worker') {
+    const phase = entry.live?.phase ? ` ${[entry.live.phase, entry.live.target].filter(Boolean).join(' ')}` : '';
+    return `worker ${entry.taskId} ${entry.process}${phase}`;
+  }
   return entry.text.slice(0, 80);
 }

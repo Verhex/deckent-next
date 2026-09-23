@@ -739,7 +739,8 @@
         "src/engine/core/toolchain-currency",
         "src/domain/core/effect",
         "src/engine/core/effect",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/domain/core/approval"
       ],
       "plan": "SURFACES"
     },
