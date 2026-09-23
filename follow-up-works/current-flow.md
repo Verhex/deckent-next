@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; E24 teslimleri main'de, terminal Cursor'da, sıradaki B06→B07 (Astra/Fable sırası)
+# Anlık iş akışı — Opus 5.5; ACİL terminal + yerel sunum hattı: main 58c40d8 (T0, canlı düzeltmeler, T0b); sıradaki S-STREAM; ana hat askıda (hemen-donulecek-is.md)
 
 ## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
 
@@ -20,11 +20,61 @@ kayıp ders aramasını istemek.
 
 ## Astra inceleme / host kanal — 2026-09-23
 
+Hızlı toplu inceleme 2040–2045 → REVIEW/ANALYSIS 2046; altı giriş işlendi/tüketildi.
+2040 B06 önceki iki P1 kapandı (kaynak PASS). 2041 C11 REVISE: dış idempotency anahtarı scope'la
+adlandırılmıyor; replay endpoint/descriptor kimliği sabitlenmeli; HTTP total deadline eksik.
+2042 paketli dogfood denemesi kanıtı tutarlı, B06-2/ürün terfi kapanışı değil. 2043 tasarım danışmanlığı:
+kota provenance/TTL, pin yetkisi, immutable karar girdileri, seyrek veride çekimserlik; held-out replay
+seçilmeyen modelin kalite kazancını kanıtlamaz. Owner checkpoint'i açık.
+2044 B09 REVISE: target metni redaksiyonsuz; gateway host dropped kayıtları toplam caps dışında,
+invalid batch akışı sink belleğini/kuyruğunu büyütebilir. Sidecar sağlığı artifact'ten ayrı bildirilmeli.
+2045 gerçek PTY + yönetilen tur sonrası exit0 kanıtı kaynak/yazar log incelemesinde yeterli;
+metrics için localhost DNS çözümlemesi loopback'e sabitlenmediğinden P2 açık.
+Ürün değişikliği veya suite/build yok; yazar logları incelendi, bağımsız yeniden koşum yapılmadı.
+
+Güncel inceleme: 2036 → REVIEW 2038 PASS; `2257a66` bilinmeyen profil için ortak typed hata ve
+CLI/MCP gerçek config testini ekledi; yazar logu 1633/288 + native25 + host55, exit0 incelendi.
+2037 → REVIEW 2039 REVISE (`063e9e8`): iki P1. Gecikmiş aynı-adoption çağrısı, diğer çağrı + rollback
+tamamlandıktan sonra eski CAS ile rollback'i geri çevirebiliyor; sequence Git etkisine fence olarak taşınmıyor.
+Derlenmiş apply metodunda bellek portları ve kontrollü duraklatmayla a→b→a→b yeniden üretildi
+(`/tmp/astra-b06-stale-probe.mjs`; gerçek Git/SQLite entegrasyon koşumu değil).
+İkinci bulgu: unsettled rollback resume, güncel hedef allow-list kontrolünden önce çalışıyor; hedeften
+izin kaldırılması tekrar denemedeki Git etkisini durdurmuyor. İki deterministik negatif entegrasyon kanıtı
+bekleniyor. Yazar B06 verify logu 1636/289 + native25 + host55, exit0; bu yarışları kapsamıyor.
+2036/2037 işlendi ve tüketildi. Ürün kodu değişmedi; suite/build/commit/push yapılmadı.
+
+I40 r6 incelemesi → REVIEW 2034 PASS (kaynak ve yazar koşum kanıtı; bağımsız yeniden koşum değil).
+2031 custody okuma/restore hata yolları ortak `releaseCustody` ile kapandı; worker cancel→release,
+gerçek operasyon sınırında iki hata enjeksiyonu, negatif mutation kanıtları ve tüm-container kontrolü mevcut.
+Exact r6 diff `d0257346…`; main `447fc5d` ile B06/I40 path-limited diff aynı (`cc7ac133…`).
+R6 logu ürün1628/286 dosya, native25, host55; birleşik main logu ürün1632/287, native25, host55, exit0.
+Paket B → REVIEW 2035 REVISE: explicit bilinmeyen profil MCP'de configured:false, CLI'da hata;
+ortak profil çözümleme sözleşmesi ve gerçek composition negatif testi gerekli. Socket unref yalnız
+başarıyla doğrulanan yanıt sonrası; yeni kaynak engeli bulunmadı. Canlı yönetilen tur sonrası `/exit`
+PTY kanıtı Cursor C'de açık. Follow portları üreticisiz, preview boş tahmin; olay akışı/admission teslimi değil.
+Astra ürün kodunu değiştirmedi, suite/build/commit/push yapmadı. 2032/2033 işlendi ve tüketildi.
+Önceki EFFORT_NOT_MONOTONIC ve approval MCP tekil gözlemleri bu incelemeyle kapanmış sayılmaz.
+
+Kanal inceleme güncellemesi: 2007 memory birleştirmesi → REVIEW 2011 REVISE (eski MEMORY madde 14'teki
+farklı-provider ikinci görüş ayrıntısını koruma); 2008 B06 → REVIEW 2012 REVISE (kalıcı eski receipt/onarım
+kanıtı). Opus 2013 revizyonu `d168197033373891…` gerçek SQLite reopen/replay ve unresolved-effect
+koruma testlerini ekledi; kaynak/test-kapsamı incelemesi PASS, yazarın 16/16 raporu bağımsız koşum değildir.
+Opus 2018 verify logu doğrudan incelendi: exact `d168197033373891…` B06 diff'inde 1622 ürün,
+25 native, 55 host, fail/skip 0 ve exit=0. Bu yazar koşumunun kanıt incelemesidir; Astra yeniden
+koşturmadı. Sonraki I40 test değişikliği birleşik ağacı değiştirdi; önceki yeşil sonuç yeni ağaca
+taşınmaz (ANALYSIS 2019). Landing/owner kapısı açık. 2010 benimseme tasarımı → ANALYSIS 2014: A yalnız branch-reference
+benimseme dilimi olarak önerildi; exact kabul/aday bağı, fence/ABA ve gerçek N+1 aktivasyonu owner
+sözleşme checkpoint'inde açık. Jev 9280b2df/f9a555cb danışmanlık, ürün kabulü değil. Opus 2009 full-suite
+penceresi nedeniyle Astra yeni suite/build başlatmadı. İzleyici tüm `to=astra` gönderenlerini kapsıyor;
+önceki izleme penceresi 02:20 UTC’de sona erdi; kesintisiz servis iddiası yok. Yerel Codex `token_count.rate_limits` metadatası
+haftalık (10080 dakika) kullanımın 21:55 UTC'de %95, 22:27 UTC'de %96 olduğunu gösterdi;
+hesap düzeyi artış 1 yüzde puanı, yalnız Astra'ya atfedilmiş maliyet değildir.
+
 Owner: yürütme Opus/Fable, terminal Cursor, Astra analiz/inceleme. `60d66ed` ürün ağacı üzerinden
 2001/2002 okundu. HOME Codex hook'ları kuruldu; kullanıcı güven onayı sonrası gerçek `Stop`
 bildirimi ulaştı. `blocked by hook`, bekleyen incelemeyi işlemeye devam isteğidir, onay reddi değildir.
 Hook ürün paketinde değildir; yalnız Next ana oturumuna kapsamlıdır. Luna izleyicisi bu oturumda
-sınırlı süreli başlatıldı; sürekli servis veya haftalık %5 kota ölçümü kanıtlanmadı.
+sınırlı süreli başlatıldı; sürekli servis değildir. Hesap kotası gözlemi yukarıda ayrı kaydedildi.
 
 E24 için ayrı `/tmp/astra-e24-review-60d66ed` Git arşivinde build geçti. Dar test koşumu 15 geçti,
 18 başarısız: 17 yerel socket `EPERM`, 1 pipe stderr beklentisi; host alt süreç testi tanısız başarısız.
@@ -271,10 +321,106 @@ okunur, çalıştırılmaz). Açık terminal bulguları: (1) canlı PTY'de yöne
 PTY testinde kapatıyor; tekrar betiği `proof/E24-LOCAL-PROVIDER-TARIFF-2026-09-22/pty-debug.py`, kök neden ölçülmedi); (2) asistan etiketi
 `deckent` görünüyor, kullanıcı/asistan ayrımı gözden geçirilmeli; (3) Paket B listesi (PLAN). Main'de terminal için yeni iş açılmaz.
 
+## Teslim 2026-09-23: Cursor Paket B + B06 önkoşulu + I40 main'de (owner onayı, push yok)
+
+Main `3d83210 → 447fc5d` fast-forward, entegrasyon dalı `integrate/terminal-package-b` (`/home/alperen/deckent-next-wt-integrate-b`):
+`f4d7490` Paket B anlık görüntüsü (Cursor `wt-terminal` ağacından geçici index ile, `d3957d5`; Cursor ağacı/index/HEAD değişmedi) →
+`341ca43` entegrasyon düzeltmesi (CLI `inference metrics` yüzeyden doğrudan HTTP, redirect izleme, sınırsız gövde — Paket A'daki yüzey-I/O
+kusurunun aynısı; kaldırıldı, saf `loopbackMetricsUrl` kaldı; MCP `inference_plan|budget` `openWorld: false`) → `f424f81` iptal istenen Run'ın hiç
+rezerve edilmemiş görevleri `cancelled` (B06 önkoşulu) → `86590ea` I40 kök nedeni + contention sahiplik testi + r6 temizlik (Astra 2031) → `447fc5d` belgeler.
+İptal/I40 kod ve test içeriği Astra'ya gönderilen r6 ile aynı (`cc7ac133…`). Tam verify (birleşik ağaç): **1632 ürün/287 dosya, 25 native, 55 host;
+fail/skip 0, smoke geçti, exit 0** (`proof/E24-TERMINAL-PACKAGE-B-INTAKE-2026-09-23/`). I40 r6 dar koşum 9/9, iki mutasyon negatif kanıtı, r6 verify 1628/286.
+Yeni bulgu: `.release` bariyeri worker'ın çıktığını kanıtlamaz; test temizliği supervisor `cancel` → `release` kullanır.
+Açık: canlı yönetilen tur sonrası `/exit` PTY kanıtı (Astra 2005); `followWorkers/followRuns` üreticisiz port; `previewEmptyInferenceSlot`
+tüketicisiz; `createMcpServer` 155 satır uyarısı; approval modunda eşzamanlı CLI+MCP `decide_approval` tekil MCP hatası (ayrı gözlem).
+Kanal: Astra 2034 r6 PASS (yazar logları bağımsız incelendi, yeniden koşum değil). 2035 Paket B REVISE: MCP bilinmeyen profili `configured:false`
+sayıyordu, CLI `CLI_USAGE`; düzeltme tek engine seçicisi + tipli `INFERENCE_PROFILE_UNKNOWN` (CLI kod 2, MCP `{code}`), gerçek config ile CLI `main`+MCP
+sunucu parite testi, eski kodda negatif kanıt. Commit `2257a66` (main, push yok); tam verify 3. koşum 1633/288, 25 native, 55 host, exit 0
+(1. koşum lint: internal import + arch bağımlılığı, benim eksiğim; 2. koşum `model-invocation-credentials` profile-değişimi vakası ilk çağrıda
+`PROVIDER_SPEND_UNAVAILABLE` — modülde diff yok, izole 5×7/7; yeni I40 aralıklı gözlem, kök neden ölçülmedi). Astra'ya 2036 gönderildi, 2035 tüketildi. `feat/run-cancel-closure` (`wt-terminal-merge`) ve
+`wt-terminal` artık yalnız referans; silme owner'ın.
+
+**Cursor Paket C (owner 2026-09-23):** yeni worktree `/home/alperen/deckent-next-wt-terminal-c`, dal `feat/terminal-package-c`, taban main `447fc5d`.
+Prompt: `/home/alperen/deckent-refactor-work/CURSOR-TERMINAL-PACKAGE-C-PROMPT-2026-09-23.md`. Dilim 1 canlı `/exit` kanıtı, dilim 2 sınırlı metrics
+adapter'ı; olay akışı/sunucu başlatma/kapasite kabulü/`/do` owner checkpoint'li öneri. Merge Opus, onay owner.
+
+## Hat A ilk dogfood denemesi — 2026-09-23 (owner kabul etti)
+
+Main 94741da'dan paketlenen N, taze N+1 klonunda (`/home/alperen/deckent-n1-b07`, veri `/home/alperen/deckent-n/data-b07`) gerçek Claude
+worker'ıyla (r2, opus[1m], 30 sn) `runtime-service-process` `database is locked` yarışını düzeltti: kabul → teslim → `dogfood/adopted` benimseme →
+worker dışında build + test 3/3 → benimsenen commit'ten N' aktivasyonu (önceki kabulü gördü, yeni iş kabul etti) → eski N'ye dönüş (yeni iş kabul etti).
+Commit `3fd05da` (yazar Deckent) tam verify sonrası main'e fast-forward. Kanıt `proof/B07-DOGFOOD-TRIAL-2026-09-23/`. Owner geri bildirimi: izolasyon
+ve hız çok başarılı; ancak worker izlenemedi — oturum akışı (49.283 bayt) köprüde bilinçli atılıyor, yalnız zarf saklanıyor; `workers list` yalnız
+süreç durumu gösteriyor; N ve N' aynı `--version`; servis kapalıyken `run inspect` yanıltıcı `LOCAL_RUNTIME_ENDPOINT_UNSAFE`. Owner kararı: B09 worker
+gözlemi C12'den önce; deterministik şema, yorumlanabilir token, merkezi izleme/raporlama. Jev 7fe8a7a1 contract_plus_report 0,98 (report_enforceable 0,80,
+slice_order 0,76). Claude `--json-schema`/`structured_output`, sonuç `usage/total_cost_usd/num_turns/subtype` belgelerden doğrulandı; Codex/Cursor bayrakları doğrulanmadı.
+
+## Yön kararı 2026-09-23 (owner) — iki hat, Enterprise katmanı
+
+Owner: ticari hedef Enterprise; ERP adapter ailesi IFS/SAP/Oracle/Microsoft/Uyumsoft/Logo registry ile Core'a dokunmadan; müşteri ERP
+sürümüne göre paket sorumluluğu Enterprise'da; Hat A DOGFOOD denemesine izin; IFS erişimi yakında, şimdilik genel yüzeyler. Kayıt: `ff801b0`
+(core-memory kanun 10, AGENTS/CLAUDE, ARCHITECTURE sözleşme bölümü, PLAN). Kod denetimi: beş el yazımı etki akışı, yalnız Task'a bağlı onay
+(`require-approval` → `POLICY_DENIED`), registry/manifest yok, ERP kodu yok. Jev 124d141b iki hat 0,99 (rework_risk 0,91, legacy kıyası adil
+0,14, ERP modeli doğru 0,93, IFS öne 0,84); Jev 73823c15 ilk dilim etki portu 0,98. Şimdi: C11-1 (etki portu + ledger v34 + koşullu HTTP
+adapter + ERP-benzeri test sunucusu, CLI/SDK `operation`). Sonra: Hat A (B07) dogfood denemesi, C12 operasyon onayı, A04 overlay.
+
+## Teslim 2026-09-23: B06-1 dal referansı benimseme + rollback (owner: A şimdi, C ardından; rollback ref CAS)
+
+Commit `063e9e8` (main, push yok). Jev 8f6ad842: A 0,63 / C 0,34 / B 0 / none 0,01 / insufficient 0,02; evidence_strength 0,17 → sonuç
+`verification: not-verified`; fence_aba 0,42 → ledger sıra + meşgul hedef + en-son kaydı kontrolü + Git CAS, dış yazıcı sınırı yazıldı. Legacy (alt ajan,
+salt okunur): işçi çıktısını Git'e hiç indirmedi, değişen baz HOLD, kendi deposunda rollback yok, c7882b1de ara commit/revert'i paylaşılan HEAD bozduğu
+için kaldırdı; N→N+1 terfisi hiç kurulmadı. Next: `task integration-adopt|integration-rollback` (SDK+CLI), `execution.adoption.targets` (boş varsayılan),
+`adopt-integration`/`rollback-integration` politika eylemleri, ledger v33 `workspace_adoptions`, `GitIntegrationAdoption` (tam ref eşleşmesi, açık
+worktree checkout kontrolü — `update-ref` checkout edilmiş dalı reddetmiyor), ortak `GitCommand`. Kanıt: 3 gerçek Docker/Git/değerlendirme testi,
+2 mutasyon negatif kanıtı; tam verify 3. koşum 1636/289, 25 native, 55 host, exit 0 (1. koşum: eski sürüme indiren 17 migration testi yeni tabloyu
+silmiyordu → 28 dosyada DROP eklendi; 2. koşum `runtime-service-process` yoklamasında `database is locked`, izole 5/5 — yeni I40 gözlemi). Aynı testin
+bugünkü koşumlarımda bıraktığı iki sonsuz worker konteyneri silindi (kayıt `proof/B06-BRANCH-ADOPTION-2026-09-23/leaked-containers-removed.txt`).
+Astra 2037 → REVIEW 2039 REVISE (iki P1): kendi bayat kopyamız yeni rollback'ten sonra dalı yeniden taşıyabiliyordu (uçta ABA) ve devam eden
+rollback izin listesini atlıyordu. Düzeltme `c4d3144` (Jev 8872e74f fence_ref 1,00): hedef başına `refs/deckent/adoption-fences/<sha256>` fence ref'i dal ile
+tek `update-ref` transaction'ında ilerler; uzlaştırma tam fence sahipliğinden; yeni etki izin listesini yeniden kontrol eder; aynı commit'i koyan dış yazıcı
+çakışmadır. Kanıt: kapıda bekletilen kopya testi, izin listesi çıkarma testi, dış eşit-uç testi; koşulsuz fence mutasyonu Astra'nın senaryosunu gerçek Git'te
+üretti. Tam verify ilk koşumda 1637/289, 25 native, 55 host, exit 0. Astra 2038 profil paritesi PASS, 2034 I40 PASS. 2040 gönderildi.
+Süreç notu: Cursor süitini beklemek için yazdığım `while pgrep -f vitest` döngüsü kendi komut satırını eşleyip hook'u kilitledi; bekleme `pgrep -x`/süreç kimliği ile yazılmalı. Açık: B06-2 (teslim commit'inde doğrulama Run'ı policy ön koşulu), B07 aktivasyon, dış yazıcı fence'i, teslim+benimseme MCP paritesi (A03).
+
+## Acil hat 2026-09-23/24: yerel terminal + yerel sunum (owner öncelik)
+
+Main: `5edcbd5` T0 (`deckent` → terminal, servis arka planda otomatik başlar), `87904be` canlı düzeltmeler (aynı pakette Enter, vLLM `function_call:null`),
+`58c40d8` T0b (derleme farkı uyarısı + `/service-restart`, bayraksız yönetilen `runtime shutdown`, açılışta yedekli ledger yükseltmesi, meşgulken FIFO girdi).
+vLLM v0.30.0 + RedHatAI Qwen3.8-27B INT4 birincil (127.0.0.1:18080, ölçüm c8 336–348 vs 70–131 tok/sn), llama.cpp soğuk yedek. Canlı ortam: katalog qwen38 v2,
+`service.identity {live, local}` + shutdown izni, ledger v35 (yedekler `proof/LOCAL-SERVING-2026-09-23/`, `proof/F26-T0B-2026-09-24/`). Astra: 2047 (T0), 2048 (düzeltmeler),
+2049 (T0b) bekliyor. Açık: `installed-runtime-service` onay modu eşzamanlı CLI+MCP `decide_approval` aralıklı MCP `INVENTORY_QUERY_INVALID` (T0b koşum 1 ve izole 1/3;
+T0b öncesinden kayıtlı, kendi teşhisi gerekli); servis hata parametreleri (`{issues}`); arka plan servisi boşta durma politikası.
+Sıradaki: S-STREAM (akışlı yanıt + olay akışı), T1 (Claude Code sınıfı girdi/görünüm), T2 (onay/iptal/canlı worker paneli), A (araç döngüsü + D15b).
+
+## Teslim 2026-09-23: B09-1 + Cursor Paket C main'de (owner onayı, push yok)
+
+B09-1 `443006e` (tam verify 2. koşum 1646/293, native 25, host 55, exit 0; 1. koşumda `readBuildIdentity` platform/common'da i18n renderer
+sandbox'ına `node:fs` sokuyordu → platform/host'a taşındı). Astra REQUEST_REVIEW 2044, tasarım ANALYSIS 2043.
+Paket C: `feat/terminal-package-c` (4 commit, taban c4d3144) → entegrasyon worktree `/home/alperen/deckent-next-wt-integrate-c`
+birleştirme `c6d42f7` (yalnız ekleme çakışması) + düzeltme `a7ee8e4`: metrics okuma hatası çıkış 0 idi → tipli `INFERENCE_METRICS_UNREAD` çıkış 1;
+`http` timeout yalnız boşta kalma süresiydi → toplam süre sınırı. İki mutasyon negatif kanıtı. Tam verify 1654/296, native 25, host 55, exit 0
+(`proof/F26-TERMINAL-PACKAGE-C-INTAKE-2026-09-23/`). Main ff `443006e → a7ee8e4`. Cursor Paket D prompt'u:
+`CURSOR-TERMINAL-PACKAGE-D-PROMPT-2026-09-23.md` (canlı worker satırı, `/transcript`, yüksüzlük ölçümü). `wt-terminal-c` artık referans; silme owner'ın.
+LIVE kurulum güncellenmedi (ayrı aktivasyon kararı).
+
+## B09-1 worker olay sözleşmesi — 2026-09-23 (owner: deterministik şema, yorumlanabilir token, merkezi izleme)
+
+Jev 7fe8a7a1 contract_plus_report 0,98; 4c775203 tasarım. Tek güncel şema (v1, kullanıcı seçimi yok). Claude akışı konteyner köprüsünde normalize +
+redakte edilir (kimlik bilgisi, Bearer/sk-/ghp-/xox, key=value, URL kimliği, JWT; `/workspace` dışı yol `(outside-workspace)/ad`); geçit `POST /events`
+bootstrap sonrası, satır başına şema, artan sıra, 256 KiB parti / 5000 olay / 4 MiB sınırı, red → `dropped`. Host `worker.events` `{receivedAt, event}`
+(0600, host saati), bitişte artifact + ledger v35 `worker_event_logs`; `task transcript` SDK+CLI (`read-output`). `--version` ikinci satır derleme ağacı +
+commit (dogfood bulgusu: N ve N' aynı sürümü gösteriyordu); servis kapalıyken `LOCAL_RUNTIME_UNAVAILABLE`. Kanıt: gerçek haiku akış fixture'ı (25 satır),
+Docker e2e kimlik bilgisi sızıntı testi, SDK+CLI+policy red testi; mutasyon negatifleri `proof/B09-WORKER-EVENTS-2026-09-23/`. Açık: Codex/Cursor
+normalizer'ı (yalnız başlangıç + sayım), B09-2 `--json-schema` final rapor + sınırlar, B09-3 `report workers` + canlı `workers watch` fazı.
+Owner 2026-09-23 yeni istek: ajan/skill/model/efor ataması + evrim + skorlama (tek şema, sıcak yolda LLM yok), insan-okunur canlı worker akışı
+(terminal/dashboard/desktop, yük bindirmeden). **Öneri (owner checkpoint'i bekliyor):** dış çalışma alanı `ASSIGNMENT-EVOLUTION-DESIGN-2026-09-23.md`;
+Jev d37d25c1 shadow_then_promote 1,00 (kontroller 0,70–0,84; guard_as_data sorusu yorumlanamaz). Astra ANALYSIS 2043. Cursor tüketim sözleşmesi
+`CURSOR-WORKER-ACTIVITY-CONTRACT-2026-09-23.md`. Önerilen sıra: B09-3 (canlı satır + Codex normalizer) → G31-1 → B09-2 → G32-1 gölge skor.
+
 ## Sıradaki sıra (Astra/Fable devir sırasıyla hizalı; Astra teyidi owner'da)
 
-1. **B06** doğrulanmış benimseme/terfi + rollback (reference-only teslim üzerine; yeni teslim mekanizması kurulmaz). Önkoşul olarak B05
-   bulgusundan kalan run düzeyi kapanış (iptal istenen Run'ın `pending` görevleri) — dogfood kabulünü doğrudan etkiler.
+0. **B09-3** canlı insan-okunur worker satırı (üretici) + Codex normalizer; atama/evrim tasarımı owner checkpoint'inde (Astra 2043).
+1. **B06-2** benimsemeden önce teslim commit'inde doğrulama Run'ı (policy ön koşulu, kabul makbuzu tam commit'e bağlı); B06-1 `063e9e8` main'de.
 2. **B07** tekrarlanabilir gerçek dogfood kabulü/kurtarma; DOGFOOD OFF, aktivasyon owner kararı.
 3. Temel hat **A03/A04/C10/C11/C12** kalanları; sonra D/E/F/G/H kabul edilmiş bağımlılıklarla.
 4. B08 artıkları (profil revizyon önerisinin uygulanması, API şema anlık görüntüleri) ve I40 triyajı (test artığı/yetim süreç sızıntısı,
