@@ -589,6 +589,8 @@
   "cli.task.execute.notice": "Süreç çıkışı görev kabulü değildir. Kabul için kayıtlı kanıtlar değerlendirilmelidir.",
   "cli.task.evaluate.result": "Kayıtlı görev değerlendirme komutu {command}: görev {task} aşaması={phase}, kayıtlı Run revizyonu={revision}.",
   "mcp.tool.inspectRun": "Kayıtlı Run ve görevlerini oku. Canlı worker durumu veya kabul kanıtı değildir. Güncel Run inceleme izni gerektirir.",
+  "mcp.tool.inferencePlan": "Yapılandırılmış çıkarım servis planını oku. Kapasite tahminidir; çalışan sunucu veya Run kabulü değildir.",
+  "mcp.tool.inferenceBudget": "Yapılandırılmış çıkarım profili için boş bütçe token tahminini oku. Kapasite ayırmaz.",
   "mcp.tool.inspectInventory": "Yetkili kapsamda kayıtlı yürütme Attempt’lerinin sınırlı bir sayfasını oku. Worker başlatmaz veya durdurmaz.",
   "mcp.tool.inspectToolchainCurrency": "Kabul edilmiş worker CLI sürümlerini yayımlanan dağıtımlarla karşılaştır (policy izin verirse paket başına tek sınırlı registry okuması). Yalnız raporlar; güncellemez, yeniden derlemez, etkinleştirmez.",
   "mcp.tool.updateToolchains": "Kabul edilen toolchain'ler eskiyse sonraki worker imaj sürümünü planla (policy veya apply ile derle); plan/receipt/öneri artefaktı yazar, kurulu config'e yazmaz.",

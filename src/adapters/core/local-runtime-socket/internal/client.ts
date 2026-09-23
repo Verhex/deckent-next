@@ -29,24 +29,37 @@ export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
   catch (error) { socket.destroy(); throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error }); }
   const decoder = new ServiceFrameDecoder(resolved.responseMaxBytes);
   return await new Promise((resolve, reject) => {
-    let ended = false;
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', abort);
+      socket.destroy();
+      reject(error instanceof LocalRuntimeSocketError ? error : new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error }));
+    };
     // Aborting this client disconnects its wait; an accepted server operation is never cancelled here.
-    const abort = () => socket.destroy(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT'));
+    const abort = () => fail(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT'));
     signal?.addEventListener('abort', abort, { once: true });
     socket.on('data', chunk => {
       try {
         if (!Buffer.isBuffer(chunk)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
         decoder.push(chunk);
-      } catch (error) { socket.destroy(); reject(error); }
+      } catch (error) { fail(error); }
     });
     socket.once('end', () => {
-      ended = true;
-      try { resolve(parseRuntimeServiceResponse(request.requestId, decoder.finish())); }
-      catch (error) { reject(error); }
+      if (settled) return;
+      try {
+        const response = parseRuntimeServiceResponse(request.requestId, decoder.finish());
+        settled = true;
+        signal?.removeEventListener('abort', abort);
+        // A half-open socket stays ref'd after FIN and keeps the operator process alive after /exit.
+        socket.unref();
+        resolve(response);
+      } catch (error) { fail(error); }
     });
-    socket.once('close', () => { signal?.removeEventListener('abort', abort); if (!ended) reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); });
-    socket.once('error', error => reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error })));
+    socket.once('close', () => { if (!settled) fail(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); });
+    socket.once('error', error => fail(error));
     try { if (signal?.aborted) abort(); else socket.end(frame); }
-    catch (error) { socket.destroy(); reject(error); }
+    catch (error) { fail(error); }
   });
 }

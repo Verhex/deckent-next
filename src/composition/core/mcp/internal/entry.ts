@@ -9,6 +9,7 @@ import { createMcpServer } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
+import { describeMcpInference } from './inference-query.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
   registerProviderConfig(); const config = await loadConfig(root, { heal: false });
@@ -25,7 +26,9 @@ export async function main(root = process.cwd()) {
     inspectProviderSpendAccount: (query, delivery) => runtime.inspectProviderSpendAccount(query, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
-    admitModelActivation: command => admitConfiguredModelActivation(root, command) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
+    admitModelActivation: command => admitConfiguredModelActivation(root, command),
+    inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
+    inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
       { responseMaxBytes: config.mcp.responseMaxBytes }),
     onerror: () => { process.stderr.write('MCP_TRANSPORT_FAILED\n'); },

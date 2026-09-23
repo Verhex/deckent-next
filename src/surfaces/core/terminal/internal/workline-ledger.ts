@@ -8,6 +8,9 @@ export interface WorklineLedgerPorts {
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
   readonly listRunIds?: () => Promise<readonly string[]>;
   readonly workerHeartbeatMs?: number;
+  /** When set, replaces polling for that watch. The runtime owns the event source. */
+  readonly followWorkers?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
+  readonly followRuns?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
 }
 
 export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<RunView[]> {

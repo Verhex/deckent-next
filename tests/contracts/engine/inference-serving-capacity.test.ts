@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InferenceServingProfile } from '#domain/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceTokenBudget, roleContextCeiling } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceTokenBudget, loopbackMetricsUrl, previewEmptyInferenceSlot, roleContextCeiling } from '#engine/index.js';
 
 const profile: InferenceServingProfile = {
   schemaVersion: 1,
@@ -66,5 +66,14 @@ describe('inference serving capacity', () => {
     const process = buildInferenceServingPlan({ ...profile, serving: { ...profile.serving, imageRef: undefined } } as InferenceServingProfile, 18081).launcher.argv;
     expect(process[0]).toBe('vllm');
     expect(process.slice(process.indexOf('--host'), process.indexOf('--host') + 4)).toEqual(['--host', '127.0.0.1', '--port', '18081']);
+  });
+
+  it('reads metrics only from loopback and previews an empty slot without keeping the hold', () => {
+    expect(loopbackMetricsUrl('http://127.0.0.1:18080/v1')).toEqual({ ok: true, url: 'http://127.0.0.1:18080/metrics' });
+    expect(loopbackMetricsUrl('http://10.0.0.8:18080/v1')).toEqual({ ok: false, code: 'INFERENCE_METRICS_HOST_DENIED' });
+    const request = { id: 'task-1', role: 'worker' as const, estimatedTokens: 100 };
+    expect(previewEmptyInferenceSlot(profile, request)).toBe('admitted');
+    const budget = new InferenceTokenBudget(estimateReplicaCapacity(profile).totalTokenBudget, role => roleContextCeiling(profile, role));
+    expect(budget.snapshot().reserved).toBe(0);
   });
 });

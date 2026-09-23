@@ -268,7 +268,8 @@
         "src/platform/core/host",
         "src/platform/core/i18n",
         "src/surfaces/core/mcp",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/engine/core/inference-serving"
       ],
       "plan": "SURFACES"
     },

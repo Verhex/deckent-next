@@ -19,6 +19,7 @@ export type WorkLedgerRunEntry = Readonly<{
   readonly revision: number;
   readonly cancellationRequested: boolean;
   readonly taskPhases: string;
+  readonly observedAtMs?: number;
 }>;
 
 export type WorkLedgerWorkerEntry = Readonly<{
@@ -30,6 +31,7 @@ export type WorkLedgerWorkerEntry = Readonly<{
   readonly process: string;
   readonly provider: string;
   readonly authority: string;
+  readonly observedAtMs?: number;
 }>;
 
 export type WorkLedgerNoticeEntry = Readonly<{

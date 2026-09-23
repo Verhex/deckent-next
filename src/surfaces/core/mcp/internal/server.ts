@@ -41,6 +41,8 @@ export interface McpApplications {
   inspectInventory(query: DispatchInventoryInput): Promise<unknown>;
   describeService?(): Promise<RuntimeServiceDescriptor>;
   shutdownService?(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
+  inferencePlan?(input: { readonly profileId?: string }): Promise<unknown>;
+  inferenceBudget?(input: { readonly profileId?: string }): Promise<unknown>;
 }
 export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number }
 /** Local protocol surface. Injected applications own identity, policy and data access.
@@ -149,6 +151,21 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (cancelInvocation) definitions.push({ readOnly: false, destructive: true, openWorld: false, name: 'cancel_model_invocation',
     description: t('mcp.tool.cancelModelInvocation', {}, locale), schema: modelInvocationCancellationCommandSchema, modelDelivery: true,
     invoke: (input, delivery) => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input), delivery) });
+  const inferenceInput = z.object({ profileId: z.string().min(1).optional() }).strict();
+  const inferencePlan = applications.inferencePlan;
+  if (inferencePlan) definitions.push({ readOnly: true, destructive: false, name: 'inference_plan',
+    description: t('mcp.tool.inferencePlan', {}, locale), schema: inferenceInput,
+    invoke: (input: unknown) => {
+      const parsed = inferenceInput.parse(input);
+      return inferencePlan.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
+    } });
+  const inferenceBudget = applications.inferenceBudget;
+  if (inferenceBudget) definitions.push({ readOnly: true, destructive: false, name: 'inference_budget',
+    description: t('mcp.tool.inferenceBudget', {}, locale), schema: inferenceInput,
+    invoke: (input: unknown) => {
+      const parsed = inferenceInput.parse(input);
+      return inferenceBudget.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
+    } });
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',

@@ -372,11 +372,12 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`;
   chat text is not run truth. Watches are single-flight polls with bounded memory. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
-- **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
-  configuration card: pure capacity/launch estimates with loopback-only publish; Deckent does not start,
-  probe or admit Runs against the server yet. The Desktop bridge snapshot carries work rows only (no chat
-  content); live bridge files, runtime event push, server launch/metrics and inference-bound Run admission
-  are Package B.
+- **Local inference serving** (`inference_serving`, `deckent inference plan|budget|metrics`) is a separate
+  configuration card: pure capacity/launch estimates with loopback-only publish. `metrics` reads a loopback
+  `/metrics` URL and does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
+  is not Run admission. MCP `inference_plan` and `inference_budget` are the same read. The Desktop bridge
+  snapshot carries work rows only (no chat content) and is not a live file channel. Watches stay
+  single-flight polls unless the ledger `followWorkers` / `followRuns` port is connected.
 
 Domain cannot import platform or other packages, host modules or ambient host globals. The purity gate also rejects
 composition access to domain decision functions while allowing schema/type wiring; static analysis does not prove

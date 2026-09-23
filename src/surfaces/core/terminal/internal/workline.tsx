@@ -10,7 +10,7 @@ import { LedgerEntryRow, type LedgerEntryLabels } from './ledger-entry.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
 import { newWorkerTaskIds } from './worker-watch.js';
-import { newRunLedgerEntries } from './run-watch.js';
+import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
@@ -75,14 +75,50 @@ export function WorklineApp(props: WorklineProps) {
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
 
   useEffect(() => () => turn.current?.abort(), []);
-  useSingleFlightPoll(watch.workers && Boolean(ledger), pollMs, async current => {
+  useEffect(() => {
+    const follow = ledger?.followWorkers;
+    if (!watch.workers || !follow) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    void (async () => {
+      try {
+        for await (const batch of follow(controller.signal)) {
+          if (cancelled || controller.signal.aborted) return;
+          const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
+          const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
+          seenWorkers.current = seen;
+          push(fresh);
+        }
+      } catch (error) { if (!cancelled) failed(error); }
+    })();
+    return () => { cancelled = true; controller.abort(); };
+  }, [failed, ledger, push, watch.workers]);
+  useEffect(() => {
+    const follow = ledger?.followRuns;
+    if (!watch.runs || !follow) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    void (async () => {
+      try {
+        for await (const batch of follow(controller.signal)) {
+          if (cancelled || controller.signal.aborted) return;
+          const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
+          const { seen, fresh } = freshRunCards(seenRuns.current, runs);
+          seenRuns.current = seen;
+          push(fresh);
+        }
+      } catch (error) { if (!cancelled) failed(error); }
+    })();
+    return () => { cancelled = true; controller.abort(); };
+  }, [failed, ledger, push, watch.runs]);
+  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers, pollMs, async current => {
     const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
     if (!current()) return;
     const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
     seenWorkers.current = seen;
     push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds), pollMs, async current => {
+  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns, pollMs, async current => {
     const runs = await loadRunViewsForWatch(ledger!);
     if (!current()) return;
     const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
@@ -112,15 +148,16 @@ export function WorklineApp(props: WorklineProps) {
 
   const submit = useCallback(async () => {
     const trimmed = line.trim();
-    setLine('');
     if (!trimmed) return;
     const slash = parseSlashLine(trimmed);
-    if (!slash) { await runTurn(trimmed); return; }
+    if (!slash) { setLine(''); await runTurn(trimmed); return; }
     const action = immediateSlashAction(slash.command, { ledger, labels, watch });
+    // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
+    if (action?.exit) { exit(); return; }
+    setLine('');
     if (action) {
       push(action.entries);
       if (action.watch) setWatch(action.watch);
-      if (action.exit) exit();
       return;
     }
     setBusy(true);
@@ -173,5 +210,11 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
     { exitOnCtrlC: false, patchConsole: false, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
-  try { await instance.waitUntilExit(); } finally { signal?.removeEventListener('abort', stop); }
+  try { await instance.waitUntilExit(); }
+  finally {
+    signal?.removeEventListener('abort', stop);
+    const input = stdin ?? process.stdin;
+    try { if (input.isTTY && input.isRaw) input.setRawMode(false); } catch { /* already restored */ }
+    input.unref?.();
+  }
 }

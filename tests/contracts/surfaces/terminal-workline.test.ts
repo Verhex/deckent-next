@@ -65,6 +65,19 @@ describe('ledger buffer (Ink Static contract)', () => {
 });
 
 describe('workline view rendered by Ink', () => {
+  it('renders pushed worker cards and does not poll when a follow port is connected', async () => {
+    let polls = 0;
+    async function* followWorkers() {
+      yield [{ schemaVersion: 1 as const, kind: 'worker' as const, id: 'w', scopeId: 'scope-a', taskId: 'pushed-task', process: 'running', provider: 'docker', authority: 'next' }];
+    }
+    const view = mount({ completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
+      async listWorkers() { polls += 1; return workers(1, 0); }, async inspectRun() { return null; }, followWorkers } });
+    await view.type('/watch-workers\r');
+    await until(() => view.stdout.text.includes('pushed-task'), 'pushed worker');
+    await settle(40);
+    expect(polls).toBe(0);
+  });
+
   it('prints every ledger row past the former 400-row cap', async () => {
     let offset = 0;
     const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a', async listWorkers() { const report = workers(300, offset); offset += 300; return report; },
@@ -73,6 +86,16 @@ describe('workline view rendered by Ink', () => {
     await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-599'), 'second page');
     await view.type('/help\r'); await until(() => view.stdout.text.includes('/watch-runs'), 'help after 600 rows');
     for (const id of ['task-0', 'task-401', 'task-599']) expect(view.stdout.text).toContain(id);
+  });
+
+  it('closes the view with /exit after a completed turn', async () => {
+    const view = mount({ completeTurn: async () => { await settle(40); return 'Ankara'; } });
+    await view.type('capital\r');
+    await until(() => view.stdout.text.includes('bot: Ankara'), 'assistant reply');
+    let exited = false;
+    void view.instance.waitUntilExit().then(() => { exited = true; });
+    await view.type('/exit\r');
+    await until(() => exited, '/exit after turn');
   });
 
   it('cancels a running turn with Ctrl+C or Esc instead of exiting, then exits on idle Ctrl+C', async () => {
