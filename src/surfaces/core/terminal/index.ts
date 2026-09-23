@@ -17,3 +17,9 @@ export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry } from 
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';
 export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from './internal/turn-stream.js';
+export { Composer, type ComposerLabels, type ComposerProps } from './internal/composer/composer.js';
+export { COMPOSER_LIMITS, EMPTY_COMPOSER, composerMenu, exitArmed, reduceComposer, searchMatches, type ComposerContext, type ComposerHistoryEntry,
+  type ComposerHistoryPort, type ComposerIntent, type ComposerKey, type ComposerMenu, type ComposerState, type ComposerStep } from './internal/composer/reducer.js';
+export { composerKey } from './internal/composer/keys.js';
+export { PASTE_COLLAPSE, expandChips, mentionAt, pendingArgument, slashMatches, type ComposerMentionPort, type PasteChip, type PastePolicy } from './internal/composer/assist.js';
+export { caretRow, displayWidth, graphemes, layoutRows } from './internal/composer/text.js';
