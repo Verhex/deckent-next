@@ -71,7 +71,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
   }, work => lifecycle.admit(work, 'execution'), options);
-  const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async (request, peer) => {
+  const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async (request, peer, stream) => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
@@ -87,8 +87,8 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
         ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
-        : request.operation === 'invokeModel' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
-          ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost)
+        : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
+          ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {

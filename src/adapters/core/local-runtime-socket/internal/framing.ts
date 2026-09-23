@@ -45,3 +45,38 @@ export class ServiceFrameDecoder {
     return prefix;
   }
 }
+
+/**
+ * Client side of a streamed response: yields each complete bounded frame in order. `maxFrameBytes` bounds every
+ * payload and `maxTotalBytes` the whole connection; `finish()` proves EOF did not cut a frame.
+ */
+export class ServiceFrameStreamDecoder {
+  private readonly maximum: number; private readonly total: number; private buffered: Buffer = Buffer.alloc(0); private received = 0; private finished = false;
+  constructor(maxFrameBytes: number, maxTotalBytes: number) {
+    this.maximum = limit(maxFrameBytes); this.total = maxTotalBytes;
+    if (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < maxFrameBytes + 4) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
+  }
+  push(chunk: Buffer): unknown[] {
+    if (this.finished) throw new ServiceFrameError('SERVICE_FRAME_FINISHED');
+    if (!Buffer.isBuffer(chunk)) throw new ServiceFrameError('SERVICE_FRAME_TRUNCATED');
+    this.received += chunk.byteLength;
+    if (this.received > this.total) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
+    this.buffered = this.buffered.byteLength === 0 ? chunk : Buffer.concat([this.buffered, chunk]);
+    const frames: unknown[] = [];
+    while (this.buffered.byteLength >= 4) {
+      const size = this.buffered.readUInt32BE(0);
+      if (size > this.maximum) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
+      if (this.buffered.byteLength < size + 4) break;
+      let text: string;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(this.buffered.subarray(4, size + 4)); }
+      catch { throw new ServiceFrameError('SERVICE_FRAME_UTF8'); }
+      try { frames.push(JSON.parse(text)); } catch { throw new ServiceFrameError('SERVICE_FRAME_JSON'); }
+      this.buffered = this.buffered.subarray(size + 4);
+    }
+    return frames;
+  }
+  finish(): void {
+    if (this.finished) throw new ServiceFrameError('SERVICE_FRAME_FINISHED'); this.finished = true;
+    if (this.buffered.byteLength !== 0) throw new ServiceFrameError('SERVICE_FRAME_TRUNCATED');
+  }
+}

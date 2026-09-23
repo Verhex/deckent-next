@@ -1,8 +1,9 @@
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
-import { runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
+import { isRuntimeServiceStreamingOperation, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
+import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './stream-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
@@ -12,7 +13,9 @@ export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
   response: RuntimeServiceResponse;
   afterResponseOrDisconnect: () => void;
 }>;
-export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
+/** `stream` is present only for streamed operations; its deltas precede the one final response frame. */
+export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity,
+  stream?: RuntimeServiceStreamChannel) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
 export interface LocalRuntimeSocketServer { readonly endpoint: string; readonly termination: Promise<PeerClosure>; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
@@ -75,8 +78,12 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     let limitFrame: Buffer;
     try { limitFrame = encodeServiceFrame(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT'), options.responseMaxBytes); }
     catch { socket.destroy(); return; }
-    void Promise.resolve().then(() => handler(request, peer)).then(reply)
+    // Streamed deltas share the response byte limit per frame and, in total, one more response's worth of bytes.
+    const stream = isRuntimeServiceStreamingOperation(request.operation)
+      ? createServerStreamChannel(socket, request.requestId, options.responseMaxBytes, options.responseMaxBytes) : undefined;
+    void Promise.resolve().then(() => stream ? handler(request, peer, stream) : handler(request, peer)).then(reply)
       .then(value => {
+        stream?.finish();
         let response = value.response;
         afterResponseOrDisconnect = value.afterResponseOrDisconnect;
         if (disconnected) { finishHandoff(); return; }
@@ -95,6 +102,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
           });
         } catch { socket.destroy(); }
       }, () => {
+        stream?.finish();
         if (!disconnected) {
           try { socket.end(encodeServiceFrame(transportFailure(request.requestId), options.responseMaxBytes)); } catch { socket.destroy(); }
         }

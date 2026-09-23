@@ -16,11 +16,12 @@ export type ModelInvocationDelta = z.infer<typeof modelInvocationDeltaSchema>;
 /** Receives deltas in wire order; it must not throw or block. */
 export type ModelInvocationDeltaSink = (delta: ModelInvocationDelta) => void;
 
-/** Splits text into schema-sized deltas without separating a UTF-16 surrogate pair. */
-export function splitModelInvocationDelta(kind: ModelInvocationDelta['kind'], text: string): ModelInvocationDelta[] {
-  const output: ModelInvocationDelta[] = [];
+/** Splits text into schema-sized deltas (at most `maxCodeUnits` each) without separating a UTF-16 surrogate pair. */
+export function splitModelInvocationDelta(kind: ModelInvocationDelta['kind'], text: string,
+  maxCodeUnits = MODEL_INVOCATION_DELTA_TEXT_MAX): ModelInvocationDelta[] {
+  const size = Math.max(2, Math.min(Math.floor(maxCodeUnits), MODEL_INVOCATION_DELTA_TEXT_MAX)), output: ModelInvocationDelta[] = [];
   for (let start = 0; start < text.length;) {
-    let end = Math.min(start + MODEL_INVOCATION_DELTA_TEXT_MAX, text.length);
+    let end = Math.min(start + size, text.length);
     const last = text.charCodeAt(end - 1);
     if (end < text.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
     output.push(Object.freeze({ kind, text: text.slice(start, end) }));

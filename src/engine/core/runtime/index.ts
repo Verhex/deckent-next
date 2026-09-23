@@ -3,8 +3,9 @@ export type { CancellationRuntimeLoopOptions, CancellationRecoveryPageResult, Ca
 export { RuntimeServiceLifecycle, RuntimeServiceLifecycleError } from './internal/service-lifecycle.js';
 export type { RuntimeServiceDeadline, RuntimeServiceLifecycleOptions, RuntimeServiceDrainResult, RuntimeServiceWorkClass } from './internal/service-lifecycle.js';
 export { RUNTIME_SERVICE_SCHEMA_VERSION, RuntimeServiceProtocolError, classifyRuntimeServiceOperation, parseRuntimeServiceResponse, runtimeServiceResultCapacity, runtimeServiceOperationSchema,
-  runtimeServiceRequestSchema, runtimeServiceResponseSchema, runtimeServiceDescriptionInputSchema, runtimeServiceDeliverySchema } from './internal/service-protocol.js';
-export type { RuntimeServiceDelivery, RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse } from './internal/service-protocol.js';
+  runtimeServiceRequestSchema, runtimeServiceResponseSchema, runtimeServiceDescriptionInputSchema, runtimeServiceDeliverySchema,
+  RUNTIME_SERVICE_STREAM_FRAME_DELTAS, runtimeServiceStreamFrameSchema, isRuntimeServiceStreamingOperation } from './internal/service-protocol.js';
+export type { RuntimeServiceDelivery, RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse, RuntimeServiceStreamFrame } from './internal/service-protocol.js';
 
 export { ReconciliationRecoveryApplication, ReconciliationRecoveryError } from './internal/reconciliation-recovery.js';
 export type { ReconciliationRecoveryCommand, ReconciliationRecoveryInventory, ReconciliationRecoveryExecutor, ReconciliationRecoveryOptions, ReconciliationRecoveryOutcome, ReconciliationRecoveryPage } from './internal/reconciliation-recovery.js';
