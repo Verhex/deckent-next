@@ -3,7 +3,7 @@ import { settleRunCancellation } from './run-settlement.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt } from '#domain/index.js';
+import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt, RunError } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
@@ -160,6 +160,8 @@ export class SqliteRunJournal {
       if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const current = this.decode(row.snapshot, scopeId, runId);
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      // Cancellation closes never-reserved tasks, so report the cause before any capacity/order diagnosis.
+      if (current.cancelRequested) throw new RunError('RUN_CANCEL_REQUESTED');
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;

@@ -32,10 +32,10 @@ async function fixture() {
   return { project, options, path, policy };
 }
 describe.skipIf(process.platform === 'win32')('configured SDK cancellation intent', () => {
-  it('persists intent at relocated data root, replays exactly and shares the inspection view without claiming termination', async () => {
+  it('persists intent at relocated data root, closes the never-reserved task, replays exactly and shares the inspection view', async () => {
     const f = await fixture(); const result = await requestRunCancellation(f.project, command, f.options);
     expect(result.cancellation.run).toMatchObject({ cancellationRequested: true, revision: 1 });
-    expect(result.cancellation.run.tasks[0]!.phase).toBe('pending');
+    expect(result.cancellation.run.tasks[0]).toMatchObject({ phase: 'cancelled', cancellation: { reason: 'prevented-before-launch' } });
     expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(result.cancellation.run);
     expect(await requestRunCancellation(f.project, command, f.options)).toEqual(result);
     await expect(requestRunCancellation(f.project, { ...command, commandId: 'stale' }, f.options)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });

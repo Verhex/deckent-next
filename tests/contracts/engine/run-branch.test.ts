@@ -144,3 +144,31 @@ it('upgrades ledger22 without fabricating decisions for ordinary Runs or rewriti
   expect(await reopened.loadRunReceipt('s', 'create')).toEqual(before);
   expect((await reopened.loadRun('s', 'r'))!.branch).toBeUndefined();
 });
+it('repairs a persisted legacy cancel-requested Run only through a new command at the current revision, never by replay', async () => {
+  const f = await fixture(); await f.app(f.store).create(command);
+  const cancel = { commandId: 'cancel', actor, scopeId: 's', runId: 'r', expectedRevision: 0 };
+  const current = (await f.store.cancelRun(cancel)).snapshot;
+  expect(current.progress.map(task => task.phase)).toEqual(['cancelled', 'cancelled']);
+  // Pre-change shape: flag set, never-reserved tasks still pending, in both the Run row and the immutable old receipt.
+  const legacy = runSnapshotSchema.parse({ ...current, progress: current.progress.map(task => ({ ...task, phase: 'pending' })) });
+  const db = new DatabaseSync(f.path);
+  try {
+    db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify(legacy), 's', 'r');
+    db.prepare('UPDATE run_receipts SET snapshot=? WHERE scope_id=? AND command_id=?').run(JSON.stringify(legacy), 's', 'cancel');
+  } finally { db.close(); }
+  f.store.close(); stores.splice(stores.indexOf(f.store), 1);
+  const store = await f.open();
+  expect((await store.cancelRun(cancel)).snapshot).toEqual(legacy);
+  expect((await store.loadRun('s', 'r'))!.progress.map(task => task.phase)).toEqual(['pending', 'pending']);
+  await expect(store.cancelRun({ ...cancel, commandId: 'repair' })).rejects.toThrow('RUN_STORE_CONFLICT');
+  const repair = { ...cancel, commandId: 'repair', expectedRevision: legacy.revision };
+  const repaired = await store.cancelRun(repair);
+  expect(repaired.snapshot.revision).toBe(legacy.revision + 1);
+  expect(repaired.snapshot.progress.map(task => task.phase)).toEqual(['cancelled', 'cancelled']);
+  expect(await store.cancelRun(repair)).toEqual(repaired);
+  expect((await store.cancelRun(cancel)).snapshot).toEqual(legacy);
+  store.close(); stores.splice(stores.indexOf(store), 1);
+  const reopened = await f.open(); const saved = (await reopened.loadRun('s', 'r'))!;
+  expect(saved.revision).toBe(legacy.revision + 1); expect(saved.progress.map(task => task.phase)).toEqual(['cancelled', 'cancelled']);
+  await expect(reopened.cancelRun({ ...cancel, commandId: 'late', expectedRevision: legacy.revision })).rejects.toThrow('RUN_STORE_CONFLICT');
+});

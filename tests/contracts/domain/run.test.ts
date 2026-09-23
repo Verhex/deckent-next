@@ -60,8 +60,19 @@ it('records cancellation intent without inventing stopped workers or terminal ta
   const reserved = reserveRunTasks(createRun(identity, graph, 0, fixtureExecution(graph)), 0, [attemptIdentity], 0);
   const cancelled = requestRunCancellation(reserved, 1);
   expect(cancelled.cancelRequested).toBe(true); expect(cancelled.progress[0]!.phase).toBe('active');
-  expect(requestRunCancellation(cancelled, 2).revision).toBe(2);
+  // Never-reserved tasks have no attempt or effect and close in the same transition; the bound one waits for evidence.
+  expect(cancelled.progress.filter(task => task.taskId !== attemptIdentity.taskId).every(task => task.phase === 'cancelled')).toBe(true);
+  expect(requestRunCancellation(cancelled, 2)).toEqual(cancelled);
+  const legacy = runSnapshotSchema.parse({ ...cancelled, progress: cancelled.progress.map(task => task.phase === 'cancelled' ? { ...task, phase: 'pending' } : task) });
+  const closed = requestRunCancellation(legacy, 2);
+  expect(closed.revision).toBe(3); expect(closed.progress.map(task => task.phase)).toEqual(cancelled.progress.map(task => task.phase));
   expect(() => reserveRunTasks(cancelled, 2, [{ ...attemptIdentity, taskId: 'b', attemptId: 'b' }], 0)).toThrow('RUN_CANCEL_REQUESTED');
   const stopped = applyAttemptObservation(createAttempt(attemptIdentity), { protocolVersion: 1, identity: attemptIdentity, sequence: 1, eventId: 'stopped', result: { kind: 'cancelled' } }, 0);
-  expect(observeRunAttempt(cancelled, 2, stopped).progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  const reconciling = observeRunAttempt(cancelled, 2, stopped);
+  expect(reconciling.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  // Legacy repair closes only never-reserved tasks; a bound attempt with unresolved effects stays with the reconciler.
+  const legacyReconciling = runSnapshotSchema.parse({ ...reconciling, progress: reconciling.progress.map(task => task.phase === 'cancelled' ? { ...task, phase: 'pending' } : task) });
+  const repaired = requestRunCancellation(legacyReconciling, reconciling.revision);
+  expect(repaired.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  expect(repaired.progress.slice(1).every(task => task.phase === 'cancelled')).toBe(true);
 });
