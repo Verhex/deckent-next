@@ -101,8 +101,9 @@ export async function inferenceCommand(argv: readonly string[], context: Command
   if (parsed.action === 'metrics') {
     if (!context.readInferenceMetrics) throw ErrorRegistry.createError('CLI_USAGE');
     const reading = await context.readInferenceMetrics(root, parsed.profileId === undefined ? {} : { profileId: parsed.profileId }, options);
-    emit(reading, { ...sinks, json: parsed.json, ...(reading.ok ? {} : { level: 'error' as const }),
-      render: value => value.ok ? value.body : t('inference.metrics.refused', { code: value.code, url: value.url ?? '-' }, locale) });
+    // A metrics read that did not happen is a command failure (exit 1), never an empty success.
+    if (!reading.ok) throw ErrorRegistry.createError('INFERENCE_METRICS_UNREAD', { params: { reason: reading.code, url: reading.url ?? '-' }, locale });
+    emit(reading, { ...sinks, json: parsed.json, render: value => value.body });
     return;
   }
   if (parsed.action === 'plan') {

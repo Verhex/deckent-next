@@ -34,7 +34,7 @@ export function readInferenceMetrics(rawInput: InferenceMetricsReadInput): Promi
   if (!loopbackHost(url.hostname)) throw new InferenceMetricsError('INFERENCE_METRICS_HOST_DENIED');
   return new Promise<InferenceMetricsBody>((resolve, reject) => {
     let settled = false;
-    const finish = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+    const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(deadline); fn(); } };
     const req = httpRequest(url, { method: 'GET', headers: { accept: 'text/plain' }, timeout: input.timeoutMs }, response => {
       const status = response.statusCode ?? 0;
       if (status >= 300 && status < 400) {
@@ -60,6 +60,8 @@ export function readInferenceMetrics(rawInput: InferenceMetricsReadInput): Promi
       }));
     });
     req.on('timeout', () => { req.destroy(); finish(() => reject(new InferenceMetricsError('INFERENCE_METRICS_TIMEOUT'))); });
+    // The request `timeout` only bounds socket idleness; this deadline bounds the whole read (a slow drip cannot hold it open).
+    const deadline = setTimeout(() => { req.destroy(); finish(() => reject(new InferenceMetricsError('INFERENCE_METRICS_TIMEOUT'))); }, input.timeoutMs);
     req.on('error', () => finish(() => reject(new InferenceMetricsError('INFERENCE_METRICS_UNAVAILABLE'))));
     req.end();
   });

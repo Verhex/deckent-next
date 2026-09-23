@@ -48,7 +48,7 @@ it('inference metrics only calls the composition handler', async () => {
   stdout.length = 0;
   const denied = await main(['inference', 'metrics', '--json'], { root: f.projectRoot, env: f.env, ...sinks, initialize: registerProviderConfig,
     readInferenceMetrics: async () => ({ ok: false, code: 'INFERENCE_METRICS_HOST_DENIED', url: null }) });
-  expect(denied).toBe(0);
+  expect(denied).toBe(1);
   expect(stdout.join('')).toBe('');
   expect(stderr.join('')).toContain('INFERENCE_METRICS_HOST_DENIED');
   expect(stderr.join('')).not.toContain('secret-body');

@@ -52,4 +52,10 @@ it('reports non-200, size and timeout without the response body', async () => {
   const hung = await listen(() => { /* never respond */ });
   await expect(readInferenceMetrics({ url: `${hung.origin}/metrics`, timeoutMs: 50, responseMaxBytes: 1024 }))
     .rejects.toMatchObject({ code: 'INFERENCE_METRICS_TIMEOUT' });
+  // A server that keeps the socket busy with small chunks never trips the idle timeout; the total deadline still ends the read.
+  const drip = await listen((_url, reply) => { reply.writeHead(200); const timer = setInterval(() => reply.write('x'), 10); reply.on('close', () => clearInterval(timer)); });
+  const started = Date.now();
+  await expect(readInferenceMetrics({ url: `${drip.origin}/metrics`, timeoutMs: 150, responseMaxBytes: 1_000_000 }))
+    .rejects.toMatchObject({ code: 'INFERENCE_METRICS_TIMEOUT' });
+  expect(Date.now() - started).toBeLessThan(1_000);
 });
