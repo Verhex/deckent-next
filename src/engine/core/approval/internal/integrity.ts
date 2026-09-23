@@ -13,7 +13,9 @@ function projection(record: Omit<ApprovalRecord, 'mac'>) {
 }
 export function sealApproval(record: Omit<ApprovalRecord, 'mac' | 'keyId'>, authority: IntegrityAuthority): ApprovalRecord {
   const signed = { ...record, keyId: authority.keyId };
-  return approvalRecordSchema.parse({ ...signed, mac: authority.sign(projection(signed)) });
+  const sealed = approvalRecordSchema.safeParse({ ...signed, mac: authority.sign(projection(signed)) });
+  if (!sealed.success) throw new ApprovalError('APPROVAL_INVALID');
+  return sealed.data;
 }
 export function verifyApproval(input: unknown, authority: IntegrityAuthority): ApprovalRecord {
   const parsed = approvalRecordSchema.safeParse(input);
