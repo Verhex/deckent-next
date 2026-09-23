@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { DeckentError, ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
 import { runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type ChatTurnMessage, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
@@ -90,7 +90,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
     watchFailed: t('terminal.workline.watchFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
     runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
-    runsEmpty: t('terminal.workline.runsEmpty', {}, locale),
+    runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),
+    queued: t('terminal.workline.queued', {}, locale),
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
@@ -129,6 +130,13 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
     }
   } finally { rl.close(); }
   if (interactive) emit(t('terminal.session.closed', {}, locale), sinks);
+}
+
+/** A terminal from a compiled build talking to a service from another (or an unknown, older) build. Source runs never warn. */
+export function runtimeBuildSkew(own: { readonly sourceTreeSha256: string } | null, service: { readonly sourceTreeSha256: string } | null):
+  { readonly service: string | null; readonly terminal: string } | null {
+  if (!own || service?.sourceTreeSha256 === own.sourceTreeSha256) return null;
+  return { service: service ? service.sourceTreeSha256.slice(0, 12) : null, terminal: own.sourceTreeSha256.slice(0, 12) };
 }
 
 export async function terminalCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
@@ -170,13 +178,17 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
-  let serviceLine: string | null = null, serviceFailed = false;
+  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null;
   if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
     try {
       const service = await context.ensureRuntimeService(root, options);
+      const stop = service.shutdownAvailable ? t('terminal.service.stopHint', {}, locale) : t('terminal.service.stopUnavailable', {}, locale);
       serviceLine = service.mode === 'started'
-        ? t('terminal.service.started', { pid: service.pid ?? '-', log: service.logPath ?? '-' }, locale)
-        : t('terminal.service.connected', { instance: service.instanceId }, locale);
+        ? t('terminal.service.started', { pid: service.pid ?? '-', log: service.logPath ?? '-', stop }, locale)
+        : t('terminal.service.connected', { instance: service.instanceId, stop }, locale);
+      // A service started from another build answers with that build's code; say so instead of failing later (Jev 8bb2a0c7).
+      const skew = runtimeBuildSkew(readBuildIdentity(), service.build);
+      if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
@@ -198,7 +210,12 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
-    ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] } : {}),
+    ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
+      ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
+    ...(context.restartRuntimeService ? { restartService: async () => {
+      const restarted = await context.restartRuntimeService!(root, options);
+      return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
+    } } : {}),
     palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })),
     ...(ledger ? { ledger } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),

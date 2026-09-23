@@ -5,7 +5,9 @@ import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
@@ -217,14 +219,26 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   it('`deckent` alone opens the terminal, starts the runtime service in the background and leaves it running for the next terminal', async () => {
     const f = await governedChat();
     const configPath = join(f.projectRoot, '.deckent/config.json');
-    const config = JSON.parse(await readFile(configPath, 'utf8')) as { terminal: Record<string, unknown> };
-    await writeFile(configPath, JSON.stringify({ ...config, terminal: { ...config.terminal, scopeId: 'scope' } }), { mode: 0o600 });
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { terminal: Record<string, unknown>; layout: { root: string } };
+    // An upgraded install: identity + shutdown grant configured, and the ledger still at the previous schema version.
+    await writeFile(configPath, JSON.stringify({ ...config, terminal: { ...config.terminal, scopeId: 'scope' },
+      service: { identity: { scopeId: 'scope', serviceId: 'local' } } }), { mode: 0o600 });
+    const policyPath = join(config.layout.root, 'policy.json');
+    const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: Array<{ principals: unknown }> };
+    await writeFile(policyPath, JSON.stringify({ ...policy, grants: [...policy.grants, { id: 'stop', effect: 'allow', actions: ['shutdown'], scopes: ['scope'],
+      principals: policy.grants[0]!.principals, resource: { kind: 'service', ids: ['local'] } }] }), { mode: 0o600 });
+    const ledgerPath = join(config.layout.root, 'state/ledger.db');
+    const ledger = new DatabaseSync(ledgerPath); ledger.exec(`DROP TABLE worker_event_logs; PRAGMA user_version=${CURRENT_LEDGER_VERSION - 1};`); ledger.close();
     const first = await inPty(f.projectRoot, f.env, [], [['started in the background', 'hello\r'], ['pty-ok', '/exit\r']]);
+    // Register the background service for cleanup before any assertion can fail.
+    const pid = Number(/\(pid (\d+),/.exec(first.output)?.[1]);
+    if (Number.isSafeInteger(pid) && pid > 0) daemons.push(pid);
+    expect(first.output).toContain('deckent runtime shutdown');
+    const log = await readFile(join(config.layout.root, 'state/runtime-service.log'), 'utf8');
+    expect(log).toContain(`Ledger upgraded from schema ${CURRENT_LEDGER_VERSION - 1} to ${CURRENT_LEDGER_VERSION}`);
     expect(first.timeout, first.output).toBeUndefined();
     expect(first.status, first.output).toBe(0);
-    const pid = Number(/\(pid (\d+),/.exec(first.output)?.[1]);
     expect(Number.isSafeInteger(pid) && pid > 0, first.output).toBe(true);
-    daemons.push(pid);
     // The service outlives the terminal and answers other commands.
     const described = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
     expect(JSON.parse(described.stdout)).toMatchObject({ instanceId: expect.any(String) });
@@ -232,6 +246,13 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(second.timeout, second.output).toBeUndefined();
     expect(second.status, second.output).toBe(0);
     expect(second.output).not.toContain('started in the background');
+    // Governed stop without hand-written command fields; the endpoint stops answering and the process exits.
+    await execute(process.execPath, [cli, 'runtime', 'shutdown', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
+    const deadline = Date.now() + 20_000;
+    while (alive(pid) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+    expect(alive(pid)).toBe(false);
+    await expect(execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 }))
+      .rejects.toMatchObject({ stderr: expect.stringContaining('LOCAL_RUNTIME_UNAVAILABLE') });
   });
 
   it('degrades when piped: the rich view refuses with a typed usage error, line mode runs', async () => {

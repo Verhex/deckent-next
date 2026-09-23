@@ -63,11 +63,14 @@ export const shutdownOutcomeSchema = z.object({
 }).readonly();
 
 // Unconfigured installations expose no invented service/scope identity or implied shutdown grant.
+/** Source build the service runs from (absent when started from source or from a build before this field). */
+export const serviceBuildSchema = z.object({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).strict().readonly();
 export const runtimeServiceDescriptorSchema = z.discriminatedUnion('shutdownAvailable', [
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(false), identity: z.null() }).strict(),
+    shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional() }).strict(),
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema }).strict(),
+    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional() }).strict(),
 ]).readonly();
 
 export type ServiceIdentity = z.infer<typeof serviceIdentitySchema>;

@@ -8,7 +8,7 @@ import type { WorkerObservationReport } from '#engine/index.js';
 
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
-  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
+  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
   watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN' };
 
 class Screen extends Writable {
@@ -147,10 +147,11 @@ describe('workline view rendered by Ink', () => {
     view.stdin.write('\u0003'); await until(() => aborted === 1, 'ctrl+c cancels busy turn');
     await until(() => view.stdout.text.includes('ERR:TURN-ABORTED'), 'cancel notice');
     await view.type('again\r'); await until(() => seen.length === 2, 'second turn');
-    await view.type('/help\r'); await until(() => view.stdout.text.includes('> /help'), 'typing kept while busy');
+    // Enter while busy queues the line instead of dropping or blocking it; it runs once the turn has finished.
+    await view.type('/help\r'); await until(() => view.stdout.text.includes('QUEUED: /help'), 'input queued while busy');
     expect(view.stdout.text).not.toContain('/watch-runs');
     view.stdin.write('\u001b'); await until(() => aborted === 2, 'esc cancels');
-    await settle(50); view.stdin.write('\r'); await until(() => view.stdout.text.includes('/watch-runs'), 'kept line submits after the turn');
+    await until(() => view.stdout.text.includes('/watch-runs'), 'queued line runs after the turn');
     expect(seen).toEqual([['system', 'user'], ['system', 'user', 'user']]);
     let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
     await settle(50); view.stdin.write('\u0003'); await until(() => exited, 'idle ctrl+c exits');

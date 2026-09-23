@@ -1,5 +1,5 @@
 export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, readTerminalConfig, terminalConfigSchema, type TerminalChatConfig, readOperationsConfig, findOperation, operationsConfigSchema, type OperationsConfig } from '#adapters/core/contract/index.js';
-export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
+export { openSqliteAttemptStore, openSqliteInventoryReader, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure } from '#adapters/core/docker-supervisor/index.js';

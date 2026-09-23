@@ -26,6 +26,13 @@ export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
   | { readonly ok: false; readonly code: string; readonly url: string | null };
 
+import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
+
+export interface RuntimeServiceReadinessView {
+  readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
+  readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
+}
+
 export interface CommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
@@ -43,8 +50,9 @@ export interface CommandContext {
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectWorkers?: WorkerObservationHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
-  ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly mode: 'connected' | 'started'; readonly instanceId: string;
-    readonly pid: number | null; readonly logPath: string | null }>;
+  ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
+  restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
+  stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   prepareWorkspacePatch?: TaskPatchHandler;

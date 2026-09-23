@@ -17,6 +17,7 @@ export interface RuntimeServiceObserver {
   onReconciliationError?(command: ReconciliationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
+  onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
 export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
@@ -61,6 +62,13 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
       : t('cli.runtime.descriptorUnavailable', { instanceId: descriptor.instanceId }, locale));
     return;
   }
+  if (action === 'shutdown' && Object.keys(shutdown).length === 0 && context.stopRuntimeService) {
+    // No command fields: stop this project's service with a governed command built from its live descriptor.
+    const stopped = await context.stopRuntimeService(root, options);
+    output(stopped.result, () => t('cli.runtime.shutdownAdmitted', { serviceId: stopped.command.serviceId,
+      instanceId: stopped.command.instanceId, commandId: stopped.command.commandId }, locale));
+    return;
+  }
   if (action === 'shutdown') {
     if (!context.shutdownRuntimeService) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
     const command = shutdownCommandSchema.safeParse({ schemaVersion: 1, ...shutdown });
@@ -96,6 +104,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
         () => t('cli.runtime.recovery', { count: outcomes.length }, locale)); },
     onError: async (_command, error) => { output({ schemaVersion: 1, event: 'recovery-failed', code: error.code },
       () => t('cli.runtime.recoveryFailed', { code: error.code }, locale), 'error'); },
+    onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
+      () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
   }, options);
   try {
     output({ schemaVersion: 1, event: 'ready', endpoint: host.endpoint }, () => t('cli.runtime.ready', { endpoint: host.endpoint }, locale));

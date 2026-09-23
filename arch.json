@@ -203,6 +203,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/engine/core/runtime",
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
         "src/composition/core/installation",
@@ -387,6 +388,9 @@
     },
     "src/composition/core/runtime-service": {
       "dependencies": [
+        "src/platform/core/host",
+        "src/adapters/core/docker-supervisor",
+        "src/adapters/core/sqlite-ledger",
         "src/adapters/core/attempt-store",
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",

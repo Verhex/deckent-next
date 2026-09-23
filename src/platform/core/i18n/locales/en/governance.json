@@ -779,6 +779,7 @@
   "error.LOCAL_RUNTIME_UNSUPPORTED": "This local runtime transport currently requires Linux.",
   "error.LOCAL_RUNTIME_OPTIONS": "The local runtime connection settings are invalid.",
   "error.INFERENCE_METRICS_UNREAD": "Inference metrics were not read ({reason}) at {url}. Deckent does not start the server.",
+  "error.RUNTIME_SHUTDOWN_UNAVAILABLE": "This runtime service has no configured identity, so it cannot be stopped through governed shutdown. Set `service.identity` ({scopeId, serviceId}) in .deckent/config.json and grant `shutdown` on that service in policy, then restart the service once.",
   "error.RUNTIME_AUTOSTART_FAILED": "The local runtime service could not be started automatically. See the service log at {log}, or start it in the foreground with `deckent runtime serve`.",
   "error.TERMINAL_SCOPE_REQUIRED": "The terminal needs a scope. Set `terminal.scopeId` in .deckent/config.json or run `deckent terminal workline --scope <id>`.",
   "error.LOCAL_RUNTIME_UNAVAILABLE": "The local runtime service is not running for this project. Start it with `deckent runtime serve`.",

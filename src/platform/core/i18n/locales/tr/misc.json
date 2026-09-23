@@ -612,6 +612,7 @@
   "cli.graph.expected": "geçerli UTF-8 JSON gerekli",
   "cli.graph.configuredLimit": "yapılandırılmış sınır",
   "config.field.service": "Ortak yerel runtime servisi sınırları ve kontrollü kapanış",
+  "cli.runtime.ledgerUpgraded": "Ledger şeması {from} sürümünden {to} sürümüne yükseltildi; önceki ledger şuraya yedeklendi: {backup}.",
   "cli.runtime.ready": "Runtime servisi hazır: {endpoint}.",
   "cli.toolchains.update": "Toolchain güncelleme: {decision}; sonraki sürüm {version}; imaj {image}; öneri {proposal}",
   "cli.runtime.toolchains": "Açılışta toolchain güncelliği: {count} eski sağlayıcı (yalnız rapor).",

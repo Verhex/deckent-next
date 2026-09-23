@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
+import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -20,6 +21,14 @@ const plan = { schemaVersion: 1 as const, status: 'ready' as const, reference: {
   catalogRevision: 'r1', maxCompletionTokens: 64, historyMessages: 3 };
 
 describe('deckent terminal CLI', () => {
+  it('flags a runtime service from another or an unknown build, never a source run or the same build', () => {
+    const a = { sourceTreeSha256: 'a'.repeat(64) }, b = { sourceTreeSha256: 'b'.repeat(64) };
+    expect(runtimeBuildSkew(a, a)).toBeNull();
+    expect(runtimeBuildSkew(null, b)).toBeNull();
+    expect(runtimeBuildSkew(a, b)).toEqual({ service: 'b'.repeat(12), terminal: 'a'.repeat(12) });
+    expect(runtimeBuildSkew(a, null)).toEqual({ service: null, terminal: 'a'.repeat(12) });
+  });
+
   it('opens the interactive terminal for bare `deckent` only on a real terminal; piped or dumb terminals get help', async () => {
     const f = await fixture(); let ensured = 0;
     const tty = (term: string) => ({ root: f.project, env: { ...f.env, TERM: term }, initialize() {},

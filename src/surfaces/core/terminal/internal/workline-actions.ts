@@ -9,6 +9,8 @@ export interface WorklineActionLabels {
   readonly runNotFound: string;
   readonly workersEmpty: string;
   readonly runsEmpty: string;
+  readonly serviceRestartUnavailable: string;
+  readonly queued: string;
   readonly runUsage: string;
   readonly watchStarted: string;
   readonly watchRunsStarted: string;
@@ -23,6 +25,7 @@ export interface WorklineActionContext {
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
   readonly watch: WatchState;
+  readonly canRestartService?: boolean;
 }
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
@@ -58,6 +61,7 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
     return null;
   }
   if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
+  if (command === 'service-restart') return context.canRestartService ? null : { entries: [notice('error', labels.serviceRestartUnavailable)] };
   return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
 }
 

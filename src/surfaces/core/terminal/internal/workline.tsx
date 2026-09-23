@@ -41,6 +41,8 @@ export interface WorklineProps {
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
   readonly pollMs?: number;
+  /** Governed restart of the runtime service onto the current build; returns the line to show. */
+  readonly restartService?: () => Promise<string>;
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'error'; readonly text: string }>;
 }
@@ -72,7 +74,11 @@ export function WorklineApp(props: WorklineProps) {
     lineRef.current = typeof next === 'function' ? next(lineRef.current) : next;
     setLineState(lineRef.current);
   }, []);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  // Input typed while a turn runs is queued in order and never dropped (legacy input-queue contract).
+  const busyRef = useRef(false);
+  const queue = useRef<string[]>([]);
+  const setBusy = useCallback((next: boolean) => { busyRef.current = next; setBusyState(next); }, []);
   const [cancelling, setCancelling] = useState(false);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const history = useRef<readonly ChatTurnMessage[]>([{ role: 'system', content: systemPrompt }]);
@@ -159,25 +165,39 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, push, systemPrompt]);
 
-  const submit = useCallback(async () => {
-    const trimmed = lineRef.current.trim();
+  const submit = useCallback(async (queued?: string): Promise<void> => {
+    const trimmed = (queued ?? lineRef.current).trim();
     if (!trimmed) return;
+    if (queued === undefined && busyRef.current) {
+      queue.current.push(trimmed); setLine('');
+      push([notice('info', `${labels.queued}: ${trimmed}`)]);
+      return;
+    }
     const slash = parseSlashLine(trimmed);
-    if (!slash) { setLine(''); await runTurn(trimmed); return; }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch });
+    if (!slash) {
+      if (queued === undefined) setLine('');
+      await runTurn(trimmed);
+      const next = queue.current.shift();
+      if (next !== undefined) await submit(next);
+      return;
+    }
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch, canRestartService: Boolean(props.restartService) });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
     if (action?.exit) { exit(); return; }
-    setLine('');
+    if (queued === undefined) setLine('');
     if (action) {
       push(action.entries);
       if (action.watch) setWatch(action.watch);
       return;
     }
     setBusy(true);
-    try { push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs', slash.args, ledger!, labels)); }
+    try {
+      if (slash.command === 'service-restart') push([notice('info', await props.restartService!())]);
+      else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs', slash.args, ledger!, labels));
+    }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
-  }, [errorText, exit, labels, ledger, push, runTurn, setLine, watch]);
+  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, setLine, watch]);
 
   useInput((input, key) => {
     if (busy && (key.escape || (key.ctrl && input === 'c'))) {
@@ -186,15 +206,15 @@ export function WorklineApp(props: WorklineProps) {
       return;
     }
     if (key.ctrl && input === 'c') { exit(); return; }
-    // While busy the line stays editable and is kept; it is submitted with Enter once the turn has finished.
-    if (key.return) { if (!busy) void submit(); return; }
+    // While busy, Enter queues the line (FIFO); queued lines run in order after the current turn.
+    if (key.return) { void submit(); return; }
     if (key.backspace || key.delete) { setLine(current => current.slice(0, -1)); return; }
     if (!input || key.ctrl || key.meta) return;
     // Fast typing, a PTY or a paste can deliver text and Enter in one chunk (Ink then reports no return key).
     // A trailing Enter submits; newlines inside the chunk stay part of the message.
     const submitted = /[\r\n]$/.test(input) && input.length > 1;
     setLine(current => current + input.replace(/[\r\n]+$/, '').replace(/\r\n?/g, '\n'));
-    if (submitted && !busy) void submit();
+    if (submitted) void submit();
   });
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant };

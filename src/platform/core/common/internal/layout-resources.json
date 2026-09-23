@@ -19,7 +19,8 @@
     "workspaces": "workspaces",
     "policy": "policy.json",
     "runtimeSocket": "state/runtime.sock",
-    "runtimeLog": "state/runtime-service.log"
+    "runtimeLog": "state/runtime-service.log",
+    "ledgerBackups": "state/backups"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

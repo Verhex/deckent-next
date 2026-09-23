@@ -12,6 +12,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'watch-stop', descriptionKey: 'terminal.slash.watchStop' },
   { name: 'run', descriptionKey: 'terminal.slash.run' },
   { name: 'runs', descriptionKey: 'terminal.slash.runs' },
+  { name: 'service-restart', descriptionKey: 'terminal.slash.serviceRestart' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },

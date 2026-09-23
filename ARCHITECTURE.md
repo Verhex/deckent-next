@@ -408,8 +408,16 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `deckent runtime shutdown`. An existing service is reused; an endpoint that fails ownership checks is never replaced;
   a start failure is shown in the view (`RUNTIME_AUTOSTART_FAILED` with the log path) and is not fatal. Piped line
   mode and other CLI/MCP commands never start a service; `terminal.autostartService: false` only connects.
-  Open: the terminal does not yet detect a service started from an older build (version skew), and the service
-  lifecycle has no idle stop or upgrade handoff.
+  **Lifecycle (T0b, Jev 8bb2a0c7):** the service descriptor carries an optional `build` (source tree digest and commit);
+  a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
+  build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
+  be in flight. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
+  descriptor; a service without `service.identity` cannot be stopped that way (`RUNTIME_SHUTDOWN_UNAVAILABLE` says how
+  to configure identity and a shutdown grant) and the terminal banner says so. **Upgrade:** `runtime serve` upgrades an
+  existing older ledger once at startup, before accepting connections: a consistent copy is written first
+  (`VACUUM INTO` the `ledgerBackups` resource `state/backups/ledger-v<N>-<time>.db`, 0600, never over an existing file),
+  then the normal single-transaction migration runs and the service reports from/to versions. A missing or current
+  ledger is untouched; clients and read paths never migrate. Open: idle stop, error parameters across the protocol.
 - **Adapters:** `deckent terminal workline [--scope <id>]` is the Ink view and requires TTY stdin and stdout
   (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session [--scope <id>]` is line mode and also serves piped
   input (slash input stays local: `/status` answers locally, unknown commands are reported, never sent to the model); `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime

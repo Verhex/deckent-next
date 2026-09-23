@@ -5,8 +5,8 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError } from '#adapters/index.js';
+import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade } from '#adapters/index.js';
 import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -23,6 +23,17 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onReconciliationError?: ConfiguredReconciliationRuntimeObserver['onError'];
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
   onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
+  onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
+}
+
+/** An existing older ledger is backed up and migrated once, before the service accepts connections (Jev 8bb2a0c7). */
+async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
+  let path: string;
+  try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
+  catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
+  const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
+    new Date(), { validate: validateDockerSupervisorProfile });
+  if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
 }
 
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
@@ -31,6 +42,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
+  await upgradeLedgerAtStart(config, observer);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
     onPage: (command, result) => observer.onReconciliationPage?.(command, result),
@@ -43,8 +55,10 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
     onError: (command, error) => observer.onModelCancellationError?.(command, error),
   }, options);
+  const build = readBuildIdentity();
   const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
-    shutdownAvailable: config.service.identity !== null, identity: config.service.identity });
+    shutdownAvailable: config.service.identity !== null, identity: config.service.identity,
+    ...(build ? { build: { sourceTreeSha256: build.sourceTreeSha256, sourceCommit: build.sourceCommit } } : {}) });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
     serviceInstanceSchema.parse({ ...config.service.identity, instanceId })) : null;
   const remoteShutdowns = new Map<string, Promise<void>>();
