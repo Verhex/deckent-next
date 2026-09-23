@@ -47,6 +47,17 @@ describe('durable verified approval application', () => {
       try { expect(reopened.store.load('scope', cli.request.approvalId)).toEqual(cli); } finally { reopened.close(); }
     } finally { await f.close(); }
   });
+  it('records a decision no earlier than the request when the host wall clock has stepped back (measured on WSL2)', async () => {
+    const f = await fixture();
+    try {
+      // The request was created at 1020 by a process whose clock was ahead; this process decides at its own 1000.
+      const ahead = requestTaskApproval(f.journal.store, f.integrity, { scopeId: 'scope', runId: 'run', taskId: 'task',
+        requester: f.record.request.requester, actionDigest: 'b'.repeat(64), policyRevision: 'policy', summary: 'Execute task', createdAt: 1020, expiresAt: 1100 });
+      const decided = await f.make('cli').decide({ ...f.command, approvalId: ahead.request.approvalId, commandId: 'ahead' });
+      expect(decided).toMatchObject({ status: 'decided', decision: { decidedAt: 1020 } });
+      expect(verifyApproval(decided, f.integrity).status).toBe('decided');
+    } finally { await f.close(); }
+  });
   it('a conflicting decision has one winner and leaves no second receipt', async () => {
     const f = await fixture();
     try {

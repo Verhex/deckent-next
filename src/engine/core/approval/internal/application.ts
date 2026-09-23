@@ -103,7 +103,9 @@ export class ApprovalApplication {
     record = this.expired(record, now);
     if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
     const decision = { commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
-      channel: this.channel, reason: command.reason, decidedAt: now, requestDigest: approvalRequestDigest(record.request),
+      // Another process may have created the request at a later wall time than this host's (stepped-back) clock reports;
+      // the decision certainly happened after creation, so it is never recorded earlier than it.
+      channel: this.channel, reason: command.reason, decidedAt: Math.max(now, record.request.createdAt), requestDigest: approvalRequestDigest(record.request),
       commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId) };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
