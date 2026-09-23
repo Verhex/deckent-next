@@ -16,3 +16,4 @@ export { loadRunViewsForWatch } from './internal/workline-ledger.js';
 export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry } from './internal/work-ledger.js';
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';
+export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from './internal/turn-stream.js';
