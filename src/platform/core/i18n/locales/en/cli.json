@@ -700,8 +700,8 @@
   "terminal.status.inferenceAbsent": "No inference_serving profile configured.",
   "terminal.status.inference": "Inference profile {profile} · token budget {tokenBudget} · max-seq {maxSeqs} · endpoint {endpoint}",
   "terminal.status.hint": "Interactive terminal: `deckent`. Line mode: `deckent terminal session [--scope <id>]`.",
-  "terminal.workline.banner": "Deckent workline. Esc cancels a running turn; /exit or Ctrl+C when idle quits.",
-  "terminal.workline.hint": "Slash: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /exit",
+  "terminal.workline.banner": "Deckent workline. Esc cancels a running turn; /exit, Ctrl+D or Ctrl+C twice when idle quits.",
+  "terminal.workline.hint": "Enter send · Alt+Enter new line · Tab completes /commands · Up/Down history · Ctrl+R search · ? shortcuts",
   "terminal.workline.watchStarted": "Worker watch on — new workers append to the work ledger.",
   "terminal.workline.watchRunsStarted": "Run watch on — revision/phase changes append run cards.",
   "terminal.workline.watchStopped": "Worker and run watch stopped.",
@@ -749,5 +749,10 @@
   "terminal.chat.systemPrompt": "You are the Deckent operator terminal assistant. Answer briefly. You cannot run, approve or change work yourself; point the operator to Deckent commands instead.",
   "terminal.workline.statusCancelling": "Cancelling…",
   "terminal.workline.watchFailed": "Watch poll failed",
-  "terminal.workline.unknownCommand": "Unknown command"
+  "terminal.workline.unknownCommand": "Unknown command",
+  "terminal.composer.pasteChip": "[Pasted {lines} lines]",
+  "terminal.composer.search": "(reverse-i-search)",
+  "terminal.composer.exitArmed": "Press Ctrl+C again to exit.",
+  "terminal.composer.shortcuts": "Keyboard shortcuts\nEnter  send (queued while a turn runs)\nShift+Enter · Alt+Enter · Ctrl+J · \\ then Enter  new line\nEsc · Ctrl+C  cancel the running turn · Esc closes a menu\nCtrl+C  clear the draft · twice on an empty line to exit\nCtrl+D  exit on an empty line\nUp/Down  move between draft lines · history at the edges\nCtrl+R  search history (Ctrl+R again: older, Enter: take)\nTab  complete a /command or @path\nLeft/Right · Ctrl/Alt+Left/Right  character · word\nHome/End · Ctrl+A/Ctrl+E  line start · line end\nCtrl+W · Alt+Backspace  delete the previous word\nCtrl+U · Ctrl+K · Ctrl+Y  cut to line start · cut to line end · paste the cut back\n?  this panel (empty line) · Esc closes",
+  "terminal.slash.runArgument": "<runId>"
 }

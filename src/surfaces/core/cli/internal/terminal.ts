@@ -95,6 +95,14 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
+    composer: { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
+      exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
+      slash: { 'terminal.slash.status': t('terminal.slash.status', {}, locale), 'terminal.slash.workers': t('terminal.slash.workers', {}, locale),
+        'terminal.slash.watchWorkers': t('terminal.slash.watchWorkers', {}, locale), 'terminal.slash.watchRuns': t('terminal.slash.watchRuns', {}, locale),
+        'terminal.slash.watchStop': t('terminal.slash.watchStop', {}, locale), 'terminal.slash.run': t('terminal.slash.run', {}, locale),
+        'terminal.slash.runArgument': t('terminal.slash.runArgument', {}, locale), 'terminal.slash.runs': t('terminal.slash.runs', {}, locale),
+        'terminal.slash.serviceRestart': t('terminal.slash.serviceRestart', {}, locale), 'terminal.slash.exit': t('terminal.slash.exit', {}, locale),
+        'terminal.slash.help': t('terminal.slash.help', {}, locale) } },
   };
 }
 

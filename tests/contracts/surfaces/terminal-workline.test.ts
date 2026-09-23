@@ -9,7 +9,10 @@ import type { WorkerObservationReport } from '#engine/index.js';
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
-  watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN' };
+  watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
+  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
+// The /help notice joins commands with " · "; the slash popup lists them one per row, so this only matches the notice.
+const HELP_NOTICE = '/watch-runs · /watch-stop';
 
 class Screen extends Writable {
   text = '';
@@ -98,7 +101,7 @@ describe('workline view rendered by Ink', () => {
       async inspectRun() { return null; } } });
     await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-299'), 'first page');
     await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-599'), 'second page');
-    await view.type('/help\r'); await until(() => view.stdout.text.includes('/watch-runs'), 'help after 600 rows');
+    await view.type('/help\r'); await until(() => view.stdout.text.includes(HELP_NOTICE), 'help after 600 rows');
     for (const id of ['task-0', 'task-401', 'task-599']) expect(view.stdout.text).toContain(id);
   });
 
@@ -137,7 +140,7 @@ describe('workline view rendered by Ink', () => {
     await until(() => exited, '/exit after turn');
   });
 
-  it('cancels a running turn with Ctrl+C or Esc instead of exiting, then exits on idle Ctrl+C', async () => {
+  it('cancels a running turn with Ctrl+C or Esc instead of exiting, then exits on a second idle Ctrl+C', async () => {
     const seen: string[][] = []; let aborted = 0;
     const view = mount({ completeTurn: (messages, signal) => new Promise((_resolve, reject) => {
       seen.push(messages.map(message => message.role));
@@ -149,12 +152,15 @@ describe('workline view rendered by Ink', () => {
     await view.type('again\r'); await until(() => seen.length === 2, 'second turn');
     // Enter while busy queues the line instead of dropping or blocking it; it runs once the turn has finished.
     await view.type('/help\r'); await until(() => view.stdout.text.includes('QUEUED: /help'), 'input queued while busy');
-    expect(view.stdout.text).not.toContain('/watch-runs');
+    expect(view.stdout.text).not.toContain(HELP_NOTICE);
     view.stdin.write('\u001b'); await until(() => aborted === 2, 'esc cancels');
-    await until(() => view.stdout.text.includes('/watch-runs'), 'queued line runs after the turn');
+    await until(() => view.stdout.text.includes(HELP_NOTICE), 'queued line runs after the turn');
     expect(seen).toEqual([['system', 'user'], ['system', 'user', 'user']]);
     let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
-    await settle(50); view.stdin.write('\u0003'); await until(() => exited, 'idle ctrl+c exits');
+    // Idle Ctrl+C on an empty draft arms exit with a notice; the second press inside the window exits.
+    await settle(50); view.stdin.write('\u0003'); await until(() => view.stdout.text.includes('EXIT-ARMED'), 'first idle ctrl+c arms');
+    expect(exited).toBe(false);
+    view.stdin.write('\u0003'); await until(() => exited, 'second idle ctrl+c exits');
   });
 
   it('renders no colour escape sequences at the none tier (NO_COLOR / --no-color / non-TTY)', async () => {

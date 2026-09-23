@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
-import { render, Box, Static, Text, useApp, useInput, type Instance } from 'ink';
+import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import type { WorklineInkPalette } from './ink-palette.js';
 import { WorklinePaletteProvider, useWorklinePalette } from './ink-palette-context.js';
 import { StatusStrip } from './status-strip.js';
@@ -14,6 +14,9 @@ import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
+import { Composer, type ComposerLabels } from './composer/composer.js';
+import type { ComposerHistoryPort } from './composer/reducer.js';
+import type { ComposerMentionPort } from './composer/assist.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -27,6 +30,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly runCard: string;
   readonly workerCard: string;
   readonly watchFailed: string;
+  readonly composer: ComposerLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -45,6 +49,9 @@ export interface WorklineProps {
   readonly restartService?: () => Promise<string>;
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
   readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'error'; readonly text: string }>;
+  /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
+  readonly inputHistory?: ComposerHistoryPort;
+  readonly mentions?: ComposerMentionPort;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -67,13 +74,6 @@ export function WorklineApp(props: WorklineProps) {
   const palette = useWorklinePalette();
   const { exit } = useApp();
   const { buffer, push } = useLedgerBuffer();
-  const [line, setLineState] = useState('');
-  // The current line lives in a ref so a submit in the same input chunk never reads a stale render's line.
-  const lineRef = useRef('');
-  const setLine = useCallback((next: string | ((current: string) => string)) => {
-    lineRef.current = typeof next === 'function' ? next(lineRef.current) : next;
-    setLineState(lineRef.current);
-  }, []);
   const [busy, setBusyState] = useState(false);
   // Input typed while a turn runs is queued in order and never dropped (legacy input-queue contract).
   const busyRef = useRef(false);
@@ -165,26 +165,24 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, push, systemPrompt]);
 
-  const submit = useCallback(async (queued?: string): Promise<void> => {
-    const trimmed = (queued ?? lineRef.current).trim();
+  const submit = useCallback(async (text: string, queued = false): Promise<void> => {
+    const trimmed = text.trim();
     if (!trimmed) return;
-    if (queued === undefined && busyRef.current) {
-      queue.current.push(trimmed); setLine('');
+    if (!queued && busyRef.current) {
+      queue.current.push(trimmed);
       push([notice('info', `${labels.queued}: ${trimmed}`)]);
       return;
     }
     const slash = parseSlashLine(trimmed);
     if (!slash) {
-      if (queued === undefined) setLine('');
       await runTurn(trimmed);
       const next = queue.current.shift();
-      if (next !== undefined) await submit(next);
+      if (next !== undefined) await submit(next, true);
       return;
     }
     const action = immediateSlashAction(slash.command, { ledger, labels, watch, canRestartService: Boolean(props.restartService) });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
     if (action?.exit) { exit(); return; }
-    if (queued === undefined) setLine('');
     if (action) {
       push(action.entries);
       if (action.watch) setWatch(action.watch);
@@ -197,25 +195,12 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
-  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, setLine, watch]);
+  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, watch]);
 
-  useInput((input, key) => {
-    if (busy && (key.escape || (key.ctrl && input === 'c'))) {
-      // A running turn is cancelled, never abandoned: the governed invocation receives a cancellation request.
-      if (turn.current && !cancelling) { setCancelling(true); turn.current.abort(); }
-      return;
-    }
-    if (key.ctrl && input === 'c') { exit(); return; }
-    // While busy, Enter queues the line (FIFO); queued lines run in order after the current turn.
-    if (key.return) { void submit(); return; }
-    if (key.backspace || key.delete) { setLine(current => current.slice(0, -1)); return; }
-    if (!input || key.ctrl || key.meta) return;
-    // Fast typing, a PTY or a paste can deliver text and Enter in one chunk (Ink then reports no return key).
-    // A trailing Enter submits; newlines inside the chunk stay part of the message.
-    const submitted = /[\r\n]$/.test(input) && input.length > 1;
-    setLine(current => current + input.replace(/[\r\n]+$/, '').replace(/\r\n?/g, '\n'));
-    if (submitted) void submit();
-  });
+  // A running turn is cancelled, never abandoned: the governed invocation receives a cancellation request.
+  const cancel = useCallback(() => {
+    if (turn.current && !cancelling) { setCancelling(true); turn.current.abort(); }
+  }, [cancelling]);
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant };
   return (
@@ -225,9 +210,9 @@ export function WorklineApp(props: WorklineProps) {
       </Static>
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy} />
-      <Box borderStyle="round" paddingX={1}>
-        <Text>{labels.prompt}{line}</Text>
-      </Box>
+      {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D. */}
+      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} onSubmit={text => void submit(text)} onCancel={cancel} onExit={exit}
+        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
   );
@@ -241,7 +226,7 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly signal?: AbortSignal;
 }
 
-/** Ctrl+C is handled by the view (cancel a running turn, otherwise exit); the outer signal unmounts the view. */
+/** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ...props } = options;
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: createElement(WorklineApp, props) }),
