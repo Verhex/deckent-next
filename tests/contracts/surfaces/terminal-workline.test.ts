@@ -8,7 +8,7 @@ import type { WorkerObservationReport } from '#engine/index.js';
 
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
-  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
+  ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
   watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN' };
 
 class Screen extends Writable {
@@ -86,6 +86,31 @@ describe('workline view rendered by Ink', () => {
     await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-599'), 'second page');
     await view.type('/help\r'); await until(() => view.stdout.text.includes('/watch-runs'), 'help after 600 rows');
     for (const id of ['task-0', 'task-401', 'task-599']) expect(view.stdout.text).toContain(id);
+  });
+
+  it('appends one inspection card per inventory run and does not invent a run', async () => {
+    const seen: string[] = [];
+    const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
+      async listWorkers() { return workers(0, 0); },
+      async listRunIds() { return ['run-a', 'run-b']; },
+      async inspectRun(runId: string) {
+        seen.push(runId);
+        return { runId, scopeId: 'scope-a', revision: 3, cancellationRequested: false, tasks: [{ phase: 'running' }] } as never;
+      } } });
+    await view.type('/runs\r');
+    await until(() => view.stdout.text.includes('run-a') && view.stdout.text.includes('run-b'), 'run cards');
+    expect(seen).toEqual(['run-a', 'run-b']);
+  });
+
+  it('reports an empty inventory and refuses /runs when inventory is not wired', async () => {
+    const empty = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
+      async listWorkers() { return workers(0, 0); }, async listRunIds() { return []; }, async inspectRun() { return null; } } });
+    await empty.type('/runs\r');
+    await until(() => empty.stdout.text.includes('NO-RUNS'), 'empty inventory');
+    const unwired = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
+      async listWorkers() { return workers(0, 0); }, async inspectRun() { return null; } } });
+    await unwired.type('/runs\r');
+    await until(() => unwired.stdout.text.includes('NO-LEDGER'), 'inventory not wired');
   });
 
   it('closes the view with /exit after a completed turn', async () => {

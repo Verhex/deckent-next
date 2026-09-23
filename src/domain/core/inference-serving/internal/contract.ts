@@ -46,6 +46,11 @@ export const inferenceServingProfileSchema = z.object({
     computeCap: counterSchema.positive(),
     observedTokenCapacity: counterSchema.positive().optional(),
   }).strict().readonly(),
+  /** Loopback /metrics read limits. Absent means the read is refused; the adapter does not invent them. */
+  metrics: z.object({
+    timeoutMs: z.number().int().positive().max(2_147_483_647),
+    responseMaxBytes: z.number().int().positive().safe(),
+  }).strict().readonly().optional(),
 }).strict().readonly();
 
 export const inferenceServingConfigSchema = z.object({

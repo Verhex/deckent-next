@@ -219,7 +219,8 @@
         "src/composition/core/workspace-patch",
         "src/composition/core/worker-observation",
         "src/composition/core/toolchains",
-        "src/composition/core/operations"
+        "src/composition/core/operations",
+        "src/composition/core/inference-metrics"
       ],
       "plan": "SURFACES"
     },
@@ -1296,6 +1297,18 @@
     },
     "src/adapters/core/npm-registry": {
       "dependencies": [],
+      "plan": "PROVIDERS"
+    },
+    "src/adapters/core/inference-metrics": {
+      "dependencies": [],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/inference-metrics": {
+      "dependencies": [
+        "src/adapters/core/inference-metrics",
+        "src/engine/core/inference-serving",
+        "src/platform/core/config"
+      ],
       "plan": "PROVIDERS"
     },
     "src/composition/core/toolchains": {

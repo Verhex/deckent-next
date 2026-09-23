@@ -1,14 +1,33 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { createServer, type Server } from 'node:https';
 import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
+import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
+import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
+import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
+import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { createPricedProviderTls, fixtureBudget } from '../../fixtures/priced-provider.js';
 
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
-const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
+const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
+afterEach(async () => {
+  for (const child of runtimes.splice(0)) {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      await new Promise<void>(resolve => child.once('exit', () => resolve()));
+    }
+  }
+  clearConfigCache();
+  await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 
 /**
  * A real pseudo-terminal (python3 `pty`, POSIX only): the built executable sees TTY stdin/stdout, raw keys and a window
@@ -34,14 +53,14 @@ def read_for(seconds):
             out += chunk
     return True
 for wait, send in steps:
-    deadline = time.time() + 15
+    deadline = time.time() + 25
     while wait.encode() not in out:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.3)  # let the view settle (raw mode, input subscription) before typing
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.01)
-deadline = time.time() + 15
+deadline = time.time() + 25
 status = None
 while status is None and time.time() < deadline:
     read_for(0.1)
@@ -66,8 +85,89 @@ async function project(config: Record<string, unknown> = {}) {
 
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string]>) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps)],
-    { cwd, env, timeout: 60_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
+    { cwd, env, timeout: 90_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
   return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
+}
+
+async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: projectRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  runtimes.push(child);
+  let stderr = '', buffer = '';
+  child.stderr!.on('data', chunk => { stderr += String(chunk); });
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`RUNTIME_READY_TIMEOUT:${stderr.slice(-800)}`)), 20_000);
+    const failed = () => { clearTimeout(timer); reject(new Error(`RUNTIME_START_FAILED:${stderr.slice(-800)}`)); };
+    child.once('error', failed);
+    child.once('exit', failed);
+    child.stdout!.on('data', chunk => {
+      buffer += String(chunk);
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        try {
+          if ((JSON.parse(line) as { event?: string }).event === 'ready') {
+            clearTimeout(timer);
+            child.off('error', failed);
+            child.off('exit', failed);
+            resolve();
+          }
+        } catch { /* The ready line is JSON. */ }
+      }
+    });
+  });
+}
+
+/** Local priced OpenAI fixture and a governed activation. No external network. */
+async function governedChat() {
+  await access(cli).catch(() => { throw new Error('BUILD_REQUIRED'); });
+  const root = await mkdtemp(join(tmpdir(), 'deckent-terminal-governed-'));
+  roots.push(root);
+  const projectRoot = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
+  await Promise.all([mkdir(join(projectRoot, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
+  const tls = await createPricedProviderTls(root);
+  const server = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
+    if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
+    request.resume();
+    request.on('end', () => {
+      reply.writeHead(200, { 'content-type': 'application/json' });
+      reply.end(JSON.stringify({ id: 'pty', object: 'chat.completion', created: 1, model: 'vendor/model',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'pty-ok', refusal: null } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+    });
+  });
+  servers.push(server);
+  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => resolve()); });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
+  const origin = `https://127.0.0.1:${address.port}`;
+  const reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
+  const model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] };
+  const catalog = { schemaVersion: 1 as const, revision: 'catalog-pty', providers: [{ id: 'openrouter', version: 1, models: [model] }] };
+  const definition = { encodingVersion: 1 as const, provider: { id: 'openrouter', version: 1 }, model };
+  const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
+  const zero = { kind: 'operator-static' as const, version: 1 as const, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 };
+  const profile = { schemaVersion: 1, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
+    protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
+      definition: { endpoint: `${origin}/chat`, maxOutputTokens: 8, authentication: { type: 'none' }, tls: { caPem: tls.caPem }, tariff: zero } },
+    allocation: { id: 'allocation', maxCalls: 4, maxInFlight: 2 }, limits: { requestMaxBytes: 8192, responseMaxBytes: 8192, timeoutMs: 5_000 } };
+  await writeFile(join(projectRoot, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
+    provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
+    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 8 } },
+    cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
+    cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
+  const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
+  const activation = new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
+    new ModelBindingApplication({ async read() { return catalog; } }), async () => openSqliteModelActivationStore(ledger, sqlite), () => 1);
+  await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
+    expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding });
+  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants: [
+    { id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'cancel-invocation'], scopes: ['scope'],
+      principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
+  ] }), { mode: 0o600 });
+  const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
+    DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
+  return { projectRoot, env };
 }
 
 describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo-terminal', () => {
@@ -91,6 +191,18 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [['Deckent workline', '\u0003']]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
+  });
+
+  it('exits 0 after a successful governed chat turn', async () => {
+    const f = await governedChat();
+    await startRuntime(f.projectRoot, f.env);
+    const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
+      ['Deckent workline', 'hello\r'],
+      ['pty-ok', '/exit\r'],
+    ]);
+    expect(result.timeout, result.output).toBeUndefined();
+    expect(result.status, result.output).toBe(0);
+    expect(result.output).toContain('pty-ok');
   });
 
   it('degrades when piped: the rich view refuses with a typed usage error, line mode runs', async () => {
