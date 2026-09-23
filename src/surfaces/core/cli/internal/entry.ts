@@ -11,7 +11,7 @@ import { modelsCommand } from './models.js';
 import { operationCommand } from './operation.js';
 import { inferenceCommand } from './inference.js';
 import { terminalCommand } from './terminal.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -20,7 +20,12 @@ export function dispatch(argv: readonly string[]): { readonly output: string; re
   const [command] = argv;
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
   if (command === undefined || command === '--help' || command === '-h') return { output: t('cli.help', common), code: 0 };
-  if (command === '--version' || command === '-v') return { output: t('cli.version', common), code: 0 };
+  if (command === '--version' || command === '-v') {
+    const build = readBuildIdentity();
+    const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
+      dirty: build.sourceDirty ? t('cli.version.dirty') : '' }) : '';
+    return { output: t('cli.version', common) + line, code: 0 };
+  }
   return { output: t('cli.unknownCommand', { ...common, command }), code: 2 };
 }
 

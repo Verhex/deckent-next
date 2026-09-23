@@ -778,6 +778,7 @@
   "error.WORKSPACE_GIT_FAILED": "Git çalışma alanı işlemi başarısız oldu.",
   "error.LOCAL_RUNTIME_UNSUPPORTED": "Bu yerel runtime bağlantısı şu anda Linux gerektirir.",
   "error.LOCAL_RUNTIME_OPTIONS": "Yerel runtime bağlantı ayarları geçersiz.",
+  "error.LOCAL_RUNTIME_UNAVAILABLE": "Bu proje için yerel runtime servisi çalışmıyor. `deckent runtime serve` ile başlatın.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "Yerel runtime bağlantı yolu sahiplik veya dosya sistemi denetimini geçemedi.",
   "error.LOCAL_RUNTIME_ALREADY_RUNNING": "Bu projenin bağlantı noktası başka bir runtime servisine ait.",
   "error.LOCAL_RUNTIME_TRANSPORT": "Runtime servisine ulaşılamadı veya bağlantı kesildi. Yapılandırılmış servisi başlatıp aynı komutu yeniden deneyin.",

@@ -93,7 +93,8 @@
         "src/engine/core/workspaces",
         "src/engine/core/run-progression",
         "src/engine/core/workspace-patch",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/engine/core/worker-observation"
       ],
       "plan": "STORE"
     },
@@ -729,7 +730,8 @@
         "src/engine/core/worker-observation",
         "src/engine/core/toolchain-currency",
         "src/domain/core/effect",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/domain/core/worker-event"
       ],
       "plan": "SURFACES"
     },
@@ -1112,7 +1114,9 @@
       "plan": "PROVIDERS"
     },
     "src/adapters/core/native-connection": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/worker-event"
+      ],
       "plan": "PROVIDERS"
     },
     "src/engine/core/workspace-patch": {
@@ -1166,14 +1170,18 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/attempt",
-        "src/engine/core/dispatch"
+        "src/engine/core/dispatch",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/worker-event",
+        "src/domain/core/principal"
       ],
       "plan": "EXECUTION"
     },
     "src/adapters/core/worker-observation": {
       "dependencies": [
         "src/domain/core/attempt",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/domain/core/worker-event"
       ],
       "plan": "EXECUTION"
     },
@@ -1189,7 +1197,9 @@
         "src/composition/core/policy",
         "src/composition/core/scoped-request",
         "src/composition/core/inventory",
-        "src/composition/core/query-errors"
+        "src/composition/core/query-errors",
+        "src/adapters/core/file-artifacts",
+        "src/domain/core/attempt"
       ],
       "plan": "EXECUTION"
     },
@@ -1344,6 +1354,10 @@
         "src/composition/core/scoped-request"
       ],
       "plan": "EXECUTION"
+    },
+    "src/domain/core/worker-event": {
+      "dependencies": [],
+      "plan": "CONTRACT"
     }
   },
   "composition": {

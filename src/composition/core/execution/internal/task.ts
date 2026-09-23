@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection, startWorkerObservation } from '#adapters/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -59,10 +59,12 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       }
       const broker = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot });
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
+      // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
+      const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
       // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt.
       const connection = profile.nativeSubscription ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs }) : undefined;
+        deadlineMs: profile.options.deadlineMs, ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
       try {
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
         ...(inputs.length ? { inputs } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
@@ -81,7 +83,22 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       try { result = await app.execute(request); } finally { await observation.close(); }
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: result.kind,
         terminal: result.record.terminal, outputRecorded: !!result.record.output }) });
-      } finally { await connection?.close(); }
+      } finally {
+        await connection?.close();
+        // Seal the event log once the gateway is closed; retention failure never changes the execution outcome.
+        const sealed = await events?.close();
+        if (sealed?.length) {
+          try {
+            // Keep the events that fit the artifact limit; the loss stays visible as a byte-cap marker, never silent.
+            const lines: string[] = []; let bytes = 0, kept = 0;
+            for (const event of sealed) { const line = JSON.stringify(event) + '\n'; if (bytes + Buffer.byteLength(line) > config.artifacts.maxBytes - 256) break; lines.push(line); bytes += Buffer.byteLength(line); kept++; }
+            if (kept < sealed.length) lines.push(JSON.stringify({ schemaVersion: 1, sequence: (sealed[kept - 1]?.sequence ?? 0) + 1, atMs: sealed[kept - 1]?.atMs ?? 0,
+              kind: 'dropped', reason: 'byte-cap', count: sealed.length - kept }) + '\n');
+            const receipt = await artifacts.put(identity.scopeId, Buffer.from(lines.join('')));
+            await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now() });
+          } catch { /* live sidecar remains; sealing is observation, not execution */ }
+        }
+      }
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

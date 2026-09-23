@@ -49,7 +49,13 @@ function buildIdentity() {
     hash.update(readFileSync(file));
   }
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  const identity = { schemaVersion: 1, packageName: pkg.name, packageVersion: pkg.version, sourceTreeSha256: hash.digest('hex'), sourceFileCount: files.length, builtAt: new Date().toISOString() };
+  // Commit is best-effort provenance (null outside a Git checkout, e.g. a `git archive` tree); the source tree digest is the product identity.
+  const git = args => { try { return execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
+  const sourceCommit = git(['rev-parse', 'HEAD']) || null;
+  const status = sourceCommit === null ? null : git(['--no-optional-locks', 'status', '--porcelain', '--', 'src']);
+  const sourceDirty = status === null ? null : status.length > 0;
+  const identity = { schemaVersion: 1, packageName: pkg.name, packageVersion: pkg.version, sourceTreeSha256: hash.digest('hex'), sourceFileCount: files.length,
+    sourceCommit, sourceDirty, builtAt: new Date().toISOString() };
   writeFileSync(join(DIST, 'build-identity.json'), JSON.stringify(identity, null, 2) + '\n');
   return identity;
 }

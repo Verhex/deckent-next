@@ -778,6 +778,7 @@
   "error.WORKSPACE_GIT_FAILED": "The Git workspace operation failed.",
   "error.LOCAL_RUNTIME_UNSUPPORTED": "This local runtime transport currently requires Linux.",
   "error.LOCAL_RUNTIME_OPTIONS": "The local runtime connection settings are invalid.",
+  "error.LOCAL_RUNTIME_UNAVAILABLE": "The local runtime service is not running for this project. Start it with `deckent runtime serve`.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "The local runtime endpoint failed ownership or filesystem checks.",
   "error.LOCAL_RUNTIME_ALREADY_RUNNING": "A runtime service already owns this project endpoint.",
   "error.LOCAL_RUNTIME_TRANSPORT": "The runtime service could not be reached or the connection failed. Start the configured service and retry the same command.",

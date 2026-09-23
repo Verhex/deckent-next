@@ -12,6 +12,7 @@ export type TaskIntegrationCheckHandler = (root: string, identity: AttemptIdenti
 export type TaskIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
 export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; application: 'not-applied' }>>;
 import type { CommandContext } from './kernel-commands.js';
+import { renderWorkerTranscript } from './transcript.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
@@ -25,7 +26,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback'].includes(action ?? '')) throw usage();
+  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback', 'transcript'].includes(action ?? '')) throw usage();
   const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
@@ -67,6 +68,11 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const adoptionCommandId = values.get('--adoption-command-id'); if (!adoptionCommandId) throw usage('--adoption-command-id');
     if (!context.rollbackWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     emit(await context.rollbackWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, adoptionCommandId }, options), { ...sinks, render }); return;
+  }
+  if (action === 'transcript') {
+    if (!context.inspectWorkerTranscript) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.inspectWorkerTranscript(context.root ?? process.cwd(), identity, options);
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderWorkerTranscript(data, locale) }); return;
   }
   if (action === 'integration-inspect') {
     const commandId = values.get('--command-id'); if (!commandId) throw usage('--command-id');

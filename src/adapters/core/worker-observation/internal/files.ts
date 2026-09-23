@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
+import { attemptIdentitySchema, sameAttemptIdentity, workerEventSchema, workerActivityPhase, summarizeWorkerEvents, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
@@ -39,9 +39,18 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   try {
     const pinned = `/proc/self/fd/${root.fd}`;
     captured = await Promise.all([readObservationFile(join(pinned, stem + '.hb'), limits.maxFileBytes),
-      readObservationFile(join(pinned, stem + '.log'), limits.maxFileBytes, true), readObservationFile(join(pinned, stem + '.result'), limits.maxFileBytes)]);
+      readObservationFile(join(pinned, stem + '.log'), limits.maxFileBytes, true), readObservationFile(join(pinned, stem + '.result'), limits.maxFileBytes),
+      readObservationFile(join(pinned, stem + '.events'), limits.maxFileBytes, true)]);
   } finally { await root.close(); }
-  const [hb, log, result] = captured;
+  const [hb, log, result, eventFile] = captured;
+  // Tail only: a partial first line is skipped by validation; events are re-validated against the current schema.
+  let lastReceivedAt: number | null = null;
+  const workerEvents = eventFile.bytes.toString('utf8').split('\n').flatMap((line): WorkerEvent[] => {
+    const value = object(Buffer.from(line)); const parsed = value ? workerEventSchema.safeParse(value.event) : null;
+    if (!parsed?.success) return [];
+    if (typeof value?.receivedAt === 'number' && Number.isSafeInteger(value.receivedAt)) lastReceivedAt = value.receivedAt;
+    return [parsed.data];
+  });
   let heartbeat = object(hb.bytes); let outcome = object(result.bytes);
   const bound = (value: Record<string, unknown> | null) => {
     const parsed = attemptIdentitySchema.safeParse(value?.identity);
@@ -69,5 +78,6 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   result: { state: result.state === 'available' && !outcome ? 'malformed' : result.state,
     exitCode: typeof terminal?.exitCode === 'number' && Number.isSafeInteger(terminal.exitCode) ? terminal.exitCode : null,
     reportedAssessment: typeof outcome?.selfAssessment === 'string' && catalog.assessments.includes(outcome.selfAssessment) ? outcome.selfAssessment : null },
-  pid: typeof heartbeat?.pid === 'number' && Number.isSafeInteger(heartbeat.pid) && heartbeat.pid > 0 ? heartbeat.pid : null };
+  pid: typeof heartbeat?.pid === 'number' && Number.isSafeInteger(heartbeat.pid) && heartbeat.pid > 0 ? heartbeat.pid : null,
+  activity: (() => { const phase = workerActivityPhase(workerEvents); return phase ? { ...phase, receivedAt: lastReceivedAt } : null; })(), usage: workerEvents.length ? summarizeWorkerEvents(workerEvents) : null, eventsTruncated: eventFile.truncated };
 }

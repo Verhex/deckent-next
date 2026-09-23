@@ -446,7 +446,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
   const invocationCount = (commandId: string) => countInvocations(ledger, commandId);
   const firstPath = join(root, 'first.json'); await writeFile(firstPath, JSON.stringify(command('first')), { mode: 0o600 });
-  expect(await callSdk(project, env, 'invoke', firstPath)).toEqual({ ok: false, code: 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' });
+  expect(await callSdk(project, env, 'invoke', firstPath)).toEqual({ ok: false, code: 'LOCAL_RUNTIME_UNAVAILABLE' });
   expect(bodies).toHaveLength(0);
   const runtime = await startRuntime(project, env);
   const firstObserved = hold();

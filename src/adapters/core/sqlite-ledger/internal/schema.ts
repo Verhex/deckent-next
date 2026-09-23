@@ -24,9 +24,11 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 34;
+export const CURRENT_LEDGER_VERSION = 35;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Sealed worker-reported event logs (B09): artifact receipt of the redacted events plus the deterministic summary.
+  35: `CREATE TABLE worker_event_logs(scope_id TEXT NOT NULL,attempt_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,attempt_id)); PRAGMA user_version=35;`,
   // Generic effect intents (C11): one row per operation command; sequence orders intents per external target record.
   34: `CREATE TABLE effect_intents(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_kind TEXT NOT NULL,target_id TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),idempotency_key_hash TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('claimed','settled','unknown','refused')),

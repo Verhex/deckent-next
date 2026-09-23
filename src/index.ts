@@ -64,3 +64,4 @@ export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/in
 export { configuredApproval } from '#composition/index.js';
 export { deliverConfiguredWorkspaceIntegration, adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration } from '#composition/index.js';
 export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/index.js';
+export { inspectConfiguredWorkerTranscript } from '#composition/index.js';

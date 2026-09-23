@@ -5,7 +5,7 @@
     "connections": 24,
     "headerBytes": 8192,
     "idleMs": 30000,
-    "trafficBytes": 67108864
+    "trafficBytes": 67108864, "eventBatchBytes": 262144, "maxEvents": 5000, "maxEventBytes": 4194304
   },
   "providers": {
     "codex": {

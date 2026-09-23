@@ -10,6 +10,7 @@ import { readFile } from 'node:fs/promises';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { readNativeClientHello } from './tls-hello.js';
+import { workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -19,7 +20,10 @@ export function isPublicNativeAddress(address: string) {
   return isIPv4(address) && !denied.check(address) && !Object.values(networkInterfaces()).flat().some(row => row?.address === address);
 }
 /** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
-export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number }) {
+/** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */
+export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
+export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
+  onEvents?: WorkerEventSink }) {
   const binding = nativeSubscriptionSchema.parse(input.binding); const spec = catalog.providers[binding.provider];
   const projected = projectNativeCredential(binding.provider, input.credential);
   const limits = catalog.limits;
@@ -34,8 +38,32 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   let credential: Record<string, unknown> | undefined = projected;
   let closed = false; let transferred = 0; let timer: ReturnType<typeof setTimeout>;
   const sockets = new Set<Socket>();
-  const statistics = { connected: 0, rejected: 0, bootstrapReads: 0, bytes: 0 };
+  const statistics = { connected: 0, rejected: 0, bootstrapReads: 0, bytes: 0, events: 0, eventBytes: 0, eventsDropped: 0 };
+  let lastSequence = 0;
+  // Worker-reported events after the bootstrap only: bounded per request and per attempt, schema-validated, strictly ordered.
+  const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
+    const declared = Number(request.headers['content-length']);
+    if (!Number.isSafeInteger(declared) || declared <= 0 || declared > limits.eventBatchBytes) { statistics.rejected++; response.writeHead(413).end(); request.resume(); return; }
+    let body = ''; let received = 0;
+    request.setEncoding('utf8');
+    request.on('data', (part: string) => { received += Buffer.byteLength(part); if (received > limits.eventBatchBytes) request.destroy(); else body += part; });
+    request.on('end', () => {
+      const accepted: WorkerEvent[] = []; let dropped = 0;
+      for (const line of body.split('\n')) {
+        if (!line) continue;
+        let parsed; try { parsed = workerEventSchema.safeParse(JSON.parse(line)); } catch { parsed = null; }
+        const bytes = Buffer.byteLength(line);
+        if (!parsed?.success || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents || statistics.eventBytes + bytes > limits.maxEventBytes) { dropped++; continue; }
+        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(parsed.data);
+      }
+      statistics.eventsDropped += dropped;
+      if (dropped) accepted.push({ schemaVersion: 1, sequence: lastSequence = lastSequence + 1, atMs: accepted.at(-1)?.atMs ?? 0, kind: 'dropped', reason: 'invalid', count: dropped });
+      try { if (accepted.length) input.onEvents?.(Object.freeze(accepted)); } catch { /* observation never changes execution */ }
+      response.writeHead(204).end();
+    });
+  };
   const server = createServer({ maxHeaderSize: limits.headerBytes }, (request, response) => {
+    if (!closed && request.method === 'POST' && request.url === '/events' && statistics.bootstrapReads > 0) { receiveEvents(request, response); return; }
     if (closed || request.method !== 'GET' || request.url !== '/bootstrap' || !credential || statistics.bootstrapReads > 0) {
       statistics.rejected++; response.writeHead(403).end(); return;
     }

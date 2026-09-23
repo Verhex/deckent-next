@@ -43,7 +43,8 @@ it('runs compiled CLI through a Unicode spaced symlink', async () => {
   const output = await bounded(execute(process.execPath, [f.cliAlias, '--version'], { cwd: f.project, env: f.env, timeout: 4_000, maxBuffer: 65_536 }),
     'CLI_SYMLINK_TIMEOUT');
   expect(output.stderr).toBe('');
-  expect(output.stdout.trim()).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+$/);
+  // The compiled binary also names the exact source tree (and commit when built from a checkout) it was built from.
+  expect(output.stdout.trim()).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+\nbuild [0-9a-f]{12} · commit (?:[0-9a-f]{12}|-)(?: \(uncommitted source changes\))?$/);
 });
 
 it('starts compiled MCP through a Unicode spaced symlink and serves initialization/tool discovery', async () => {

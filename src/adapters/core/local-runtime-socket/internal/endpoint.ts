@@ -3,7 +3,7 @@ import { lstat, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
 
 export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_OPTIONS'
-  | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT';
+  | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 export class LocalRuntimeSocketError extends Error {
   constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions) {
     super(code, options);
@@ -41,7 +41,11 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
 export async function assertOwnedSocket(endpoint: string): Promise<void> {
   let stat;
   try { stat = await lstat(endpoint); }
-  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error }); }
+  catch (error) {
+    // No endpoint means no running service; any other failure stays a custody refusal.
+    const missing = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+    throw new LocalRuntimeSocketError(missing ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
+  }
   if (!process.getuid || !stat.isSocket() || stat.isSymbolicLink() || stat.uid !== process.getuid()
     || (stat.mode & 0o777) !== 0o600) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
 }

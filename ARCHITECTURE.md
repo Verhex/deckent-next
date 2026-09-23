@@ -659,6 +659,24 @@ visible. Stopping watch stops only the view. CLI snapshots/JSON-lines and SDK ar
 and cross-host monitoring remain future consumers of the same semantics. Linux local files/Docker are
 verified; no non-Linux or legacy runtime activation is claimed.
 
+**Worker Event Contract (B09-1, 2026-09-23, ledger v35).** One current schema (`domain/core/worker-event`,
+`schemaVersion` 1; there is no user-selectable variant — a new version replaces the contract with a migration):
+`session.started`, `message` (size + ≤240-char redacted excerpt; thinking content never kept), `tool.call`
+(tool class read/edit/write/shell/search/network/agent/other, workspace-relative target), `tool.result`,
+`usage`, `quota`, `limit`, `session.ended` (provider totals authoritative), `unmapped` (counted native types)
+and host-only `dropped`. The provider normalizer and redaction run inside the container bridge, so raw native
+stream, credentials and paths outside `/workspace` never reach the host. The per-attempt gateway accepts
+`POST /events` only after bootstrap, validates every line against the schema, enforces strictly increasing
+sequence and batch/event/byte caps, and replaces rejects with a counted `dropped` marker. The host appends
+`{receivedAt, event}` to `worker.events` (0600, host clock only; worker clocks are untrusted) off the request
+path; at attempt end the events are sealed as an artifact and recorded in `worker_event_logs`. Summary
+(tokens, cache-read ratio, cost basis, tool classes, files touched, errors) and the live activity phase are
+pure recomputations from events — no model call, no scoring. `task transcript` (SDK/CLI) needs attempt
+`read-output`. Events are untrusted worker evidence: they never grant authority, acceptance or terminal truth;
+failure to record or seal never changes execution. Claude is normalized; Codex/Cursor report only
+`session.started` and unmapped counts until their normalizers land (B09-3). Structured final report, budgets
+(B09-2), `report workers` and live `workers watch` phases (B09-3) remain open.
+
 ### Next execution host cutover (2026-09-21)
 
 Owner makes Next the sole local execution workspace; legacy is read-only reference.

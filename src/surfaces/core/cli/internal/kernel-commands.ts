@@ -29,6 +29,7 @@ export interface CommandContext {
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   executeOperation?: import('./operation.js').OperationEffectHandler;
+  inspectWorkerTranscript?: import('./transcript.js').WorkerTranscriptHandler;
   compensateOperation?: import('./operation.js').OperationEffectHandler;
   inspectOperation?: import('./operation.js').OperationInspectHandler;
   adoptWorkspaceIntegration?: import('./task.js').TaskIntegrationAdoptHandler;

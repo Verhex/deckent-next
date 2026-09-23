@@ -90,6 +90,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CANCELLATION_RUNTIME_LOOP_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_RUNTIME_LOOP_RUNNING', p, l) }) },
   LOCAL_RUNTIME_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNSUPPORTED', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
+  LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
   LOCAL_RUNTIME_ENDPOINT_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ENDPOINT_UNSAFE', p, l) }) },
   LOCAL_RUNTIME_ALREADY_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ALREADY_RUNNING', p, l) }) },
   LOCAL_RUNTIME_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_TRANSPORT', p, l) }) },

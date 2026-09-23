@@ -23,6 +23,7 @@ export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/
 export { resolveProductPaths } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
+export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { deepMerge, readJsonFile, writeJsonAtomic } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';

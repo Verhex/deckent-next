@@ -1,10 +1,142 @@
 // Standalone Node bootstrap mounted read-only. No host package imports at runtime.
-import { get } from 'node:http';
+import { get, request as httpRequest } from 'node:http';
+import { pathToFileURL } from 'node:url';
 import { createServer, connect, type Socket } from 'node:net';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+
+// Worker Event Contract v1 (domain/core/worker-event) produced here, inside the container: this file cannot import host packages,
+// so the shapes are mirrored and the host re-validates every event. Redaction happens before any byte leaves the container.
+type BridgeEvent = Record<string, unknown> & { kind: string };
+const SECRET_PATTERNS = [/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, /\b(?:sk|pk|rk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{8,}/g,
+  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd|authorization|cookie)\s*[:=]\s*\S+/gi,
+  /[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi, /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g];
+/** Removes known secret values and credential-shaped text, strips control characters and bounds the length. */
+export function redactText(value: string, secrets: readonly string[], max: number): string {
+  let out = value;
+  for (const secret of secrets) if (secret.length >= 6) out = out.split(secret).join('[REDACTED]');
+  for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, '[REDACTED]');
+  // eslint-disable-next-line no-control-regex
+  out = out.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ');
+  return out.length > max ? out.slice(0, max - 1) + '…' : out;
+}
+/** Every string leaf of a credential object is a secret value to scrub from worker-reported text. */
+export function secretValues(value: unknown, into: string[] = []): string[] {
+  if (typeof value === 'string') into.push(value);
+  else if (value && typeof value === 'object') for (const entry of Object.values(value)) secretValues(entry, into);
+  return into;
+}
+const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookRead: 'read', Edit: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit',
+  Write: 'write', Bash: 'shell', BashOutput: 'shell', KillShell: 'shell', KillBash: 'shell', Grep: 'search', Glob: 'search', LS: 'search',
+  WebFetch: 'network', WebSearch: 'network', Task: 'agent', Agent: 'agent' };
+const IGNORED_SYSTEM = new Set(['thinking_tokens', 'hook_started', 'hook_response', 'hook_progress', 'compact_boundary', 'informational', 'status']);
+export interface NormalizerState { sequence: number; readonly startMs: number; cwd: string; readonly usageIds: Set<string>; readonly unmapped: Map<string, number>; readonly secrets: readonly string[] }
+export function createNormalizerState(secrets: readonly string[], startMs = Date.now()): NormalizerState {
+  return { sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
+}
+const num = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+function relative(path: unknown, cwd: string): string | null {
+  if (typeof path !== 'string' || !path) return null;
+  const root = cwd.endsWith('/') ? cwd : cwd + '/';
+  if (path.startsWith(root)) return path.slice(root.length).slice(0, 256);
+  if (!path.startsWith('/')) return path.slice(0, 256);
+  return '(outside-workspace)/' + (path.split('/').pop() ?? '').slice(0, 200);
+}
+/** Maps one line of Claude Code stream-json onto zero or more contract events. Thinking text and tool output content are never kept. */
+export function normalizeClaudeLine(line: string, state: NormalizerState, now = Date.now()): BridgeEvent[] {
+  const events: BridgeEvent[] = [];
+  const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
+  const miss = (type: string) => state.unmapped.set(type.slice(0, 64), (state.unmapped.get(type.slice(0, 64)) ?? 0) + 1);
+  const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
+  let data: Record<string, unknown>;
+  try { const parsed: unknown = JSON.parse(line); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { miss('non-object'); return events; } data = parsed as Record<string, unknown>; }
+  catch { if (line.trim()) miss('non-json'); return events; }
+  const type = typeof data.type === 'string' ? data.type : 'untyped', subtype = typeof data.subtype === 'string' ? data.subtype : '';
+  if (type === 'system' && subtype === 'init') {
+    if (typeof data.cwd === 'string') state.cwd = data.cwd;
+    emit('session.started', { provider: 'claude', model: typeof data.model === 'string' ? data.model.slice(0, 128) : null,
+      cliVersion: typeof data.claude_code_version === 'string' ? data.claude_code_version.slice(0, 64) : null });
+  } else if (type === 'system') { if (!IGNORED_SYSTEM.has(subtype)) miss(`system:${subtype}`); }
+  else if (type === 'assistant') {
+    const message = (data.message ?? {}) as Record<string, unknown>;
+    const id = typeof message.id === 'string' ? message.id : null, usage = (message.usage ?? null) as Record<string, unknown> | null;
+    // All messages of one API response share its id; count their usage once.
+    if (id && usage && !state.usageIds.has(id)) {
+      state.usageIds.add(id);
+      emit('usage', { tokens: { input: num(usage.input_tokens), output: num(usage.output_tokens), cacheRead: num(usage.cache_read_input_tokens),
+        cacheWrite: num(usage.cache_creation_input_tokens), thinking: null } });
+    }
+    for (const block of Array.isArray(message.content) ? message.content as Record<string, unknown>[] : []) {
+      if (block.type === 'text') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.text ?? '')), thinking: false, excerpt: red(block.text, 240) });
+      else if (block.type === 'thinking' || block.type === 'redacted_thinking') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.thinking ?? '')), thinking: true, excerpt: '' });
+      else if (block.type === 'tool_use') {
+        const name = typeof block.name === 'string' ? block.name.slice(0, 64) : 'unknown', input = (block.input ?? {}) as Record<string, unknown>;
+        const toolClass = CLAUDE_TOOLS[name] ?? (name.startsWith('mcp__') ? 'network' : 'other');
+        const target = relative(input.file_path ?? input.notebook_path ?? input.path, state.cwd);
+        const detail = toolClass === 'shell' ? red(input.description ?? input.command, 240) : toolClass === 'search' ? red(input.pattern, 240)
+          : toolClass === 'network' ? red(typeof input.url === 'string' ? (() => { try { return new URL(input.url).host; } catch { return ''; } })() : input.query, 240)
+          : toolClass === 'agent' ? red(input.description, 240) : null;
+        emit('tool.call', { toolId: String(block.id ?? '').slice(0, 96), name, toolClass, target, detail: detail || null });
+      } else miss(`assistant:${String(block.type ?? 'unknown')}`);
+    }
+  } else if (type === 'user') {
+    const message = (data.message ?? {}) as Record<string, unknown>;
+    for (const block of Array.isArray(message.content) ? message.content as Record<string, unknown>[] : []) {
+      if (block.type !== 'tool_result') continue;
+      emit('tool.result', { toolId: String(block.tool_use_id ?? '').slice(0, 96), status: block.is_error === true ? 'error' : 'ok',
+        bytes: Buffer.byteLength(typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '')) });
+    }
+  } else if (type === 'rate_limit_event') {
+    const info = (data.rate_limit_info ?? {}) as Record<string, unknown>, windows = (info.unifiedWindows ?? {}) as Record<string, Record<string, unknown>>;
+    for (const [window, value] of Object.entries(windows)) {
+      const utilization = typeof value.utilization === 'number' ? Math.min(1, Math.max(0, value.utilization)) : null;
+      if (utilization !== null) emit('quota', { window: window.slice(0, 32), utilization, resetsAtMs: typeof value.resetsAt === 'number' ? Math.round(value.resetsAt * 1000) : null,
+        status: String(info.status ?? 'unknown').slice(0, 32) });
+    }
+  } else if (type === 'result') {
+    const limit = { error_max_turns: 'max-turns', error_max_budget_usd: 'budget', error_max_structured_output_retries: 'structured-output' }[subtype];
+    if (limit) emit('limit', { limit, detail: subtype });
+    const usage = (data.usage ?? {}) as Record<string, unknown>, details = (usage.output_tokens_details ?? {}) as Record<string, unknown>;
+    const models = Object.values((data.modelUsage ?? {}) as Record<string, Record<string, unknown>>);
+    emit('session.ended', { outcome: subtype === 'success' && data.is_error !== true ? 'success' : limit ? 'limit' : 'error', turns: num(data.num_turns),
+      durationMs: num(data.duration_ms), apiDurationMs: typeof data.duration_api_ms === 'number' ? num(data.duration_api_ms) : null,
+      costUsd: typeof data.total_cost_usd === 'number' && Number.isFinite(data.total_cost_usd) && data.total_cost_usd >= 0 ? data.total_cost_usd : null,
+      costBasis: typeof models[0]?.costBasis === 'string' ? String(models[0].costBasis).slice(0, 32) : null,
+      tokens: { input: num(usage.input_tokens), output: num(usage.output_tokens), cacheRead: num(usage.cache_read_input_tokens), cacheWrite: num(usage.cache_creation_input_tokens),
+        thinking: typeof details.thinking_tokens === 'number' ? num(details.thinking_tokens) : null },
+      permissionDenials: Array.isArray(data.permission_denials) ? data.permission_denials.length : 0 });
+  } else miss(type);
+  return events;
+}
+/** Unmapped native event types are reported as counts, never silently dropped. */
+export function flushUnmapped(state: NormalizerState, now = Date.now()): BridgeEvent[] {
+  const events: BridgeEvent[] = [];
+  for (const [nativeType, count] of state.unmapped) events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind: 'unmapped', nativeType, count });
+  state.unmapped.clear();
+  return events;
+}
+/** Best-effort, bounded delivery of event batches to the attempt gateway. Observation never changes execution. */
+function eventChannel(socketPath: string, maxQueued = 4000, batch = 64) {
+  const queue: BridgeEvent[] = []; let dropped = 0, sending: Promise<void> = Promise.resolve();
+  const post = (events: BridgeEvent[]) => new Promise<void>(resolve => {
+    const body = events.map(event => JSON.stringify(event)).join('\n') + '\n';
+    const request = httpRequest({ socketPath, path: '/events', method: 'POST', timeout: 5000,
+      headers: { 'content-type': 'application/x-ndjson', 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); response.on('error', () => resolve()); });
+    request.on('error', () => resolve()); request.on('timeout', () => { request.destroy(); resolve(); }); request.end(body);
+  });
+  const flush = () => { sending = sending.then(async () => { while (queue.length) { const next = queue.splice(0, batch); await post(next); } }); return sending; };
+  const timer = setInterval(() => { void flush(); }, 500); timer.unref();
+  return {
+    push(events: BridgeEvent[]) { for (const event of events) { if (queue.length >= maxQueued) dropped++; else queue.push(event); } if (queue.length >= batch) void flush(); },
+    async close(state: NormalizerState) {
+      clearInterval(timer);
+      if (dropped) queue.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), kind: 'dropped', reason: 'event-cap', count: dropped });
+      await flush();
+    },
+  };
+}
 
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
@@ -90,10 +222,23 @@ async function main() {
     kind: 'native-prompt-delivery', phase: 'spawned', channel: delivery.channel, sha256: delivery.sha256,
     argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(delivery.task),
     segments: delivery.segments }) + '\n'));
-  // Native events can contain tool output and request headers. Never forward raw events.
-  let tail = ''; let bytes = 0;
+  // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
+  let tail = ''; let bytes = 0; let pending = '';
+  const state = createNormalizerState([...secretValues(setup.credential), proxy]);
+  const channel = eventChannel(socketPath);
+  if (setup.provider !== 'claude') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
-  child.stdout.on('data', capture); child.stderr.on('data', capture);
+  const observe = (part: Buffer) => {
+    capture(part);
+    pending += part.toString('utf8');
+    const lines = pending.split('\n'); pending = lines.pop() ?? '';
+    if (pending.length > 1_048_576) { state.unmapped.set('oversized-line', (state.unmapped.get('oversized-line') ?? 0) + 1); pending = ''; }
+    for (const line of lines) {
+      if (setup.provider === 'claude') channel.push(normalizeClaudeLine(line, state));
+      else if (line.trim()) state.unmapped.set(`${setup.provider}-event`, (state.unmapped.get(`${setup.provider}-event`) ?? 0) + 1);
+    }
+  };
+  child.stdout.on('data', observe); child.stderr.on('data', capture);
   const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {
     child.on('error', () => resolve({ code: null, signal: null }));
     child.on('close', (code, signal) => resolve({ code, signal }));
@@ -102,9 +247,14 @@ async function main() {
     : /quota|rate.limit|usage.limit|429/i.test(tail) ? 'capacity'
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
     : /connect|proxy|network|fetch failed|socket|ENOTFOUND|ECONN/i.test(tail) ? 'connection' : 'native';
+  if (pending && setup.provider === 'claude') channel.push(normalizeClaudeLine(pending, state));
+  channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
     failure: result.code === 0 ? null : failure }) + '\n');
   for (const socket of sockets) socket.destroy(); relay.close();
   process.exitCode = result.code === 0 ? 0 : 1;
 }
-main().catch(() => { process.stderr.write('NATIVE_BOOTSTRAP_FAILED\n'); process.exitCode = 78; });
+// Runs only as the mounted bootstrap (`node /run/deckent-bootstrap.mjs ...`); importing it for tests has no side effects.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(() => { process.stderr.write('NATIVE_BOOTSTRAP_FAILED\n'); process.exitCode = 78; });
+}
