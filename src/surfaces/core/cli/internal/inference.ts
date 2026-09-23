@@ -1,10 +1,10 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseInferenceServingConfig, resolveActiveInferenceProfile } from '#domain/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingConfig, roleContextCeiling, InferenceTokenBudget, loopbackMetricsUrl } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingConfig, roleContextCeiling, InferenceTokenBudget } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 interface Parsed {
-  action: 'plan' | 'budget' | 'metrics';
+  action: 'plan' | 'budget';
   json: boolean;
   help: boolean;
   language?: string;
@@ -17,7 +17,7 @@ interface Parsed {
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'inference') throw ErrorRegistry.createError('CLI_USAGE');
   const action = argv[1];
-  if (action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
+  if (action !== 'plan' && action !== 'budget') throw ErrorRegistry.createError('CLI_USAGE');
   const parsed: Parsed = { action, json: false, help: false };
   const seen = new Set<string>();
   for (let index = 2; index < argv.length; index++) {
@@ -99,22 +99,6 @@ export async function inferenceCommand(argv: readonly string[], context: Command
     return;
   }
   const profile = resolveProfile(serving, parsed.profileId);
-  if (parsed.action === 'metrics') {
-    const endpoint = loopbackMetricsUrl(buildInferenceServingPlan(profile).openaiBaseUrl);
-    if (!endpoint.ok) {
-      emit(t('inference.metrics.denied', { code: endpoint.code }, locale), { ...sinks, level: 'error' });
-      return;
-    }
-    try {
-      const response = await fetch(endpoint.url, { signal: AbortSignal.timeout(3000) });
-      const body = await response.text();
-      if (!response.ok) throw new Error('INFERENCE_METRICS_HTTP');
-      emit(body.slice(0, 8000), sinks);
-    } catch {
-      emit(t('inference.metrics.unreachable', { url: endpoint.url }, locale), { ...sinks, level: 'error' });
-    }
-    return;
-  }
   if (parsed.action === 'plan') {
     const plan = buildInferenceServingPlan(profile);
     emit(plan, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderPlan(value, locale) });

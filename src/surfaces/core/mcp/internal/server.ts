@@ -153,14 +153,14 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     invoke: (input, delivery) => cancelInvocation.call(applications, modelInvocationCancellationCommandSchema.parse(input), delivery) });
   const inferenceInput = z.object({ profileId: z.string().min(1).optional() }).strict();
   const inferencePlan = applications.inferencePlan;
-  if (inferencePlan) definitions.push({ readOnly: true, destructive: false, name: 'inference_plan',
+  if (inferencePlan) definitions.push({ readOnly: true, destructive: false, openWorld: false, name: 'inference_plan',
     description: t('mcp.tool.inferencePlan', {}, locale), schema: inferenceInput,
     invoke: (input: unknown) => {
       const parsed = inferenceInput.parse(input);
       return inferencePlan.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
     } });
   const inferenceBudget = applications.inferenceBudget;
-  if (inferenceBudget) definitions.push({ readOnly: true, destructive: false, name: 'inference_budget',
+  if (inferenceBudget) definitions.push({ readOnly: true, destructive: false, openWorld: false, name: 'inference_budget',
     description: t('mcp.tool.inferenceBudget', {}, locale), schema: inferenceInput,
     invoke: (input: unknown) => {
       const parsed = inferenceInput.parse(input);
