@@ -1,18 +1,41 @@
-import { Box, Text } from 'ink';
+import { useEffect, useState } from 'react';
+import { Text, useAnimation, useWindowSize } from 'ink';
 import { useWorklinePalette } from './ink-palette-context.js';
+import { useRenderGlyphs } from './render/glyphs.js';
+import { spanStyle } from './render/lines-view.js';
+import { fitStatusRow, worklineStatusSegments, type WorklineStatusLabels } from './render/status-row.js';
 
 export interface StatusStripProps {
+  /** Scope (or the pre-joined `scope · model` target); shrinks from the start before anything wraps. */
   readonly target: string;
+  readonly model?: string | undefined;
   readonly state: string;
   readonly busy: boolean;
+  readonly queued?: number | undefined;
+  /** Short service notice (for example a build skew), the first fact dropped on a narrow terminal. */
+  readonly notice?: string | undefined;
+  readonly labels: WorklineStatusLabels;
 }
 
-export function StatusStrip({ target, state, busy }: StatusStripProps) {
-  const palette = useWorklinePalette();
+/**
+ * One inline text node measured against the live terminal width (Ink `useWindowSize` re-renders on resize), so the row
+ * never wraps and never leaves stale lines behind when the terminal narrows (legacy f18d53fb8, row 7143).
+ */
+export function StatusStrip({ target, model, state, busy, queued, notice, labels }: StatusStripProps) {
+  const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
+  const { columns } = useWindowSize();
+  const { frame } = useAnimation({ interval: 120, isActive: busy });
+  const [since, setSince] = useState<number | null>(null);
+  useEffect(() => { setSince(busy ? Date.now() : null); }, [busy]);
+  const segments = worklineStatusSegments({ scope: target, model, state, busy, spinner: glyphs.spinner[frame % glyphs.spinner.length],
+    elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels });
+  const separator = ` ${glyphs.separator} `;
+  const layout = fitStatusRow(segments, columns || 80, separator, glyphs.ellipsis);
   return (
-    <Box flexDirection="row" gap={2}>
-      <Text {...palette.accent}>{target}</Text>
-      <Text {...(busy ? palette.user : palette.muted)}>{state}</Text>
-    </Box>
+    <Text wrap="truncate-end">
+      {layout.segments.map((segment, index) => (
+        <Text key={segment.id}>{index > 0 ? separator : ''}<Text {...(segment.role ? spanStyle({ text: '', role: segment.role }, palette) : {})}>{segment.text}</Text></Text>
+      ))}
+    </Text>
   );
 }

@@ -1,10 +1,11 @@
 export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
 import { PALETTE, type PaletteRole } from './generated/palette.js';
 
-/** Workline layout roles projected from semantic palette roles. */
-export type WorklineInkRole = 'accent' | 'muted' | 'user' | 'assistant' | 'error';
+/** Workline layout roles projected from semantic palette roles, plus the rendered-answer roles (markdown, status). */
+export type WorklineInkRole = 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
+  | 'strong' | 'emphasis' | 'strike';
 
-export type InkRoleStyle = Readonly<{ color?: string; bold?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
+export type InkRoleStyle = Readonly<{ color?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
 
 export type WorklineInkPalette = Readonly<Record<WorklineInkRole, InkRoleStyle>>;
 
@@ -13,13 +14,21 @@ const ANSI16_NAME: Readonly<Record<string, string>> = {
   '90': 'gray', '91': 'redBright', '92': 'greenBright', '93': 'yellowBright', '94': 'blueBright', '95': 'magentaBright', '96': 'cyanBright', '97': 'whiteBright',
 };
 
-const WORKLINE_ROLE_MAP: Readonly<Record<WorklineInkRole, PaletteRole>> = {
+type AttributeRole = 'strong' | 'emphasis' | 'strike';
+const WORKLINE_ROLE_MAP: Readonly<Record<Exclude<WorklineInkRole, AttributeRole>, PaletteRole>> = {
   accent: 'accent',
   muted: 'muted',
   user: 'success',
   assistant: 'info',
   error: 'error',
+  code: 'code',
+  link: 'link',
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
 };
+/** Text attributes carry emphasis on every host theme; the `none` tier (NO_COLOR) drops them with the colours. */
+const ATTRIBUTE_ROLES: Readonly<Record<AttributeRole, InkRoleStyle>> = { strong: { bold: true }, emphasis: { italic: true }, strike: { strikethrough: true } };
 
 function tierColor(role: PaletteRole, tier: ColorTier): string | undefined {
   const entry = PALETTE[role];
@@ -48,6 +57,7 @@ export function resolveWorklinePalette(tier: ColorTier): WorklineInkPalette {
   for (const [worklineRole, paletteRole] of Object.entries(WORKLINE_ROLE_MAP) as [WorklineInkRole, PaletteRole][]) {
     out[worklineRole] = Object.freeze(roleStyle(paletteRole, tier));
   }
+  for (const [role, style] of Object.entries(ATTRIBUTE_ROLES) as [AttributeRole, InkRoleStyle][]) out[role] = Object.freeze(tier === 'none' ? {} : style);
   return Object.freeze(out) as WorklineInkPalette;
 }
 

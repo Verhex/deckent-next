@@ -24,4 +24,6 @@ export { renderMarkdown, type MarkdownOptions } from './internal/render/markdown
 export { renderedText, type RenderedLine, type Span } from './internal/render/spans.js';
 export { prefersAsciiGlyphs, resolveRenderGlyphs, RenderGlyphsContext, type RenderGlyphs } from './internal/render/glyphs.js';
 export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput } from './internal/render/status-row.js';
+export { AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from './internal/render/assistant-view.js';
+export { assistantLedgerEntries, streamStepEntries } from './internal/render/ledger-units.js';
 export { cells, truncateEnd, truncateStart, wrapCells } from './internal/render/text-width.js';

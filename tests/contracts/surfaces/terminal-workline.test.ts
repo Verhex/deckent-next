@@ -9,7 +9,10 @@ import type { WorkerObservationReport } from '#engine/index.js';
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
-  watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN' };
+  watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
+  render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
+    tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
+    code: 'code', moreAbove: '{count} more above', queued: '{count} queued' } };
 
 class Screen extends Writable {
   text = '';
@@ -130,7 +133,7 @@ describe('workline view rendered by Ink', () => {
   it('closes the view with /exit after a completed turn', async () => {
     const view = mount({ completeTurn: async () => { await settle(40); return 'Ankara'; } });
     await view.type('capital\r');
-    await until(() => view.stdout.text.includes('bot: Ankara'), 'assistant reply');
+    await until(() => view.stdout.text.includes('● bot') && view.stdout.text.includes('  Ankara'), 'assistant reply');
     let exited = false;
     void view.instance.waitUntilExit().then(() => { exited = true; });
     await view.type('/exit\r');

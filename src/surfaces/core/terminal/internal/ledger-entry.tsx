@@ -1,16 +1,22 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from './ink-palette-context.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
+import { AssistantUnitRow, type AssistantRenderLabels } from './render/assistant-view.js';
 
 export interface LedgerEntryLabels {
   readonly runCard: string;
   readonly workerCard: string;
   readonly chatUser: string;
   readonly chatAssistant: string;
+  readonly render: AssistantRenderLabels;
 }
 
 export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
   const ink = useWorklinePalette();
+  if (entry.kind === 'chat' && entry.role === 'assistant') {
+    // A row without a unit is a complete reply: one lead unit rendered as markdown.
+    return <AssistantUnitRow unit={entry.assistant ?? { kind: 'text', markdown: entry.text, lead: true }} labels={labels.render} />;
+  }
   if (entry.kind === 'chat') {
     const palette = entry.role === 'user' ? ink.user : ink.assistant;
     const prefix = entry.role === 'user' ? labels.chatUser : labels.chatAssistant;

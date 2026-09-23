@@ -1,4 +1,5 @@
 import type { RunView, WorkerObservation, WorkerObservationReport } from '#engine/index.js';
+import type { AssistantUnit } from './render/assistant-stream.js';
 
 export const WORK_LEDGER_SCHEMA_VERSION = 1;
 
@@ -8,6 +9,8 @@ export type WorkLedgerChatEntry = Readonly<{
   readonly id: string;
   readonly role: 'user' | 'assistant';
   readonly text: string;
+  /** Presentation of one finished assistant unit (answer part, reasoning summary or turn footer); chat rows never reach the bridge. */
+  readonly assistant?: AssistantUnit;
 }>;
 
 export type WorkLedgerRunEntry = Readonly<{
