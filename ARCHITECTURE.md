@@ -706,11 +706,16 @@ Branch adoption (B06-1, ledger v33) moves one operator-listed branch (`execution
 the delivery base to the delivered commit with a Git compare-and-swap. It requires the completed delivery with its reference
 intact, the recorded Task acceptance of that exact attempt, an existing branch at the base that no worktree has checked out
 (checked explicitly: `update-ref` does not refuse it), its own policy action and a live session. A changed base is refused.
-Intent precedes the Git effect; a per-target sequence fences Deckent's own commands and an unsettled record blocks the target.
-Rollback CASes back to the previous tip only while the adopted commit is still the tip and no later record exists. Crash
-settlement infers from the observed tip (unlike delivery's exact create-only ref). The basis is Task acceptance, reported as
-`not-verified`; a verification Run on the adopted commit (B06-2) and live checkout/runtime activation (B07) are separate. Git
-writers outside Deckent under the same OS user are not fenced.
+Intent precedes the Git effect and an unsettled record blocks the target. Each target has a fence reference
+(`refs/deckent/adoption-fences/<sha256(target)>` → deterministic blob naming target, sequence and command); one `update-ref`
+transaction moves the branch and advances the fence from the previous sequence, so a stale duplicate of Deckent's own command
+cannot move the branch after newer records (Astra 2039). Crash settlement reads exact fence ownership: this record's fence →
+settle only; previous fence with the branch at the base → move; anything else, including a foreign writer placing the same
+commit, is a conflict. A new effect re-checks the current allow-list. Rollback CASes back to the previous tip only while the
+adopted commit is still the tip and no later record exists. The basis is Task acceptance, reported as `not-verified`; a
+verification Run on the adopted commit (B06-2) and live checkout/runtime activation (B07) are separate. Git writers outside
+Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
+complete keeps the target blocked until operator recovery (no abandon command yet).
 
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 

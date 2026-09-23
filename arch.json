@@ -1123,6 +1123,7 @@
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",

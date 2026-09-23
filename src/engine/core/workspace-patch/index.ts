@@ -10,4 +10,4 @@ export { WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, integra
 export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/delivery.js';
 export type { WorkspacePatchLimitDetail } from './internal/contract.js';
 export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema } from './internal/adoption.js';
-export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
+export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, WorkspaceAdoptionErrorCode } from './internal/adoption.js';

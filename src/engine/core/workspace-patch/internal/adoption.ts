@@ -43,17 +43,22 @@ export interface IntegrationAdoptionStore {
   claimAdoption(intent: IntegrationAdoptionIntent): Promise<IntegrationAdoptionRecord>;
   finishAdoption(intent: IntegrationAdoptionIntent): Promise<IntegrationAdoptionRecord>;
 }
-export interface AdoptionTargetObservation { readonly tip: string | null; readonly checkedOut: boolean }
+/** Which journal record last moved a target: the per-target sequence and its command. */
+export interface AdoptionFence { readonly sequence: number; readonly scopeId: string; readonly commandId: string }
+export interface AdoptionTargetObservation { readonly tip: string | null; readonly checkedOut: boolean; readonly fence: AdoptionFence | null }
 export interface IntegrationAdoptionTarget {
   observe(targetRef: string): Promise<AdoptionTargetObservation>;
-  /** Atomic compare-and-swap of one branch reference; never touches an index, worktree or HEAD. */
-  move(targetRef: string, fromCommit: string, toCommit: string): Promise<void>;
+  /** One atomic transaction: the branch moves `fromCommit`→`toCommit` and the target's fence moves `expected`→`next`, or nothing
+   * changes. A stale caller whose expected fence is no longer current cannot move the branch. Never touches an index, worktree or HEAD. */
+  move(targetRef: string, fromCommit: string, toCommit: string, expected: AdoptionFence | null, next: AdoptionFence): Promise<void>;
 }
 type AdoptionResult = Readonly<{ schemaVersion: 1; status: 'adopted' | 'rolled-back'; command: IntegrationAdoptionCommand | IntegrationRollbackCommand;
   targetRef: string; fromCommit: string; toCommit: string; sequence: number; basis: 'task-acceptance'; verification: 'not-verified'; application: 'branch-reference' }>;
 
+const sameFence = (a: AdoptionFence | null, b: AdoptionFence) => a !== null && a.sequence === b.sequence && a.scopeId === b.scopeId && a.commandId === b.commandId;
 /** Moves a configured, not-checked-out branch to a delivered commit, or back to its previous tip. Never writes the live checkout,
- * never accepts a Task and never claims verification of the adopted commit. There is no fence against Git writers outside Deckent. */
+ * never accepts a Task and never claims verification of the adopted commit. Deckent's own commands are fenced through the target's fence reference;
+ * Git writers outside Deckent are not fenced (a foreign move turns into a conflict, never into attributed success). */
 export class WorkspaceAdoptionApplication {
   constructor(private readonly store: IntegrationAdoptionStore, private readonly deliveries: Pick<IntegrationDeliveryTarget, 'delivered'>,
     private readonly target: IntegrationAdoptionTarget, private readonly allowedTargets: readonly string[],
@@ -99,8 +104,7 @@ export class WorkspaceAdoptionApplication {
     return this.apply(await this.store.claimAdoption(intent), settle);
   }
 
-  /** Replay or crash settlement of an existing command. A branch tip is shared, so an unsettled intent settles only from tip
-   * equality: at `toCommit` it finishes, at `fromCommit` it performs the move, anything else is a conflict. */
+  /** Replay or crash settlement of an existing command, decided by exact fence ownership (see apply). */
   private async resume(scopeId: string, commandId: string, actor: unknown, command: IntegrationAdoptionCommand | IntegrationRollbackCommand,
     settle: () => Promise<void>): Promise<AdoptionResult | null> {
     const previous = await this.store.loadAdoption(scopeId, commandId);
@@ -112,15 +116,22 @@ export class WorkspaceAdoptionApplication {
     return this.apply(previous, settle);
   }
 
+  /** The target's fence names the last record that moved it. If it is this record, the effect already happened (crash before
+   * settle) and the record only settles. A new effect needs the fence of the previous sequence, the branch at `fromCommit`, the
+   * target still allow-listed and not checked out; the move then advances branch and fence together. Anything else — including an
+   * external writer that placed `toCommit` — is a conflict, never an attributed success. */
   private async apply(record: IntegrationAdoptionRecord, settle: () => Promise<void>): Promise<AdoptionResult> {
     if (record.settled) return this.result(record);
     const { intent } = record;
+    const mine: AdoptionFence = { sequence: record.sequence, scopeId: intent.command.identity.scopeId, commandId: intent.command.commandId };
     const observed = await this.target.observe(intent.targetRef);
-    if (observed.checkedOut) throw new WorkspaceAdoptionError('ADOPTION_TARGET_CHECKED_OUT');
-    if (observed.tip !== intent.toCommit) {
-      if (observed.tip !== intent.fromCommit) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
+    if (!sameFence(observed.fence, mine)) {
+      if (!this.allowedTargets.includes(intent.targetRef)) throw new WorkspaceAdoptionError('ADOPTION_TARGET_DENIED');
+      if (observed.checkedOut) throw new WorkspaceAdoptionError('ADOPTION_TARGET_CHECKED_OUT');
+      const previous = observed.fence === null ? record.sequence === 1 : observed.fence.sequence === record.sequence - 1;
+      if (!previous || observed.tip !== intent.fromCommit) throw new WorkspaceAdoptionError('ADOPTION_CONFLICT');
       await settle();
-      await this.target.move(intent.targetRef, intent.fromCommit, intent.toCommit);
+      await this.target.move(intent.targetRef, intent.fromCommit, intent.toCommit, observed.fence, mine);
     }
     await settle();
     return this.result(await this.store.finishAdoption(intent));

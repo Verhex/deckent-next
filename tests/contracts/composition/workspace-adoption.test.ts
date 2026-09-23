@@ -1,4 +1,4 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -129,5 +129,42 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await f.git('branch', '-f', 'adopted', foreign);
     await expect(f.adopt('adopt-2')).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
     expect(await f.tip()).toBe(foreign);
+    // A foreign writer that places exactly the intended commit is not this command's effect: still a conflict.
+    await f.git('branch', '-f', 'adopted', f.plan.commit);
+    await expect(f.adopt('adopt-2')).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
+    expect(f.ledger('adopt-2')).toEqual({ sequence: 3, settled: 0 });
+  });
+
+  it('fences its own paused duplicate after a newer rollback and re-checks the allow-list before a resumed effect', async () => {
+    const f = await delivered(); await f.evaluate();
+    await f.git('branch', 'adopted', f.base);
+    const real = GitIntegrationAdoption.prototype.move;
+    let entered!: () => void, release!: () => void, first = true;
+    const paused = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+    const move = vi.spyOn(GitIntegrationAdoption.prototype, 'move').mockImplementation(async function(this: GitIntegrationAdoption, ...args) {
+      if (first) { first = false; entered(); await gate; }
+      return real.apply(this, args);
+    });
+    // A1 claims and observes, then pauses right before its Git transaction.
+    const stale = f.adopt('adopt'); await paused;
+    expect(await f.adopt('adopt')).toMatchObject({ status: 'adopted', sequence: 1 });
+    expect(await f.rollback('rollback', 'adopt')).toMatchObject({ status: 'rolled-back', sequence: 2 });
+    expect(await f.tip()).toBe(f.base);
+    release();
+    await expect(stale).rejects.toMatchObject({ code: 'ADOPTION_CONFLICT' });
+    expect(await f.tip()).toBe(f.base); expect(f.ledger('rollback')).toEqual({ sequence: 2, settled: 1 });
+
+    // A rollback interrupted before its effect must not move a target that is no longer allow-listed.
+    expect(await f.adopt('adopt-2')).toMatchObject({ status: 'adopted', sequence: 3 });
+    move.mockImplementationOnce(async () => { throw new Error('crash before move'); });
+    await expect(f.rollback('rollback-2', 'adopt-2')).rejects.toBeDefined();
+    expect(f.ledger('rollback-2')).toEqual({ sequence: 4, settled: 0 });
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    await writeFile(f.configPath, JSON.stringify({ ...config, execution: { ...config.execution, adoption: { targets: [] } } })); clearConfigCache();
+    await expect(f.rollback('rollback-2', 'adopt-2')).rejects.toMatchObject({ code: 'ADOPTION_TARGET_DENIED' });
+    expect(await f.tip()).toBe(f.plan.commit);
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    expect(await f.rollback('rollback-2', 'adopt-2')).toMatchObject({ status: 'rolled-back', sequence: 4 });
+    expect(await f.tip()).toBe(f.base);
   });
 });
