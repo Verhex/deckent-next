@@ -65,7 +65,13 @@ export function WorklineApp(props: WorklineProps) {
   const palette = useWorklinePalette();
   const { exit } = useApp();
   const { buffer, push } = useLedgerBuffer();
-  const [line, setLine] = useState('');
+  const [line, setLineState] = useState('');
+  // The current line lives in a ref so a submit in the same input chunk never reads a stale render's line.
+  const lineRef = useRef('');
+  const setLine = useCallback((next: string | ((current: string) => string)) => {
+    lineRef.current = typeof next === 'function' ? next(lineRef.current) : next;
+    setLineState(lineRef.current);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
@@ -154,7 +160,7 @@ export function WorklineApp(props: WorklineProps) {
   }, [completeTurn, errorText, historyMessages, push, systemPrompt]);
 
   const submit = useCallback(async () => {
-    const trimmed = line.trim();
+    const trimmed = lineRef.current.trim();
     if (!trimmed) return;
     const slash = parseSlashLine(trimmed);
     if (!slash) { setLine(''); await runTurn(trimmed); return; }
@@ -171,7 +177,7 @@ export function WorklineApp(props: WorklineProps) {
     try { push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs', slash.args, ledger!, labels)); }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
-  }, [errorText, exit, labels, ledger, line, push, runTurn, watch]);
+  }, [errorText, exit, labels, ledger, push, runTurn, setLine, watch]);
 
   useInput((input, key) => {
     if (busy && (key.escape || (key.ctrl && input === 'c'))) {
@@ -183,7 +189,12 @@ export function WorklineApp(props: WorklineProps) {
     // While busy the line stays editable and is kept; it is submitted with Enter once the turn has finished.
     if (key.return) { if (!busy) void submit(); return; }
     if (key.backspace || key.delete) { setLine(current => current.slice(0, -1)); return; }
-    if (input && !key.ctrl && !key.meta) setLine(current => current + input);
+    if (!input || key.ctrl || key.meta) return;
+    // Fast typing, a PTY or a paste can deliver text and Enter in one chunk (Ink then reports no return key).
+    // A trailing Enter submits; newlines inside the chunk stay part of the message.
+    const submitted = /[\r\n]$/.test(input) && input.length > 1;
+    setLine(current => current + input.replace(/[\r\n]+$/, '').replace(/\r\n?/g, '\n'));
+    if (submitted && !busy) void submit();
   });
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant };

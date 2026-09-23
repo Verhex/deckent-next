@@ -44,6 +44,20 @@ function workers(count: number, offset: number): WorkerObservationReport {
 }
 
 describe('ledger buffer (Ink Static contract)', () => {
+  it('submits when Enter arrives in the same input chunk as the text and keeps pasted newlines inside the message', async () => {
+    const sent: string[] = [];
+    const view = mount({ completeTurn: async messages => { sent.push(messages.at(-1)!.content); return 'ok'; } });
+    await settle(20);
+    view.stdin.write('hello there, one chunk\r');
+    await until(() => sent.length === 1, 'chunked enter submits');
+    expect(sent[0]).toBe('hello there, one chunk');
+    view.stdin.write('first line\nsecond line');
+    await settle(20);
+    view.stdin.write('\r');
+    await until(() => sent.length === 2, 'pasted lines submit on enter');
+    expect(sent[1]).toBe('first line\nsecond line');
+  });
+
   it('keeps appending after any number of rows and bounds only the bridge tail', () => {
     let buffer = EMPTY_LEDGER;
     const notice = (index: number): WorkLedgerEntry => ({ schemaVersion: 1, kind: 'notice', id: 'n', level: 'info', text: `n${index}` });

@@ -69,7 +69,8 @@ it.skipIf(unsupported).each([0o700, 0o775])('publishes a relocated installation 
     '--accept-custom', '--json'])).stdout);
   expect(replayed).toMatchObject({ status: 'replayed', transactionId: installed.transactionId, proposalDigest: evidence.proposalDigest,
     trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
-});
+// Inspect + apply + a compiled-CLI replay measured 27.5-28.1 s on this host and 30.4 s under a running local model server.
+}, 90_000);
 
 it.skipIf(unsupported)('rejects a changed proposal or absent custom consent before publishing a target', async () => {
   const changed = await fixture();

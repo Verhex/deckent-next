@@ -44,7 +44,8 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
     return { reason: 'response-limit' };
   }
   const choice = parsed.data.choices[0]!;
-  if ('tool_calls' in choice.message || 'function_call' in choice.message) {
+  // No tool calls are accepted. Servers such as vLLM always send these keys, as null, when there is none.
+  if ((choice.message['tool_calls'] ?? null) !== null || (choice.message['function_call'] ?? null) !== null) {
     return { reason: 'invalid-response' };
   }
   if (parsed.data.usage === undefined || parsed.data.usage === null) return { response: Object.freeze({ schemaVersion: 1, native: copied.data, usage: null }) };

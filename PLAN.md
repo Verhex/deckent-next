@@ -76,6 +76,9 @@ günü (ölçüm değil). Analiz: dış çalışma alanı `TERMINAL-NATIVE-AND-L
 arka planda `runtime serve` (0600 günlük, hazır olma süresi, sahiplik hatasında başlatma yok, başarısızlık ölümcül değil), terminal
 kapansa da çalışır. Açık: eski sürümle başlamış servisin fark edilmesi (canlı denemede eski servis yeni `terminal.scopeId` alanını
 tanımayıp `CONFIG_VALIDATION` verdi), meşgulken girdi kuyruğu yok, servis hatasında parametre kaybı (`{issues}`).
+**L2 (2026-09-23):** ölçümlü kıyasla vLLM v0.30.0 + RedHatAI Qwen3.8-27B INT4 birincil yerel sunucu (8 eşzamanlı 336–348 vs 70–131 tok/sn; Jev 5ee8d8aa 0,90),
+llama.cpp soğuk yedek; kalite farkı ölçülmedi. Canlı `deckent` sohbeti vLLM ile çalışıyor. T0b açıkları: `service.identity` yoksa `runtime shutdown`
+arka plan servisini kapatamıyor; mevcut projede ledger sürüm geçişi otomatik değil.
 
 ### Güncel öncelik — owner 2026-09-22
 

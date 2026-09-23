@@ -52,6 +52,20 @@ it('uses exact native nonstream bytes and preserves full native completion evide
   expect(Object.isFrozen(result.native)).toBe(true); expect(Object.isFrozen(result.usage)).toBe(true);
 });
 
+it('accepts a vLLM-shaped completion whose tool fields are null and whose extra fields are kept as native evidence', async () => {
+  const vllm = response('configured-model', { service_tier: null, system_fingerprint: 'vllm-0.30.0', prompt_logprobs: null, kv_transfer_params: null,
+    choices: [{ index: 0, finish_reason: 'stop', stop_reason: null, token_ids: null, logprobs: null,
+      message: { role: 'assistant', content: 'native answer', refusal: null, annotations: null, audio: null, function_call: null, tool_calls: null, reasoning: null } }] });
+  const origin = await fixture((_req, res) => { res.end(JSON.stringify(vllm)); });
+  const { port, prepared } = await token(origin);
+  expect(await port.send(prepared)).toMatchObject({ schemaVersion: 1, native: vllm });
+  // A real tool call is still refused.
+  const called = structuredClone(vllm); (called.choices[0]!.message as Record<string, unknown>)['function_call'] = { name: 'x', arguments: '{}' };
+  const toolOrigin = await fixture((_req, res) => { res.end(JSON.stringify(called)); });
+  const tool = await token(toolOrigin);
+  expect(await tool.port.send(tool.prepared)).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response' } });
+});
+
 it('uses the explicit endpoint pathname without adding a default route, and freezes it during preparation', async () => {
   let seen: { method?: string; url?: string } = {}; let redirected = 0;
   const origin = await fixture((req, res) => { seen = { method: req.method, url: req.url }; res.end(JSON.stringify(response())); });
