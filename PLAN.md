@@ -12,6 +12,18 @@ Owner 2026-09-23: Next'te Opus ↔ Astra inceleme kanalı açıldı; geçici yü
 Astra analiz/incelemede, terminal Cursor'dadır. İşlenen kanal kayıtları alıcı tarafından tüketilir.
 Bu rol düzeni yeni ürün kapsamı, DOGFOOD aktivasyonu veya push izni vermez; eski kanal arşivdir.
 
+**Owner kararı 2026-09-23 — iki hat ve Enterprise katmanı (Jev 124d141b two_lanes_contract_gate 0,99; core-memory kanun 10):**
+Ticari hedef Deckent-Enterprise; Core MIT/açık kaynak ve bağımsız. Her Core sözleşmesi Enterprise ve ERP adapter'larının
+(IFS, SAP, Oracle, Microsoft, Uyumsoft, Logo) Core'u değiştirmeden registry üzerinden giydirilebileceği biçimde kurulur;
+müşteri ERP sürümüne göre iç paketlerin yazımı/dağıtımı Enterprise sorumluluğudur. **Sözleşme kapısı:** modüle özel yeni
+etki akışı yazılmaz; B06-2 ve IFS genel etki portu üzerine kurulur. **Hat A (dogfood, zaman kutulu):** mevcut B05/B06-1
+ile kararlı N → N+1 gerçek iş, benimseme, operatör aktivasyonu, kabul/kurtarma kanıtı; owner DOGFOOD denemesine izin verdi,
+yeni etki türü yok. **Hat B (Enterprise'ı taşıyan Core):** (1) genel etki-settlement portu + tek ledger tablosu,
+(2) operasyon anahtarlı onay (`require-approval` → onay, ret değil), (3) registry + ayrı dağıtılan Enterprise örnek paketiyle
+Core'a dokunmadan takılma kanıtı, (4) company scope tipleri (H34), (5) IFS senaryo tasarımı + sandbox kanıtı M4'ten öne;
+IFS erişimi yok, owner yakında sağlayacak — o zamana dek belgelenmiş genel yüzeylerle, çalışıyor iddiası olmadan.
+Mevcut beş el yazımı etki akışı (teslim, benimseme, entegrasyon, iptal teslimi, model çağrısı) dogfood sonrası porta taşınır.
+
 ## Kalıcı yön ve kararlar
 
 - Müşterinin kurduğu solo/team/on-prem/uzak/air-gapped ürün; Deckent SaaS işletmez. Güvenli Core bağımsız, Enterprise özel dağıtılır.
@@ -173,10 +185,10 @@ Legacy'de var, Next'te fiziksel olarak olmayan katmanlar ve owner kararı. Kayna
 
 | Kilometre taşı | İçerik | Temel tarih | Aralık |
 |---|---|---|---|
-| M1 Kabuk | Dalga 0–1 + FOUNDATION registry | 2026-10-31 | 10-15 … 11-30 |
-| M2 Dogfood | kurtarılabilir runtime, DOGFOOD açık | 2026-11-20 | 10-31 … 12-31 |
+| M1 Kabuk | Dalga 0–1 + FOUNDATION registry + Hat B sözleşmeleri (etki portu, operasyon onayı, registry/Enterprise overlay kanıtı, company scope) | 2026-10-31 | 10-15 … 11-30 |
+| M2 Dogfood | kurtarılabilir runtime, DOGFOOD açık (Hat A denemesi 2026-09-23'ten itibaren), IFS senaryo tasarımı + sandbox kanıtı (erişime bağlı) | 2026-11-20 | 10-31 … 12-31 |
 | M3 Yüzeyler | API, TUI, streaming, Desktop, Dashboard okuma, SDK | 2027-01-31 | 12-15 … 03-31 |
-| M4 Enterprise kapısı | company scope/SSO/RBAC, secret, audit, backup, upgrade, supply chain, yük/arıza, SLO + IFS ilk senaryo | 2027-03-15 | 01-31 … 05-31 |
+| M4 Enterprise kapısı | company scope/SSO/RBAC, secret, audit, backup, upgrade, supply chain, yük/arıza, SLO + ERP adapter ailesinin ilk müşteri senaryosu | 2027-03-15 | 01-31 … 05-31 |
 | M5 Zekâ katmanı | Brain/Auditor/Nervous/learning/connector/catalog | 2027-05-15 | 03-15 … 08-31 |
 
 Ölçüm tabanı 6 gün/211 commit; proof tekrarı %30, düzeltici commit %19,6, kart süresi 2026-09-22'ye kadar ölçülmemiş. A02/W0-3 süre enstrümanı 2026-09-22'de kuruldu (`node .agents/refactor/effort.mjs report --format table`); tanım: her dilim M1–M5 milestone kimliği, startedAt/endedAt, aktif çalışma, BLOCKED/bekleme, doğrulama ve rework süresiyle kaydedilir. Bu ölçümler yukarıdaki temel tarih/aralıkların yeniden hesabına girdidir; commit sayısı efor yerine geçmez, gözlenmeyen süre tahminle doldurulmaz. Tarih/aralıklar iki haftada bir ve her milestone kabulünde ölçüm kaynağıyla yeniden yayımlanır; mevcut tarihler söz değil tahmindir.
@@ -187,7 +199,7 @@ Legacy'de var, Next'te fiziksel olarak olmayan katmanlar ve owner kararı. Kayna
 |---|---|---|
 | A02 | **Enstrüman kuruldu (2026-09-22):** `.agents/refactor/effort.mjs` dilim başına M1–M5, startedAt/endedAt, active/blocked/verification/rework aralıklarını özel immutable journal'a (`.deckent/host/effort`, Git dışı) yazar; pause/açık kuyruk *unknown* kalır, tahmin edilmez; durum enum'ludur; commit sayısı efor değildir. İlk gerçek kayıt A02 diliminin kendisidir. Kart dosyaları yeniden yazılmadı; mevcut kanıt kapısı değişmedi. | Her iki haftada `effort report` çıktısı M1–M5 yeniden yayımına girdidir; tek dilimle tahmin güncellenmez. |
 | B05 | **İlk dilim kanıtlandı (2026-09-22):** `npm pack` ile paketlenmiş kararlı N (`/home/alperen/deckent-n`, kendi prefix/global-home/data kökü) ayrı N+1 klonuna (`/home/alperen/deckent-n1`) kurulum uyguladı; N'in paketlenmiş runtime servisi r2 imajında gerçek Claude worker'ıyla N+1'i düzenledi, reference-only teslim `refs/deckent/deliveries/` altına indi, teslim edilen commit bağımsız testle kabul edildi, servis SIGKILL/yeniden başlatma sonrası durum korundu; N+1 HEAD/WIP ve canlı checkout değişmedi. Üç EXECUTION bulgusu açıldı (aşağıda). Canlı checkout'a benimseme/terfi B06. | M2 Dogfood önkoşulu; DOGFOOD OFF. |
-| B06 | **B06-1 dal referansı benimseme uygulandı (owner 2026-09-23: A şimdi, C ardından; rollback = ref CAS; Jev 8f6ad842 A 0,63 / C 0,34, evidence_strength 0,17):** `task integration-adopt|integration-rollback` (SDK+CLI) teslim edilmiş commit'i `execution.adoption.targets` izin listesindeki, hiçbir worktree'de checkout edilmemiş ve teslim bazında duran dala Git CAS ile taşır; ön koşul tamamlanmış teslim + bu denemenin kayıtlı Task kabulü; değişen baz reddedilir (rebase/merge yok); ayrı `adopt-integration`/`rollback-integration` politika eylemi + canlı oturum; ledger v33 niyet + hedef başına sıra fence'i, yarım kayıt varken hedef meşgul; rollback yalnız uç hâlâ benimsenen commit ve daha sonraki kayıt yoksa. Sonuç `verification: not-verified` (process-exit kabulü). Hedef başına fence ref'i dal ile aynı Git transaction'ında ilerler (kendi bayat kopyalarımız yeni kayıtlardan sonra dalı taşıyamaz, çökme uzlaştırması tam fence sahipliğinden; Astra 2039); devam eden etki izin listesini yeniden kontrol eder. Sınırlar: Deckent dışı aynı-kullanıcı Git yazıcılarına ve yarışan checkout'a fence yok; tamamlanamayan kayıt hedefi operatör kurtarmasına kadar bloklar; canlı checkout/runtime aktivasyonu yok. **B06-2:** teslim commit'inde doğrulama Run'ı policy ön koşulu. MCP paritesi (teslim+benimseme) A03. | M2 Dogfood önkoşulu; B07 B06-2 sonrası; DOGFOOD OFF. |
+| B06 | **B06-1 dal referansı benimseme uygulandı (owner 2026-09-23: A şimdi, C ardından; rollback = ref CAS; Jev 8f6ad842 A 0,63 / C 0,34, evidence_strength 0,17):** `task integration-adopt|integration-rollback` (SDK+CLI) teslim edilmiş commit'i `execution.adoption.targets` izin listesindeki, hiçbir worktree'de checkout edilmemiş ve teslim bazında duran dala Git CAS ile taşır; ön koşul tamamlanmış teslim + bu denemenin kayıtlı Task kabulü; değişen baz reddedilir (rebase/merge yok); ayrı `adopt-integration`/`rollback-integration` politika eylemi + canlı oturum; ledger v33 niyet + hedef başına sıra fence'i, yarım kayıt varken hedef meşgul; rollback yalnız uç hâlâ benimsenen commit ve daha sonraki kayıt yoksa. Sonuç `verification: not-verified` (process-exit kabulü). Hedef başına fence ref'i dal ile aynı Git transaction'ında ilerler (kendi bayat kopyalarımız yeni kayıtlardan sonra dalı taşıyamaz, çökme uzlaştırması tam fence sahipliğinden; Astra 2039); devam eden etki izin listesini yeniden kontrol eder. Sınırlar: Deckent dışı aynı-kullanıcı Git yazıcılarına ve yarışan checkout'a fence yok; tamamlanamayan kayıt hedefi operatör kurtarmasına kadar bloklar; canlı checkout/runtime aktivasyonu yok. **B06-2:** teslim commit'inde doğrulama Run'ı policy ön koşulu — owner 2026-09-23 sözleşme kapısıyla Hat B genel etki portu üzerine kurulur. MCP paritesi (teslim+benimseme) A03. | M2 Dogfood önkoşulu; B07 B06-2 sonrası; DOGFOOD OFF. |
 | D14 | Deterministik Mission, maxRounds ve tur checkpoint'i. | Kabuk/EXECUTION sözleşmeleri. |
 | D15a | Mission AI author; D14 + invocation allocation/spend ve checkpoint gerektirir. | D14 sonrası. |
 | D15b | `do` intent→RunProposal→kapılar→Run admission; D14'ten bağımsız, COMMAND-ENVELOPE/POLICY-EFFECT-VERDICT ve gereken approval sözleşmeleri sonrası. | Mission ile paralel; tam sohbet/TUI kabulü öncesi. |
@@ -232,7 +244,7 @@ fixture'ları v25 tablolarını eski sürümde bırakmayacak şekilde düzeltild
 Bu doğrulama açık model unknown'ının çözüldüğü anlamına gelmez.
 [Checkpoint kanıtı](../deckent-refactor-work/proof/CHECKPOINT-2026-09-21/verification.json).
 Son dört dilimin yerel commitleri `dcab7e6` ve `652d1c2`: onay, canlı oturum, reference-only teslim/kurtarma ve üç native sağlayıcının paralel yerel koşumu. Kayıtlı son doğrulama 1541 ürün/265 dosya, 25 native, 36 host; fail/skip0. [Kanıt özeti](../deckent-refactor-work/proof/FOUR-STEP-EXECUTION/review.md) ve [commit/hash/koşum kaydı](../deckent-refactor-work/proof/FOUR-STEP-EXECUTION/completion.json) önceki Linux koşumunun kanıtıdır; belge eşlemesinde canlı worker yeniden çalıştırılmadı. Bağımsız inceleme yapılmadı; Fable kanalı kapalı.
-DOGFOOD_MODE=OFF. Ağırlıklı yetenek paydası kabul edilmediğinden genel tamamlanma yüzdesi verilmez.
+DOGFOOD_MODE=OFF; owner 2026-09-23 Hat A kapsamında sınırlı DOGFOOD denemesine izin verdi (operatör aktivasyonlu N+1, kanıt ve kurtarma yolu ile). Ağırlıklı yetenek paydası kabul edilmediğinden genel tamamlanma yüzdesi verilmez.
 
 - [Temizlik öncesi eksiksiz plan ve tarihsel kartlar](../deckent-refactor-work/archive/PLAN-before-flow-split-2026-09-21-55a9ec25aa3b.md) — geçmiş/iptal/kanıt; aktif yürütme izni değildir.
 - [İlk onaylı refaktör planı](../deckent-refactor-work/PLAN-APPROVED-2026-09-16.md) ve [backlog kaynağı](../deckent-refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md) — güncel owner kararlarıyla çelişen legacy öneriler uygulanmaz.

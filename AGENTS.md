@@ -15,6 +15,8 @@
 - Target scope is installation > company > optional site/unit > project > session; company policy is Core, customer IdP/SIEM are adapters.
 - `do` proposes and admits Runs independently of Mission; business processes reuse the operation catalog and existing execution authority.
 - Keep secure Core standalone and proprietary Enterprise outside public artifacts and history.
+- Enterprise is the commercial target (owner 2026-09-23): every Core contract must let Enterprise and ERP adapters
+  (IFS, SAP, Oracle, Microsoft, Uyumsoft, Logo) layer on via registry without editing Core; no new module-specific effect flow.
 - Enforce filesystem/process/network/secret boundaries; workspace separation alone is not isolation.
 - Preserve bounded resources, cancellation, recovery and uncertain-effect handling.
 - Mutable policy and user strings belong in registries/catalogs; invariants remain versioned code.

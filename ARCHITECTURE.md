@@ -318,6 +318,36 @@ refresh, usage and dogfood closure remain open.
 - Early dogfood requires a stable N controlling candidate N+1, bounded real work, independent acceptance,
   cancel/restart evidence and an external recovery path. Product self-development cannot bypass its own policy.
 
+### Enterprise layering, effect settlement and ERP adapters — owner 2026-09-23 (accepted target; Lane B)
+
+Deckent-Enterprise is the commercial target; Core is standalone open source (MIT). Enterprise is layered on published
+Core contracts and never requires editing Core. Core-memory law 10 records this rule (Jev 124d141b, two lanes 0.99).
+
+- **Contract gate.** New external effects use one Core effect-settlement port, never another module-specific
+  intent/claim/effect/finish flow. The port carries: a versioned operation (catalog id/version, effect class,
+  compensation availability), scope/principal/actor, an idempotency key, a conditional-write precondition observed
+  from the target (Git tip, ERP record version/ETag or business condition), intent persisted before the effect,
+  re-authorization and live-session check immediately before the effect, exact settlement evidence where the target
+  supports it (Git fence ref, ERP-side idempotency record) and otherwise typed `unknown` reconciliation without blind
+  retry, and compensation as a new intent (cancel/reverse), not a silent rollback. Existing delivery, adoption,
+  integration, cancellation delivery and model-invocation flows migrate onto it after the dogfood lane; until then
+  they are recorded debt, not a pattern to copy.
+- **Operation-keyed approval.** Approval binds (scope, resource kind, resource id, action digest), not only Run/Task.
+  A policy `require-approval` decision opens or checks an approval request instead of collapsing into `POLICY_DENIED`.
+  Four-eyes/separation of duties remain organization policy data.
+- **Registry overlay.** Adapters, policy sources, identity providers, operation catalogs, ledger extension
+  namespaces and surfaces are registered through a versioned registry with module manifests (tier, version,
+  required Core API range, capabilities). Composition resolves registered units; a separately distributed Enterprise
+  package proves overlay without Core edits before Enterprise features are claimed. Tiers never grant authority.
+- **ERP adapter family (Enterprise).** IFS (Cloud via MCP/REST and Applications 10 native), SAP, Oracle, Microsoft,
+  Uyumsoft and Logo implement the same operation/effect/approval contracts. Customer ERP development projects are built
+  on these adapters; Deckent-Enterprise owns writing and distributing internal packages as each customer's ERP version
+  changes. Every adapter/package declares the ERP product/version range it supports; compatibility is never assumed.
+  ERP company/site authority maps to Core company scope. No ERP access exists yet: adapters start against documented
+  generic surfaces and are not claimed working until a customer/test environment proves read and conditional write.
+- **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
+  Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
+
 ## Packages (current implementation)
 
 ```text

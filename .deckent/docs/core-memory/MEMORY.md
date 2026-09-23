@@ -1,4 +1,4 @@
-# Memory — 9 KALICI KANUN (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
+# Memory — 10 KALICI KANUN (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
 
 > Bu dosya ve aynı dizindeki referanslar bu repo için canonical ürün/geliştirme core-memory authority'sidir.
 > Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; geçici ilerleme `follow-up-works/current-flow.md`.
@@ -20,6 +20,7 @@ Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_
 7. **[Yerel doğrulama ve kaynak sınırı](law_local_verification.md)** — test ≤16 GB, `VITEST_MAX_FORKS=2`; landing öncesi `npm run verify`; suite koşarken build yasak; makine sınırı ürün sınırı değil.
 8. **[İkinci görüş, Jev ve inceleme kanalı](law_second_opinion_jev.md)** — belirsizlikte logged Jev, iki çekimser seçenek zorunlu; Jev danışmandır, PASS değil; kanal (2026-09-23): Opus uygular, Astra inceler.
 9. **[Alp Discipline karar çapası](law_alp_discipline_anchor.md)** — negative-space → sınır-içi-alternatif → kayıpta-dur → irtifa-ilanı.
+10. **[Enterprise katmanı ve ERP adapter ailesi](law_enterprise_layering.md)** — ticari hedef Enterprise; Core MIT/bağımsız; her Core sözleşmesi Enterprise ve ERP'nin Core'u değiştirmeden giydirilebileceği biçimde; genel etki sözleşmesi kapısı; ERP adapter'ları (IFS/SAP/Oracle/Microsoft/Uyumsoft/Logo) Enterprise'da, müşteri ERP sürümüne göre paket sorumluluğu; iki hat (owner 2026-09-23).
 
 ## Eski numara eşlemesi (2026-09-23 birleştirme)
 
