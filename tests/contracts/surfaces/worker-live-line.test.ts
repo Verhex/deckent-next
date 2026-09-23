@@ -90,6 +90,7 @@ describe('approval decision keys and scans', () => {
     expect([decisionKey('n', {}), decisionKey('N', {}), decisionKey('\r', { return: true }), decisionKey('', { escape: true })]).toEqual(['no', 'no', 'no', 'no']);
     for (const input of ['a', 'A', '3', 'yes', 'y\r', ' ', 'x']) expect(decisionKey(input, {})).toBeNull();
     expect(decisionKey('y', { ctrl: true })).toBeNull();
+    expect(decisionKey('c', { ctrl: true })).toBe('no');
     expect(decisionKey('y', { meta: true })).toBeNull();
   });
 

@@ -70,13 +70,14 @@ export function approvalWatchStep(state: ApprovalWatchState, page: WorklineAppro
 }
 
 /**
- * Key mapping for a decision card. Only a single typed `y`/`Y` says yes; `n`/`N`, Enter and Esc say no (the safe default).
+ * Key mapping for a decision card. Only a single typed `y`/`Y` says yes; `n`/`N`, Enter, Esc and Ctrl+C say no (the safe
+ * default; Ctrl+C closes the card instead of leaving the operator stuck, it never exits the terminal from a card).
  * Pasted or multi-character input, control sequences and every other key leave the card waiting. There is no
  * "always"/remember key: every gated item is decided one by one (legacy `a` is deliberately absent).
  */
 export function decisionKey(input: string, key: { readonly return?: boolean; readonly escape?: boolean; readonly ctrl?: boolean; readonly meta?: boolean }):
   'yes' | 'no' | null {
-  if (key.return || key.escape) return 'no';
+  if (key.return || key.escape || (key.ctrl && input === 'c')) return 'no';
   if (key.ctrl || key.meta || input.length !== 1) return null;
   if (input === 'y' || input === 'Y') return 'yes';
   if (input === 'n' || input === 'N') return 'no';

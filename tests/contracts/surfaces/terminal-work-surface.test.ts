@@ -217,6 +217,13 @@ describe('work surface: /cancel', () => {
     await view.type('n');
     await until(() => view.frame().includes('C-KEPT run-7') && !view.frame().includes('C-PROMPT'), 'kept');
     expect(cancelled).toEqual([]);
+    // Ctrl+C on an open card is the safe answer (keep running) and never exits the terminal.
+    let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
+    await view.type('/cancel run-7\r');
+    await view.card('C-PROMPT', 'ctrl+c card');
+    view.stdin.write('\u0003');
+    await until(() => view.frame().includes('C-KEPT run-7') && !view.frame().includes('C-PROMPT'), 'ctrl+c keeps the run');
+    expect(exited).toBe(false); expect(cancelled).toEqual([]);
     await view.type('/cancel run-7\r');
     await view.card('C-PROMPT', 'second card');
     await view.type('y');

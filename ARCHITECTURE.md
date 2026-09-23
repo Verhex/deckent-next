@@ -442,7 +442,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
   and unsealed attempts are visible). `/approvals [n|id]` lists pending items via the runtime `listApprovals` and opens
   one y/N card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
-  `approvals decide`). Only a single typed `y` approves; `n`, Enter and Esc deny; there is no remember/always key and
+  `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
   no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
   default whenever approvals are wired. `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
   handler against the inspected revision. Read-only commands never prompt; an open card owns the keys.
