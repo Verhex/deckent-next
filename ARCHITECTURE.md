@@ -369,8 +369,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
-- **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`;
-  chat text is not run truth. Watches are single-flight polls with bounded memory. The Ink `Static`
+- **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
+  `/runs` reads that same inventory page and appends one inspection card per id; it does not create or cancel a run.
+  Chat text is not run truth. Watches are single-flight polls with bounded memory. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only

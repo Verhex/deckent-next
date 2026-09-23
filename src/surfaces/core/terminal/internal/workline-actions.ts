@@ -2,12 +2,13 @@ import type { WorkLedgerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { WORKLINE_SLASH_COMMANDS } from './slash-registry.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
-import { ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
+import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;
   readonly runNotFound: string;
   readonly workersEmpty: string;
+  readonly runsEmpty: string;
   readonly runUsage: string;
   readonly watchStarted: string;
   readonly watchRunsStarted: string;
@@ -52,12 +53,20 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
   if (command === 'watch-stop') {
     return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false } } : { entries: [] };
   }
+  if (command === 'runs') {
+    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
+    return null;
+  }
   if (command === 'workers' || command === 'run') return ledger ? null : { entries: [notice('error', labels.ledgerUnavailable)] };
   return { entries: [notice('error', `${labels.unknownCommand}: /${command}`)] };
 }
 
-export async function runLedgerCommand(command: 'workers' | 'run', args: string, ledger: WorklineLedgerPorts,
+export async function runLedgerCommand(command: 'workers' | 'run' | 'runs', args: string, ledger: WorklineLedgerPorts,
   labels: WorklineActionLabels): Promise<readonly WorkLedgerEntry[]> {
+  if (command === 'runs') {
+    const cards = await ledgerEntriesForRuns(ledger, 'runs');
+    return cards.length ? cards : [notice('info', labels.runsEmpty)];
+  }
   if (command === 'workers') {
     const cards = await ledgerEntriesForWorkers(ledger, 'workers');
     return cards.length ? cards : [notice('info', labels.workersEmpty)];

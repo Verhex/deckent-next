@@ -161,7 +161,7 @@ export function WorklineApp(props: WorklineProps) {
       return;
     }
     setBusy(true);
-    try { push(await runLedgerCommand(slash.command as 'workers' | 'run', slash.args, ledger!, labels)); }
+    try { push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs', slash.args, ledger!, labels)); }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
   }, [errorText, exit, labels, ledger, line, push, runTurn, watch]);

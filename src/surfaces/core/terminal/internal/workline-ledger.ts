@@ -24,6 +24,11 @@ export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<
   return views;
 }
 
+export async function ledgerEntriesForRuns(ports: WorklineLedgerPorts, idPrefix: string): Promise<WorkLedgerEntry[]> {
+  const views = await loadRunViewsForWatch(ports);
+  return views.map(run => runViewToLedgerEntry(run, `${idPrefix}-run-${run.runId}`));
+}
+
 export async function ledgerEntriesForWorkers(ports: WorklineLedgerPorts, idPrefix: string): Promise<WorkLedgerEntry[]> {
   const report = await ports.listWorkers();
   return workerReportToLedgerEntries(report, idPrefix);
