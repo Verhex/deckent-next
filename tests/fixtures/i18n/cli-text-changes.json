@@ -246,7 +246,7 @@
     },
     "terminal.workline.hint": {
       "before": "Slash: /help /status /workers /run <id> /watch-workers /watch-runs /watch-stop /exit",
-      "after": "Slash: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /exit"
+      "after": "Slash: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /transcript <n> /approvals /cancel <id> /exit"
     }
   },
   "tr": {
@@ -604,7 +604,7 @@
     },
     "terminal.workline.hint": {
       "before": "Komutlar: /help /status /workers /run <id> /watch-workers /watch-runs /watch-stop /exit",
-      "after": "Komutlar: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /exit"
+      "after": "Komutlar: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /transcript <n> /approvals /cancel <id> /exit"
     }
   }
 }

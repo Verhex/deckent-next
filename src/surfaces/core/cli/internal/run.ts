@@ -1,5 +1,5 @@
 import { cliUsage, shellIdentity } from './usage.js';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
@@ -9,6 +9,25 @@ export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoa
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
+/** Human rendering of a typed cancellation delivery; shared by `run cancel` and the terminal `/cancel` card. */
+export function renderRunCancellation(data: Awaited<ReturnType<RunCancellationDeliveryHandler>>, commandId: string, scopeId: string, runId: string, locale: Locale): string {
+  const labels = {
+    terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
+    denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
+    prevented: t('cli.run.cancel.prevented', {}, locale),
+    'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
+  };
+  const deliveryLabels = { queued: t('cli.run.cancel.deliveryQueued', {}, locale), claimed: t('cli.run.cancel.deliveryClaimed', {}, locale), exhausted: t('cli.run.cancel.deliveryExhausted', {}, locale), terminal: labels.terminal, prevented: labels.prevented };
+  const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
+  return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
+    ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
+    ...data.delivery.outcomes.flatMap(item => [t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale),
+      ...(item.delivery && ['queued', 'claimed', 'exhausted'].includes(item.delivery.state)
+        ? [t('cli.run.cancel.delivery', { count: item.delivery.attempts, state: deliveryLabels[item.delivery.state] }, locale)] : [])]),
+    ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
+    t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),
+  ].join('\n');
+}
 export async function runCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
   const languageAt = argv.indexOf('--lang');
@@ -75,24 +94,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
     if (!context.deliverRunCancellation) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.deliverRunCancellation(context.root ?? process.cwd(), { schemaVersion: 1, commandId, scopeId, runId, action: 'cancel', expectedRevision: Number(revision) }, { env: context.env ?? process.env });
-    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
-      const labels = {
-        terminal: t('cli.run.cancel.terminal', {}, locale), unresolved: t('cli.run.cancel.unresolved', {}, locale),
-        denied: t('cli.run.cancel.denied', {}, locale), unavailable: t('cli.run.cancel.unavailable', {}, locale),
-        prevented: t('cli.run.cancel.prevented', {}, locale),
-        'not-dispatched': t('cli.run.cancel.notDispatched', {}, locale),
-      };
-      const deliveryLabels = { queued: t('cli.run.cancel.deliveryQueued', {}, locale), claimed: t('cli.run.cancel.deliveryClaimed', {}, locale), exhausted: t('cli.run.cancel.deliveryExhausted', {}, locale), terminal: labels.terminal, prevented: labels.prevented };
-      const unconfirmed = data.delivery.outcomes.filter(item => item.status !== 'terminal' && item.status !== 'not-dispatched' && item.status !== 'prevented').length;
-      return [t('cli.run.cancel.heading', { run: data.delivery.runId, command: commandId }, locale),
-        ...(unconfirmed ? [t('cli.run.cancel.unconfirmed', { count: unconfirmed, total: data.delivery.outcomes.length }, locale)] : []),
-        ...data.delivery.outcomes.flatMap(item => [t('cli.run.cancel.outcome', { task: item.taskId, attempt: item.attemptId, status: labels[item.status] }, locale),
-          ...(item.delivery && ['queued', 'claimed', 'exhausted'].includes(item.delivery.state)
-            ? [t('cli.run.cancel.delivery', { count: item.delivery.attempts, state: deliveryLabels[item.delivery.state] }, locale)] : [])]),
-        ...(data.delivery.outcomes.length ? [] : [t('cli.run.cancel.empty', {}, locale)]),
-        t('cli.run.cancel.notice', { scope: scopeId, run: runId }, locale),
-      ].join('\n');
-    } });
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderRunCancellation(data, commandId, scopeId, runId, locale) });
     return;
   }
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

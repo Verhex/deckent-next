@@ -4,7 +4,7 @@ export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, 
   schemaVersion: 1; identity: AttemptIdentity; sealed: Readonly<{ eventCount: number; sealedAt: number }> | null;
   summary: WorkerEventSummary | null; events: readonly WorkerEvent[] }>>;
 const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
-function phaseLabel(phase: WorkerPhase, locale: Locale) {
+export function phaseLabel(phase: WorkerPhase, locale: Locale) {
   const labels: Record<WorkerPhase, string> = {
     starting: t('cli.worker.phase.starting', {}, locale), thinking: t('cli.worker.phase.thinking', {}, locale), reading: t('cli.worker.phase.reading', {}, locale),
     editing: t('cli.worker.phase.editing', {}, locale), running: t('cli.worker.phase.running', {}, locale), searching: t('cli.worker.phase.searching', {}, locale),

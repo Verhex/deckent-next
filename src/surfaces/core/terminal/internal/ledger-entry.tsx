@@ -1,12 +1,15 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from './ink-palette-context.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
+import { formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
 
 export interface LedgerEntryLabels {
   readonly runCard: string;
   readonly workerCard: string;
   readonly chatUser: string;
   readonly chatAssistant: string;
+  /** When present, worker cards carry the live activity line reported by the worker (as of the observation). */
+  readonly workerLine?: WorkerLineLabels;
 }
 
 export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
@@ -29,11 +32,13 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
       </Box>
     );
   }
+  const live = entry.live && labels.workerLine ? formatWorkerLine(entry, labels.workerLine) : null;
   return (
     <Box flexDirection="column" borderStyle="single" {...(ink.user.color ? { borderColor: ink.user.color } : {})} paddingX={1}>
       <Text {...ink.user}>{labels.workerCard}</Text>
       <Text>{entry.taskId} · {entry.process}</Text>
       <Text {...ink.muted}>{entry.provider} · {entry.authority}</Text>
+      {live ? <Text {...(live.tone === 'error' ? ink.error : live.tone === 'muted' ? ink.muted : {})}>{live.text}</Text> : null}
     </Box>
   );
 }

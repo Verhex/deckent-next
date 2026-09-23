@@ -434,6 +434,18 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `/runs` reads that same inventory page and appends one inspection card per id; it does not create or cancel a run.
   Chat text is not run truth. Watches are single-flight polls with bounded memory. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
+- **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while `/watch-workers`
+  runs, fed only by that single-flight poll or `followWorkers`) render one line per worker from the `activity`/`usage`
+  of `inspectWorkers` (`worker 2 · claude <model> · editing src/x.ts · 12 s ago · 18.4k tokens (cache 83%)`): phase text
+  from `cli.worker.phase.*`, age = observation time − host `receivedAt` (never `atMs`), truncated/dropped markers, a
+  finished/failed session labelled "worker reported"; `starting` with unmapped events is muted progress, not an error.
+  `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
+  and unsealed attempts are visible). `/approvals [n|id]` lists pending items via the runtime `listApprovals` and opens
+  one y/N card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
+  `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
+  no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
+  default whenever approvals are wired. `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
+  handler against the inspected revision. Read-only commands never prompt; an open card owns the keys.
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
