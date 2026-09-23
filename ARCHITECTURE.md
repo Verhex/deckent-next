@@ -374,8 +374,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
-  derives a loopback `/metrics` URL; reading it belongs to a bounded adapter (not yet wired), never a surface
-  fetch, and Deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
+  derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
+  inference-metrics adapter (loopback only, the profile's metrics limits, no redirect follow) and never
+  through a surface fetch. Deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
   is not Run admission. MCP `inference_plan` and `inference_budget` are the same read. The Desktop bridge
   snapshot carries work rows only (no chat content) and is not a live file channel. Watches stay
   single-flight polls unless the ledger `followWorkers` / `followRuns` port is connected.
