@@ -3,4 +3,4 @@ export { buildInferenceServingPlan, type InferenceServingPlan } from './internal
 export { InferenceTokenBudget, type TokenBudgetState, type TokenReservationRequest } from './internal/token-budget.js';
 export { loopbackMetricsUrl, type InferenceMetricsEndpoint } from './internal/metrics-endpoint.js';
 export { previewEmptyInferenceSlot } from './internal/slot-preview.js';
-export { readInferenceServingConfig, readInferenceServingProfile, selectInferenceProfile } from './internal/config-source.js';
+export { InferenceServingError, readInferenceServingConfig, readInferenceServingProfile, selectInferenceProfile } from './internal/config-source.js';

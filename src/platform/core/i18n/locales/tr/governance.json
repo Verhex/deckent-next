@@ -884,6 +884,7 @@
   "error.TERMINAL_CHAT_CANCELLED": "Sohbet turu iptal edildi; model çağrı servisinden iptal istendi.",
   "error.TERMINAL_CHAT_UNAVAILABLE": "Bu çalıştırılabilirde terminal sohbeti yok (yönetilen model çağrı işleyicisi bağlı değil).",
   "error.TERMINAL_TTY_REQUIRED": "Bu terminal modu stdin ve stdout için etkileşimli terminal ister; pipe ile `deckent terminal status --json` veya MCP araçlarını kullanın.",
+  "error.INFERENCE_PROFILE_UNKNOWN": "Çıkarım profili {profile} inference_serving.profiles içinde tanımlı değil. activeProfileId kullanmak için profil belirtmeyin.",
   "error.MODEL_INVOCATION_INVALID": "Model çağrısı girdisi geçersiz.",
   "error.MODEL_INVOCATION_BINDING_CONFLICT": "Tanımlı model bağı değişti veya kullanılamıyor.",
   "error.MODEL_INVOCATION_PROFILE_CONFLICT": "Eşleşen güncel çağrı profili bulunamıyor.",

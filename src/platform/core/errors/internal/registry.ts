@@ -28,6 +28,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
   TERMINAL_CHAT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_UNAVAILABLE', p, l) }) },
   TERMINAL_TTY_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_TTY_REQUIRED', p, l) }) },
+  INFERENCE_PROFILE_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.INFERENCE_PROFILE_UNKNOWN', p, l) }) },
   MODEL_INVOCATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_INVALID', p, l) }) },
   MODEL_INVOCATION_BINDING_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_BINDING_CONFLICT', p, l) }) },
   MODEL_INVOCATION_PROFILE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_PROFILE_CONFLICT', p, l) }) },

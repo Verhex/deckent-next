@@ -1,6 +1,5 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseInferenceServingConfig, resolveActiveInferenceProfile } from '#domain/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingConfig, roleContextCeiling, InferenceTokenBudget } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingError, roleContextCeiling, InferenceTokenBudget, selectInferenceProfile } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 interface Parsed {
@@ -57,11 +56,12 @@ function parse(argv: readonly string[]): Parsed {
   return parsed;
 }
 
-function resolveProfile(config: ReturnType<typeof parseInferenceServingConfig>, profileId?: string) {
-  if (!profileId) return resolveActiveInferenceProfile(config);
-  const profile = config.profiles.find(entry => entry.id === profileId);
-  if (!profile) throw ErrorRegistry.createError('CLI_USAGE');
-  return profile;
+function selectProfile(config: Record<string, unknown>, profileId: string | undefined, locale: Locale) {
+  try { return selectInferenceProfile(config, profileId); }
+  catch (error) {
+    if (error instanceof InferenceServingError) throw ErrorRegistry.createError(error.code, { params: { profile: error.profileId }, locale, cause: error });
+    throw error;
+  }
 }
 
 function renderPlan(plan: ReturnType<typeof buildInferenceServingPlan>, locale: Locale): string {
@@ -93,12 +93,11 @@ export async function inferenceCommand(argv: readonly string[], context: Command
   const config = await loadConfig(root, options);
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  const serving = readInferenceServingConfig(config as Record<string, unknown>);
-  if (!serving) {
+  const profile = selectProfile(config as Record<string, unknown>, parsed.profileId, locale);
+  if (!profile) {
     emit(t('inference.notConfigured', {}, locale), { ...sinks, level: 'warning' });
     return;
   }
-  const profile = resolveProfile(serving, parsed.profileId);
   if (parsed.action === 'plan') {
     const plan = buildInferenceServingPlan(profile);
     emit(plan, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderPlan(value, locale) });

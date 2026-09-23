@@ -884,6 +884,7 @@
   "error.TERMINAL_CHAT_CANCELLED": "The chat turn was cancelled; cancellation was requested from the model invocation service.",
   "error.TERMINAL_CHAT_UNAVAILABLE": "Terminal chat is unavailable in this executable (no governed model invocation handler).",
   "error.TERMINAL_TTY_REQUIRED": "This terminal mode needs an interactive terminal on both stdin and stdout; use `deckent terminal status --json` or MCP tools when piped.",
+  "error.INFERENCE_PROFILE_UNKNOWN": "Inference profile {profile} is not defined in inference_serving.profiles. Omit the profile to use activeProfileId.",
   "error.MODEL_INVOCATION_INVALID": "The model invocation input is invalid.",
   "error.MODEL_INVOCATION_BINDING_CONFLICT": "The declared model binding changed or is unavailable.",
   "error.MODEL_INVOCATION_PROFILE_CONFLICT": "No matching current invocation profile is available.",

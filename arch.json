@@ -269,7 +269,8 @@
         "src/platform/core/i18n",
         "src/surfaces/core/mcp",
         "src/composition/core/toolchains",
-        "src/engine/core/inference-serving"
+        "src/engine/core/inference-serving",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },
@@ -690,7 +691,6 @@
       "dependencies": [
         "src/surfaces/core/terminal",
         "src/domain/core/attempt",
-        "src/domain/core/inference-serving",
         "src/domain/core/model-activation",
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
