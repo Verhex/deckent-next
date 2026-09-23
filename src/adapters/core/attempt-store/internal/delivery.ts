@@ -15,6 +15,16 @@ export class SqliteDeliveryJournal {
     this.bound(intent);
     return { intent, delivered: row.delivered === 1 };
   }
+  /** Adoption lookup by the delivery's own command id; the stored intent is re-bound to its integration manifest and patch. */
+  async findDelivery(scopeId: string, commandId: string): Promise<IntegrationDeliveryRecord | null> {
+    const row = this.db.prepare('SELECT intent FROM workspace_deliveries WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+    if (!row) return null;
+    let intent: IntegrationDeliveryIntent;
+    try { intent = integrationDeliveryIntentSchema.parse(JSON.parse(String(row.intent))); }
+    catch { throw new WorkspacePatchError('PATCH_CORRUPT'); }
+    if (intent.command.identity.scopeId !== scopeId || intent.command.commandId !== commandId) throw new WorkspacePatchError('PATCH_CORRUPT');
+    return this.loadDelivery(intent.command);
+  }
   private bound(intent: IntegrationDeliveryIntent) {
     const original = readIntegration(this.db, { schemaVersion: 1, identity: intent.command.identity, commandId: intent.command.integrationCommandId });
     if (!original?.manifest || JSON.stringify(original.manifest) !== JSON.stringify(intent.manifest)

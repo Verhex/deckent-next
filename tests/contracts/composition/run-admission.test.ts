@@ -66,7 +66,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
   });
   it('refuses schema upgrade during SDK admission and leaves the older ledger unchanged', async () => {
     const f = await fixture(); await f.policy(true, true); const db = new DatabaseSync(f.path);
-    db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE execution_pools; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=3'); db.close(); const before = await readFile(f.path);
+    db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE execution_pools; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=3'); db.close(); const before = await readFile(f.path);
     await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
     expect(await readFile(f.path)).toEqual(before);
     const reader = new DatabaseSync(f.path, { readOnly: true });

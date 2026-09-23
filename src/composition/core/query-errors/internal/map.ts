@@ -1,7 +1,7 @@
 import { ApprovalError } from '#domain/index.js';
 import { SessionAuthenticationError } from '#engine/index.js';
 import { WorkerObservationError } from '#engine/index.js';
-import { WorkspacePatchError } from '#engine/index.js';
+import { WorkspacePatchError, WorkspaceAdoptionError } from '#engine/index.js';
 import { ModelActivationError } from '#domain/index.js';
 import { ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
@@ -20,6 +20,7 @@ import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntim
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof ApprovalError || error instanceof SessionAuthenticationError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkerObservationError) return ErrorRegistry.createError(error.code);
+  if (error instanceof WorkspaceAdoptionError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { detail: error.detail } } : {});
   if (error instanceof DeckentError) return error;
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);

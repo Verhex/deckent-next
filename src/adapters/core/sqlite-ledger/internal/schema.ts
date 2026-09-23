@@ -24,9 +24,13 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 32;
+export const CURRENT_LEDGER_VERSION = 33;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Branch adoption/rollback intents. sequence is the per-target fence; state 0 = claimed (Git effect may be pending), 1 = settled.
+  33: `CREATE TABLE workspace_adoptions(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
+    settled INTEGER NOT NULL CHECK(settled IN(0,1)),PRIMARY KEY(scope_id,command_id),UNIQUE(target_ref,sequence)); PRAGMA user_version=33;`,
   32: `CREATE TABLE workspace_deliveries(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,
     intent TEXT NOT NULL,delivered INTEGER NOT NULL CHECK(delivered IN(0,1)),PRIMARY KEY(scope_id,command_id)); PRAGMA user_version=32;`,
   31: `CREATE TABLE approvals(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,run_id TEXT NOT NULL,

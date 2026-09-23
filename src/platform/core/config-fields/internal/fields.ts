@@ -1,4 +1,4 @@
-import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from './execution.js';
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { z } from 'zod';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -20,7 +20,7 @@ export const CONFIG_FIELDS = Object.freeze({
   storage: field('config.field.storage', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64), patchPreview: z.object({ maxEntries: z.number().int().positive().safe().default(10000), maxDepth: z.number().int().positive().max(128).default(32), maxPathBytes: z.number().int().positive().safe().default(1024) }).strict().default({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
-  execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS, adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] }) }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   installation: field('config.field.installation', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
     writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),

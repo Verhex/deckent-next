@@ -1116,7 +1116,8 @@
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
         "src/domain/core/primitives",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/domain/core/run"
       ],
       "plan": "ISOLATION"
     },

@@ -1,33 +1,16 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, rm, lstat, realpath } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { patchDigest, WorkspacePatchError, type IntegrationDeliveryTarget, type IntegrationDeliveryCommand,
   type IntegrationDeliveryPlan, type IntegrationManifest, type WorkspacePatch } from '#engine/index.js';
 import format from './delivery-format.json' with { type: 'json' };
-import { gitFailure } from './snapshot.js';
+import { GitCommand } from './git-command.js';
 /** Writes Git objects and one create-only dedicated reference, never the source index/checkout. */
 export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
-  constructor(private readonly options: GitWorkspaceOptions) {}
-  private async git(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs) {
-    if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time');
-    return new Promise<string>((resolve, reject) => {
-      const child = execFile(this.options.gitExecutable, ['--no-replace-objects', '-C', this.options.sourceRoot,
-        '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', ...args], {
-        env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
-          ...(index ? { GIT_INDEX_FILE: index } : {}), GIT_AUTHOR_NAME: format.authorName, GIT_AUTHOR_EMAIL: format.authorEmail,
-          GIT_COMMITTER_NAME: format.authorName, GIT_COMMITTER_EMAIL: format.authorEmail, GIT_AUTHOR_DATE: format.date, GIT_COMMITTER_DATE: format.date },
-        timeout: Math.max(1, deadline - Date.now()), maxBuffer: this.options.outputBytes, encoding: 'utf8',
-      }, (error, stdout) => error ? reject(gitFailure(error)) : resolve(stdout.trim()));
-      child.stdin?.on('error', () => undefined); child.stdin?.end(input);
-    });
-  }
-  private async custody() {
-    for (const path of [this.options.sourceRoot, this.options.workspaceRoot, await this.git(['rev-parse', '--absolute-git-dir'])]) {
-      const stat = await lstat(path);
-      if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid!() || (stat.mode & 0o022) || await realpath(path) !== path) throw new WorkspacePatchError('PATCH_UNSAFE');
-    }
-  }
+  private readonly command: GitCommand;
+  constructor(private readonly options: GitWorkspaceOptions) { this.command = new GitCommand(options); }
+  private git(args: string[], input = '', index?: string, deadline?: number) { return this.command.run(args, input, index, deadline); }
+  private custody() { return this.command.custody(); }
   async plan(command: IntegrationDeliveryCommand, manifest: IntegrationManifest, patch: WorkspacePatch): Promise<IntegrationDeliveryPlan> {
     await this.custody();
     const deadline = Date.now() + this.options.timeoutMs;

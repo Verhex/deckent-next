@@ -273,7 +273,7 @@ it('migrates schema13 to current without changing activation rows and read-only 
     DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints;
     DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
     DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
-    DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=13;`);
+    DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=13;`);
   db.prepare('INSERT INTO model_activations VALUES(?,?,?,?,?,?,?)').run('scope', 'provider', 1, 'model', 1, 1, '{"preserved":true}'); db.close();
   const beforeDb = new DatabaseSync(path, { readOnly: true }), before = beforeDb.prepare('SELECT * FROM model_activations').all(); beforeDb.close();
   const oldBytes = await readFile(path);

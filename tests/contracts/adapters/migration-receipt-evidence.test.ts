@@ -26,7 +26,7 @@ type Receipt = ReturnType<typeof creation>;
 function database(snapshot: RunSnapshot, receipts: readonly Receipt[]) {
   const db = new DatabaseSync(':memory:');
   db.exec(`CREATE TABLE runs(scope_id TEXT,run_id TEXT,revision INTEGER,snapshot TEXT,policy TEXT,PRIMARY KEY(scope_id,run_id));
-    CREATE TABLE run_receipts(scope_id TEXT,command_id TEXT,command TEXT,snapshot TEXT,PRIMARY KEY(scope_id,command_id)); DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=11;`);
+    CREATE TABLE run_receipts(scope_id TEXT,command_id TEXT,command TEXT,snapshot TEXT,PRIMARY KEY(scope_id,command_id)); DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=11;`);
   db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run('scope', 'run', snapshot.revision, JSON.stringify(legacy(snapshot)), JSON.stringify(policy));
   for (const receipt of receipts) db.prepare('INSERT INTO run_receipts VALUES(?,?,?,?)').run('scope', receipt.id, receipt.command, JSON.stringify(legacy(receipt.snapshot)));
   return db;

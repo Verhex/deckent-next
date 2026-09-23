@@ -28,6 +28,8 @@ export interface CommandContext {
   inspectApproval?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
+  adoptWorkspaceIntegration?: import('./task.js').TaskIntegrationAdoptHandler;
+  rollbackWorkspaceIntegration?: import('./task.js').TaskIntegrationRollbackHandler;
   inspectWorkspaceIntegration?: TaskIntegrationInspectHandler;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

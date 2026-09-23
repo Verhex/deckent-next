@@ -62,4 +62,4 @@ export type { ToolchainCurrencyReport, ToolchainCurrencyEntry, ToolchainStatus }
 export type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 
 export { configuredApproval } from '#composition/index.js';
-export { deliverConfiguredWorkspaceIntegration } from '#composition/index.js';
+export { deliverConfiguredWorkspaceIntegration, adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration } from '#composition/index.js';

@@ -2,9 +2,11 @@ import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
-import type { WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch } from '#engine/index.js';
+import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 export type TaskIntegrationDeliverHandler = (root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceDeliveryApplication['deliver']>;
+export type TaskIntegrationAdoptHandler = (root: string, command: IntegrationAdoptionCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceAdoptionApplication['adopt']>;
+export type TaskIntegrationRollbackHandler = (root: string, command: IntegrationRollbackCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceAdoptionApplication['rollback']>;
 export type TaskIntegrationInspectHandler = (root: string, query: IntegrationQuery, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationInspection['inspect']>;
 export type TaskIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
 export type TaskIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
@@ -23,8 +25,8 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver'].includes(action ?? '')) throw usage();
-  const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
+  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback'].includes(action ?? '')) throw usage();
+  const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -48,6 +50,23 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const result = await context.deliverWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, identity, commandId, integrationCommandId }, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
       t('cli.task.integration.delivered', { ref: data.plan.ref, commit: data.plan.commit }, locale) }); return;
+  }
+  if (action === 'integration-adopt' || action === 'integration-rollback') {
+    const commandId = values.get('--command-id'); if (!commandId) throw usage('--command-id');
+    const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}) };
+    const render = (data: Awaited<ReturnType<TaskIntegrationAdoptHandler>>) => {
+      const params = { ref: data.targetRef, from: data.fromCommit, to: data.toCommit, sequence: data.sequence };
+      return data.status === 'adopted' ? t('cli.task.integration.adopted', params, locale) : t('cli.task.integration.rolledBack', params, locale);
+    };
+    if (action === 'integration-adopt') {
+      const deliveryCommandId = values.get('--delivery-command-id'), targetRef = values.get('--target');
+      if (!deliveryCommandId || !targetRef) throw usage(!deliveryCommandId ? '--delivery-command-id' : '--target');
+      if (!context.adoptWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+      emit(await context.adoptWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, deliveryCommandId, targetRef }, options), { ...sinks, render }); return;
+    }
+    const adoptionCommandId = values.get('--adoption-command-id'); if (!adoptionCommandId) throw usage('--adoption-command-id');
+    if (!context.rollbackWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    emit(await context.rollbackWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, adoptionCommandId }, options), { ...sinks, render }); return;
   }
   if (action === 'integration-inspect') {
     const commandId = values.get('--command-id'); if (!commandId) throw usage('--command-id');

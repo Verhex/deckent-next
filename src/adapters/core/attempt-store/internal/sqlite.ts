@@ -1,5 +1,6 @@
 import { SqliteDeliveryJournal } from './delivery.js';
-import type { IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery } from '#engine/index.js';
+import { SqliteAdoptionJournal } from './adoption.js';
+import type { IntegrationDeliveryCommand, IntegrationDeliveryIntent, IntegrationQuery, IntegrationAdoptionIntent } from '#engine/index.js';
 import { SqliteIntegrationJournal, readIntegration } from './integration.js';
 import type { IntegrationIntent } from '#engine/index.js';
 import { SqliteRunProgression } from './progression.js';
@@ -85,6 +86,10 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadDelivery(command: IntegrationDeliveryCommand) { return new SqliteDeliveryJournal(this.db).loadDelivery(command); }
   async claimDelivery(intent: IntegrationDeliveryIntent) { return new SqliteDeliveryJournal(this.db).claimDelivery(intent); }
   async finishDelivery(intent: IntegrationDeliveryIntent) { return new SqliteDeliveryJournal(this.db).finishDelivery(intent); }
+  async findDelivery(scopeId: string, commandId: string) { return new SqliteDeliveryJournal(this.db).findDelivery(scopeId, commandId); }
+  async loadAdoption(scopeId: string, commandId: string) { return new SqliteAdoptionJournal(this.db).loadAdoption(scopeId, commandId); }
+  async claimAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).claimAdoption(intent); }
+  async finishAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).finishAdoption(intent); }
   close(): void { this.db.close(); }
   async load(scopeId: string, attemptId: string) {
     let row;
