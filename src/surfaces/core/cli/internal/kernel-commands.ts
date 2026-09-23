@@ -22,6 +22,10 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { TerminalChatPlanHandler, TerminalChatTurnHandler } from './terminal-chat.js';
 
+export type InferenceMetricsReading =
+  | { readonly ok: true; readonly url: string; readonly body: string }
+  | { readonly ok: false; readonly code: string; readonly url: string | null };
+
 export interface CommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
@@ -35,6 +39,7 @@ export interface CommandContext {
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectWorkers?: WorkerObservationHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
+  readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;

@@ -3,7 +3,7 @@ import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingErr
 import type { CommandContext } from './kernel-commands.js';
 
 interface Parsed {
-  action: 'plan' | 'budget';
+  action: 'plan' | 'budget' | 'metrics';
   json: boolean;
   help: boolean;
   language?: string;
@@ -16,7 +16,7 @@ interface Parsed {
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'inference') throw ErrorRegistry.createError('CLI_USAGE');
   const action = argv[1];
-  if (action !== 'plan' && action !== 'budget') throw ErrorRegistry.createError('CLI_USAGE');
+  if (action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
   const parsed: Parsed = { action, json: false, help: false };
   const seen = new Set<string>();
   for (let index = 2; index < argv.length; index++) {
@@ -96,6 +96,13 @@ export async function inferenceCommand(argv: readonly string[], context: Command
   const profile = selectProfile(config as Record<string, unknown>, parsed.profileId, locale);
   if (!profile) {
     emit(t('inference.notConfigured', {}, locale), { ...sinks, level: 'warning' });
+    return;
+  }
+  if (parsed.action === 'metrics') {
+    if (!context.readInferenceMetrics) throw ErrorRegistry.createError('CLI_USAGE');
+    const reading = await context.readInferenceMetrics(root, parsed.profileId === undefined ? {} : { profileId: parsed.profileId }, options);
+    emit(reading, { ...sinks, json: parsed.json, ...(reading.ok ? {} : { level: 'error' as const }),
+      render: value => value.ok ? value.body : t('inference.metrics.refused', { code: value.code, url: value.url ?? '-' }, locale) });
     return;
   }
   if (parsed.action === 'plan') {

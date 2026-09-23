@@ -37,6 +37,7 @@ export * from '#adapters/core/provider-openai-chat/index.js';
 export * from '#adapters/core/provider-openrouter-chat/index.js';
 export * from '#adapters/core/provider-openrouter-pricing/index.js';
 export * from '#adapters/core/npm-registry/index.js';
+export * from '#adapters/core/inference-metrics/index.js';
 export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
