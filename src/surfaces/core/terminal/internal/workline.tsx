@@ -41,6 +41,8 @@ export interface WorklineProps {
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
   readonly pollMs?: number;
+  /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
+  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'error'; readonly text: string }>;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -75,6 +77,11 @@ export function WorklineApp(props: WorklineProps) {
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
 
   useEffect(() => () => turn.current?.abort(), []);
+  const opening = useRef(props.openingNotices);
+  useEffect(() => {
+    const notices = opening.current;
+    if (notices?.length) push(notices.map(item => notice(item.level, item.text)));
+  }, [push]);
   useEffect(() => {
     const follow = ledger?.followWorkers;
     if (!watch.workers || !follow) return;

@@ -779,6 +779,8 @@
   "error.LOCAL_RUNTIME_UNSUPPORTED": "Bu yerel runtime bağlantısı şu anda Linux gerektirir.",
   "error.LOCAL_RUNTIME_OPTIONS": "Yerel runtime bağlantı ayarları geçersiz.",
   "error.INFERENCE_METRICS_UNREAD": "Çıkarım metrikleri okunamadı ({reason}), uç {url}. Deckent sunucuyu başlatmaz.",
+  "error.RUNTIME_AUTOSTART_FAILED": "Yerel runtime servisi otomatik başlatılamadı. Servis günlüğü: {log}. Ön planda başlatmak için `deckent runtime serve` kullanın.",
+  "error.TERMINAL_SCOPE_REQUIRED": "Terminal bir scope gerektirir. .deckent/config.json içinde `terminal.scopeId` ayarlayın ya da `deckent terminal workline --scope <id>` çalıştırın.",
   "error.LOCAL_RUNTIME_UNAVAILABLE": "Bu proje için yerel runtime servisi çalışmıyor. `deckent runtime serve` ile başlatın.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "Yerel runtime bağlantı yolu sahiplik veya dosya sistemi denetimini geçemedi.",
   "error.LOCAL_RUNTIME_ALREADY_RUNNING": "Bu projenin bağlantı noktası başka bir runtime servisine ait.",

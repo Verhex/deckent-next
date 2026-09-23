@@ -43,6 +43,8 @@ export interface CommandContext {
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectWorkers?: WorkerObservationHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
+  ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly mode: 'connected' | 'started'; readonly instanceId: string;
+    readonly pid: number | null; readonly logPath: string | null }>;
   readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   prepareWorkspacePatch?: TaskPatchHandler;

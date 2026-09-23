@@ -396,9 +396,23 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Regions:** banner, status strip (scope, chat model, busy/cancelling), work ledger (append-only chat,
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
   the slash catalog is data (`slash-registry`).
-- **Adapters:** `deckent terminal workline --scope <id>` is the Ink view and requires TTY stdin and stdout
-  (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session --scope <id>` is line mode and also serves piped
-  input; `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime
+- **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
+  `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
+  `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed
+  `TERMINAL_SCOPE_REQUIRED` screen says how to set one. **Runtime auto-start:** when no service answers on the
+  configured endpoint (absent socket, never-created state directory or refused connection), an interactive terminal
+  starts `runtime serve` of the same executable as a **detached background process** (no shell, no stdin, output
+  appended to the private `runtimeLog` resource `state/runtime-service.log`, 0600, no-follow) and waits for a
+  successful describe within `terminal.serviceStartTimeoutMs` (default 20 s). The service keeps running after the
+  terminal exits so runs and workers continue (owner decision after Jev 0198c77c abstained in effect); it stops with
+  `deckent runtime shutdown`. An existing service is reused; an endpoint that fails ownership checks is never replaced;
+  a start failure is shown in the view (`RUNTIME_AUTOSTART_FAILED` with the log path) and is not fatal. Piped line
+  mode and other CLI/MCP commands never start a service; `terminal.autostartService: false` only connects.
+  Open: the terminal does not yet detect a service started from an older build (version skew), and the service
+  lifecycle has no idle stop or upgrade handoff.
+- **Adapters:** `deckent terminal workline [--scope <id>]` is the Ink view and requires TTY stdin and stdout
+  (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session [--scope <id>]` is line mode and also serves piped
+  input (slash input stays local: `/status` answers locally, unknown commands are reported, never sent to the model); `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime
   dependencies pinned exactly; `NO_COLOR`, `--no-color` and non-TTY stdout render without colour.
 - **Chat is one governed model invocation per turn:** the `terminal.chat` config section names a declared
   catalog model and `maxCompletionTokens`; catalog revision and binding are read per turn; the turn goes

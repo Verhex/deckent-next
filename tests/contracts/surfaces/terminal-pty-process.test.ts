@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
-import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -15,9 +15,17 @@ import { createPricedProviderTls, fixtureBudget } from '../../fixtures/priced-pr
 
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
-const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
+const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [], daemons: number[] = [];
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 afterEach(async () => {
+  // Background services started by the terminal are stopped here; the test proves they outlive the terminal.
+  for (const pid of daemons.splice(0)) {
+    if (alive(pid)) process.kill(pid, 'SIGTERM');
+    const deadline = Date.now() + 20_000;
+    while (alive(pid) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+    if (alive(pid)) process.kill(pid, 'SIGKILL');
+  }
   for (const child of runtimes.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM');
@@ -77,7 +85,8 @@ async function project(config: Record<string, unknown> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-terminal-pty-')); roots.push(root);
   const projectRoot = join(root, 'project'), home = join(root, 'home');
   await Promise.all([mkdir(join(projectRoot, '.deckent'), { recursive: true }), mkdir(home, { recursive: true })]);
-  await writeFile(join(projectRoot, '.deckent', 'config.json'), JSON.stringify(config));
+  // These cases exercise the view without a service; automatic service start has its own case.
+  await writeFile(join(projectRoot, '.deckent', 'config.json'), JSON.stringify({ terminal: { autostartService: false }, ...config }));
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   return { projectRoot, env };
@@ -203,6 +212,26 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status, result.output).toBe(0);
     expect(result.output).toContain('pty-ok');
+  });
+
+  it('`deckent` alone opens the terminal, starts the runtime service in the background and leaves it running for the next terminal', async () => {
+    const f = await governedChat();
+    const configPath = join(f.projectRoot, '.deckent/config.json');
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { terminal: Record<string, unknown> };
+    await writeFile(configPath, JSON.stringify({ ...config, terminal: { ...config.terminal, scopeId: 'scope' } }), { mode: 0o600 });
+    const first = await inPty(f.projectRoot, f.env, [], [['started in the background', 'hello\r'], ['pty-ok', '/exit\r']]);
+    expect(first.timeout, first.output).toBeUndefined();
+    expect(first.status, first.output).toBe(0);
+    const pid = Number(/\(pid (\d+),/.exec(first.output)?.[1]);
+    expect(Number.isSafeInteger(pid) && pid > 0, first.output).toBe(true);
+    daemons.push(pid);
+    // The service outlives the terminal and answers other commands.
+    const described = await execute(process.execPath, [cli, 'runtime', 'describe', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
+    expect(JSON.parse(described.stdout)).toMatchObject({ instanceId: expect.any(String) });
+    const second = await inPty(f.projectRoot, f.env, [], [['Runtime service connected', '/exit\r']]);
+    expect(second.timeout, second.output).toBeUndefined();
+    expect(second.status, second.output).toBe(0);
+    expect(second.output).not.toContain('started in the background');
   });
 
   it('degrades when piped: the rich view refuses with a typed usage error, line mode runs', async () => {

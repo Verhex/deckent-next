@@ -18,7 +18,8 @@
     "ledger": "state/ledger.db",
     "workspaces": "workspaces",
     "policy": "policy.json",
-    "runtimeSocket": "state/runtime.sock"
+    "runtimeSocket": "state/runtime.sock",
+    "runtimeLog": "state/runtime-service.log"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

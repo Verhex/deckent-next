@@ -7,6 +7,12 @@ import { CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service.
  */
 export const terminalConfigSchema = z.object({
+  /** Scope the interactive terminal (`deckent` with no arguments) works in; `--scope` overrides it. */
+  scopeId: z.string().min(1).max(128).optional(),
+  /** Interactive terminals start the runtime service when none is running (owner 2026-09-23); false only connects. */
+  autostartService: z.boolean().default(true),
+  /** Deadline for an automatically started runtime service to answer on its endpoint. */
+  serviceStartTimeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
   chat: z.object({
     schemaVersion: z.literal(1),
     reference: modelReferenceSchema,
@@ -22,6 +28,10 @@ export function readTerminalChatConfig(config: Record<string, unknown>): Termina
   const section = config['terminal'];
   if (section === undefined) return null;
   return terminalConfigSchema.parse(section).chat ?? null;
+}
+
+export function readTerminalConfig(config: Record<string, unknown>): TerminalConfig {
+  return terminalConfigSchema.parse(config['terminal'] ?? {});
 }
 
 export function registerTerminalConfig(): void {

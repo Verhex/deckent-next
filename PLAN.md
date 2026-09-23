@@ -62,6 +62,21 @@ Sıra: C11-1 (Jev 73823c15 effect_port_first 0,98) → Hat A dogfood denemesi he
 - [Cursor Faz0 raporu](../deckent-refactor-work/proof/LOCAL-LLM-INFERENCE/00-current-state.md) önceki gözlemdir; burada GPU/servis yeniden çalıştırılmadı. Worktree başlangıcından sonraki main belge/karar değişiklikleri entegrasyon öncesi eşlenir. Main’e alma daha sonra ayrı adım: exact commit/diff, gerçek koşum ve kaynak temizliği kanıtı; ortak runtime/policy/kapasite sözleşmesi ve terminalin ince istemci olması; conflict incelemesi ve birleşen sonuçta `npm run verify`. Ardından denetim/iyileştirme. Branch veya rapor varlığı ürün teslimi değildir.
 - **Paket A main'e alındı (owner 2026-09-22, 1-a):** Opus tek yazar olarak `integrate/terminal-package-a` dalında Cursor snapshot'ını (`1da40c8`) main'e aldı ve review kusurlarını düzeltti: terminal sohbeti yalnız yönetilen `invoke_model` (runtime client, `--scope`), `terminal.chat` config bölümü kayıtlı, denetimsiz `inference_http`/engine I/O yok, Run kabulüne global yerel-LLM kısıtı yok, Ink `Static` 400 satır kusuru giderildi, tur iptali, tek-uçuşlu izleme, TTY/`NO_COLOR` degrade; host betikleri repo dışına (`deckent-refactor-work/host-tools/inference/`). Ink/React Core bağımlılığı owner kabulüyle tam sürüme sabit. **Paket B (Cursor):** runtime olay aboneliği → ledger, Desktop köprüsü (canlı dosya değil ortak runtime sorgusu), sunucu başlatma/metrics adapter'ı ve süreç sınırı, görev→yerel-LLM bağlama kavramı ve buna dayalı kapasite kabulü, tam token pipeline. Terminal Contract v1: `ARCHITECTURE.md` § Operator terminal contract v1. Owner: main'e alındı (`c86ff1a`); Cursor Paket B'ye yeni main'den başlar (eski WIP'in çoğu yeniden yazıldı/silindi). Yerel/ücretsiz sağlayıcı: owner A — `openai-chat-http` v4 operatör sıfır tarifesi aynı bütçe/rezervasyon/ledger yolundan (`settled-local 0`); pozitif maliyet dağıtımı ayrı dilim. **Owner 2026-09-22: terminal yüzeyi Cursor'a devredildi** (yeni main'den bağımsız yeni worktree; `deckent-dev` terminali salt okunur referans). **Paket B ilk dilimi main'e alındı (owner 2026-09-23):** `/exit` kapanışı, stdin/soket unref, EN `assistant` etiketi, `followWorkers`/`followRuns` portu (üretici yok, varsayılan poll), MCP `inference_plan|budget`; yüzeyden HTTP metrics okuması entegrasyonda kaldırıldı. Açık (Cursor, `feat/terminal-package-c`): canlı yönetilen tur sonrası `/exit` PTY kanıtı (Astra 2005), sınırlı metrics adapter'ı, runtime olay akışı (protokol kararı owner'da), sunucu başlatma, görev→yerel-LLM kapasite kabulü, legacy slash eşlemesi.
 
+### Acil öncelik — owner 2026-09-23: yerel terminal + yerel model sunumu (Opus'ta)
+
+Owner: `deckent` → etkileşimli terminal (TTY; pipe'ta yardım), `deckent --help` → yardım; Claude Code kalitesi altı kabul edilmez;
+kullanıcı ve Enterprise için aynı. Terminal ve yerel sunum hattı Cursor'dan Opus'a geçti; askıya alınan ana hat
+`follow-up-works/hemen-donulecek-is.md`. Jev 5e41ffaf `foundation_then_quality` 0,97; owner onayı. Owner kararları: runtime servisi
+kapalıysa terminal **otomatik başlatır** (runtime adopt/spawn yetkisi kabul edildi; aynı principal, yerel soket, mevcut policy);
+çalışan llama.cpp container'ı yeniden yapılandırılabilir; vLLM kıyası için `vllm/vllm-openai:v0.30.0` + `RedHatAI/Qwen3.8-27B-INT4`
+indirilebilir; bozuk 3,6 GB CRACK GGUF yalnız raporlanır. Sıra: T0 giriş → L1 yerel sunucu denetleyici → L2 vLLM/llama.cpp ölçümlü
+kıyas → S-STREAM → T1 Claude Code sınıfı girdi/görünüm → T2 onay/iptal/canlı worker → A araç döngüsü + D15b. Tahmin 55–75 mühendislik
+günü (ölçüm değil). Analiz: dış çalışma alanı `TERMINAL-NATIVE-AND-LOCAL-SERVING-PLAN-2026-09-23.md`.
+**T0 uygulandı (2026-09-23):** `deckent` (TTY) → terminal, pipe/dumb → yardım; scope `--scope` veya `terminal.scopeId`; servis yoksa
+arka planda `runtime serve` (0600 günlük, hazır olma süresi, sahiplik hatasında başlatma yok, başarısızlık ölümcül değil), terminal
+kapansa da çalışır. Açık: eski sürümle başlamış servisin fark edilmesi (canlı denemede eski servis yeni `terminal.scopeId` alanını
+tanımayıp `CONFIG_VALIDATION` verdi), meşgulken girdi kuyruğu yok, servis hatasında parametre kaybı (`{issues}`).
+
 ### Güncel öncelik — owner 2026-09-22
 
 Enterprise yönetim/kimlik/fleet yüzeyleri acil değildir; erken developer dogfood önkoşulu yapılmaz.

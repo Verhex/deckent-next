@@ -1,4 +1,4 @@
-export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, terminalConfigSchema, type TerminalChatConfig, readOperationsConfig, findOperation, operationsConfigSchema, type OperationsConfig } from '#adapters/core/contract/index.js';
+export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, readTerminalConfig, terminalConfigSchema, type TerminalChatConfig, readOperationsConfig, findOperation, operationsConfigSchema, type OperationsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -38,6 +38,7 @@ export * from '#adapters/core/provider-openrouter-chat/index.js';
 export * from '#adapters/core/provider-openrouter-pricing/index.js';
 export * from '#adapters/core/npm-registry/index.js';
 export * from '#adapters/core/inference-metrics/index.js';
+export * from '#adapters/core/runtime-launcher/index.js';
 export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 

@@ -220,7 +220,10 @@
         "src/composition/core/worker-observation",
         "src/composition/core/toolchains",
         "src/composition/core/operations",
-        "src/composition/core/inference-metrics"
+        "src/composition/core/inference-metrics",
+        "src/adapters/core/runtime-launcher",
+        "src/platform/core/errors",
+        "src/platform/core/managed-files"
       ],
       "plan": "SURFACES"
     },
@@ -1302,6 +1305,10 @@
     "src/adapters/core/inference-metrics": {
       "dependencies": [],
       "plan": "PROVIDERS"
+    },
+    "src/adapters/core/runtime-launcher": {
+      "dependencies": [],
+      "plan": "SURFACES"
     },
     "src/composition/core/inference-metrics": {
       "dependencies": [

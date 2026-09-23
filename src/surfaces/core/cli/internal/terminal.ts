@@ -12,7 +12,8 @@ const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot',
 const DEFAULT_HISTORY_MESSAGES = 40;
 
 function parse(argv: readonly string[]): Parsed {
-  const action = argv[1] as Action;
+  // Bare `deckent terminal` is the interactive terminal, the same as `deckent` with no arguments on a TTY.
+  const action = (argv.length === 1 ? 'workline' : argv[1]) as Action;
   if (argv[0] !== 'terminal' || !ACTIONS.includes(action)) throw ErrorRegistry.createError('CLI_USAGE');
   const parsed: Parsed = { action, json: false, help: false };
   for (let index = 2; index < argv.length; index++) {
@@ -27,7 +28,6 @@ function parse(argv: readonly string[]): Parsed {
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (parsed.help && parsed.json) throw ErrorRegistry.createError('CLI_USAGE');
-  if ((parsed.action === 'session' || parsed.action === 'workline') && !parsed.help && !parsed.scopeId) throw ErrorRegistry.createError('CLI_USAGE');
   if (parsed.json && (parsed.action === 'session' || parsed.action === 'workline')) throw ErrorRegistry.createError('CLI_USAGE');
   return parsed;
 }
@@ -99,7 +99,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: CommandContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
-  historyMessages: number, interactive: boolean): Promise<void> {
+  historyMessages: number, interactive: boolean, status: () => string): Promise<void> {
   const stdin = context.stdin ?? process.stdin;
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const rl = createInterface({ input: stdin, ...(interactive ? { output: process.stdout } : {}), terminal: interactive,
@@ -111,7 +111,10 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
     for await (const line of rl) {
       const trimmed = line.trim();
       if (trimmed === '/exit' || trimmed === '/quit') break;
-      if (trimmed.length > 0) {
+      if (trimmed === '/status') { emit(status(), sinks); }
+      // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
+      else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
+      else if (trimmed.length > 0) {
         const messages = boundChatHistory(system, [...history, { role: 'user', content: trimmed }], historyMessages);
         try {
           const reply = await turn(messages, context.signal);
@@ -161,11 +164,30 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   }
   const completeTerminalChat = context.completeTerminalChat;
   if (!completeTerminalChat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  const scopeId = parsed.scopeId!;
+  const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
+  const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
+  if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
+  // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
+  const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
+  let serviceLine: string | null = null, serviceFailed = false;
+  if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
+    try {
+      const service = await context.ensureRuntimeService(root, options);
+      serviceLine = service.mode === 'started'
+        ? t('terminal.service.started', { pid: service.pid ?? '-', log: service.logPath ?? '-' }, locale)
+        : t('terminal.service.connected', { instance: service.instanceId }, locale);
+    } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
+  }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
   const turn = (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
     completeTerminalChat(root, { scopeId, messages }, options, signal);
-  if (parsed.action === 'session') { await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout); return; }
+  if (parsed.action === 'session') {
+    if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
+    await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
+      () => [renderStatus(statusPayload(tty, config, chat), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
+    return;
+  }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   const ledger = createWorklineLedgerPorts({ root, scopeId, options, workerHeartbeatMs: config.inspection.workers.heartbeatMs,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
@@ -173,9 +195,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectInventory ? { inspectInventory: context.inspectInventory } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   await runTerminalWorkline({
-    labels: worklineLabels(locale, t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale)),
+    labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
+    ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] } : {}),
     palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })),
     ...(ledger ? { ledger } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),

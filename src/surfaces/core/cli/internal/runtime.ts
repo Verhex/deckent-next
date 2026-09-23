@@ -25,7 +25,8 @@ export type RuntimeServiceShutdownHandler = (root: string, command: ShutdownComm
 function waitForStop(signal: AbortSignal): Promise<void> {
   return signal.aborted ? Promise.resolve() : new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
 }
-/** Foreground-only local host; this never starts itself during normal CLI/MCP calls. */
+/** Foreground local host. Normal CLI/MCP calls never start it; only the interactive terminal starts `runtime serve` in the
+ * background when no service answers (owner 2026-09-23). */
 export async function runtimeCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
   if (!['serve', 'describe', 'shutdown', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
