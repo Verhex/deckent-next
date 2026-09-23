@@ -887,6 +887,8 @@
   "error.TERMINAL_CHAT_TRUNCATED": "Model yanıt vermeden tüm tamamlama bütçesini ({maxCompletionTokens} token) kullandı; düşünen modeller genelde daha fazlasına ihtiyaç duyar. terminal.chat.maxCompletionTokens değerini (profilin maxOutputTokens sınırı içinde) artırın.",
   "error.TERMINAL_CHAT_EMPTY": "Model bu tur için asistan metni döndürmedi.",
   "error.TERMINAL_CHAT_CANCELLED": "Sohbet turu iptal edildi; model çağrı servisinden iptal istendi.",
+  "error.TERMINAL_CHAT_INVOCATION_FAILED": "Bu turun model çağrısı yanıt olmadan sona erdi (sonuç: {state}). Kayıt altındadır ve yeniden denenmez; `deckent models invocation --input <sorgu>` ile inceleyin.",
+  "error.TERMINAL_CHAT_STREAM_MISMATCH": "Akışla gelen metin kaydedilen model yanıtıyla uyuşmuyor; tur durduruldu. Tek doğru kaynak kayıtlı çağrıdır.",
   "error.TERMINAL_CHAT_UNAVAILABLE": "Bu çalıştırılabilirde terminal sohbeti yok (yönetilen model çağrı işleyicisi bağlı değil).",
   "error.TERMINAL_TTY_REQUIRED": "Bu terminal modu stdin ve stdout için etkileşimli terminal ister; pipe ile `deckent terminal status --json` veya MCP araçlarını kullanın.",
   "error.INFERENCE_PROFILE_UNKNOWN": "Çıkarım profili {profile} inference_serving.profiles içinde tanımlı değil. activeProfileId kullanmak için profil belirtmeyin.",
