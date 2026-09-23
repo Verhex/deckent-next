@@ -87,6 +87,10 @@ describe('terminal markdown tables (width-aware)', () => {
     expect(plain(table, 12)).toBe(['• Name: Ada', '  Role: admin', '  Note: root', '• Name: Linus', '  Role: dev', '  Note: x'].join('\n'));
   });
 
+  it('keeps a pipe line followed by a rule as prose (a delimiter row needs a pipe)', () => {
+    expect(plain('a | b\n---', 10)).toBe(['a | b', '─'.repeat(10)].join('\n'));
+  });
+
   it('uses ASCII borders for the ASCII glyph set', () => {
     expect(plain('| a |\n|---|\n| 1 |', 40, ascii)).toBe(['+---+', '| a |', '+---+', '| 1 |', '+---+'].join('\n'));
   });

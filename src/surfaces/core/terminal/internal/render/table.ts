@@ -10,7 +10,7 @@ import { line, padSpans, span, spanCells, wrapSpans, type RenderedLine, type Spa
 type Align = 'left' | 'right' | 'center';
 const MIN_COLUMN = 3;
 
-export const isTableSeparator = (text: string): boolean => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(text);
+export const isTableSeparator = (text: string): boolean => text.includes('|') && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(text);
 
 function splitRow(text: string): string[] {
   return text.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'));
