@@ -1,4 +1,27 @@
-# Anlık iş akışı — Opus 5.5; origin/main = ae52cda; B09-3 Codex normalizer teslimde; sıradaki: deckent-dev terminal analizi (owner öncelik); GPU yasağı
+# Anlık iş akışı — Opus 5.5; origin/main = 4eec455; terminal yerel/host yönü (2065); Codex REVISE; GPU yasağı
+
+## Terminal analizi — 2026-09-24 gece
+
+Astra 2062–2064 incelemesi (HEAD `4eec455`): Codex normalizer **REVISE** — sentinel unknown type/kind üzerinden
+schema-valid çıkışa sızıyor; `changes:[null]` TypeError; 65 dosyanın 64'ü görünüyor, kayıp sayacı sıfır;
+96 karakter id'ye suffix eklenince şema aşılıyor. Bağımsız mevcut test 4/4 PASS, bu negatifler dış probe ile kanıtlandı:
+`proof/ASTRA-2062-2064-20260924/probe.jsonl` (dış çalışma alanı). Yazar verify1809/316 exit0 logu incelendi;
+tam suite/canlı model/GPU koşulmadı. Sonraki adım Opus'un bounded normalizer düzeltmesi ve negatif kanıtı.
+Tasarım **REVISE** (kabul değil): engine yönü korunuyor; resource-bound onay, deterministik görünür kapanış,
+ilk döngüde durable turn/replay, tek effect sahibi, host dosya sınırı ve legacy olay→düzeltme ayrımı gerekli.
+2065 ile bildirilen ve PLAN'a kaydedilen yön: önce yerel terminal, sonra API, host shell izin modlarıyla; zorunlu toplam
+terminal bütçesi yok. Astra önceki API-first/container varsayılanı ve zorunlu toplam tur kotası önerilerini geri çekti.
+T-L3 asgari compaction/context admission ve durable turn içerir; T-L4 policy/onay olmadan yazma açmaz.
+Son yanıt rezervi yalnız kullanıcı limit koyarsa o limit içinde; mevcut maxCalls50 allocation canlıda bypass edilmez,
+yönetilen sözleşme değişikliği gerekir. Jev a6bc511f eski öneri değerlendirmesidir: targeted_revision 1,00;
+none 0,00 / insufficient 0,00 (ikisi de seçilmedi); yeni owner yönünün kabul kanıtı değildir.
+
+Dört paralel salt okunur legacy incelemesi → `deckent-refactor-work/TERMINAL-CLAUDE-CODE-CLASS-ANALYSIS-2026-09-24.md`.
+Legacy kök nedenleri: tur başına metin zorunluluğu yok, anlatım sözleşmesi yok, bayt/token karışıklığı, kontrolsüz akıl yürütme,
+salt okunur işlere onay, 400 çağrı/45 dk bütçe, gizlenen son yanıt, bayat oturum saati, iç içe çağrıda risk atlama. Öneri (Jev ed6de584
+0,86; 2065 ile model sırası/kabuk/bütçe önerisi superseded): sağlayıcıdan bağımsız engine döngüsü, önce native Anthropic Messages, yerel uzun bağlam (Qwen3.8 262k, KV ~217k) ikinci ve worker
+profiliyle GPU'da birbirini dışlar; kabuk varsayılan yalıtılmış (host_shell 0,35), host modu açık profil. Dilimler T-A0..A6.
+Güncel kararlar PLAN'da (yerel önce, host shell, kullanıcı seçmedikçe terminal kotası yok, worker hattı sonra); GPU yasağı sürer.
 
 ## Owner 2026-09-24 akşam — yön ve GPU
 
