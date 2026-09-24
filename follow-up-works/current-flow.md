@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; terminal kalite hattı main'de (yerel, push yok: 0d3aad7); sabah owner kontrolü + push; ana hat askıda (hemen-donulecek-is.md)
+# Anlık iş akışı — Opus 5.5; terminal kalite hattı + Astra REVISE düzeltmeleri main'de (yerel, push yok: 9f1d9f3); sabah owner kontrolü + push; sıradaki: atama tasarımı owner checkpoint'i
 
 ## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
 
@@ -399,6 +399,13 @@ Gece sonu ekleri: `974b352` yaşam döngüsü uyumluluk penceresi, `0d3aad7` kal
 + servis hata parametreleri protokolde (`{issues}` giderildi). Doğrulama 1782/313, native 25, host 55, exit 0 (`verify-3-history-params.log`).
 Son canlı kontrol: bayraksız `deckent runtime shutdown` kabul → `deckent` servisi 1,04 sn'de başlattı → vLLM akışlı yanıt → sıradaki `/exit` → exit 0; geçmiş dosyası 0600.
 Sabah: owner kontrolü, push onayı, Astra 2047–2050 yanıtları; sonra P1 karar listesi ve A (araç döngüsü/D15b) için owner checkpoint.
+Dönülecek iş (hemen-donulecek-is.md) gece tamamlananlar: `8a0cf52` B09 REVISE (Astra 2044: host tarafı olay redaksiyonu, kayıp işaretleri bütçeye sayılır,
+bütçe bitince 429 + tek `dropped{event-cap}`, mühür kaydında `projection: complete|partial`) → 1784/313; `c052a31` C11 REVISE (Astra 2041: scope'la adlandırılmış
+dış anahtar, hedef bağlaması sabit — değişirse `EFFECT_TARGET_CHANGED`, HTTP toplam süre sınırı, settle CAS yarışında kayıtlı sonuç) → 1786/314;
+`9f1d9f3` metrics `localhost` (Astra 2045 P2: çözümle, tüm cevaplar loopback değilse bağlanmadan reddet, bağlantıyı denetlenen adrese sabitle) → 1787/314.
+Her biri native 25, host 55, exit 0 ve mutasyon kanıtlı (`proof/F26-*`). Astra 2051 (B09+C11), 2052 (metrics) bekliyor.
+Astra 2043 tasarım eklemeleri `ASSIGNMENT-EVOLUTION-DESIGN-2026-09-23.md` sonuna işlendi (yalnız belge; PLAN'a G31/G32 satırı owner onayından sonra).
+Sabah owner: push onayı (c32f4ce sonrası tüm yerel commit'ler), Astra 2047–2052 yanıtları, atama tasarımı checkpoint'i, P1 karar listesi, A checkpoint'i.
 
 ## Acil hat 2026-09-23/24: yerel terminal + yerel sunum (owner öncelik)
 
