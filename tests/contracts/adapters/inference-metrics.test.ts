@@ -71,3 +71,15 @@ it('resolves the name localhost before contact, refuses it when any answer is no
     async () => [{ address: '127.0.0.1' }])).resolves.toEqual({ body: 'metric_ok 1\n' });
   expect(fixture.hits).toEqual(['/metrics']);
 });
+
+it('tries each checked loopback answer in order when the first family has no listener', async () => {
+  const fixture = await listen((_url, reply) => { reply.writeHead(200); reply.end('metric_ok 1\n'); });
+  const port = new URL(fixture.origin).port;
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 2_000, responseMaxBytes: 1024 },
+    async () => [{ address: '::1' }, { address: '127.0.0.1' }])).resolves.toEqual({ body: 'metric_ok 1\n' });
+  expect(fixture.hits).toEqual(['/metrics']);
+  // A later unchecked address is never reached: the whole answer set is refused before the first connection.
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 1_000, responseMaxBytes: 1024 },
+    async () => [{ address: '::1' }, { address: '198.51.100.7' }])).rejects.toMatchObject({ code: 'INFERENCE_METRICS_HOST_DENIED' });
+  expect(fixture.hits).toEqual(['/metrics']);
+});
