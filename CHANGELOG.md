@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURFACES/F26 (Astra 2045 P2): `deckent inference metrics` resolves the name `localhost` before any contact, refuses it when any answer is not a loopback address, and pins the connection to the checked address; literal loopback addresses are used as given.
+
 - CONTRACT/C11-1 REVISE (Astra 2041): targets receive a wire idempotency key namespaced by scope, target and operation (never the caller's raw key), so cross-scope key reuse can no longer settle a foreign record; intents pin a target binding (descriptor + endpoint identity) and a changed binding stops a resume with `EFFECT_TARGET_CHANGED` before any send or lookup (older unbound intents too); a losing concurrent replay returns the settled record instead of `EFFECT_CONFLICT`; the HTTP target has a whole-exchange deadline. Four negative tests, each mutation-proven.
 
 - EXECUTION/B09-1 REVISE (Astra 2044): tool targets, tool names/ids and session identifiers are redacted in the bridge like other exported text; the gateway also scrubs every free-text field on the host with the credential values it projected (a hostile worker posting schema-valid text directly no longer bypasses the bridge scrub); loss markers count against the event budget, spent budgets refuse batches (429) without growing the sink and the loss is sealed as one final marker; the seal record reports `projection: partial` when the live `worker.events` file missed writes, and `task transcript` says so. Negative tests with mutation proofs.

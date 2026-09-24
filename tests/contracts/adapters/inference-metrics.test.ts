@@ -59,3 +59,15 @@ it('reports non-200, size and timeout without the response body', async () => {
     .rejects.toMatchObject({ code: 'INFERENCE_METRICS_TIMEOUT' });
   expect(Date.now() - started).toBeLessThan(1_000);
 });
+
+it('resolves the name localhost before contact, refuses it when any answer is not loopback, and pins the checked address', async () => {
+  const fixture = await listen((_url, reply) => { reply.writeHead(200); reply.end('metric_ok 1\n'); });
+  const port = new URL(fixture.origin).port;
+  let asked = 0;
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 1_000, responseMaxBytes: 1024 },
+    async () => { asked++; return [{ address: '127.0.0.1' }, { address: '203.0.113.9' }]; })).rejects.toMatchObject({ code: 'INFERENCE_METRICS_HOST_DENIED' });
+  expect(asked).toBe(1); expect(fixture.hits).toEqual([]);
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 1_000, responseMaxBytes: 1024 },
+    async () => [{ address: '127.0.0.1' }])).resolves.toEqual({ body: 'metric_ok 1\n' });
+  expect(fixture.hits).toEqual(['/metrics']);
+});

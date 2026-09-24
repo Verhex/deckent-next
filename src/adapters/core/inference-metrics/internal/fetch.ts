@@ -1,4 +1,5 @@
 import { request as httpRequest } from 'node:http';
+import { lookup } from 'node:dns/promises';
 import { z } from 'zod';
 
 export type InferenceMetricsErrorCode = 'INFERENCE_METRICS_ENDPOINT_INVALID' | 'INFERENCE_METRICS_HOST_DENIED'
@@ -18,13 +19,27 @@ const inputSchema = z.object({
 export type InferenceMetricsReadInput = z.infer<typeof inputSchema>;
 export type InferenceMetricsBody = Readonly<{ body: string }>;
 
-function loopbackHost(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/g, '');
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+const unbracket = (hostname: string) => hostname.replace(/^\[|\]$/g, '');
+function loopbackAddress(address: string): boolean {
+  return /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(address) || address === '::1';
+}
+function loopbackHost(hostname: string): boolean { const host = unbracket(hostname); return host === 'localhost' || loopbackAddress(host); }
+export type InferenceMetricsLookup = (hostname: string) => Promise<readonly { readonly address: string }[]>;
+const systemLookup: InferenceMetricsLookup = hostname => lookup(hostname, { all: true, verbatim: true });
+
+/** A literal loopback address is used as is; the name `localhost` is resolved and every answer must be loopback before
+ * any connection, and the connection is pinned to the checked address (Astra 2045: a name check is not a target check). */
+async function pinnedAddress(hostname: string, resolve: InferenceMetricsLookup): Promise<string> {
+  const host = unbracket(hostname);
+  if (host !== 'localhost') return host;
+  let answers: readonly { readonly address: string }[];
+  try { answers = await resolve(host); } catch { throw new InferenceMetricsError('INFERENCE_METRICS_UNAVAILABLE'); }
+  if (!answers.length || answers.some(answer => !loopbackAddress(answer.address))) throw new InferenceMetricsError('INFERENCE_METRICS_HOST_DENIED');
+  return answers[0]!.address;
 }
 
 /** GET one loopback metrics URL. No credentials, no redirects, no retries. Limits come from the caller. */
-export function readInferenceMetrics(rawInput: InferenceMetricsReadInput): Promise<InferenceMetricsBody> {
+export function readInferenceMetrics(rawInput: InferenceMetricsReadInput, resolveHost: InferenceMetricsLookup = systemLookup): Promise<InferenceMetricsBody> {
   const parsed = inputSchema.safeParse(rawInput);
   if (!parsed.success) throw new InferenceMetricsError('INFERENCE_METRICS_ENDPOINT_INVALID');
   const input = parsed.data;
@@ -32,10 +47,11 @@ export function readInferenceMetrics(rawInput: InferenceMetricsReadInput): Promi
   try { url = new URL(input.url); } catch { throw new InferenceMetricsError('INFERENCE_METRICS_ENDPOINT_INVALID'); }
   if (url.protocol !== 'http:' || url.username !== '' || url.password !== '') throw new InferenceMetricsError('INFERENCE_METRICS_ENDPOINT_INVALID');
   if (!loopbackHost(url.hostname)) throw new InferenceMetricsError('INFERENCE_METRICS_HOST_DENIED');
-  return new Promise<InferenceMetricsBody>((resolve, reject) => {
+  return pinnedAddress(url.hostname, resolveHost).then(address => new Promise<InferenceMetricsBody>((resolve, reject) => {
     let settled = false;
     const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(deadline); fn(); } };
-    const req = httpRequest(url, { method: 'GET', headers: { accept: 'text/plain' }, timeout: input.timeoutMs }, response => {
+    const req = httpRequest({ host: address, family: address.includes(':') ? 6 : 4, port: url.port || 80, path: `${url.pathname}${url.search}`, method: 'GET',
+      headers: { accept: 'text/plain', host: url.host }, timeout: input.timeoutMs }, response => {
       const status = response.statusCode ?? 0;
       if (status >= 300 && status < 400) {
         response.destroy();
@@ -64,5 +80,5 @@ export function readInferenceMetrics(rawInput: InferenceMetricsReadInput): Promi
     const deadline = setTimeout(() => { req.destroy(); finish(() => reject(new InferenceMetricsError('INFERENCE_METRICS_TIMEOUT'))); }, input.timeoutMs);
     req.on('error', () => finish(() => reject(new InferenceMetricsError('INFERENCE_METRICS_UNAVAILABLE'))));
     req.end();
-  });
+  }));
 }
