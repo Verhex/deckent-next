@@ -943,6 +943,7 @@
   "error.EFFECT_OUTCOME_UNKNOWN": "The outcome is unknown and the target cannot confirm it. The operation is not retried automatically; reconcile with the target.",
   "error.EFFECT_NOT_COMPENSABLE": "The referenced operation is not settled, has no compensation in the catalog, or the compensation does not match it.",
   "error.EFFECT_REJECTED": "The target refused the operation before any effect.",
+  "error.EFFECT_TARGET_CHANGED": "The operation's descriptor or target endpoint changed since this effect was recorded (or the record predates pinned targets). Nothing was sent; recover the recorded effect against its original target before retrying.",
   "error.EFFECT_TARGET_UNAVAILABLE": "The target could not be read before recording any intent. Nothing was sent.",
   "error.EFFECT_CORRUPT": "A recorded operation intent is invalid.",
   "error.ADOPTION_TARGET_DENIED": "The target branch is not in execution.adoption.targets or is not a plain branch reference. Nothing was changed.",

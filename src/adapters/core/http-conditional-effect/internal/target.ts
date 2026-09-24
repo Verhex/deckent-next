@@ -25,12 +25,13 @@ export class HttpConditionalEffectTarget implements EffectTarget {
   readonly kind: string;
   private readonly options: HttpConditionalEffectOptions;
   constructor(input: unknown) { this.options = httpConditionalEffectOptionsSchema.parse(input); this.kind = this.options.kind; }
+  identity() { const url = new URL(this.options.baseUrl); return `${this.options.kind}@${url.origin}${url.pathname.replace(/\/+$/, '')}`; }
   private url(path: string) { return new URL(`${this.options.baseUrl.replace(/\/+$/, '')}/${path}`); }
   private send(method: 'GET' | 'POST', url: URL, headers: Record<string, string>, body?: string): Promise<Response> {
     const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
     return new Promise((resolve, reject) => {
       let settled = false;
-      const finish = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
+      const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(deadline); fn(); } };
       const req = send(url, { method, headers: { accept: 'application/json', ...headers }, timeout: this.options.timeoutMs }, response => {
         const chunks: Buffer[] = []; let received = 0;
         response.on('data', (chunk: Buffer) => {
@@ -42,6 +43,8 @@ export class HttpConditionalEffectTarget implements EffectTarget {
         response.on('end', () => finish(() => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks) })));
       });
       req.on('timeout', () => { req.destroy(); finish(() => reject(new Error('EFFECT_TARGET_TIMEOUT'))); });
+      // `timeout` bounds socket idleness only; the deadline bounds the whole exchange (a slow drip cannot hold it open).
+      const deadline = setTimeout(() => { req.destroy(); finish(() => reject(new Error('EFFECT_TARGET_TIMEOUT'))); }, this.options.timeoutMs);
       req.on('error', error => finish(() => reject(error)));
       req.end(body);
     });

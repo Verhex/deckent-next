@@ -34,7 +34,7 @@ async function fixture() {
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   const policy = (effect: 'allow' | 'require-approval' = 'allow', actions = ['execute', 'compensate', 'inspect']) => writeFile(productResourcePath(opened.layout, 'policy'),
     JSON.stringify({ schemaVersion: 1, revision: 'effects', restrictions: [], grants: [
-      { id: 'operations', effect: 'allow', actions, scopes: ['s'], principals, resource: { kind: 'operation', ids: 'all' } },
+      { id: 'operations', effect: 'allow', actions, scopes: ['s', 's2'], principals, resource: { kind: 'operation', ids: 'all' } },
       ...(effect === 'require-approval' ? [{ id: 'gate', effect, actions: ['execute'], scopes: ['s'], principals, resource: { kind: 'operation', ids: ['post-order'] } }] : []),
     ] }), { mode: 0o600 });
   await policy();
@@ -46,7 +46,7 @@ async function fixture() {
     try { return db.prepare('SELECT state,sequence FROM effect_intents WHERE command_id=?').get(commandId); } finally { db.close(); }
   };
   server.records.set('PO-1', 1);
-  return { server, project, options, policy, command, execute, state, root };
+  return { server, project, options, policy, command, execute, state, root, target };
 }
 
 it('settles a conditional write once, replays it, refuses stale and raced preconditions, and stops approval-gated operations before any effect', async () => {
@@ -120,8 +120,39 @@ it('compensates a settled operation with its catalog compensation as a new opera
     { cwd: f.project, env: { ...process.env, ...f.options.env } })).stdout);
   expect(cli).toMatchObject({ status: 'settled', compensates: 'post', operation: ref('cancel-order'), sequence: 2 });
   expect(await compensateConfiguredOperation(f.project, compensation as never, f.options)).toEqual(cli);
-  expect(f.server.operations.map(entry => entry.key)).toEqual(['key-post', 'cancel-post']);
+  // The target only ever sees namespaced wire keys derived from the durable intent, never the caller's raw keys (Astra 2041).
+  const keys = f.server.operations.map(entry => entry.key);
+  expect(keys).toHaveLength(2); expect(new Set(keys).size).toBe(2);
+  for (const key of keys) { expect(key).toMatch(/^[a-f0-9]{64}$/); expect(['key-post', 'cancel-post']).not.toContain(key); }
   const inspected = JSON.parse((await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'operation', 'inspect', '--scope', 's', '--command-id', 'cancel', '--json'],
     { cwd: f.project, env: { ...process.env, ...f.options.env } })).stdout);
   expect(inspected.record).toMatchObject({ state: 'settled', intent: { command: { compensates: 'post' } } });
+});
+
+it('namespaces target keys, never resumes against a changed endpoint and lets a losing concurrent replay return the settled outcome (Astra 2041)', async () => {
+  const f = await fixture();
+  // Two scopes reuse one caller key on different records: both writes really happen (a raw key would replay the first).
+  f.server.records.set('PO-2', 1);
+  expect(await f.execute(f.command('a', { idempotencyKey: 'shared' }))).toMatchObject({ status: 'settled' });
+  expect(await f.execute(f.command('b', { scopeId: 's2', idempotencyKey: 'shared', target: { kind: 'records', id: 'PO-2' }, expectedVersion: '"v1"' })))
+    .toMatchObject({ status: 'settled', version: '"v2"' });
+  expect(f.server.operations.map(entry => entry.id)).toEqual(['PO-1', 'PO-2']);
+
+  // A concurrent replay of an unknown effect: both callers settle from evidence; the CAS loser returns the durable outcome.
+  f.server.faults.dropAfterWrite = 1; f.server.faults.lookupDown = 1;
+  await expect(f.execute(f.command('race'))).rejects.toMatchObject({ code: 'EFFECT_OUTCOME_UNKNOWN' });
+  const replay = f.command('race', { expectedVersion: '"v2"' });
+  const [left, right] = await Promise.all([f.execute(replay), f.execute(replay)]);
+  expect(left).toEqual(right); expect(left).toMatchObject({ status: 'settled' });
+
+  // An unknown effect whose endpoint was reconfigured is never resent or looked up at the new service.
+  f.server.faults.dropAfterWrite = 1; f.server.faults.lookupDown = 1;
+  await expect(f.execute(f.command('moved'))).rejects.toMatchObject({ code: 'EFFECT_OUTCOME_UNKNOWN' });
+  const other = await conditionalRecordServer(); cleanup.push(other.close);
+  const configPath = join(f.project, '.deckent/config.json');
+  const config = JSON.parse(await (await import('node:fs/promises')).readFile(configPath, 'utf8')) as { operations: { targets: { options: { kind: string; baseUrl: string } }[] } };
+  for (const target of config.operations.targets) if (target.options.kind === 'records') target.options.baseUrl = other.baseUrl;
+  await writeFile(configPath, JSON.stringify(config)); clearConfigCache();
+  await expect(f.execute(f.command('moved', { expectedVersion: '"v3"' }))).rejects.toMatchObject({ code: 'EFFECT_TARGET_CHANGED' });
+  expect(other.operations).toHaveLength(0); expect(f.state('moved')).toMatchObject({ state: 'unknown' });
 });

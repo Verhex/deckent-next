@@ -43,6 +43,11 @@ export type EffectState = z.infer<typeof effectStateSchema>;
 export const effectIntentSchema = z.object({
   schemaVersion: z.literal(1), command: effectCommandSchema, descriptor: operationDescriptorSchema, actor: actorSchema,
   idempotencyKeyHash: digest, inputDigest: digest,
+  /** The only idempotency key the target ever sees: namespaced by scope, target and operation, so two scopes (or two
+   * operations) reusing a caller key can never settle each other's records (Astra 2041). Absent only on older intents. */
+  wireKey: digest.optional(),
+  /** Descriptor + target endpoint identity at claim time; a resume against a changed binding never sends or looks up. */
+  targetBinding: digest.optional(),
 }).strict().readonly();
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
 /** Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
@@ -56,7 +61,8 @@ export type EffectRecord = z.infer<typeof effectRecordSchema>;
 
 export class EffectError extends Error {
   constructor(readonly code: 'EFFECT_INVALID' | 'EFFECT_OPERATION_UNKNOWN' | 'EFFECT_APPROVAL_REQUIRED' | 'EFFECT_PRECONDITION_CHANGED'
-    | 'EFFECT_TARGET_BUSY' | 'EFFECT_CONFLICT' | 'EFFECT_OUTCOME_UNKNOWN' | 'EFFECT_NOT_COMPENSABLE' | 'EFFECT_REJECTED' | 'EFFECT_CORRUPT' | 'EFFECT_TARGET_UNAVAILABLE',
+    | 'EFFECT_TARGET_BUSY' | 'EFFECT_CONFLICT' | 'EFFECT_OUTCOME_UNKNOWN' | 'EFFECT_NOT_COMPENSABLE' | 'EFFECT_REJECTED' | 'EFFECT_CORRUPT' | 'EFFECT_TARGET_UNAVAILABLE'
+    | 'EFFECT_TARGET_CHANGED',
     options?: ErrorOptions) { super(code, options); this.name = 'EffectError'; }
 }
 

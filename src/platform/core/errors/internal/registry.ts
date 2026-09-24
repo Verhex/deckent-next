@@ -141,6 +141,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EFFECT_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_OUTCOME_UNKNOWN', p, l) }) },
   EFFECT_NOT_COMPENSABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_NOT_COMPENSABLE', p, l) }) },
   EFFECT_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_REJECTED', p, l) }) },
+  EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },
   EFFECT_TARGET_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_UNAVAILABLE', p, l) }) },
   EFFECT_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_CORRUPT', p, l) }) },
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },

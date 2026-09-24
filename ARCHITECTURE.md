@@ -354,6 +354,13 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. Required approval stops
   before any effect with `EFFECT_APPROVAL_REQUIRED` until C12. Not claimed: any ERP adapter, credentials, MCP tool, registry
   resolution of targets (A04), migration of the five existing flows.
+- **C11-1 REVISE (Astra 2041, Jev 2bfd2ee9, 2026-09-24).** The target never sees the caller's key: the intent stores a wire
+  key derived from scope, target kind+id, operation id@version and caller key, so two scopes or operations reusing a key
+  cannot settle each other's records. The intent also pins a target binding (descriptor digest + the adapter's endpoint
+  `identity()`); a resume against a changed binding — or an older intent without one — stops with `EFFECT_TARGET_CHANGED`
+  before any send or lookup (operator recovery). A compare-and-swap loser of a concurrent identical replay reloads and
+  returns the settled record. The HTTP target bounds the whole exchange, not only socket idleness. One target kind maps
+  to one endpoint per installation (config rejects duplicate kinds), which is what makes kind+id busy scoping sound.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
   Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
 

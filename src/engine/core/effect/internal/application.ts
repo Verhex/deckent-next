@@ -22,6 +22,9 @@ export interface EffectApplyRequest {
 /** One external system addressed through the effect contract (generic HTTP record service, an ERP adapter, ...). */
 export interface EffectTarget {
   readonly kind: string;
+  /** Stable identity of the physical service this target addresses (e.g. its normalized endpoint). One kind maps to one
+   * identity per installation (validated in config); an unsettled intent is only ever resumed against the same identity. */
+  identity(): string;
   observe(target: EffectTargetRef): Promise<{ readonly version: string | null }>;
   /** Conditional, idempotent write. Resolves with the record version after the effect, or throws EffectTargetError. */
   apply(request: EffectApplyRequest): Promise<{ readonly version: string | null }>;
@@ -57,6 +60,10 @@ export const refuseRequiredApproval: EffectApprovalGate = {
 export type EffectResult = Readonly<{ schemaVersion: 1; status: 'settled'; commandId: string; scopeId: string; operation: OperationRef; target: EffectTargetRef;
   sequence: number; version: string | null; compensates: string | null; evidence: 'idempotency-record' | 'fence' }>;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const wireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
+  `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
+const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
+  digest(`effect-binding:1\0${encodeCommandProjection('effect-descriptor', descriptor)}\0${target.identity()}`);
 
 /** Executes catalog operations against external targets through one contract: intent before effect, conditional write, idempotency,
  * re-authorization and live session right before the effect, evidence-based settlement, typed unknown without blind retry, and
@@ -100,7 +107,7 @@ export class EffectApplication {
       if (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef)) {
         throw new EffectError('EFFECT_CONFLICT');
       }
-      return this.resume(previous, target, settle);
+      return this.resume(previous, target, settle, binding(descriptor, target));
     }
     if (action === 'compensate') {
       const original = await this.store.loadEffect(command.scopeId, command.compensates!);
@@ -118,15 +125,19 @@ export class EffectApplication {
       if (observed.version !== command.expectedVersion) throw new EffectError('EFFECT_PRECONDITION_CHANGED');
     }
     const intent = effectIntentSchema.parse({ schemaVersion: 1, command, descriptor, actor: verified.session.principalRef,
-      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest: digest(encoded) });
+      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest: digest(encoded),
+      wireKey: wireKey(command), targetBinding: binding(descriptor, target) });
     return this.apply(await this.store.claimEffect(intent), target, settle);
   }
 
   /** Crash/replay settlement from target evidence: applied → settle; absent → the idempotent write is (re)sent; the target cannot tell →
    * unknown, never a blind retry. Terminal records replay their outcome. */
-  private async resume(record: EffectRecord, target: EffectTarget, settle: () => Promise<void>): Promise<EffectResult> {
+  private async resume(record: EffectRecord, target: EffectTarget, settle: () => Promise<void>, current: string): Promise<EffectResult> {
     if (record.state === 'settled') return this.result(record);
     if (record.state === 'refused') throw new EffectError(record.refusal!);
+    // Never redirect an unsettled effect: a changed descriptor/endpoint (or an older intent without a pinned binding and
+    // namespaced key) stops before any send or lookup and is left for operator recovery.
+    if (!record.intent.wireKey || record.intent.targetBinding !== current) throw new EffectError('EFFECT_TARGET_CHANGED');
     const found = await this.lookup(target, record);
     if (found?.status === 'applied') return this.result(await this.save(record, settleEffect(record, this.evidence(found.version))));
     if (!found) {
@@ -140,7 +151,7 @@ export class EffectApplication {
     const { command } = record.intent;
     await settle();
     try {
-      const applied = await target.apply({ target: command.target, operation: command.operation, idempotencyKey: command.idempotencyKey,
+      const applied = await target.apply({ target: command.target, operation: command.operation, idempotencyKey: record.intent.wireKey!,
         expectedVersion: command.expectedVersion, input: command.input ?? null });
       return this.result(await this.save(record, settleEffect(record, this.evidence(applied.version))));
     } catch (error) {
@@ -159,10 +170,19 @@ export class EffectApplication {
   }
 
   private async lookup(target: EffectTarget, record: EffectRecord) {
-    try { return await target.lookup(record.intent.command.target, record.intent.command.idempotencyKey); } catch { return null; }
+    try { return await target.lookup(record.intent.command.target, record.intent.wireKey!); } catch { return null; }
   }
   private evidence(version: string | null) { return { kind: 'idempotency-record' as const, version, observedAt: this.clock.sample().wallMs }; }
-  private save(previous: EffectRecord, next: EffectRecord) { return this.store.saveEffect(previous, next); }
+  /** Compare-and-swap; a concurrent identical replay that lost the race returns the durable outcome the winner recorded. */
+  private async save(previous: EffectRecord, next: EffectRecord) {
+    try { return await this.store.saveEffect(previous, next); }
+    catch (error) {
+      if (!(error instanceof EffectError) || error.code !== 'EFFECT_CONFLICT' || next.state !== 'settled') throw error;
+      const current = await this.store.loadEffect(previous.intent.command.scopeId, previous.intent.command.commandId);
+      if (current?.state === 'settled' && JSON.stringify(current.intent) === JSON.stringify(previous.intent)) return current;
+      throw error;
+    }
+  }
   private result(record: EffectRecord): EffectResult {
     const { command } = record.intent;
     return Object.freeze({ schemaVersion: 1, status: 'settled', commandId: command.commandId, scopeId: command.scopeId, operation: command.operation,

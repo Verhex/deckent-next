@@ -943,6 +943,7 @@
   "error.EFFECT_OUTCOME_UNKNOWN": "Sonuç belirsiz ve hedef bunu doğrulayamıyor. Operasyon otomatik tekrarlanmaz; hedefle uzlaştırın.",
   "error.EFFECT_NOT_COMPENSABLE": "Referans verilen operasyon sonuçlanmamış, katalogda telafisi yok ya da telafi onunla eşleşmiyor.",
   "error.EFFECT_REJECTED": "Hedef operasyonu herhangi bir etkiden önce reddetti.",
+  "error.EFFECT_TARGET_CHANGED": "Bu etki kaydedildikten sonra operasyonun tanımı veya hedef ucu değişti (ya da kayıt sabitlenmiş hedeflerden önce). Hiçbir şey gönderilmedi; yeniden denemeden önce kayıtlı etkiyi özgün hedefinde uzlaştırın.",
   "error.EFFECT_TARGET_UNAVAILABLE": "Hedef, herhangi bir niyet kaydedilmeden önce okunamadı. Hiçbir şey gönderilmedi.",
   "error.EFFECT_CORRUPT": "Kayıtlı bir operasyon niyeti geçersiz.",
   "error.ADOPTION_TARGET_DENIED": "Hedef dal execution.adoption.targets içinde değil ya da düz bir dal referansı değil. Hiçbir şey değiştirilmedi.",
