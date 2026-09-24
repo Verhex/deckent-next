@@ -1,4 +1,11 @@
-# Anlık iş akışı — Opus 5.5; origin/main = dd256fe (Astra 2059 PASS, push 2026-09-24); PLAN bölündü (COMPLETED-PLAN.md); sıradaki S akış kararları
+# Anlık iş akışı — Opus 5.5; origin/main = d4cff1a; S akış kararları uygulandı (doğrulamada); sıradaki A-1 araç döngüsü tasarımı ∥ B09-3
+
+## S akış kararları — 2026-09-24 akşam
+
+Owner Opus'a bıraktı. Jev aac0af98 `proposed_package` 0,97; uygulamada domain kanıt kuralı çıktı (eksik kanıt yalnız interrupted/response-limit)
+→ Jev e2faa91b `keep_invariant_stop_early` 1,00 (madde 3/4 düzeltildi, domain sözleşmesi değişmedi). Sonuç: token'a bağlı tel sınırı, ilk
+geçersiz parçada durma, tam kanıtla neden korunması, `TERMINAL_CHAT_INVOCATION_PENDING`, `deckent_stream` belgelendi. Mutasyon 3/3 kırıldı
+(`proof/F26-S-STREAM-DECISIONS/`).
 
 ## 2026-09-24 akşam
 

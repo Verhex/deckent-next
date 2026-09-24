@@ -4,6 +4,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURFACES/F26 S (owner delegated, Jev aac0af98/e2faa91b): the streamed wire bound adds 1024 bytes per requested completion
+  token to 16× `responseMaxBytes`, so long legitimate answers are no longer rejected after billing; the first invalid chunk
+  stops the read and closes the connection (no draining) and its cause is kept whenever every observed byte is retained
+  (the domain rule — a semantic cause only with complete evidence — is unchanged); a concurrent duplicate turn is reported
+  as `TERMINAL_CHAT_INVOCATION_PENDING` instead of a failed turn; `deckent_stream` is documented as assembled provenance.
+
 - DOCS (owner 2026-09-24): PLAN.md keeps remaining work and durable decisions; completed work and closed findings moved
   verbatim to the new COMPLETED-PLAN.md (Markdown gate, contracts, core-memory and refactor skill updated).
 

@@ -13,12 +13,15 @@ export type NativeJsonHttpParsed = { response: ModelInvocationNativeResponse } |
 /**
  * Incremental parser for a streamed (for example SSE) response. The transport keeps the same credential guards,
  * deadline, redirect and status rules; it retains at most `responseMaxBytes` of wire bytes as evidence while the
- * parser bounds its own assembled result. `push` never throws; `limit` asks the transport to stop reading.
+ * parser bounds its own assembled result. `push` never throws; `limit` asks the transport to stop reading, and
+ * `rejected` stops it at once with the parser's own reason. That cause is recorded when every observed byte is retained
+ * (the decisive chunk is in the evidence); past the evidence cap the reason is `response-limit`, because a semantic cause
+ * is only claimed with complete evidence (S-STREAM decision, Jev aac0af98/e2faa91b).
  */
 export interface NativeJsonHttpStream {
   readonly accept: string;
   readonly wireMaxBytes: number;
-  push(chunk: Buffer): Readonly<{ deltas: readonly ModelInvocationDelta[]; limit: boolean }>;
+  push(chunk: Buffer): Readonly<{ deltas: readonly ModelInvocationDelta[]; limit: boolean; rejected?: ModelInvocationRejectionReason }>;
   finish(): NativeJsonHttpParsed;
 }
 export interface NativeJsonHttpSendOptions {
@@ -161,6 +164,7 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
       if (retainedCredential?.hasPartialPrefix()) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
       // Only a fully retained body is complete evidence; a stream past the retention cap is bounded, not complete.
       const complete = completeInput && observedBytes === retainedBytes;
+      // `complete` means every observed byte is retained (not that the provider finished); a semantic cause needs it.
       const reason = complete || reasonInput === 'interrupted' ? reasonInput : 'response-limit';
       try { done(undefined, rejected(adapter.data, reason, status, retainedBody(), complete, observedBytes)); }
       catch { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_RESPONSE_TOO_LARGE')); }
@@ -197,6 +201,7 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
         for (const delta of parsed.deltas) {
           if (!gate!.push(delta)) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
         }
+        if (parsed.rejected) { settleRejected(parsed.rejected, true); return; }
         if (parsed.limit) settleRejected('response-limit', false);
       });
       incoming.on('error', () => { if (!settled) interrupted(new NativeJsonHttpError('NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN')); });

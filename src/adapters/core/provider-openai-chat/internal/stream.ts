@@ -8,9 +8,13 @@ import { openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObje
 /**
  * SSE framing costs about 60x the answer text per token (vLLM measured ~240 wire bytes per token). The profile's
  * `responseMaxBytes` keeps bounding the retained evidence prefix and the assembled result that is persisted and
- * delivered; total wire bytes of one streamed response are bounded at this fixed multiple of it, within the same deadline.
+ * delivered. Total wire bytes of one streamed response, within the same deadline, are bounded by a fixed multiple of it
+ * plus a per-token framing allowance (4x the measured vLLM framing) for the request's completion budget, so a long
+ * legitimate answer is not rejected after the provider billed it (S-STREAM decision, Jev aac0af98). The bound limits
+ * bandwidth only; parser memory stays bounded by `responseMaxBytes`.
  */
 export const OPENAI_CHAT_STREAM_WIRE_FACTOR = 16;
+export const OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES = 1024;
 
 const deltaSchema = z.object({ role: z.literal('assistant').optional(), content: z.string().nullable().optional(),
   reasoning: z.string().nullable().optional(), reasoning_content: z.string().nullable().optional(),
@@ -24,7 +28,8 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
 /**
  * Incremental OpenAI chat-completions SSE parser. Every `data:` event is bounded and validated like the non-streamed
  * response (model match, no tool or function calls, usage within the requested completion budget). The result is the
- * assembled `chat.completion` plus a digest of the exact wire bytes. A stream that ends without `[DONE]`, a finish
+ * assembled `chat.completion` plus a digest of the exact wire bytes (`deckent_stream`: the native object of a streamed call
+ * is assembled provenance, never the provider's verbatim body). A stream that ends without `[DONE]`, a finish
  * reason and usage is interrupted, which the invocation records as an uncertain outcome; it is never retried.
  */
 export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits): NativeJsonHttpStream {
@@ -88,12 +93,13 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
 
   return Object.freeze({
     accept: 'text/event-stream',
-    wireMaxBytes: Math.min(limits.responseMaxBytes * OPENAI_CHAT_STREAM_WIRE_FACTOR, Number.MAX_SAFE_INTEGER),
+    wireMaxBytes: Math.min(limits.responseMaxBytes * OPENAI_CHAT_STREAM_WIRE_FACTOR
+      + request.max_completion_tokens * OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, Number.MAX_SAFE_INTEGER),
     push(chunk: Buffer) {
       hash.update(chunk); wireBytes += chunk.byteLength;
       const out: ModelInvocationDelta[] = [];
       let limit = false, start = 0;
-      if (invalid) return Object.freeze({ deltas: out, limit });
+      if (invalid) return Object.freeze({ deltas: out, limit, rejected: invalid });
       for (let index = chunk.indexOf(0x0a); index >= 0 && !invalid && !limit; index = chunk.indexOf(0x0a, start)) {
         line.push(chunk.subarray(start, index)); lineBytes += index - start; start = index + 1;
         limit = endLine(out);
@@ -102,8 +108,9 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
         line.push(chunk.subarray(start)); lineBytes += chunk.byteLength - start;
         limit = lineBytes > limits.responseMaxBytes;
       }
-      // After a rejection no further text is presented; the body is still drained to a definite end.
-      return Object.freeze({ deltas: invalid ? [] : out, limit });
+      // The first invalid chunk ends the read at once with its own reason: nothing after it is presented or parsed, and the
+      // provider stops generating when the connection closes (no draining; usage is not trusted past an invalid chunk).
+      return Object.freeze(invalid ? { deltas: [], limit, rejected: invalid } : { deltas: out, limit });
     },
     finish(): NativeJsonHttpParsed {
       if (invalid) return { reason: invalid };

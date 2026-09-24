@@ -466,13 +466,19 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   always holds a prefix and completes the answer from the recorded result. This is an upper bound on buffered delta bytes,
   not strict per-write backpressure: the send loop may continue after a socket write reports a full buffer (Astra 2054). A replayed command sends no deltas and never
   reaches the provider again (a concurrent duplicate gets the pending receipt without deltas, engine-tested; the terminal
-  composition currently reports that as `TERMINAL_CHAT_INVOCATION_FAILED` with state `pending`). Disconnect
+  composition reports that as `TERMINAL_CHAT_INVOCATION_PENDING`: still running elsewhere, recorded, not failed). Disconnect
   stops delivery only; the client sends the same governed cancellation command as the plain turn (the peer's session
   ends with its connection, so the service cannot cancel on its behalf). `openai-chat-http` v4 accepts `stream: true`
   with required `stream_options.include_usage` and parses SSE incrementally with the same deadline, redirect, model-match
   and no-tool rules; `responseMaxBytes` bounds the retained evidence prefix and the assembled `chat.completion` (with a
-  wire digest), and total wire bytes are bounded at 16× it. A stream without `[DONE]`, finish and usage is interrupted
-  (uncertain, never retried). Streamed text is withheld while it could still begin an echoed bearer credential.
+  wire digest in a `deckent_stream` block — the native object of a streamed call is assembled provenance, never the
+  provider's verbatim body), and total wire bytes are bounded at 16× it plus 1024 bytes per requested completion token (4× the
+  measured vLLM framing), so a long legitimate answer is not rejected after it was billed; the bound limits bandwidth, not
+  memory. The first invalid chunk (malformed, tool call, model change, usage over budget, data after `[DONE]`) ends the read
+  at once and closes the connection, so the provider stops generating; its cause is recorded only when every observed byte
+  is retained (evidence `complete` means that, not that the provider finished), otherwise the reason is `response-limit`,
+  because a semantic rejection cause is only claimed with complete evidence (S decisions, Jev aac0af98/e2faa91b).
+  A stream without `[DONE]`, finish and usage is interrupted (uncertain, never retried). Streamed text is withheld while it could still begin an echoed bearer credential.
 - **Rendering (P3, unit `surfaces/core/terminal-render`):** a pure `renderAssistantStream(state, delta, now)` state
   machine feeds the workline: a stream segmenter emits finished units (prose line, list item, quote, heading, whole fenced
   code block or table) to `Static` scrollback as they complete and keeps only the unfinished tail live (an unclosed

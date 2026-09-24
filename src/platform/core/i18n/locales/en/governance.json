@@ -888,6 +888,7 @@
   "error.TERMINAL_CHAT_EMPTY": "The model returned no assistant text for this turn.",
   "error.TERMINAL_CHAT_CANCELLED": "The chat turn was cancelled; cancellation was requested from the model invocation service.",
   "error.TERMINAL_CHAT_INVOCATION_FAILED": "The model invocation for this turn ended without an answer (outcome: {state}). It is recorded and is not retried; inspect it with `deckent models invocation --input <query>`.",
+  "error.TERMINAL_CHAT_INVOCATION_PENDING": "This turn's model invocation is still running under another request for the same command, so no answer is shown here. Its outcome will be recorded; inspect it with `deckent models invocation --input <query>` instead of sending the turn again.",
   "error.TERMINAL_CHAT_STREAM_MISMATCH": "The streamed text does not match the recorded model answer; the turn was stopped. The recorded invocation remains the only source of truth.",
   "error.TERMINAL_CHAT_UNAVAILABLE": "Terminal chat is unavailable in this executable (no governed model invocation handler).",
   "error.TERMINAL_TTY_REQUIRED": "This terminal mode needs an interactive terminal on both stdin and stdout; use `deckent terminal status --json` or MCP tools when piped.",

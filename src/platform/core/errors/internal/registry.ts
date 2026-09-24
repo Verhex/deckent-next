@@ -27,6 +27,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TERMINAL_CHAT_EMPTY: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_EMPTY', p, l) }) },
   TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
   TERMINAL_CHAT_INVOCATION_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_INVOCATION_FAILED', p, l) }) },
+  TERMINAL_CHAT_INVOCATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_INVOCATION_PENDING', p, l) }) },
   TERMINAL_CHAT_STREAM_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_STREAM_MISMATCH', p, l) }) },
   TERMINAL_CHAT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_UNAVAILABLE', p, l) }) },
   TERMINAL_TTY_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_TTY_REQUIRED', p, l) }) },

@@ -56,7 +56,12 @@ export async function* streamTerminalChatTurn(input: TerminalChatTurnInput, port
 }
 
 function* settle(result: ModelInvocationResult, shownText: string, shownReasoning: string, signal?: AbortSignal): Generator<TurnDelta> {
-  const state = result.receipt.outcome?.state ?? 'pending';
+  // A concurrent duplicate of the same command gets the pending receipt: that invocation is still running, not failed.
+  if (!result.receipt.outcome) {
+    if (signal?.aborted) { yield { kind: 'done', finish: 'cancelled' }; return; }
+    throw ErrorRegistry.createError('TERMINAL_CHAT_INVOCATION_PENDING');
+  }
+  const state = result.receipt.outcome.state;
   if (state === 'not-sent') { yield { kind: 'done', finish: 'cancelled' }; return; }
   const message = state === 'responded' ? openAiChatMessageFromInvocation(result) : null;
   if (!message) {

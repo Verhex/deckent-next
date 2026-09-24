@@ -5,7 +5,7 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createOpenAiChatNativePort, OPENAI_CHAT_STREAM_WIRE_FACTOR } from '#adapters/core/provider-openai-chat/index.js';
+import { createOpenAiChatNativePort, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHAT_STREAM_WIRE_FACTOR } from '#adapters/core/provider-openai-chat/index.js';
 import type { ModelInvocationDelta } from '#domain/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 
@@ -99,12 +99,14 @@ it('streams content and reasoning_content deltas in wire order across CRLF frami
     usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 } });
 });
 
-it('rejects malformed chunks, tool calls and model changes with typed complete evidence and presents nothing after them', async () => {
+it('rejects malformed chunks, tool calls and model changes at the first invalid chunk with its own reason and presents nothing after it', async () => {
   const malformedParts = [chunk({ content: 'ok' }), 'data: {not json\n\n', chunk({ content: 'hidden' }), chunk({}, 'stop'), usage(), DONE];
   const malformed = await send(await fixture(drip(malformedParts)));
   expect(malformed.deltas).toEqual([{ kind: 'text', text: 'ok' }]);
+  // The read stops at the invalid chunk: every observed byte is retained (complete), and the rest of the stream is never read.
   expect(malformed.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response', httpStatus: 200, body: { complete: true } } });
-  expect(Buffer.from((malformed.result as { evidence: { body: { data: string } } }).evidence.body.data, 'base64').toString()).toBe(malformedParts.join(''));
+  const evidence = Buffer.from((malformed.result as { evidence: { body: { data: string } } }).evidence.body.data, 'base64').toString();
+  expect(evidence.startsWith(malformedParts[0]! + malformedParts[1]!)).toBe(true); expect(evidence).not.toContain('hidden');
 
   const tool = await send(await fixture(drip([chunk({ content: 'a' }), chunk({ tool_calls: [{ index: 0, id: 't', type: 'function', function: { name: 'x', arguments: '' } }] }),
     chunk({}, 'stop'), usage(), DONE])));
@@ -142,9 +144,11 @@ it('applies the total deadline to a slow drip and the wire bound to an endless s
   expect(timed.deltas.length).toBeGreaterThanOrEqual(2);
   expect(timed.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
 
-  const comments = Array.from({ length: 200 }, () => `: ${'p'.repeat(200)}\n\n`);
+  // The wire bound is the evidence multiple plus a per-token framing allowance for the request's completion budget.
+  const wireBound = 1024 * OPENAI_CHAT_STREAM_WIRE_FACTOR + 48 * OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES;
+  const comments = Array.from({ length: Math.ceil(wireBound / 204) + 20 }, () => `: ${'p'.repeat(200)}\n\n`);
   const noisy = await send(await fixture(drip(comments, 0)), streamed(), { ...limits, responseMaxBytes: 1024 });
-  expect(1024 * OPENAI_CHAT_STREAM_WIRE_FACTOR).toBeLessThan(200 * 204);
+  expect(wireBound).toBeLessThan(comments.length * 204);
   expect(noisy.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'response-limit', body: { complete: false, byteLength: 1024 } } });
 
   // Assembled text beyond responseMaxBytes stops the read before the wire bound.
@@ -200,4 +204,43 @@ it('never presents a streamed prefix of an echoed bearer credential and fails th
     // Text that could still begin the credential is held back, so not even a prefix reaches the observer.
     expect(shown).toBe('');
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('closes the provider connection at the first invalid chunk instead of draining the rest of the stream', async () => {
+  let providerClosed = false, written = 0;
+  const endpoint = await fixture((req, res) => {
+    req.resume(); res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(chunk({ content: 'ok' }));
+    res.write(chunk({ tool_calls: [{ index: 0, id: 't', type: 'function', function: { name: 'x', arguments: '' } }] }));
+    // A provider that would keep generating: only the client closing the connection ends it.
+    const timer = setInterval(() => { written++; res.write(chunk({ content: '.' })); }, 10);
+    res.on('close', () => { providerClosed = true; clearInterval(timer); });
+  });
+  const started = Date.now();
+  const { result, deltas } = await send(endpoint, streamed(), { ...limits, timeoutMs: 4000 });
+  expect(Date.now() - started).toBeLessThan(1000);
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response', body: { complete: true } } });
+  expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(providerClosed).toBe(true); expect(written).toBeLessThan(20);
+});
+
+it('claims a stream\'s rejection cause only with complete evidence: within the cap it is kept, past the cap it is the limit', async () => {
+  const mismatch = (padding: number) => [...Array.from({ length: padding }, () => `: ${'p'.repeat(200)}\n\n`),
+    chunk({ content: 'a' }, null, 'other-model'), chunk({}, 'stop'), usage(), DONE];
+  const within = await send(await fixture(drip(mismatch(2), 0)), streamed(), { ...limits, responseMaxBytes: 4096 });
+  expect(within.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'model-mismatch', body: { complete: true } } });
+  // Comments carry no text, so only the evidence cap is passed; the decisive chunk is then outside the retained bytes.
+  const past = await send(await fixture(drip(mismatch(12), 0)), streamed(), { ...limits, responseMaxBytes: 1024 });
+  expect(past.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'response-limit', body: { complete: false, byteLength: 1024 } } });
+});
+
+it('accepts a long legitimate answer whose SSE framing exceeds the evidence multiple but fits its completion budget', async () => {
+  const parts = Array.from({ length: 130 }, () => chunk({ content: 'x' }));
+  const wire = parts.join('').length;
+  expect(wire).toBeGreaterThan(1024 * OPENAI_CHAT_STREAM_WIRE_FACTOR);
+  const port = createOpenAiChatNativePort();
+  const endpoint = await fixture(drip([...parts, chunk({}, 'stop'), usage(130), DONE], 0));
+  const prepared = await port.prepare(profile(endpoint, { ...limits, responseMaxBytes: 1024 }, { maxOutputTokens: 200 }), binding(), streamed('configured-model', 200));
+  const result = await port.send(prepared);
+  expect(result).toMatchObject({ native: { choices: [{ message: { content: 'x'.repeat(130) }, finish_reason: 'stop' }] } });
 });

@@ -56,9 +56,8 @@ Sıra: C11-1 ve Hat A ilk dogfood denemesi tamamlandı ([COMPLETED-PLAN](COMPLET
 
 ## Açık işler — sıradaki (owner 2026-09-24)
 
-Devam planı: dış çalışma alanı `DEVAM-PLANI-2026-09-24.md` (Astra 2055/2057 değerlendirmesiyle). Sıra: **S** akış karar listesi
-(owner Opus'a bıraktı: tel çarpanı 16×, `deckent_stream` bloğu, kanıt sınırı sonrası neden kaybı, bozuk parça sonrası boşaltma,
-bekleyen kopya ifadesi; kesintili/bilinmeyen kanıt davranışı A'dan önce kapanır) → **A-1** yönetilen araç döngüsü tasarımı
+Devam planı: dış çalışma alanı `DEVAM-PLANI-2026-09-24.md` (Astra 2055/2057 değerlendirmesiyle). **S** akış karar listesi
+uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)). Sıra: **A-1** yönetilen araç döngüsü tasarımı
 (owner onayı 2026-09-24; salt okunur araçlar policy izin verirse ek varsayılan onay olmadan, etkili araçlar mevcut onaylı uygulama
 yetkisiyle; `@` dosya adayı scoped okuma portu burada) ∥ **B09-3** canlı worker satırı + Codex normalizer → **A-2** D15b `do` →
 RunProposal → **G31** atama (aşağıdaki satır). Terminal açıkları: açık karar kartında kuyruk boşaltmanın duraklatılması (Astra 2057),

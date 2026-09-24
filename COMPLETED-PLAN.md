@@ -5,6 +5,13 @@ PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kan
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.
 Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve current-flow esastır.
 
+## S — akış karar listesi (owner 2026-09-24 Opus'a bıraktı; Jev aac0af98 0,97, e2faa91b 1,00)
+
+Tel sınırı = 16× `responseMaxBytes` + istenen tamamlama token'ı başına 1024 bayt (uzun meşru yanıt faturadan sonra reddedilmez);
+ilk geçersiz parçada okuma durur ve bağlantı kapanır (boşaltma yok); neden, gözlenen her bayt saklıysa korunur, değilse
+`response-limit` (domain kuralı değişmedi: anlamsal neden yalnız tam kanıtla); eşzamanlı kopya tur `TERMINAL_CHAT_INVOCATION_PENDING`;
+`deckent_stream` birleştirilmiş köken bloğu olarak belgelendi. Mutasyon kanıtları `proof/F26-S-STREAM-DECISIONS/`.
+
 ## Terminal ve yerel sunum acil hattı — 2026-09-23/24
 
 Owner: `deckent` → etkileşimli terminal (TTY; pipe'ta yardım), `deckent --help` → yardım; Claude Code kalitesi altı kabul edilmez;

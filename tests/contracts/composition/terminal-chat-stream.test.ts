@@ -87,6 +87,9 @@ describe('streamed terminal chat turn contract', () => {
     await expect(collect(streamTerminalChatTurn(input, fakePorts(async () => unknown).ports)))
       .rejects.toMatchObject({ code: 'TERMINAL_CHAT_INVOCATION_FAILED', params: { state: 'unknown' } });
     await expect(collect(streamTerminalChatTurn(input, fakePorts(async () => responded('  ')).ports))).rejects.toMatchObject({ code: 'TERMINAL_CHAT_EMPTY' });
+    // A concurrent duplicate of the same command is still running elsewhere: typed as pending, never as a failed turn.
+    const pending = { ...responded(''), receipt: {}, response: null } as unknown as ModelInvocationResult;
+    await expect(collect(streamTerminalChatTurn(input, fakePorts(async () => pending).ports))).rejects.toMatchObject({ code: 'TERMINAL_CHAT_INVOCATION_PENDING' });
     const failing = fakePorts(async () => { throw new DeckentError('MODEL_INVOCATION_UNAVAILABLE', 'down'); });
     await expect(collect(streamTerminalChatTurn(input, failing.ports))).rejects.toMatchObject({ code: 'MODEL_INVOCATION_UNAVAILABLE' });
     expect(failing.invoked).toHaveLength(1); expect(failing.cancelled).toEqual([]);
