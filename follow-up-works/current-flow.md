@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; ACİL terminal + yerel sunum hattı: main 58c40d8 (T0, canlı düzeltmeler, T0b); sıradaki S-STREAM; ana hat askıda (hemen-donulecek-is.md)
+# Anlık iş akışı — Opus 5.5; terminal kalite hattı main'de (yerel, push yok: 0d3aad7); sabah owner kontrolü + push; ana hat askıda (hemen-donulecek-is.md)
 
 ## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
 
@@ -381,6 +381,24 @@ tek `update-ref` transaction'ında ilerler; uzlaştırma tam fence sahipliğinde
 çakışmadır. Kanıt: kapıda bekletilen kopya testi, izin listesi çıkarma testi, dış eşit-uç testi; koşulsuz fence mutasyonu Astra'nın senaryosunu gerçek Git'te
 üretti. Tam verify ilk koşumda 1637/289, 25 native, 55 host, exit 0. Astra 2038 profil paritesi PASS, 2034 I40 PASS. 2040 gönderildi.
 Süreç notu: Cursor süitini beklemek için yazdığım `while pgrep -f vitest` döngüsü kendi komut satırını eşleyip hook'u kilitledi; bekleme `pgrep -x`/süreç kimliği ile yazılmalı. Açık: B06-2 (teslim commit'inde doğrulama Run'ı policy ön koşulu), B07 aktivasyon, dış yazıcı fence'i, teslim+benimseme MCP paritesi (A03).
+
+## 2026-09-24 gece: terminal kalitesi paralel ajanlarla (owner: "tamamlayana kadar devam et", push sabah)
+
+Main yerel `974b352` (origin `c32f4ce`'den ileride; push YOK, owner onayı bekleniyor). Jev 1370d942 four_packages 0,96. Dört ajan ayrı worktree'lerde:
+P1 S-STREAM (SSE, protokol v11 `invokeModelStream`, yönetişim aynı; sahte sunucuda ilk delta 170 ms), P2 Claude Code sınıfı giriş (unit `terminal-composer`),
+P3 akışlı markdown görünüm + durum satırı (unit `terminal-render`), P4 iş yüzeyi (canlı worker satırı/paneli, `/transcript`, `/approvals` y/N, `/cancel`).
+Lead entegrasyonu `integrate/terminal-quality` (worktree `/home/alperen/deckent-next-wt-integrate-tq`): birim ayrımı `terminal-kit` ← render/composer ← terminal,
+Composer `active` (karar kartı klavyeyi alır), akış workline'a bağlı, onay bildirimi ≥10 sn. Saat düzeltmesi (Jev 6086297e): WSL2 duvar saati ~30 sn'de 2,1–2,2 sn geri
+atlıyor → aralıklı onay hatasının kök nedeni (enstrümanlı yeniden üretim). Canlı kabulde bulunan yükseltme hatası: v11 CLI v10 servise describe/shutdown yapamıyordu →
+yaşam döngüsü uyumluluk penceresi (Jev 898c8af3). Doğrulama: entegrasyon 1777/312, yaşam döngüsü 1778/312, native 25, host 55, exit 0 (`proof/F26-TERMINAL-QUALITY-2026-09-24/`).
+Canlı (owner ortamı, vLLM): sürüm farkı uyarısı 0,54 sn → `/service-restart` 1,2 sn → akışlı yanıt, durum satırında gösterge/süre/sıra. Astra 2047–2050 bekliyor.
+Ajan worktree'leri kaldırıldı (eslint `.claude/worktrees` altında çoklu tsconfig görüyordu); dallar `worktree-agent-*` duruyor. Açık: P1 karar listesi (tel çarpanı 16×,
+`deckent_stream` bloğu, kanıt sınırı sonrası neden kaybı, geçersiz parça sonrası boşaltma, bekleyen kopya ifadesi), geçmiş kalıcılığı ve `@` aday adapter'ları (portlar hazır),
+satır modu akışı, araç döngüsü + D15b (A, owner checkpoint).
+Gece sonu ekleri: `974b352` yaşam döngüsü uyumluluk penceresi, `0d3aad7` kalıcı girdi geçmişi (`state/terminal-history.jsonl`, 0600, yapıştırma içeriği yazılmaz)
++ servis hata parametreleri protokolde (`{issues}` giderildi). Doğrulama 1782/313, native 25, host 55, exit 0 (`verify-3-history-params.log`).
+Son canlı kontrol: bayraksız `deckent runtime shutdown` kabul → `deckent` servisi 1,04 sn'de başlattı → vLLM akışlı yanıt → sıradaki `/exit` → exit 0; geçmiş dosyası 0600.
+Sabah: owner kontrolü, push onayı, Astra 2047–2050 yanıtları; sonra P1 karar listesi ve A (araç döngüsü/D15b) için owner checkpoint.
 
 ## Acil hat 2026-09-23/24: yerel terminal + yerel sunum (owner öncelik)
 
