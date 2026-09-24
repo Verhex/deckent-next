@@ -86,8 +86,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       } finally {
         await connection?.close();
         // Seal the event log once the gateway is closed; retention failure never changes the execution outcome.
-        const sealed = await events?.close();
-        if (sealed?.length) {
+        const closedSink = await events?.close();
+        // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
+        const unreported = connection?.statistics().eventsUnreported ?? 0;
+        const received = closedSink?.events ?? [];
+        const sealed = unreported > 0 ? [...received, { schemaVersion: 1 as const, sequence: (received.at(-1)?.sequence ?? 0) + 1, atMs: received.at(-1)?.atMs ?? 0,
+          kind: 'dropped' as const, reason: 'event-cap' as const, count: unreported }] : received;
+        if (sealed.length) {
           try {
             // Keep the events that fit the artifact limit; the loss stays visible as a byte-cap marker, never silent.
             const lines: string[] = []; let bytes = 0, kept = 0;
@@ -95,7 +100,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             if (kept < sealed.length) lines.push(JSON.stringify({ schemaVersion: 1, sequence: (sealed[kept - 1]?.sequence ?? 0) + 1, atMs: sealed[kept - 1]?.atMs ?? 0,
               kind: 'dropped', reason: 'byte-cap', count: sealed.length - kept }) + '\n');
             const receipt = await artifacts.put(identity.scopeId, Buffer.from(lines.join('')));
-            await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now() });
+            await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now(),
+              projection: closedSink?.projectionComplete === false ? 'partial' : 'complete' });
           } catch { /* live sidecar remains; sealing is observation, not execution */ }
         }
       }

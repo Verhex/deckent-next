@@ -42,7 +42,9 @@ export class WorkerObservationError extends Error {
 }
 /** Sealed worker-reported events of one attempt: the redacted event log artifact; the summary is always recomputed from it. */
 export const workerEventLogSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, events: artifactReceiptSchema,
-  eventCount: z.number().int().nonnegative().safe(), sealedAt: z.number().int().nonnegative().safe() }).strict().readonly();
+  eventCount: z.number().int().nonnegative().safe(), sealedAt: z.number().int().nonnegative().safe(),
+  /** 'partial' when the live worker.events projection failed to write some events; the sealed artifact is built from all received events. */
+  projection: z.enum(['complete', 'partial']).optional() }).strict().readonly();
 export type WorkerEventLog = z.infer<typeof workerEventLogSchema>;
 export interface WorkerEventLogStore {
   saveWorkerEventLog(record: WorkerEventLog): Promise<WorkerEventLog>;

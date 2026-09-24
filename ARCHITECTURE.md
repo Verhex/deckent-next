@@ -745,7 +745,12 @@ verified; no non-Linux or legacy runtime activation is claimed.
 and host-only `dropped`. The provider normalizer and redaction run inside the container bridge, so raw native
 stream, credentials and paths outside `/workspace` never reach the host. The per-attempt gateway accepts
 `POST /events` only after bootstrap, validates every line against the schema, enforces strictly increasing
-sequence and batch/event/byte caps, and replaces rejects with a counted `dropped` marker. The host appends
+sequence and batch/event/byte caps, and replaces rejects with a counted `dropped` marker. **Hardening (Astra 2044):**
+the gateway re-applies redaction to every free-text field on the host with the credential values it projected plus the
+generic secret patterns (the bridge scrub is best-effort; a hostile worker can POST schema-valid text directly); loss
+markers are charged to the same event/byte budget, one slot stays reserved, and once the budget is spent batches are
+refused (429) without parsing and counted as unreported loss, sealed as one final `dropped` marker; the seal record says
+`projection: partial` when the live `worker.events` file missed writes. The host appends
 `{receivedAt, event}` to `worker.events` (0600, host clock only; worker clocks are untrusted) off the request
 path; at attempt end the events are sealed as an artifact and recorded in `worker_event_logs`. Summary
 (tokens, cache-read ratio, cost basis, tool classes, files touched, errors) and the live activity phase are

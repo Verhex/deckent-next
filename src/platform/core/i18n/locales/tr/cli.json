@@ -687,6 +687,7 @@
   "cli.task.transcript.toolError": "araç hatası ({tool})",
   "cli.task.transcript.limit": "sınıra ulaşıldı: {limit}",
   "cli.task.transcript.none": "Bu deneme için mühürlenmiş worker olayı yok.",
+  "cli.task.transcript.projectionPartial": "Canlı worker.events dosyası bazı olayları yazamadı (yazma hatası); bu mühürlü kayıt geçidin aldığı tüm olayları içerir.",
   "cli.task.transcript.notice": "Worker tarafından bildirilen, temizlenmiş olaylar. Sonuç ve kabul için otorite süreç çıkışı, patch ve Task değerlendirmesidir.",
   "config.field.inference_serving": "Kurumsal çıkarım profilleri, kapasite kalibrasyonu ve OpenAI uyumlu servis uçları",
   "cli.help.inference": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nYapılandırılmış inference_serving profillerinden vLLM başlatma argümanlarını ve kapasite\n    tahminini türetir. metrics, profildeki metrics sınırlarıyla yalnız loopback /metrics okur;\n    sunucuyu başlatmaz.",

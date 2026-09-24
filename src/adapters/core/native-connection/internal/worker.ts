@@ -72,13 +72,14 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
       if (block.type === 'text') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.text ?? '')), thinking: false, excerpt: red(block.text, 240) });
       else if (block.type === 'thinking' || block.type === 'redacted_thinking') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.thinking ?? '')), thinking: true, excerpt: '' });
       else if (block.type === 'tool_use') {
-        const name = typeof block.name === 'string' ? block.name.slice(0, 64) : 'unknown', input = (block.input ?? {}) as Record<string, unknown>;
+        const name = typeof block.name === 'string' ? red(block.name, 64) || 'unknown' : 'unknown', input = (block.input ?? {}) as Record<string, unknown>;
         const toolClass = CLAUDE_TOOLS[name] ?? (name.startsWith('mcp__') ? 'network' : 'other');
-        const target = relative(input.file_path ?? input.notebook_path ?? input.path, state.cwd);
+        const path = relative(input.file_path ?? input.notebook_path ?? input.path, state.cwd);
+        const target = path === null ? null : red(path, 256) || null;
         const detail = toolClass === 'shell' ? red(input.description ?? input.command, 240) : toolClass === 'search' ? red(input.pattern, 240)
           : toolClass === 'network' ? red(typeof input.url === 'string' ? (() => { try { return new URL(input.url).host; } catch { return ''; } })() : input.query, 240)
           : toolClass === 'agent' ? red(input.description, 240) : null;
-        emit('tool.call', { toolId: String(block.id ?? '').slice(0, 96), name, toolClass, target, detail: detail || null });
+        emit('tool.call', { toolId: red(block.id, 96), name, toolClass, target, detail: detail || null });
       } else miss(`assistant:${String(block.type ?? 'unknown')}`);
     }
   } else if (type === 'user') {

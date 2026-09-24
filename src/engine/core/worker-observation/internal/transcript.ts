@@ -19,7 +19,7 @@ export class WorkerTranscriptApplication {
       const text = new TextDecoder('utf-8', { fatal: true }).decode(await this.artifacts.read(identity.scopeId, log.events));
       events = text.split('\n').filter(Boolean).map(line => workerEventSchema.parse(JSON.parse(line)));
     } catch { throw new WorkerObservationError('WORKER_OBSERVATION_INVALID'); }
-    return Object.freeze({ schemaVersion: 1 as const, identity, sealed: Object.freeze({ eventCount: log.eventCount, sealedAt: log.sealedAt }),
+    return Object.freeze({ schemaVersion: 1 as const, identity, sealed: Object.freeze({ eventCount: log.eventCount, sealedAt: log.sealedAt, projection: log.projection ?? 'complete' }),
       summary: summarizeWorkerEvents(events), activity: workerActivityPhase(events), events: Object.freeze(events) });
   }
 }

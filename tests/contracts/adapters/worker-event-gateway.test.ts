@@ -37,7 +37,33 @@ it('accepts worker events only after the bootstrap, validates each against the c
   const flat = received.flat();
   expect(flat.map(item => [item.sequence, item.kind])).toEqual([[1, 'unmapped'], [2, 'unmapped'], [4, 'unmapped'], [5, 'dropped']]);
   expect(flat.at(-1)).toMatchObject({ kind: 'dropped', reason: 'invalid', count: 3 });
-  expect(connection.statistics()).toMatchObject({ events: 3, eventsDropped: 3 });
+  // The loss marker is charged to the same event budget as worker events (3 events + 1 marker).
+  expect(connection.statistics()).toMatchObject({ events: 4, eventsDropped: 3, eventsUnreported: 0 });
+});
+
+it('scrubs credential values and secret shapes from schema-valid events a worker posts directly (host-side guard)', async () => {
+  const received: WorkerEvent[][] = []; const connection = await gateway(await fixture(), received); const socket = connection.descriptor.socketPath;
+  expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
+  const hostile = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'tool.call', toolId: 'x', name: 'Write', toolClass: 'write',
+    target: `leak-${access}.txt`, detail: 'Authorization: Bearer abc.def.ghi' });
+  expect(await call(socket, 'POST', '/events', hostile + '\n')).toBe(204);
+  const serialized = JSON.stringify(received.flat());
+  expect(serialized).not.toContain(access); expect(serialized).not.toContain('abc.def.ghi'); expect(serialized).toContain('[REDACTED]');
+});
+
+it('charges loss markers to the event budget and refuses further batches once it is spent, without growing the sink', async () => {
+  const received: WorkerEvent[][] = []; const connection = await gateway(await fixture(), received); const socket = connection.descriptor.socketPath;
+  expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
+  let sequence = 0;
+  const batch = (count: number) => Array.from({ length: count }, () => event(++sequence)).join('\n') + '\n';
+  for (let sent = 0; sent < 5_200; sent += 1_000) await call(socket, 'POST', '/events', batch(1_000));
+  const statuses: number[] = [];
+  for (let i = 0; i < 50; i++) statuses.push(await call(socket, 'POST', '/events', '{bad json\n'));
+  expect(statuses.every(status => status === 429)).toBe(true);
+  const total = received.flat().length, stats = connection.statistics();
+  expect(total).toBeLessThanOrEqual(4_999);
+  expect(stats.events).toBe(total);
+  expect(stats.eventsUnreported).toBeGreaterThanOrEqual(50);
 });
 
 describe.skipIf(!imageId)('real container bridge to gateway event stream', () => {

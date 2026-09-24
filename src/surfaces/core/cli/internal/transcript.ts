@@ -1,7 +1,7 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase } from '#domain/index.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
-  schemaVersion: 1; identity: AttemptIdentity; sealed: Readonly<{ eventCount: number; sealedAt: number }> | null;
+  schemaVersion: 1; identity: AttemptIdentity; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
   summary: WorkerEventSummary | null; events: readonly WorkerEvent[] }>>;
 const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
@@ -35,6 +35,7 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
     else if (event.kind === 'limit') lines.push(`${at}  ${t('cli.task.transcript.limit', { limit: event.limit }, locale)}`);
     else if (event.kind === 'session.ended') lines.push(`${at}  ${phaseLabel(event.outcome === 'success' ? 'finished' : 'failed', locale)}`);
   }
+  if (data.sealed?.projection === 'partial') lines.push(t('cli.task.transcript.projectionPartial', {}, locale));
   lines.push(t('cli.task.transcript.notice', {}, locale));
   return lines.join('\n');
 }

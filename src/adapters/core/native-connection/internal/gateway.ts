@@ -9,6 +9,8 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, projectNativeCredential, type NativeSubscription } from './credential.js';
+import { scrubWorkerEvent } from './event-guard.js';
+import { secretValues } from './worker.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
@@ -38,10 +40,16 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   let credential: Record<string, unknown> | undefined = projected;
   let closed = false; let transferred = 0; let timer: ReturnType<typeof setTimeout>;
   const sockets = new Set<Socket>();
-  const statistics = { connected: 0, rejected: 0, bootstrapReads: 0, bytes: 0, events: 0, eventBytes: 0, eventsDropped: 0 };
+  const statistics = { connected: 0, rejected: 0, bootstrapReads: 0, bytes: 0, events: 0, eventBytes: 0, eventsDropped: 0, eventsUnreported: 0 };
+  // The values this gateway projects into the worker; kept only to scrub events it receives (never sent anywhere).
+  let secrets: string[] = secretValues(projected);
   let lastSequence = 0;
   // Worker-reported events after the bootstrap only: bounded per request and per attempt, schema-validated, strictly ordered.
   const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
+    // Budget exhausted (one event and a little space stay reserved): refuse without parsing; the loss is sealed later.
+    if (statistics.events >= limits.maxEvents - 1 || statistics.eventBytes >= limits.maxEventBytes - 256) {
+      statistics.rejected++; statistics.eventsUnreported++; response.writeHead(429).end(); request.resume(); return;
+    }
     const declared = Number(request.headers['content-length']);
     if (!Number.isSafeInteger(declared) || declared <= 0 || declared > limits.eventBatchBytes) { statistics.rejected++; response.writeHead(413).end(); request.resume(); return; }
     let body = ''; let received = 0;
@@ -53,11 +61,18 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
         if (!line) continue;
         let parsed; try { parsed = workerEventSchema.safeParse(JSON.parse(line)); } catch { parsed = null; }
         const bytes = Buffer.byteLength(line);
-        if (!parsed?.success || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents || statistics.eventBytes + bytes > limits.maxEventBytes) { dropped++; continue; }
-        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(parsed.data);
+        if (!parsed?.success || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
+        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(scrubWorkerEvent(parsed.data, secrets));
       }
       statistics.eventsDropped += dropped;
-      if (dropped) accepted.push({ schemaVersion: 1, sequence: lastSequence = lastSequence + 1, atMs: accepted.at(-1)?.atMs ?? 0, kind: 'dropped', reason: 'invalid', count: dropped });
+      if (dropped) {
+        // Loss markers are charged to the same budget; past it they are counted and sealed as one marker at the end.
+        const marker: WorkerEvent = { schemaVersion: 1, sequence: lastSequence + 1, atMs: accepted.at(-1)?.atMs ?? 0, kind: 'dropped', reason: 'invalid', count: dropped };
+        const markerBytes = Buffer.byteLength(JSON.stringify(marker));
+        if (statistics.events < limits.maxEvents - 1 && statistics.eventBytes + markerBytes <= limits.maxEventBytes - 256) {
+          lastSequence = marker.sequence; statistics.events++; statistics.eventBytes += markerBytes; accepted.push(marker);
+        } else statistics.eventsUnreported += dropped;
+      }
       try { if (accepted.length) input.onEvents?.(Object.freeze(accepted)); } catch { /* observation never changes execution */ }
       response.writeHead(204).end();
     });
@@ -107,7 +122,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     })().catch(() => { statistics.rejected++; socket.destroy(); });
   });
   const close = async () => {
-    if (closed) return; closed = true; credential = undefined; clearTimeout(timer);
+    if (closed) return; closed = true; credential = undefined; secrets = []; clearTimeout(timer);
     for (const socket of sockets) socket.destroy();
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });

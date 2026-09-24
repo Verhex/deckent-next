@@ -687,6 +687,7 @@
   "cli.task.transcript.toolError": "tool error ({tool})",
   "cli.task.transcript.limit": "limit reached: {limit}",
   "cli.task.transcript.none": "No sealed worker events for this attempt.",
+  "cli.task.transcript.projectionPartial": "The live worker.events file missed some events (write failure); this sealed transcript holds all events the gateway received.",
   "cli.task.transcript.notice": "Worker-reported, redacted events. Process exit, the patch and Task evaluation remain the authority for outcome and acceptance.",
   "config.field.inference_serving": "Enterprise inference profiles, capacity calibration and OpenAI-compatible serving endpoints",
   "cli.help.inference": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nDerives vLLM launch arguments and a capacity estimate from configured inference_serving\n    profiles. metrics reads a loopback /metrics URL using that profile's metrics limits and\n    does not start the server.",

@@ -48,6 +48,8 @@ it('never lets credentials, bearer tokens, key-shaped strings, proxy credentials
     assistant('b', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: `curl -H "Authorization: Bearer ${token}" ${proxy}`, description: `export API_KEY=sk-live-0123456789abcdef and token=${token}` } }]),
     assistant('c', [{ type: 'tool_use', id: 't2', name: 'WebFetch', input: { url: 'https://user:hunter2@example.com/path?token=abc' } }]),
     assistant('d', [{ type: 'tool_use', id: 't3', name: 'Read', input: { file_path: '/home/owner/.claude/.credentials.json' } }]),
+    // A file name that carries the credential itself is redacted like any other exported text (Astra 2044).
+    assistant('e', [{ type: 'tool_use', id: 't4', name: 'Write', input: { file_path: `/workspace/notes-${token}.txt` } }]),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: `raw output with ${token}`, is_error: true }] } }),
   ];
   const events = await normalize(lines, [...secrets, proxy]);

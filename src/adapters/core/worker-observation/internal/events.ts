@@ -20,9 +20,10 @@ export async function openWorkerEventSink(directory: string) {
       const bytes = batch.map(event => JSON.stringify({ receivedAt, event })).join('\n') + '\n';
       writes = writes.then(async () => { if (healthy) await handle.write(bytes).then(() => undefined, () => { healthy = false; }); });
     },
-    async close(): Promise<readonly WorkerEvent[]> {
+    /** The received events and whether the live `worker.events` projection holds all of them (a write failure stops it). */
+    async close(): Promise<{ readonly events: readonly WorkerEvent[]; readonly projectionComplete: boolean }> {
       await writes; await handle.close().catch(() => undefined);
-      return Object.freeze([...events]);
+      return Object.freeze({ events: Object.freeze([...events]), projectionComplete: healthy });
     },
   };
 }
