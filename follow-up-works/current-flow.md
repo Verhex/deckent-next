@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; Astra 2054 REVISE (R1–R5) uygulandı, doğrulamada; devam planı Astra'da (2055); push R sonrası owner onayıyla
+# Anlık iş akışı — Opus 5.5; Astra 2054/2057 REVISE uygulandı; R2 kalan düzeltme doğrulamada; devam planı Astra'da (2055); push R sonrası owner onayıyla
 
 ## Şimdi — 2026-09-24 sabah (owner cevapları + Astra 2054)
 
@@ -15,6 +15,10 @@ R uygulandı (R3/R4/R5 paralel ajan, R1/R2 lead): R1 servis başlangıcında gö
 yokluk sayılır, her describe tek monoton süreyle sınırlı, susan eş raporlanır, başlatma yalnız descriptor `processId` eşleşirse bizim;
 R3 tek serileştirilmiş kuyruk boşaltma; R4 kısa/sıfır/reddedilen yazım veya close hatası → `projection: partial`; R5 DNS süresi + gerçek IP doğrulaması.
 Her biri mutasyon kanıtlı (`proof/F26-ASTRA-2054/`). Açık: R3'te kuyruktaki satır açık onay kartı sırasında da çalışır (tuşlar kartta kalır).
+`f0c87ee` → Astra 2057: R1/R3/R4/R5 kapandı; R2 kalan P2 (durdurma/yeniden başlatma süresiz bekleyebiliyordu) → stop/restart tek monoton bütçe
+(describe → shutdown yanıtı → yokluk bekleme → hazırlık), zaman aşımı bilinmeyen sonuç, başlatma yok; susan/yanıtsız eş testleri + mutasyon.
+Owner 2026-09-24: direktif kuralı onaylandı (PLAN G31 satırı); Astra 2057 kota üçlü ayrımı owner kararı bekliyor. Push: Astra bu R2 düzeltmesini onaylayınca.
+Takip: R3 açık karar kartında kuyruk boşaltmayı duraklatma (ayrı dilim).
 
 ## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
 
@@ -35,6 +39,14 @@ alınmadı, yalnız lint-core-memory koştu. Sonraki adım: owner commit kararı
 kayıp ders aramasını istemek.
 
 ## Astra inceleme / host kanal — 2026-09-23
+
+2026-09-24 son inceleme: 2055/2056 → ANALYSIS/REVIEW 2057; ikisi işlendi/tüketildi.
+`f0c87ee` R1/R3/R4/R5 önceki bulguları kapattı. DNS bağımsız ağsız probe: timeout15ms → TIMEOUT16ms.
+R2 kalan P2: restart, deadline oluşturmadan stop'un sinyalsiz describe/shutdown yanıtını bekliyor;
+susan eşte sonsuz bekleme mümkün. Stop→yokluk→readiness boyunca bütçe ve belirsiz sonuç testi gerekli.
+Yazar verify1804/316, native25, host55, exit0 incelendi; bağımsız suite değil. Modal açıkken kuyruk
+ilerlemesi ayrı kontrol endişesi olarak kayıtlı. Plan sırası uygun; direktif tercih/tier istisnası ile
+zorunlu bütçe/policy/aktivasyon ve sağlayıcı tükenmesi ayrılmalı; owner checkpoint'i açık. Push yapılmadı.
 
 Güncel 2026-09-24: 2047–2053 → REVIEW 2054; yedi giriş işlendi/tüketildi.
 C11 önceki anahtar/endpoint/CAS/deadline bulguları kapandı. B09 redaksiyon/cap bulguları kapandı;

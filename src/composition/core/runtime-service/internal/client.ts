@@ -19,7 +19,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   purgeModelInvocationContent(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
   /** `signal` bounds the whole exchange, including a peer that accepts and never answers. */
   describeService(signal?: AbortSignal): Promise<RuntimeServiceDescriptor>;
-  shutdownService(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
+  shutdownService(command: ShutdownCommand, signal?: AbortSignal): Promise<ServiceShutdownAdmissionResult>;
   invokeModel(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal): Promise<ModelInvocationResult>;
   /** v11 streamed invocation: the same governed result as invokeModel, preceded by presentation-only deltas. */
   invokeModelStream(command: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink, delivery?: ModelInvocationDelivery,
@@ -137,9 +137,9 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       if (!parsed.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       return parsed.data;
     },
-    async shutdownService(command: ShutdownCommand) {
+    async shutdownService(command: ShutdownCommand, signal?: AbortSignal) {
       const expected = shutdownCommandSchema.parse(command);
-      const value = await lifecycle('shutdownService', expected) as ServiceShutdownAdmissionResult;
+      const value = await lifecycle('shutdownService', expected, signal) as ServiceShutdownAdmissionResult;
       if (!value || typeof value.replayed !== 'boolean') throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       const parsed = shutdownAdmissionSchema.safeParse(value.admission);
       if (!parsed.success || JSON.stringify(parsed.data.command) !== JSON.stringify(expected)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
-import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory } from '../../../src/composition/core/cli/index.js';
+import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
+import { encodeServiceFrame, ServiceFrameDecoder } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 
@@ -96,5 +97,43 @@ it('reports a launch as its own only when the answering service runs in the laun
     }, fileURLToPath(import.meta.url));
     expect(ready).toMatchObject({ mode, pid: mode === 'started' ? process.pid : null });
     for (const running of services.splice(0)) { await running.stop(); await running.done; }
+  }
+});
+
+/** A peer on the endpoint that answers describe with a stoppable descriptor, or nothing, and never answers shutdown. */
+async function stubbornPeer(data: string, answerDescribe: boolean) {
+  await mkdir(join(data, 'state'), { recursive: true, mode: 0o700 });
+  const endpoint = join(data, 'state/runtime.sock');
+  const seen: string[] = [];
+  // A request is one frame followed by half-close; the answer (if any) is one frame, like the real host.
+  const peer = createServer({ allowHalfOpen: true }, socket => {
+    sockets.push(socket);
+    const decoder = new ServiceFrameDecoder(65_536);
+    socket.on('data', chunk => decoder.push(chunk));
+    socket.on('end', () => {
+      const frame = decoder.finish() as { schemaVersion: number; requestId: string; operation: string };
+      seen.push(frame.operation);
+      if (frame.operation === 'describeService' && answerDescribe) socket.end(encodeServiceFrame({ schemaVersion: frame.schemaVersion, requestId: frame.requestId, ok: true,
+        result: { schemaVersion: 1, instanceId: 'instance-1', shutdownAvailable: true, identity: { scopeId: 'scope', serviceId: 'runtime' } } }, 65_536));
+    });
+  });
+  peers.push(peer);
+  await new Promise<void>(resolve => peer.listen(endpoint, () => resolve())); await chmod(endpoint, 0o600);
+  return seen;
+}
+
+it('bounds /service-restart and flagless stop by one budget when describe or the shutdown answer never comes, and launches nothing (Astra 2054 R2)', async () => {
+  for (const answerDescribe of [false, true]) {
+    const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+    const seen = await stubbornPeer(f.data, answerDescribe);
+    let launched = 0; const started = performance.now();
+    await expect(restartConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+      .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(launched).toBe(0);
+    await expect(stopConfiguredRuntimeService(f.project, f.options)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+    expect(performance.now() - started).toBeLessThan(6_000);
+    // With a stoppable descriptor the governed shutdown was sent; its unanswered outcome stays unknown, never a restart.
+    expect(seen.includes('shutdownService')).toBe(answerDescribe);
   }
 });

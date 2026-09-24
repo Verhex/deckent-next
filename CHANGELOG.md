@@ -8,7 +8,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   kernel-owned guard, so a second start against a live service of any build fails before touching its schema (R1);
   terminal auto-start treats only a missing endpoint or a refused connection as absence, bounds every describe with one
   monotonic deadline, reports a silent or failing peer instead of replacing it, and attributes a launch only when the
-  descriptor's new `processId` matches (R2); the terminal drains queued input through one serialized path for text,
+  descriptor's new `processId` matches; `/service-restart` and flagless `runtime shutdown` share one budget through
+  describe, the shutdown answer, the absence wait and readiness, and an unanswered stop never leads to a launch (R2, Astra 2057); the terminal drains queued input through one serialized path for text,
   immediate and awaited slash commands (R3); a short, zero-byte or rejected `worker.events` write or a failed close
   seals `projection: partial` (R4); the metrics read's total deadline now covers `localhost` resolution, a late answer
   starts no connection, and answers are validated as real loopback addresses (R5).

@@ -419,8 +419,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   connection — nothing listens on a crashed host's stale socket), an interactive terminal
   starts `runtime serve` of the same executable as a **detached background process** (no shell, no stdin, output
   appended to the private `runtimeLog` resource `state/runtime-service.log`, 0600, no-follow) and waits for a
-  successful describe within `terminal.serviceStartTimeoutMs` (default 20 s); one monotonic deadline bounds every describe,
-  so a peer that accepts and stays silent cannot hold the terminal. A peer that accepts but fails or stays silent may be a
+  successful describe within `terminal.serviceStartTimeoutMs` (default 20 s); one monotonic budget covers the first describe,
+  the launch and readiness, so a peer that accepts and stays silent cannot hold the terminal. `/service-restart` and flagless
+  `runtime shutdown` carry one budget through describe, the shutdown answer, the wait for absence and readiness; running out
+  is an unknown outcome (the command may still be admitted), never proof of stop or permission to replace the service. A peer that accepts but fails or stays silent may be a
   live incompatible or unhealthy service: it is reported (`LOCAL_RUNTIME_TRANSPORT`), never replaced. The launch is shown
   as ours only when the descriptor's `processId` equals the launched pid; a concurrent winner is shown as connected
   (Astra 2054 R2). The service keeps running after the

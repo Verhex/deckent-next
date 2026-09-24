@@ -29,8 +29,15 @@ function monotonicDeadline(timeoutMs: number) {
   const until = performance.now() + timeoutMs;
   return { remaining: () => Math.max(0, until - performance.now()), expired: () => performance.now() >= until };
 }
-async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: ReturnType<typeof monotonicDeadline>) {
-  try { return { descriptor: await client.describeService(AbortSignal.timeout(Math.max(1, Math.ceil(deadline.remaining())))), code: null }; }
+type LifecycleDeadline = ReturnType<typeof monotonicDeadline>;
+const within = (deadline: LifecycleDeadline) => AbortSignal.timeout(Math.max(1, Math.ceil(deadline.remaining())));
+async function lifecycleDeadline(projectRoot: string, options: ConfigLoadOptions) {
+  registerProviderConfig();
+  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  return monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
+}
+async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline) {
+  try { return { descriptor: await client.describeService(within(deadline)), code: null }; }
   catch (error) {
     const code = error instanceof DeckentError ? error.code : null;
     if (code !== null && ABSENT.has(code)) return { descriptor: null, code };
@@ -41,23 +48,23 @@ async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeC
 /**
  * Owner 2026-09-23: the interactive terminal starts the local runtime service when none is running, as a detached
  * `runtime serve` of the same executable that keeps running after the terminal exits. An existing service is reused.
- * Readiness is proven only by a successful describe on the configured endpoint within the configured deadline; the
- * launch is reported as ours only when the answering service's process is the one launched.
+ * Readiness is proven only by a successful describe on the configured endpoint; one monotonic budget
+ * (`terminal.serviceStartTimeoutMs`, or the caller's remaining one) covers the first describe, the launch and readiness.
+ * The launch is reported as ours only when the answering service's process is the one launched.
  */
 export async function ensureConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
-  launch = launchDetachedRuntimeService, entry = ENTRY): Promise<RuntimeServiceReadiness> {
+  launch = launchDetachedRuntimeService, entry = ENTRY, budget?: LifecycleDeadline): Promise<RuntimeServiceReadiness> {
   const client = createConfiguredRuntimeClient(projectRoot, options);
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
-  const timeoutMs = readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs;
-  const first = await describeWithin(client, monotonicDeadline(timeoutMs));
+  const deadline = budget ?? monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
+  const first = await describeWithin(client, deadline);
   if (first.descriptor) return readiness('connected', first.descriptor, null, null);
   const logPath = await prepareProductFile(config.productLayout, 'runtimeLog');
   try { await access(entry); } catch { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); }
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   const { pid } = await launch({ executable: process.execPath, entry, cwd: projectRoot, logPath, env })
     .catch(() => { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
-  const deadline = monotonicDeadline(timeoutMs);
   while (!deadline.expired()) {
     await delay(Math.min(POLL_MS, deadline.remaining()));
     if (deadline.expired()) break;
@@ -74,27 +81,31 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
 }
 
 /** Governed stop of this project's service without hand-written command fields: the durable command is built from the
- * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. */
-export async function stopConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {}, reason = 'operator stop') {
+ * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. Describe and
+ * the shutdown answer share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
+ * never proof of stop and never permission to replace the service (Astra 2054 R2). */
+export async function stopConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {}, reason = 'operator stop',
+  budget?: LifecycleDeadline) {
+  const deadline = budget ?? await lifecycleDeadline(projectRoot, options);
   const client = createConfiguredRuntimeClient(projectRoot, options);
-  const descriptor = await client.describeService();
+  const descriptor = await client.describeService(within(deadline));
   if (!descriptor.shutdownAvailable) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
   const command = { schemaVersion: 1 as const, commandId: randomUUID(), serviceId: descriptor.identity.serviceId,
     instanceId: descriptor.instanceId, reason };
-  return { command, result: await client.shutdownService(command) };
+  return { command, result: await client.shutdownService(command, within(deadline)) };
 }
 
-/** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current build. */
-export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {}): Promise<RuntimeServiceReadiness> {
-  await stopConfiguredRuntimeService(projectRoot, options, 'terminal restart onto the current build');
+/** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
+ * build — all within one monotonic budget. A new service is launched only after absence is observed. */
+export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
+  launch = launchDetachedRuntimeService, entry = ENTRY): Promise<RuntimeServiceReadiness> {
+  const deadline = await lifecycleDeadline(projectRoot, options);
+  await stopConfiguredRuntimeService(projectRoot, options, 'terminal restart onto the current build', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
-  const deadline = monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
   while (!deadline.expired()) {
-    try { await client.describeService(AbortSignal.timeout(Math.max(1, Math.ceil(deadline.remaining())))); }
+    try { await client.describeService(within(deadline)); }
     catch (error) {
-      if (error instanceof DeckentError && ABSENT.has(error.code)) return ensureConfiguredRuntimeService(projectRoot, options);
+      if (error instanceof DeckentError && ABSENT.has(error.code)) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline);
       // The stopping service may close connections while it drains; keep waiting for absence until the deadline.
       if (!(error instanceof DeckentError && (error.code === 'LOCAL_RUNTIME_TRANSPORT' || error.code === 'RUNTIME_SERVICE_TRANSPORT'))) throw error;
     }
