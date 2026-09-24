@@ -81,6 +81,12 @@ llama.cpp soğuk yedek; kalite farkı ölçülmedi. Canlı `deckent` sohbeti vLL
 **T0b (2026-09-24, Jev 8bb2a0c7 0,97):** servis tanımında derleme kimliği → terminal farklı/bilinmeyen derlemeyi bildirir, `/service-restart`
 (yönetilen kapatma + otomatik başlatma; kendiliğinden yeniden başlatma yok); bayraksız `deckent runtime shutdown`; kimlik yoksa tipli ipucu;
 `runtime serve` açılışta eski ledger'ı önce `VACUUM INTO` yedekleyip taşır; meşgulken girdi FIFO kuyruğu. Açık: servis hata parametreleri, boşta durma.
+**Terminal kalitesi (2026-09-24, owner: paralel ajanlar; Jev 1370d942 four_packages 0,96):** P1 S-STREAM (sağlayıcı SSE, runtime protokol v11 `invokeModelStream`,
+yönetişim aynı; sahte sunucuda ilk delta 170 ms, canlı vLLM ilk parça 488 ms), P2 Claude Code sınıfı giriş (grafem imleç, geçmiş + Ctrl+R, çok satır, yapıştırma çipi,
+Tab tamamlama, `?` kısayollar, çift Ctrl+C çıkış), P3 görüntü (akış bölütleyici, markdown/kod/diff, düşünme anlatımı, genişliğe uyan durum satırı), P4 iş yüzeyi
+(canlı worker satırı ve paneli, `/transcript`, `/approvals` y/N, `/cancel`); birimler `terminal-kit`/`terminal-render`/`terminal-composer`/`terminal`.
+Saat düzeltmesi (Jev 6086297e): WSL2'de duvar saati ~30 sn'de 2,1–2,2 sn geri atlıyor; süreç içi tabanlı saat + karar zamanı ≥ oluşturma.
+Açık: geçmiş kalıcılığı ve `@` aday adapter'ları (portlar hazır), araç döngüsü + D15b (A), satır modu akışı.
 
 ### Güncel öncelik — owner 2026-09-22
 

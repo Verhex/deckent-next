@@ -396,7 +396,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Regions:** banner, status strip (scope, chat model, busy/cancelling), work ledger (append-only chat,
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
   the slash catalog is data (`slash-registry`). **Composer (P2):** the single input owner is a pure reducer plus a
-  small Ink view (`terminal/internal/composer`): grapheme/cell-aware caret, readline editing and kill/yank, multiline
+  small Ink view (unit `surfaces/core/terminal-composer`): grapheme/cell-aware caret, readline editing and kill/yank, multiline
   (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, Tab
   slash completion with argument hints, `?` shortcuts; it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
   clears a draft or arms exit (second press within 2 s exits); Ctrl+D exits on an empty idle line; while busy
@@ -432,7 +432,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   through the runtime model client in the caller's `--scope` (same path as `models invoke`), so principal,
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
   cancellation of that invocation. There is no direct/unmanaged HTTP backend and no silent fallback.
-  **Streaming (S-STREAM backend, implemented; UI integration pending):** `streamTerminalChatTurn` yields the surface
+  **Streaming (S-STREAM, implemented end to end 2026-09-24):** `streamTerminalChatTurn` yields the surface
   `TurnDelta` contract over runtime protocol **v11** `invokeModelStream`: the same governed invocation as `invokeModel`
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta
   frames and exactly one ordinary response frame. Delta frames are presentation: each ≤ `service.responseMaxBytes`, all
@@ -446,6 +446,19 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   and no-tool rules; `responseMaxBytes` bounds the retained evidence prefix and the assembled `chat.completion` (with a
   wire digest), and total wire bytes are bounded at 16× it. A stream without `[DONE]`, finish and usage is interrupted
   (uncertain, never retried). Streamed text is withheld while it could still begin an echoed bearer credential.
+- **Rendering (P3, unit `surfaces/core/terminal-render`):** a pure `renderAssistantStream(state, delta, now)` state
+  machine feeds the workline: a stream segmenter emits finished units (prose line, list item, quote, heading, whole fenced
+  code block or table) to `Static` scrollback as they complete and keeps only the unfinished tail live (an unclosed
+  fence renders live, is chunked into scrollback past 200 lines and is flushed on `done`, fixing the legacy freeze);
+  a dependency-free markdown renderer (headings, emphasis, inline code, lists, quotes, links as label + URL, fenced code
+  with a small built-in highlighter for ts/js/json/py/sh/sql/diff, width-aware tables, diff colouring) produces a span
+  model resolved through the palette (`none` tier = no colour, ASCII glyph set). Reasoning deltas are narrated in one
+  muted live line (tokens, seconds) that collapses to "thought for Xs" when the answer starts; reasoning text is never
+  stored or sent back as history. A turn footer shows elapsed time, tokens and truncation/cancel/failure. The status row
+  is one width-fitted line (scope · model · state · elapsed · queue · notice, dropped by priority, never wrapping).
+- **Units (2026-09-24):** `terminal-kit` (palette, slash registry, `TurnDelta` stream contract) ← `terminal-render` and
+  `terminal-composer` ← `terminal` (workline, ledger, work surface); split by responsibility to keep each unit within the
+  2000-line budget.
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
@@ -463,7 +476,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   one y/N card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
   `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
   no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
-  default whenever approvals are wired. `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
+  default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
+  `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
   handler against the inspected revision. Read-only commands never prompt; an open card owns the keys.
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
