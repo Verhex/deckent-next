@@ -3,10 +3,11 @@ import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { WorklinePaletteProvider, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
-import { renderCompleteReply } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, renderAssistantStream, renderCompleteReply, startAssistantStream, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
+import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { assistantLedgerEntries } from './ledger-units.js';
+import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
 import { parseSlashLine } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
@@ -52,6 +53,8 @@ export interface WorklineProps {
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
   readonly pollMs?: number;
+  /** Streamed form of the governed turn (S-STREAM); when present it replaces `completeTurn` for chat. */
+  readonly streamTurn?: WorklineStreamTurn;
   /** Approval notification cadence override (tests); production uses max(pollMs, 10 s). */
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
@@ -89,6 +92,7 @@ export function WorklineApp(props: WorklineProps) {
   const queue = useRef<string[]>([]);
   const setBusy = useCallback((next: boolean) => { busyRef.current = next; setBusyState(next); }, []);
   const [cancelling, setCancelling] = useState(false);
+  const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const history = useRef<readonly ChatTurnMessage[]>([{ role: 'system', content: systemPrompt }]);
   const turn = useRef<AbortController | null>(null);
@@ -167,19 +171,34 @@ export function WorklineApp(props: WorklineProps) {
     setBusy(true);
     const messages = boundChatHistory({ role: 'system', content: systemPrompt }, [...history.current, { role: 'user', content: text }], historyMessages);
     try {
-      const reply = await completeTurn(messages, controller.signal);
-      history.current = boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: reply }], historyMessages);
-      // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
-      push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
+      if (props.streamTurn) {
+        // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
+        let state = startAssistantStream(startedAtMs), answer = '';
+        for await (const delta of props.streamTurn(messages, controller.signal)) {
+          if (delta.kind === 'text') answer += delta.text;
+          const step: AssistantStreamStep = renderAssistantStream(state, delta, Date.now());
+          state = step.state;
+          const entries = streamStepEntries(step);
+          if (entries.length) push(entries);
+          setLive(delta.kind === 'done' ? null : { step, lead: !state.answered });
+        }
+        history.current = answer ? boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: answer }], historyMessages) : messages;
+      } else {
+        const reply = await completeTurn(messages, controller.signal);
+        history.current = boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: reply }], historyMessages);
+        // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
+        push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
+      }
     } catch (error) {
       history.current = messages;
       push([notice('error', errorText(error))]);
     } finally {
+      setLive(null);
       turn.current = null;
       setBusy(false);
       setCancelling(false);
     }
-  }, [completeTurn, errorText, historyMessages, push, systemPrompt]);
+  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, systemPrompt]);
 
   const submit = useCallback(async (text: string, queued = false): Promise<void> => {
     const trimmed = text.trim();
@@ -226,6 +245,7 @@ export function WorklineApp(props: WorklineProps) {
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
+      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} /> : null}
       {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}

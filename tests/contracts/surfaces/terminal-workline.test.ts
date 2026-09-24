@@ -64,6 +64,32 @@ describe('ledger buffer (Ink Static contract)', () => {
     expect(sent[1]).toBe('first line\nsecond line');
   });
 
+  it('streams a turn: reasoning is narrated live, finished markdown goes to scrollback, and only the answer becomes history', async () => {
+    const seen: string[][] = []; let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+      seen.push(messages.map(message => `${message.role}:${message.content}`));
+      yield { kind: 'reasoning' as const, text: 'SECRET-REASONING ' };
+      await gate;
+      yield { kind: 'text' as const, text: '## Title\nFirst **line**\n' };
+      yield { kind: 'text' as const, text: 'tail' };
+      yield { kind: 'usage' as const, promptTokens: 3, completionTokens: 4, reasoningTokens: 2 };
+      yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mount({ completeTurn: async () => 'unused', streamTurn });
+    await settle(20);
+    view.stdin.write('hello\r');
+    await until(() => view.stdout.text.includes('THINKING'), 'reasoning narration while thinking');
+    release();
+    await until(() => view.stdout.text.includes('First') && view.stdout.text.includes('tail') && view.stdout.text.includes('3 in 4 out'), 'answer and footer');
+    expect(view.stdout.text).not.toContain('SECRET-REASONING');
+    expect(view.stdout.text).not.toContain('**line**');
+    view.stdin.write('again\r');
+    await until(() => seen.length === 2, 'second turn');
+    expect(seen[1]).toContain('assistant:## Title\nFirst **line**\ntail');
+    expect(seen[1]!.join('\n')).not.toContain('SECRET-REASONING');
+  });
+
   it('keeps appending after any number of rows and bounds only the bridge tail', () => {
     let buffer = EMPTY_LEDGER;
     const notice = (index: number): WorkLedgerEntry => ({ schemaVersion: 1, kind: 'notice', id: 'n', level: 'info', text: `n${index}` });

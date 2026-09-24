@@ -261,6 +261,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly ChatTurnMessage[], signal: AbortSignal) =>
+      context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {

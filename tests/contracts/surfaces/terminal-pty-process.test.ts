@@ -138,8 +138,22 @@ async function governedChat() {
   const tls = await createPricedProviderTls(root);
   const server = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
     if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
-    request.resume();
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
+      const streamed = (JSON.parse(Buffer.concat(chunks).toString('utf8')) as { stream?: boolean }).stream === true;
+      if (streamed) {
+        // The interactive terminal streams (S-STREAM): reasoning, then the answer in two pieces, finish, usage, [DONE] (vLLM shape).
+        const chunk = (choices: unknown[], extra: Record<string, unknown> = {}) =>
+          `data: ${JSON.stringify({ id: 'pty', object: 'chat.completion.chunk', created: 1, model: 'vendor/model', choices, ...extra })}\n\n`;
+        reply.writeHead(200, { 'content-type': 'text/event-stream' });
+        reply.end([chunk([{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }]),
+          chunk([{ index: 0, delta: { reasoning: 'thinking' }, finish_reason: null }]),
+          chunk([{ index: 0, delta: { content: 'pty-' }, finish_reason: null }]),
+          chunk([{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }]),
+          chunk([], { usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 } }), 'data: [DONE]\n\n'].join(''));
+        return;
+      }
       reply.writeHead(200, { 'content-type': 'application/json' });
       reply.end(JSON.stringify({ id: 'pty', object: 'chat.completion', created: 1, model: 'vendor/model',
         choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'pty-ok', refusal: null } }],
