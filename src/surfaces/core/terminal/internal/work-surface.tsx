@@ -38,6 +38,8 @@ function phaseCounts(run: RunView): string {
  * Worker live panel, approval notifications and the y/N cards for approvals and run cancellation. Every decision goes
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
+export const APPROVAL_NOTIFY_MIN_MS = 10_000;
+
 export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
@@ -48,8 +50,9 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker'));
   }, []);
 
-  // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per heartbeat.
-  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage), pollMs, async current => {
+  // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
+  // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
+  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage), Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
     const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
     if (!current()) return;
     const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());
