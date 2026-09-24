@@ -6,7 +6,8 @@ import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, startLocalRuntimeSocketServer, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade } from '#adapters/index.js';
+import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
+  type LocalRuntimeSocketGuard } from '#adapters/index.js';
 import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -26,7 +27,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
 }
 
-/** An existing older ledger is backed up and migrated once, before the service accepts connections (Jev 8bb2a0c7). */
+/** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
+ * connections (Jev 8bb2a0c7, Astra 2054 R1). */
 async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -42,13 +44,22 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
+  const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
+  // Custody before the ledger is backed up or migrated: a live host of any build holds this guard, so a second start
+  // fails here and never touches the schema that host is using; custody is kept until the listener is up (Astra 2054 R1).
+  const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint));
+  try { return await startUnderCustody(projectRoot, observer, options, config, guard); }
+  catch (error) { await guard.release(); throw error; }
+}
+
+async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
+  config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard) {
   await upgradeLedgerAtStart(config, observer);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
     onPage: (command, result) => observer.onReconciliationPage?.(command, result),
     onError: (command, error) => observer.onReconciliationError?.(command, error),
   }, options) : null;
-  const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   const instanceId = randomUUID();
   const modelHost = { ownerId: instanceId, controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
@@ -57,7 +68,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   }, options);
   const build = readBuildIdentity();
   const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
-    shutdownAvailable: config.service.identity !== null, identity: config.service.identity,
+    shutdownAvailable: config.service.identity !== null, identity: config.service.identity, processId: process.pid,
     ...(build ? { build: { sourceTreeSha256: build.sourceTreeSha256, sourceCommit: build.sourceCommit } } : {}) });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
     serviceInstanceSchema.parse({ ...config.service.identity, instanceId })) : null;
@@ -71,7 +82,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
   }, work => lifecycle.admit(work, 'execution'), options);
-  const server = await startLocalRuntimeSocketServer(socketOptions(config.service, endpoint), async (request, peer, stream) => {
+  const server = await guard.start(async (request, peer, stream) => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });

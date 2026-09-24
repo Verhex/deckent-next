@@ -4,6 +4,15 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- RUNTIME/F26 REVISE (Astra 2054): runtime startup backs up and migrates an older ledger only while holding the endpoint's
+  kernel-owned guard, so a second start against a live service of any build fails before touching its schema (R1);
+  terminal auto-start treats only a missing endpoint or a refused connection as absence, bounds every describe with one
+  monotonic deadline, reports a silent or failing peer instead of replacing it, and attributes a launch only when the
+  descriptor's new `processId` matches (R2); the terminal drains queued input through one serialized path for text,
+  immediate and awaited slash commands (R3); a short, zero-byte or rejected `worker.events` write or a failed close
+  seals `projection: partial` (R4); the metrics read's total deadline now covers `localhost` resolution, a late answer
+  starts no connection, and answers are validated as real loopback addresses (R5).
+
 - SURFACES/F26 (Astra 2045 P2): `deckent inference metrics` resolves the name `localhost` before any contact, refuses it when any answer is not a loopback address, and connects only to the checked addresses, trying the next one after a connection failure (a resolver listing `::1` first no longer misses an IPv4-only server such as vLLM on 127.0.0.1); literal loopback addresses are used as given.
 
 - CONTRACT/C11-1 REVISE (Astra 2041): targets receive a wire idempotency key namespaced by scope, target and operation (never the caller's raw key), so cross-scope key reuse can no longer settle a foreign record; intents pin a target binding (descriptor + endpoint identity) and a changed binding stops a resume with `EFFECT_TARGET_CHANGED` before any send or lookup (older unbound intents too); a losing concurrent replay returns the settled record instead of `EFFECT_CONFLICT`; the HTTP target has a whole-exchange deadline. Four negative tests, each mutation-proven.

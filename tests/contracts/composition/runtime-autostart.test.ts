@@ -1,19 +1,27 @@
-import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory } from '../../../src/composition/core/cli/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { startConfiguredRuntimeService } from '../../../src/index.js';
 
-const roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const roots: string[] = [], peers: Server[] = [], sockets: Socket[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
+afterEach(async () => {
+  for (const socket of sockets.splice(0)) socket.destroy();
+  await Promise.all(peers.splice(0).map(peer => new Promise<void>(resolve => peer.close(() => resolve()))));
+  for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
+  clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 
-async function fixture(terminal: Record<string, unknown> = {}) {
+async function fixture(terminal: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-autostart-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, terminal }), { mode: 0o600 });
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, terminal, ...extra }), { mode: 0o600 });
   return { project, data, options: { env: { HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global') } } };
 }
 
@@ -47,4 +55,46 @@ it('keeps composer history per project unless disabled, and never stores an entr
   expect((await (await openConfiguredTerminalHistory(f.project, f.options))!.load()).map(entry => entry.text)).toEqual(['visible line']);
   const off = await fixture({ persistHistory: false });
   expect(await openConfiguredTerminalHistory(off.project, off.options)).toBeNull();
+});
+
+it('treats an accepting but silent endpoint as a present service: bounded by the start deadline, reported, never replaced (Astra 2054 R2)', async () => {
+  const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+  await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
+  const endpoint = join(f.data, 'state/runtime.sock');
+  const peer = createServer(socket => { sockets.push(socket); }); peers.push(peer);
+  await new Promise<void>(resolve => peer.listen(endpoint, () => resolve())); await chmod(endpoint, 0o600);
+  let launched = 0; const started = performance.now();
+  await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; }))
+    .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+  expect(performance.now() - started).toBeLessThan(3_000);
+  expect(launched).toBe(0);
+});
+
+it('treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {
+  const f = await fixture({ serviceStartTimeoutMs: 1_000 });
+  await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
+  const endpoint = join(f.data, 'state/runtime.sock');
+  // A killed host leaves its socket file behind; nothing accepts on it any more.
+  try { execFileSync(process.execPath, ['-e', `const p=${JSON.stringify(endpoint)};require('net').createServer().listen(p,()=>{require('fs').chmodSync(p,0o600);process.kill(process.pid,'SIGKILL')})`], { stdio: 'ignore' }); }
+  catch (error) { expect(error).toMatchObject({ signal: 'SIGKILL' }); }
+  expect((await stat(endpoint)).isSocket()).toBe(true);
+  let launched = 0;
+  await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; }, fileURLToPath(import.meta.url)))
+    .rejects.toMatchObject({ code: 'RUNTIME_AUTOSTART_FAILED' });
+  expect(launched).toBe(1);
+});
+
+it('reports a launch as its own only when the answering service runs in the launched process', async () => {
+  const service = { cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
+    cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
+    service: { inputMaxBytes: 4096, responseMaxBytes: 4096, maxConnections: 2, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 100, shutdownGraceMs: 100 } };
+  for (const [launchedPid, mode] of [[process.pid + 1_000_000, 'connected'], [process.pid, 'started']] as const) {
+    const f = await fixture({ serviceStartTimeoutMs: 5_000 }, service);
+    // The launch "wins" in-process; the reported pid decides whether the answering service is the launched one.
+    const ready = await ensureConfiguredRuntimeService(f.project, f.options, async () => {
+      services.push(await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options)); return { pid: launchedPid };
+    }, fileURLToPath(import.meta.url));
+    expect(ready).toMatchObject({ mode, pid: mode === 'started' ? process.pid : null });
+    for (const running of services.splice(0)) { await running.stop(); await running.done; }
+  }
 });

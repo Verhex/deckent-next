@@ -192,6 +192,56 @@ describe('workline view rendered by Ink', () => {
     view.stdin.write('\u0003'); await until(() => exited, 'second idle ctrl+c exits');
   });
 
+  // Astra 2054 R3: one serialized drain follows every line kind. Debug output repeats rows, so single execution is proven by port counters.
+  it('drains the queue past an immediate slash command: text, /status, text all run in order and once', async () => {
+    const sent: string[] = []; const gates: Array<() => void> = [];
+    const view = mount({ completeTurn: messages => new Promise(resolve => {
+      sent.push(messages.at(-1)!.content); gates.push(() => resolve(`REPLY-${sent.length}`));
+    }) });
+    await view.type('one\r'); await until(() => sent.length === 1, 'first turn busy');
+    await view.type('two\r'); await view.type('/status\r'); await view.type('three\r');
+    await until(() => view.stdout.text.includes('QUEUED: three'), 'three lines queued');
+    gates[0]!(); await until(() => sent.length === 2, 'queued text turn');
+    expect(view.stdout.text).not.toContain('STATUS-LINE');
+    gates[1]!(); await until(() => view.stdout.text.includes('STATUS-LINE') && sent.length === 3, '/status then the next text turn');
+    gates[2]!(); await until(() => view.stdout.text.includes('REPLY-3'), 'last reply');
+    await settle(40);
+    expect(sent).toEqual(['one', 'two', 'three']);
+  });
+
+  it('drains the queue after an awaited slash operation, once and in order', async () => {
+    const sent: string[] = []; let calls = 0, release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const view = mount({ completeTurn: async messages => { sent.push(messages.at(-1)!.content); return 'REPLY-AFTER'; },
+      ledger: { scopeId: 'scope-a', async listWorkers() { calls++; await gate; return workers(1, 0); }, async inspectRun() { return null; } } });
+    await view.type('/workers\r'); await until(() => calls === 1, '/workers pending');
+    await view.type('after\r'); await until(() => view.stdout.text.includes('QUEUED: after'), 'text queued behind /workers');
+    await settle(40);
+    expect(sent).toEqual([]);
+    release();
+    await until(() => sent.length === 1 && view.stdout.text.includes('REPLY-AFTER'), 'queued text runs after /workers');
+    await settle(40);
+    expect(calls).toBe(1); expect(sent).toEqual(['after']);
+    expect(view.stdout.text.indexOf('task-0')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
+  });
+
+  it('applies queued watch toggles in order and exits on a queued /exit without running what follows it', async () => {
+    const sent: string[] = []; const gates: Array<() => void> = [];
+    const view = mount({ completeTurn: messages => new Promise(resolve => { sent.push(messages.at(-1)!.content); gates.push(() => resolve('ok')); }),
+      ledger: { scopeId: 'scope-a', async listWorkers() { return workers(0, 0); }, async inspectRun() { return null; } } });
+    let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
+    await view.type('one\r'); await until(() => sent.length === 1, 'turn busy');
+    for (const line of ['/watch-workers', '/watch-stop', 'two', '/exit', 'never']) await view.type(`${line}\r`);
+    await until(() => view.stdout.text.includes('QUEUED: never'), 'lines queued');
+    gates[0]!(); await until(() => sent.length === 2, 'queued text turn after the watch toggles');
+    // A stale watch would make the queued /watch-stop a no-op: both toggles must be applied in order before `two`.
+    expect(view.stdout.text).toContain('WATCH-ON'); expect(view.stdout.text).toContain('WATCH-OFF');
+    expect(exited).toBe(false);
+    gates[1]!(); await until(() => exited, 'queued /exit closes the view');
+    await settle(40);
+    expect(sent).toEqual(['one', 'two']);
+  });
+
   it('renders no colour escape sequences at the none tier (NO_COLOR / --no-color / non-TTY)', async () => {
     const plain = mount({ completeTurn: async () => 'ok', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(1, 0); }, async inspectRun() { return null; } } }, 'none');
     await plain.type('/workers\r'); await until(() => plain.stdout.text.includes('task-0'), 'plain worker');

@@ -66,11 +66,13 @@ export const shutdownOutcomeSchema = z.object({
 /** Source build the service runs from (absent when started from source or from a build before this field). */
 export const serviceBuildSchema = z.object({ sourceTreeSha256: z.string().regex(/^[0-9a-f]{64}$/),
   sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).strict().readonly();
+/** `processId` lets a launcher tell its own process from a concurrent winner on the same endpoint (Astra 2054 R2). */
+const processIdSchema = z.number().int().positive().optional();
 export const runtimeServiceDescriptorSchema = z.discriminatedUnion('shutdownAvailable', [
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional() }).strict(),
+    shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional(), processId: processIdSchema }).strict(),
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional() }).strict(),
+    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional(), processId: processIdSchema }).strict(),
 ]).readonly();
 
 export type ServiceIdentity = z.infer<typeof serviceIdentitySchema>;

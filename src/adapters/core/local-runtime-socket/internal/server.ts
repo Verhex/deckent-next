@@ -124,8 +124,12 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
   socket.once('close', disconnectedNow);
 }
 
-export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketOptions,
-  handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer> {
+/** Installation custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the
+ * kernel releases when the process dies. Hold it before any startup work that must not race a live service (ledger
+ * backup/migration), then start the listener under the same custody (Astra 2054 R1). */
+export interface LocalRuntimeSocketGuard { start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>; release(): Promise<void> }
+
+export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions): Promise<LocalRuntimeSocketGuard> {
   const resolved = await resolveSocketOptions(options);
   const guard = createServer({ allowHalfOpen: true }, socket => socket.destroy());
   try { await listen(guard, resolved.guardEndpoint); }
@@ -134,6 +138,28 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
+  let state: 'held' | 'started' | 'released' = 'held';
+  return Object.freeze({
+    async start(handler: RuntimeServiceHandler) {
+      if (state !== 'held') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
+      state = 'started';
+      return await listenUnderGuard(resolved, guard, handler);
+    },
+    async release() {
+      if (state !== 'held') return;
+      state = 'released';
+      await close(guard).catch(() => undefined);
+    },
+  });
+}
+
+export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketOptions,
+  handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer> {
+  return await (await acquireLocalRuntimeSocketGuard(options)).start(handler);
+}
+
+async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, guard: Server,
+  handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer> {
   let endpoint: ReturnType<typeof listenWithPeerIdentity> | undefined;
   try {
     await removeOwnedSocket(resolved.endpoint, true);

@@ -5,6 +5,12 @@ import { isRuntimeServiceStreamingOperation, parseRuntimeServiceLifecycleRespons
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder } from './framing.js';
 import { assertOwnedSocket, LocalRuntimeSocketError, resolveSocketOptions, type LocalRuntimeSocketOptions } from './endpoint.js';
 
+/** A refused connection to an owned socket path means no process listens there (a crashed host's stale socket): no live
+ * service, like a missing endpoint. Every other connect failure stays a transport failure, not evidence of absence. */
+function connectFailure(error: unknown): LocalRuntimeSocketError {
+  const refused = error && typeof error === 'object' && 'code' in error && error.code === 'ECONNREFUSED';
+  return new LocalRuntimeSocketError(refused ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_TRANSPORT', { cause: error });
+}
 function connected(socket: Socket, endpoint: string, timeoutMs: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { socket.destroy(); reject(new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT')); }, timeoutMs);
@@ -29,7 +35,7 @@ export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
   await assertOwnedSocket(resolved.endpoint);
   const socket = new Socket({ allowHalfOpen: true });
   try { await connected(socket, resolved.endpoint, resolved.headerTimeoutMs, signal); }
-  catch (error) { socket.destroy(); throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error }); }
+  catch (error) { socket.destroy(); throw connectFailure(error); }
   const decoder = new ServiceFrameDecoder(resolved.responseMaxBytes);
   return await new Promise((resolve, reject) => {
     let settled = false;
@@ -83,7 +89,7 @@ export async function streamLocalRuntime(options: LocalRuntimeSocketOptions, val
   await assertOwnedSocket(resolved.endpoint);
   const socket = new Socket({ allowHalfOpen: true });
   try { await connected(socket, resolved.endpoint, resolved.headerTimeoutMs, signal); }
-  catch (error) { socket.destroy(); throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error }); }
+  catch (error) { socket.destroy(); throw connectFailure(error); }
   // Delta frames share one response limit in total; the final frame has its own.
   const decoder = new ServiceFrameStreamDecoder(resolved.responseMaxBytes, 2 * (resolved.responseMaxBytes + 4));
   return await new Promise((resolve, reject) => {

@@ -83,3 +83,33 @@ it('tries each checked loopback answer in order when the first family has no lis
     async () => [{ address: '::1' }, { address: '198.51.100.7' }])).rejects.toMatchObject({ code: 'INFERENCE_METRICS_HOST_DENIED' });
   expect(fixture.hits).toEqual(['/metrics']);
 });
+
+it('bounds name resolution by the same total deadline and starts no connection after it', async () => {
+  const fixture = await listen((_url, reply) => { reply.writeHead(200); reply.end('metric_ok 1\n'); });
+  const port = new URL(fixture.origin).port;
+  // A lookup that never answers ends as TIMEOUT inside timeoutMs instead of pending forever.
+  const started = Date.now();
+  const hanging = readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 30, responseMaxBytes: 1024 },
+    () => new Promise(() => { /* never resolves */ })).catch(value => value);
+  const outcome = await Promise.race([hanging, new Promise(resolve => setTimeout(() => resolve('STILL_PENDING'), 500))]);
+  expect(outcome).toMatchObject({ code: 'INFERENCE_METRICS_TIMEOUT' });
+  expect(Date.now() - started).toBeLessThan(500);
+  // A valid loopback answer that arrives after the deadline is ignored: no connection is ever started.
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 30, responseMaxBytes: 1024 },
+    () => new Promise(resolve => setTimeout(() => resolve([{ address: '127.0.0.1' }]), 120)))).rejects.toMatchObject({ code: 'INFERENCE_METRICS_TIMEOUT' });
+  await new Promise(resolve => setTimeout(resolve, 250));
+  expect(fixture.hits).toEqual([]);
+});
+
+it('validates injected answers as real loopback addresses before contact', async () => {
+  const fixture = await listen((_url, reply) => { reply.writeHead(200); reply.end('metric_ok 1\n'); });
+  const port = new URL(fixture.origin).port;
+  for (const address of ['127.0.0.999', '127.1', '127.0.0.1.5', '0127.0.0.1', '::ffff:127.0.0.1', '::1%lo', '0:0:0:0:0:0:0:2']) {
+    await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 1_000, responseMaxBytes: 1024 },
+      async () => [{ address }])).rejects.toMatchObject({ code: 'INFERENCE_METRICS_HOST_DENIED' });
+  }
+  expect(fixture.hits).toEqual([]);
+  await expect(readInferenceMetrics({ url: `http://localhost:${port}/metrics`, timeoutMs: 1_000, responseMaxBytes: 1024 },
+    async () => [{ address: '127.0.0.1' }])).resolves.toEqual({ body: 'metric_ok 1\n' });
+  expect(fixture.hits).toEqual(['/metrics']);
+});

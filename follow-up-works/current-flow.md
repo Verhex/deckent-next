@@ -1,4 +1,20 @@
-# Anlık iş akışı — Opus 5.5; terminal kalite hattı + Astra REVISE düzeltmeleri main'de (yerel, push yok); sabah owner kontrolü + push; sıradaki: atama tasarımı owner checkpoint'i
+# Anlık iş akışı — Opus 5.5; Astra 2054 REVISE (R1–R5) uygulandı, doğrulamada; devam planı Astra'da (2055); push R sonrası owner onayıyla
+
+## Şimdi — 2026-09-24 sabah (owner cevapları + Astra 2054)
+
+Astra 2054 (main `cd4d992`): 2048, C11 (2051), B09 önceki bulgular ve metrics loopback PASS/kapandı. REVISE:
+R1 P1 ledger göçü soket sahipliğinden önce (canlı eski servisin veritabanı göç edebilir), R2 otomatik başlatma yokluk kanıtı + mutlak süre,
+R3 terminal FIFO boşaltma, R4 olay projeksiyonu kısa yazım/close, R5 metrics DNS süresi. Ayrıntı `hemen-donulecek-is.md`.
+Owner 2026-09-24: push Astra değerlendirmesinden sonra; P1 akış karar listesi Opus'a; A (araç döngüsü + D15b) onaylı; atama tasarımı
+cevapları verildi (iş sınıfları Core asgari + Enterprise overlay; yalnız aktif/izinli modeller; seçim skoru ≠ güven skoru; direktif öncelikli;
+bilinmeyen kota başlamadan onay). Jev 28b69543 `bounded_directive` 0,99: direktif skor/kota/tier korumasını ezer, aktivasyon/policy/güvenliği
+ezmez — owner teyidi bekliyor. Test container'ı (01:01 sızıntı) durduruldu; bozuk CRACK dosyasının silinmesi izin sisteminde engellendi (owner).
+Devam planı: `/home/alperen/deckent-refactor-work/DEVAM-PLANI-2026-09-24.md` (R → S → A-1 ∥ B09-3 → A-2/G31), Astra 2055'te.
+R uygulandı (R3/R4/R5 paralel ajan, R1/R2 lead): R1 servis başlangıcında göç uç noktanın çekirdek guard soketi alındıktan sonra
+(canlı servis varken ikinci başlatma şemaya dokunmadan `LOCAL_RUNTIME_ALREADY_RUNNING`); R2 yalnız eksik uç nokta veya reddedilen bağlantı
+yokluk sayılır, her describe tek monoton süreyle sınırlı, susan eş raporlanır, başlatma yalnız descriptor `processId` eşleşirse bizim;
+R3 tek serileştirilmiş kuyruk boşaltma; R4 kısa/sıfır/reddedilen yazım veya close hatası → `projection: partial`; R5 DNS süresi + gerçek IP doğrulaması.
+Her biri mutasyon kanıtlı (`proof/F26-ASTRA-2054/`). Açık: R3'te kuyruktaki satır açık onay kartı sırasında da çalışır (tuşlar kartta kalır).
 
 ## Core-memory birleştirme — Fable 5.1, owner kararı 2026-09-23
 
@@ -19,6 +35,16 @@ alınmadı, yalnız lint-core-memory koştu. Sonraki adım: owner commit kararı
 kayıp ders aramasını istemek.
 
 ## Astra inceleme / host kanal — 2026-09-23
+
+Güncel 2026-09-24: 2047–2053 → REVIEW 2054; yedi giriş işlendi/tüketildi.
+C11 önceki anahtar/endpoint/CAS/deadline bulguları kapandı. B09 redaksiyon/cap bulguları kapandı;
+projectionComplete için short-write/close hatası P2 açık. Metrics loopback sabitlemesi düzeldi fakat
+DNS çözümleme toplam deadline dışında: bağımsız ağsız probe timeout10ms iken 61ms sonunda pending.
+Yeni P1: runtime startup ledger göçünü mevcut servis/lifecycle sahipliği denetiminden önce yapıyor;
+canlı eski servis veya çift startup için migration exclusion kanıtı gerekli. P2: autostart describe
+bekleyişi deadline'ı aşabilir; terminal FIFO slash sonrası kalan kuyruğu boşaltmıyor.
+Streaming incelemesi sınırlı kaynak kontrolüdür; tüm governance yarışları için bağımsız PASS değil.
+Yazar verify logları incelendi; ürün değişikliği, build/suite/commit/push yok. Sonraki adım dar negatif testler.
 
 Hızlı toplu inceleme 2040–2045 → REVIEW/ANALYSIS 2046; altı giriş işlendi/tüketildi.
 2040 B06 önceki iki P1 kapandı (kaynak PASS). 2041 C11 REVISE: dış idempotency anahtarı scope'la

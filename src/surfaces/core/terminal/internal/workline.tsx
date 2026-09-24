@@ -94,6 +94,7 @@ export function WorklineApp(props: WorklineProps) {
   const [cancelling, setCancelling] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
+  const watchRef = useRef(watch);
   const history = useRef<readonly ChatTurnMessage[]>([{ role: 'system', content: systemPrompt }]);
   const turn = useRef<AbortController | null>(null);
   const seenWorkers = useRef(new Set<string>());
@@ -104,7 +105,9 @@ export function WorklineApp(props: WorklineProps) {
   const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
 
-  useEffect(() => () => turn.current?.abort(), []);
+  // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
+  const closed = useRef(false);
+  useEffect(() => { closed.current = false; return () => { closed.current = true; turn.current?.abort(); }; }, []);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
     const notices = opening.current;
@@ -200,28 +203,18 @@ export function WorklineApp(props: WorklineProps) {
     }
   }, [completeTurn, errorText, historyMessages, props.streamTurn, push, systemPrompt]);
 
-  const submit = useCallback(async (text: string, queued = false): Promise<void> => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    if (!queued && busyRef.current) {
-      queue.current.push(trimmed);
-      push([notice('info', `${labels.queued}: ${trimmed}`)]);
-      return;
-    }
-    const slash = parseSlashLine(trimmed);
-    if (!slash) {
-      await runTurn(trimmed);
-      const next = queue.current.shift();
-      if (next !== undefined) await submit(next, true);
-      return;
-    }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch, canRestartService: Boolean(props.restartService) });
+  // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
+  const perform = useCallback(async (line: string): Promise<boolean> => {
+    const slash = parseSlashLine(line);
+    if (!slash) { await runTurn(line); return true; }
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService) });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
-    if (action?.exit) { exit(); return; }
+    if (action?.exit) { exit(); return false; }
     if (action) {
       push(action.entries);
-      if (action.watch) setWatch(action.watch);
-      return;
+      // The ref moves with the state so a queued `/watch-stop` behind `/watch-workers` sees the new watch before any render.
+      if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
+      return true;
     }
     setBusy(true);
     try {
@@ -231,7 +224,26 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
-  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, watch, work.run]);
+    return true;
+  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, work.run]);
+
+  // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
+  // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the
+  // next `shift()` is microtask-only, so no keystroke can interleave. An open decision card keeps the keys (Composer inactive).
+  const submit = useCallback(async (text: string): Promise<void> => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (busyRef.current) {
+      queue.current.push(trimmed);
+      push([notice('info', `${labels.queued}: ${trimmed}`)]);
+      return;
+    }
+    let next: string | undefined = trimmed;
+    while (next !== undefined && !closed.current) {
+      if (!(await perform(next))) return;
+      next = queue.current.shift();
+    }
+  }, [labels.queued, perform, push]);
 
   // A running turn is cancelled, never abandoned: the governed invocation receives a cancellation request.
   const cancel = useCallback(() => {

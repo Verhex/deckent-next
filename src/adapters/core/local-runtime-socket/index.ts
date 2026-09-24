@@ -2,8 +2,8 @@ export { ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder, enco
 export type { ServiceFrameErrorCode } from './internal/framing.js';
 export { LocalRuntimeSocketError } from './internal/endpoint.js';
 export type { LocalRuntimeSocketErrorCode, LocalRuntimeSocketOptions } from './internal/endpoint.js';
-export { startLocalRuntimeSocketServer } from './internal/server.js';
-export type { LocalRuntimeSocketServer, RuntimeServiceHandler } from './internal/server.js';
+export { acquireLocalRuntimeSocketGuard, startLocalRuntimeSocketServer } from './internal/server.js';
+export type { LocalRuntimeSocketGuard, LocalRuntimeSocketServer, RuntimeServiceHandler } from './internal/server.js';
 export type { RuntimeServiceStreamChannel } from './internal/stream-channel.js';
 export { requestLocalRuntime, streamLocalRuntime } from './internal/client.js';
 export type { LocalPeerIdentity } from './internal/peer.js';

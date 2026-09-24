@@ -415,10 +415,15 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed
   `TERMINAL_SCOPE_REQUIRED` screen says how to set one. **Runtime auto-start:** when no service answers on the
-  configured endpoint (absent socket, never-created state directory or refused connection), an interactive terminal
+  configured endpoint and absence is positively observed (absent socket, never-created state directory, or a refused
+  connection — nothing listens on a crashed host's stale socket), an interactive terminal
   starts `runtime serve` of the same executable as a **detached background process** (no shell, no stdin, output
   appended to the private `runtimeLog` resource `state/runtime-service.log`, 0600, no-follow) and waits for a
-  successful describe within `terminal.serviceStartTimeoutMs` (default 20 s). The service keeps running after the
+  successful describe within `terminal.serviceStartTimeoutMs` (default 20 s); one monotonic deadline bounds every describe,
+  so a peer that accepts and stays silent cannot hold the terminal. A peer that accepts but fails or stays silent may be a
+  live incompatible or unhealthy service: it is reported (`LOCAL_RUNTIME_TRANSPORT`), never replaced. The launch is shown
+  as ours only when the descriptor's `processId` equals the launched pid; a concurrent winner is shown as connected
+  (Astra 2054 R2). The service keeps running after the
   terminal exits so runs and workers continue (owner decision after Jev 0198c77c abstained in effect); it stops with
   `deckent runtime shutdown`. An existing service is reused; an endpoint that fails ownership checks is never replaced;
   a start failure is shown in the view (`RUNTIME_AUTOSTART_FAILED` with the log path) and is not fatal. Piped line
@@ -429,11 +434,14 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
   in protocol versions [10, current] and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
-  from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). Every other operation
-  is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
+  from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
+  shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
   descriptor; a service without `service.identity` cannot be stopped that way (`RUNTIME_SHUTDOWN_UNAVAILABLE` says how
   to configure identity and a shutdown grant) and the terminal banner says so. **Upgrade:** `runtime serve` upgrades an
-  existing older ledger once at startup, before accepting connections: a consistent copy is written first
+  existing older ledger once at startup, before accepting connections and only under endpoint custody: the service first
+  binds the kernel-owned abstract guard socket of its endpoint (held by any live host of any build, released by the kernel
+  when the process dies), so a second start against a live service fails `LOCAL_RUNTIME_ALREADY_RUNNING` before any
+  backup or migration, and custody is kept until the listener is up (Astra 2054 R1). A consistent copy is written first
   (`VACUUM INTO` the `ledgerBackups` resource `state/backups/ledger-v<N>-<time>.db`, 0600, never over an existing file),
   then the normal single-transaction migration runs and the service reports from/to versions. A missing or current
   ledger is untouched; clients and read paths never migrate. Typed error responses carry bounded message
@@ -453,7 +461,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta
   frames and exactly one ordinary response frame. Delta frames are presentation: each ≤ `service.responseMaxBytes`, all
   together ≤ one more `responseMaxBytes`, coalesced per event-loop turn; when exhausted they stop for good, so the client
-  always holds a prefix and completes the answer from the recorded result. A replayed command sends no deltas and never
+  always holds a prefix and completes the answer from the recorded result. This is an upper bound on buffered delta bytes,
+  not strict per-write backpressure: the send loop may continue after a socket write reports a full buffer (Astra 2054). A replayed command sends no deltas and never
   reaches the provider again (a concurrent duplicate gets the pending receipt without deltas, engine-tested; the terminal
   composition currently reports that as `TERMINAL_CHAT_INVOCATION_FAILED` with state `pending`). Disconnect
   stops delivery only; the client sends the same governed cancellation command as the plain turn (the peer's session
@@ -498,7 +507,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
-  inference-metrics adapter (loopback only — the name `localhost` is resolved and every answer must be loopback before contact, then connections go only to the checked addresses, in answer order after a connection failure — the profile's metrics limits, no redirect follow) and never
+  inference-metrics adapter (loopback only — the name `localhost` is resolved and every answer must be a valid 127.0.0.0/8 or `::1` address before contact, then connections go only to the checked addresses, in answer order after a connection failure; one total deadline covers resolution and every attempt, and a late answer starts no connection — the profile's metrics limits, no redirect follow) and never
   through a surface fetch. Deckent does not start the server. `previewEmptyInferenceSlot` is an empty-budget estimate and
   is not Run admission. MCP `inference_plan` and `inference_budget` are the same read. The Desktop bridge
   snapshot carries work rows only (no chat content) and is not a live file channel. Watches stay
@@ -757,7 +766,8 @@ the gateway re-applies redaction to every free-text field on the host with the c
 generic secret patterns (the bridge scrub is best-effort; a hostile worker can POST schema-valid text directly); loss
 markers are charged to the same event/byte budget, one slot stays reserved, and once the budget is spent batches are
 refused (429) without parsing and counted as unreported loss, sealed as one final `dropped` marker; the seal record says
-`projection: partial` when the live `worker.events` file missed writes. The host appends
+`projection: partial` when the live `worker.events` file missed writes — a write that stays short after bounded retries,
+a zero-byte or rejected write, or a failed close (Astra 2054 R4); observation loss never fails the attempt. The host appends
 `{receivedAt, event}` to `worker.events` (0600, host clock only; worker clocks are untrusted) off the request
 path; at attempt end the events are sealed as an artifact and recorded in `worker_event_logs`. Summary
 (tokens, cache-read ratio, cost basis, tool classes, files touched, errors) and the live activity phase are
@@ -837,7 +847,11 @@ consumption, a separate approval-revocation surface and worker-native callback a
 A verified principal and a live session are distinct contracts. Local privileged decisions bind the
 OS process birth/TTY/session evidence and, through the native runtime socket, its connection lifetime. A zero-timeout kernel poll and exact SO_PEERCRED check distinguish
 normal request half-close from full disconnect before delayed Node socket events.
-Wall and monotonic deadlines plus revocation are checked before mutation. This Linux local witness
+Wall and monotonic deadlines plus revocation are checked before mutation. The trusted wall clock never runs backward within
+one process (a floor over observed time; WSL2 was measured stepping back ~2.1 s every ~30 s) and a decision is never
+earlier than its approval's creation; this orders local records only — it does not synchronize processes or keep expiry
+advancing during a backward step, so elapsed-time limits use monotonic deadlines and cross-process skew stays explicit.
+This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
