@@ -22,7 +22,7 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])) }));
   await writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { baseUrl: '.', paths: Object.fromEntries(packages.map(p => [`#${p}/*`, [`./src/${p}/*`]])) } }));
   const catalogs = Object.fromEntries(arch.i18n.families.flatMap(family => ['en', 'tr'].map(locale => [`${arch.i18n.catalogDir}/locales/${locale}/${family}.json`, '{}'])));
-  const fixtureFiles = { 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '| ID | Scope |\n|---|---|\n| FOUNDATION | fixture |', 'CHANGELOG.md': '#', ...catalogs, ...files };
+  const fixtureFiles = { 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '| ID | Scope |\n|---|---|\n| FOUNDATION | fixture |', 'COMPLETED-PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files };
   const sourceFiles = Object.keys(fixtureFiles).filter(path => /\.tsx?$/.test(path));
   const unit = (path: string) => { const parts = path.split('/'); return parts[0] === 'src' && parts.length >= 5 ? parts.slice(0, 4).join('/') : null; };
   const dependency = (path: string) => { const parts = path.split('/'); return parts[0] !== 'src' ? null : parts.length >= 5 ? parts.slice(0, 4).join('/') : parts.length === 3 ? `src/${parts[1]}` : null; };

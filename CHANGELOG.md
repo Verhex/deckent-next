@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- DOCS (owner 2026-09-24): PLAN.md keeps remaining work and durable decisions; completed work and closed findings moved
+  verbatim to the new COMPLETED-PLAN.md (Markdown gate, contracts, core-memory and refactor skill updated).
+
 - RUNTIME/F26 REVISE (Astra 2054): runtime startup backs up and migrates an older ledger only while holding the endpoint's
   kernel-owned guard, so a second start against a live service of any build fails before touching its schema (R1);
   terminal auto-start treats only a missing endpoint or a refused connection as absence, bounds every describe with one

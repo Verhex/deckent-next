@@ -555,7 +555,7 @@ Model, provider and flow identifiers appear only in `providers/core/registry/` (
 
 ## Documents
 
-The Markdown gate admits four documents: `README.md`, `ARCHITECTURE.md`, `PLAN.md`, `CHANGELOG.md`;
+The Markdown gate admits five documents: `README.md`, `ARCHITECTURE.md`, `PLAN.md`, `COMPLETED-PLAN.md`, `CHANGELOG.md`;
 ≤70-line permanent product-development contracts `CLAUDE.md`, `AGENTS.md`;
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
 and the explicit refactor host-kit globs in `arch.json`: the remaining 23 `.agents/skills/<skill>`
@@ -565,8 +565,9 @@ Product code still writes no Markdown; owner-maintained host instructions are a 
 Design reasoning goes into the decision log below, not arbitrary new documents.
 Owner 2026-09-21: `follow-up-works/current-flow.md` is an optional, replaceable development tracker;
 its exact path is admitted by the Markdown gate, excluded from product distribution, and may be deleted.
-PLAN.md retains durable roadmap/decisions and material open findings; small work/history lives in the
-transient tracker and external refactor archive, not an append-only product plan.
+PLAN.md retains durable roadmap/decisions, remaining work and material open findings; owner 2026-09-24: completed work
+and closed findings move to COMPLETED-PLAN.md (read only when history is needed), so PLAN stays short. Small work/history
+lives in the transient tracker and external refactor archive, not an append-only product plan.
 
 ## Decision log
 

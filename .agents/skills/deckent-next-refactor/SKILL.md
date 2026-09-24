@@ -37,7 +37,8 @@ Owner closed the Fable communication protocol until explicitly reopened. Do not 
 
 ## Owner override — 2026-09-21: working documentation
 
-PLAN.md holds main product workstreams, durable decisions and material open findings only.
+PLAN.md holds main product workstreams, durable decisions, remaining work and material open findings only;
+completed work moves to COMPLETED-PLAN.md (owner 2026-09-24), read only when history is needed.
 Keep small slices, current progress and next-step details in `follow-up-works/current-flow.md`;
 replace/delete its completed content rather than append history or create a document per small job.
 Owner latest decision: historical/canceled work and necessary proof live outside Next in

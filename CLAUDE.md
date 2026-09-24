@@ -27,7 +27,7 @@
 ## Working method
 - At every task start, read `ARCHITECTURE.md`, `PLAN.md`, `follow-up-works/current-flow.md` and relevant local core-memory; reconcile affected claims with code and evidence.
 - Update affected core documents at task start when stale claims are verified, whenever accepted decisions or scope change, and before delivery or handoff; this is mandatory.
-- Keep durable scope/status in `PLAN.md`, contracts in `ARCHITECTURE.md`, lasting decisions in core-memory, and current work/evidence/next step in `current-flow.md`.
+- Keep remaining scope/status in `PLAN.md` (completed work moves to `COMPLETED-PLAN.md`, read only when needed), contracts in `ARCHITECTURE.md`, lasting decisions in core-memory, and current work/evidence/next step in `current-flow.md`.
 - Before reporting completion, document implemented behavior, verification, open limits and the concrete next step; documentation reconciliation is part of delivery.
 - Preserve concurrent edits and accepted authority; never promote analysis into a decision or historical proof into a fresh result. Leave unaffected documents unchanged.
 - Preserve other contributors' WIP; work in bounded, complete, reviewable slices.

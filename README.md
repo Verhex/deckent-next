@@ -3,8 +3,8 @@
 Provider-neutral, local-first AI agent orchestration runtime. One core, three surfaces: Terminal (CLI/TUI),
 MCP server, HTTP API; Dashboard and Desktop are observer/operator apps on the same services.
 
-Status: **1.0.0-alpha, clean-room port in progress.** Only the capabilities listed as `DONE` in
-[PLAN.md](PLAN.md) exist in this repository. Everything else is being ported from the legacy codebase
+Status: **1.0.0-alpha, clean-room port in progress.** Completed capabilities are recorded in
+[COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md). Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
 ## Requirements

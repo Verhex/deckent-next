@@ -1,4 +1,12 @@
-# Anlık iş akışı — Opus 5.5; Astra 2054/2057 REVISE uygulandı; R2 kalan düzeltme doğrulamada; devam planı Astra'da (2055); push R sonrası owner onayıyla
+# Anlık iş akışı — Opus 5.5; origin/main = dd256fe (Astra 2059 PASS, push 2026-09-24); PLAN bölündü (COMPLETED-PLAN.md); sıradaki S akış kararları
+
+## 2026-09-24 akşam
+
+Astra 2059 PASS (`dd256fe`; süre bütçesi işletim sistemi takılmalarına karşı kesin duvar saati garantisi değildir) → owner onayıyla push
+(`c32f4ce..dd256fe`). İlk push denemesi git kimlik sorusunda takılmıştı; o sırada Windows 15:31'de beklenmedik kapandı (Kernel-Power 41,
+BugcheckCode 0, WHEA/GPU/minidump yok; vLLM ve test boştaydı; 2026-08-07 ve 08-27'de aynı iz) — yükle ilişkilendiren kanıt yok.
+Owner 2026-09-24: PLAN.md yalnız devam eden işler + kalıcı kararlar; tamamlananlar olduğu gibi `COMPLETED-PLAN.md`'ye taşındı
+(84 KB → 60 KB + 29 KB); Markdown kapısı, CLAUDE/AGENTS, core-memory belge kanunu, ARCHITECTURE, README ve skill güncellendi.
 
 ## Şimdi — 2026-09-24 sabah (owner cevapları + Astra 2054)
 
@@ -39,6 +47,13 @@ alınmadı, yalnız lint-core-memory koştu. Sonraki adım: owner commit kararı
 kayıp ders aramasını istemek.
 
 ## Astra inceleme / host kanal — 2026-09-23
+
+2026-09-24: 2058 → REVIEW 2059 PASS (`dd256fe`): R2 kalan sinyalsiz stop/describe bekleyişi kapandı;
+restart bütçesi stop öncesi kuruluyor, shutdown yanıtına ve sonraki aşamalara taşınıyor. Susan describe/
+shutdown testleri sıfır launch doğruluyor; sinyal kaldırma mutasyonu timeout ile başarısız. Yazar logu
+1805/316 + native25 + host55, exit0 incelendi; bağımsız suite yeniden koşulmadı. R1–R5 bildirilen
+engelleri kapalı. OS dosya/spawn bekleyişleri için sert preemption iddiası yok. Modal FIFO ve geniş streaming
+incelemesi ayrı takipte. Worktree PLAN değişikliği bu commit kanıtına dahil değil. 2058 tüketildi; push yapılmadı.
 
 2026-09-24 son inceleme: 2055/2056 → ANALYSIS/REVIEW 2057; ikisi işlendi/tüketildi.
 `f0c87ee` R1/R3/R4/R5 önceki bulguları kapattı. DNS bağımsız ağsız probe: timeout15ms → TIMEOUT16ms.
