@@ -1,4 +1,5 @@
-import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationQuery, ModelInvocationPurgeCommand } from '#domain/index.js';
+import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationDeltaSink, ModelInvocationQuery,
+  ModelInvocationPurgeCommand } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -10,6 +11,11 @@ import { createConfiguredRuntimeClient } from './client.js';
  */
 export function invokeRuntimeModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return createConfiguredRuntimeClient(projectRoot, options).invokeModel(input, undefined, signal);
+}
+/** Streamed form of invokeRuntimeModel: deltas are presentation only; abort disconnects, it does not cancel. */
+export function invokeRuntimeModelStream(projectRoot: string, input: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink,
+  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).invokeModelStream(input, onDelta, undefined, signal);
 }
 export function inspectRuntimeModelInvocation(projectRoot: string, input: ModelInvocationQuery, options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).inspectModelInvocation(input);

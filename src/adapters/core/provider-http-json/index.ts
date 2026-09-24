@@ -2,4 +2,4 @@ export { NativeJsonHttpError, parseNativeJsonHttpDefinition, parseNativeJsonHttp
 export type { NativeJsonHttpAuthentication, NativeJsonHttpDefinition, NativeJsonHttpErrorCode,
   NativeJsonHttpLimits } from './internal/contract.js';
 export { sendNativeJsonHttp } from './internal/transport.js';
-export type { NativeJsonHttpRequest, NativeJsonHttpSendOptions } from './internal/transport.js';
+export type { NativeJsonHttpParsed, NativeJsonHttpRequest, NativeJsonHttpSendOptions, NativeJsonHttpStream } from './internal/transport.js';

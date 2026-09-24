@@ -158,6 +158,7 @@
     "src/adapters/core/local-runtime-socket": {
       "dependencies": [
         "src/adapters/core/local-principal",
+        "src/domain/core/model-invocation",
         "src/engine/core/authentication",
         "src/engine/core/runtime",
         "src/platform/core/clock"
@@ -332,6 +333,7 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
+        "src/surfaces/core/terminal",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
         "src/domain/core/model-invocation",

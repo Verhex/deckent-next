@@ -1,15 +1,16 @@
 import { z } from 'zod';
-import { identitySchema, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
+import { identitySchema, modelInvocationDeltaSchema, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 10 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 11 as const;
 
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
-  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount']);
+  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
+  'invokeModelStream']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
-const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'inspectModelInvocation'
+const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
@@ -26,7 +27,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
     try {
       if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
       else if (value.operation === 'auditProviderSpendAccount') parseProviderSpendAuditCommand(value.input);
-      else if (value.operation === 'invokeModel') parseModelInvocationCommand(value.input);
+      else if (value.operation === 'invokeModel' || value.operation === 'invokeModelStream') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
       else if (value.operation === 'purgeModelInvocationContent') parseModelInvocationPurgeCommand(value.input);
       else if (value.operation === 'cancelModelInvocation') parseModelInvocationCancellationCommand(value.input);
@@ -42,6 +43,18 @@ const failure = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSI
   error: z.object({ code: identitySchema, category: z.enum(['error', 'usage', 'config']) }).strict().readonly(),
 }).strict().readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();
+/** Largest number of deltas one stream frame carries; the producer coalesces and splits within it. */
+export const RUNTIME_SERVICE_STREAM_FRAME_DELTAS = 256;
+/**
+ * v11 streamed operations (`invokeModelStream`) answer with zero or more ordered delta frames, then exactly one
+ * ordinary response frame carrying the same result as the non-streamed operation. Delta frames are presentation data;
+ * a replayed command sends none. Every other operation keeps exactly one response frame.
+ */
+export const runtimeServiceStreamFrameSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
+  kind: z.literal('delta'), sequence: z.number().int().nonnegative().safe(),
+  deltas: z.array(modelInvocationDeltaSchema).min(1).max(RUNTIME_SERVICE_STREAM_FRAME_DELTAS) }).strict().readonly();
+export type RuntimeServiceStreamFrame = z.infer<typeof runtimeServiceStreamFrameSchema>;
+export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOperation): boolean { return operation === 'invokeModelStream'; }
 export class RuntimeServiceProtocolError extends Error {
   constructor(readonly code: 'RUNTIME_SERVICE_CORRELATION' | 'RUNTIME_SERVICE_RESPONSE_LIMIT' | 'RUNTIME_SERVICE_DELIVERY_INVALID') {
     super(code);
@@ -76,7 +89,7 @@ export function runtimeServiceResultCapacity(requestId: string, responseMaxBytes
 export type RuntimeServiceOperation = z.infer<typeof runtimeServiceOperationSchema>;
 export type RuntimeServiceDelivery = z.infer<typeof runtimeServiceDeliverySchema>;
 export function classifyRuntimeServiceOperation(operation: RuntimeServiceOperation): 'execution' | 'control' {
-  return operation === 'executeTask' || operation === 'invokeModel' ? 'execution' : 'control';
+  return operation === 'executeTask' || operation === 'invokeModel' || operation === 'invokeModelStream' ? 'execution' : 'control';
 }
 export type RuntimeServiceRequest = z.infer<typeof runtimeServiceRequestSchema>;
 export type RuntimeServiceResponse = z.infer<typeof runtimeServiceResponseSchema>;

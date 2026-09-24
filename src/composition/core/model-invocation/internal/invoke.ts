@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand } from '#domain/index.js';
+import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand,
+  type ModelInvocationDeltaSink } from '#domain/index.js';
 import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, type LocalPeerIdentity } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -16,11 +17,13 @@ export async function invokeConfiguredModel(projectRoot: string, input: ModelInv
 }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
-  peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost) {
-  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), options, undefined, delivery, host);
+  peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,
+  onDelta?: ModelInvocationDeltaSink) {
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), options, undefined, delivery, host, onDelta);
 }
 async function invoke(input: ModelInvocationCommand,
-  loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost) {
+  loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,
+  onDelta?: ModelInvocationDeltaSink) {
   try {
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
@@ -41,6 +44,6 @@ async function invoke(input: ModelInvocationCommand,
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
       { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: Date.now,
         ...(host ? { register: host.controllers.register.bind(host.controllers) } : {}) }, configuredNative.spending);
-    return await application.invoke(command, undefined, signal, delivery);
+    return await application.invoke(command, undefined, signal, delivery, onDelta);
   } catch (error) { throw queryFailure(error); }
 }

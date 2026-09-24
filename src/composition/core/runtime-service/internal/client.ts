@@ -2,12 +2,12 @@ import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, requestLocalRuntime } from '#adapters/index.js';
+import { registerProviderConfig, requestLocalRuntime, streamLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
   providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
-  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
+  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
 import { parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
@@ -20,6 +20,9 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   describeService(): Promise<RuntimeServiceDescriptor>;
   shutdownService(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
   invokeModel(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal): Promise<ModelInvocationResult>;
+  /** v11 streamed invocation: the same governed result as invokeModel, preceded by presentation-only deltas. */
+  invokeModelStream(command: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink, delivery?: ModelInvocationDelivery,
+    signal?: AbortSignal): Promise<ModelInvocationResult>;
   inspectModelInvocation(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   inspectProviderSpendAccount(query: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAccountInspection>;
   auditProviderSpendAccount(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
@@ -27,24 +30,27 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
 
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
-  const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal): Promise<unknown> => {
+  const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
+    onDelta?: ModelInvocationDeltaSink): Promise<unknown> => {
     try {
       registerProviderConfig();
       const config = await loadConfig(projectRoot, { ...options, heal: false });
       const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false);
       const requestId = randomUUID();
-      const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
+      const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
-      const response = await requestLocalRuntime(socketOptions(config.service, endpoint),
-        { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, operation, input, ...capacity }, signal);
+      const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, operation, input, ...capacity };
+      const response = onDelta
+        ? await streamLocalRuntime(socketOptions(config.service, endpoint), request, deltas => { for (const delta of deltas) onDelta(delta); }, signal)
+        : await requestLocalRuntime(socketOptions(config.service, endpoint), request, signal);
       if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }
   };
   // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
-    && operation !== 'invokeModel' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
+    && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount').map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
@@ -70,6 +76,14 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
         const command = parsed.data as ModelInvocationCommand;
         return parseModelInvocationResultForCommand(command, await call('invokeModel', command, delivery, signal));
+      } catch (error) { throw queryFailure(error); }
+    },
+    async invokeModelStream(input: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink, delivery?: ModelInvocationDelivery, signal?: AbortSignal) {
+      try {
+        const parsed = modelInvocationCommandInputSchema.safeParse(input);
+        if (!parsed.success || typeof onDelta !== 'function') throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
+        const command = parsed.data as ModelInvocationCommand;
+        return parseModelInvocationResultForCommand(command, await call('invokeModelStream', command, delivery, signal, onDelta));
       } catch (error) { throw queryFailure(error); }
     },
     async inspectModelInvocation(input: ModelInvocationQuery, delivery?: ModelInvocationDelivery) {

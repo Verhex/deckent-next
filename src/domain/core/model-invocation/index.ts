@@ -20,3 +20,5 @@ export { modelInvocationCancellationCommandSchema, modelInvocationCancellationCo
   parseModelInvocationCancellationCommand, parseModelInvocationCancellationReceipt, parseModelInvocationControlRecord,
   proposeModelInvocationSendPermission } from './internal/cancellation.js';
 export type { ModelInvocationCancellationCommand, ModelInvocationCancellationReceipt, ModelInvocationControlRecord } from './internal/cancellation.js';
+export { MODEL_INVOCATION_DELTA_TEXT_MAX, modelInvocationDeltaSchema, splitModelInvocationDelta } from './internal/delta.js';
+export type { ModelInvocationDelta, ModelInvocationDeltaSink } from './internal/delta.js';

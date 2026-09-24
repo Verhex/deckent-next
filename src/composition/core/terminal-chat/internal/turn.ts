@@ -44,7 +44,8 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
  */
-export async function completeTerminalChatTurn(input: TerminalChatTurnInput, ports: TerminalChatInvocationPorts): Promise<string> {
+/** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
+export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean) {
   registerProviderConfig();
   const chat = readTerminalChatConfig(await loadConfig(input.projectRoot, input.options) as Record<string, unknown>);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
@@ -54,18 +55,31 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
     model: binding.definition.model.nativeId,
     messages: input.messages.map(message => ({ role: message.role, content: message.content })),
     max_completion_tokens: chat.maxCompletionTokens,
-    stream: false,
+    ...(streamed ? { stream: true, stream_options: { include_usage: true } } : { stream: false }),
   } as unknown as JsonObject;
   const command: ModelInvocationCommand = { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId,
     reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest };
+  return { chat, command };
+}
+
+/** Governed cancellation of the turn's exact invocation, as a separately authorized command. */
+export function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocationCancellationCommand {
+  return { schemaVersion: 1, commandId: randomUUID(), scopeId: command.scopeId, targetCommandId: command.commandId,
+    reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
+}
+
+/**
+ * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
+ * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
+ */
+export async function completeTerminalChatTurn(input: TerminalChatTurnInput, ports: TerminalChatInvocationPorts): Promise<string> {
+  const { chat, command } = await prepareTerminalChatCommand(input, false);
   let outcome: ModelInvocationResult;
   try {
     outcome = await ports.invoke(input.projectRoot, command, input.options, input.signal);
   } catch (error) {
     if (!input.signal?.aborted) throw error;
-    await ports.cancel(input.projectRoot, { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId,
-      targetCommandId: command.commandId, reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) },
-    input.options).catch(() => undefined);
+    await ports.cancel(input.projectRoot, terminalChatCancellation(command), input.options).catch(() => undefined);
     throw ErrorRegistry.createError('TERMINAL_CHAT_CANCELLED');
   }
   const text = extractOpenAiChatTextFromInvocation(outcome);

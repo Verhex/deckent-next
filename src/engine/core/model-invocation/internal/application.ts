@@ -5,7 +5,7 @@ import { authorizeModelInvocationSpending, type ModelInvocationSpendingAuthority
 import { identitySchema, ModelInvocationError, modelActivationActorSchema, modelActivationAuthorizationSchema, parseModelInvocationCommand,
   parseModelInvocationNativeResult, parseModelInvocationPurgeCommand, parseModelInvocationControlRecord, type JsonObject, type ModelBindingDefinition, type ModelInvocationAuthorization,
   type ModelInvocationClaim, type ModelInvocationNativeResponse, type ModelInvocationNativeResult, type ModelInvocationProfile, type ModelInvocationReceipt,
-  type ModelInvocationPurgeReceipt, type ModelReference, type VerifiedPrincipal } from '#domain/index.js';
+  type ModelInvocationPurgeReceipt, type ModelReference, type VerifiedPrincipal, type ModelInvocationDeltaSink } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelActivationReader } from '#engine/core/model-activation/index.js';
 import type { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
@@ -33,8 +33,9 @@ export interface ModelInvocationNativePort {
   prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject): Promise<unknown>;
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
   responseBytesUpperBound?(prepared: unknown): bigint;
-  /** The model execution transport operation; authorized metadata acquisition is separate. */
-  send(prepared: unknown, signal?: AbortSignal): Promise<ModelInvocationNativeResult>;
+  /** The model execution transport operation; authorized metadata acquisition is separate. A streaming adapter may
+   * report presentation-only deltas to `onDelta`; the returned result remains the only governed outcome. */
+  send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult>;
   /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
   observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendReportedMeasurement | null;
 }
@@ -115,7 +116,9 @@ export class ModelInvocationApplication {
     private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime,
     private readonly spending?: ModelInvocationSpendingAuthority) {}
 
-  async invoke(input: unknown, credential?: unknown, signal?: AbortSignal, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult> {
+  /** `onDelta` observes a freshly sent streamed response only; a replayed command never reaches the provider again. */
+  async invoke(input: unknown, credential?: unknown, signal?: AbortSignal, delivery?: ModelInvocationDelivery,
+    onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationResult> {
     validateInvocationDelivery(delivery);
     const command = parseModelInvocationCommand(input), requestDigest = modelInvocationRequestDigest(command);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
@@ -201,7 +204,8 @@ export class ModelInvocationApplication {
         }
         let response;
         try {
-          response = parseModelInvocationNativeResult(await native.send(prepared, live ? (signal ? AbortSignal.any([signal, live.signal]) : live.signal) : signal));
+          const sendSignal = live ? (signal ? AbortSignal.any([signal, live.signal]) : live.signal) : signal;
+          response = parseModelInvocationNativeResult(await (onDelta ? native.send(prepared, sendSignal, onDelta) : native.send(prepared, sendSignal)));
           if ('kind' in response) verifyModelInvocationResponseEvidence(response.evidence, profile);
           if (!('kind' in response) && responseBound !== undefined && BigInt(Buffer.byteLength(JSON.stringify(response), 'utf8')) > responseBound) {
             throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');

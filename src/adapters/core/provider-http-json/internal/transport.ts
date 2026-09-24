@@ -1,16 +1,33 @@
 import { Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { createModelInvocationResponseEvidence } from '#engine/index.js';
-import type { ModelInvocationNativeResponse, ModelInvocationNativeResult, ModelInvocationRejectionReason } from '#domain/index.js';
+import { splitModelInvocationDelta, type ModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResponse,
+  type ModelInvocationNativeResult, type ModelInvocationRejectionReason } from '#domain/index.js';
 import { CredentialEchoGuard } from './credential-guard.js';
 import { NativeJsonHttpError, nativeJsonHttpAdapterSchema, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits,
   type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from './contract.js';
 
 export type NativeJsonHttpRequest = Readonly<{ definition: NativeJsonHttpDefinition; limits: NativeJsonHttpLimits;
   body: string; adapter: Readonly<{ id: string; version: number }> }>;
+export type NativeJsonHttpParsed = { response: ModelInvocationNativeResponse } | { reason: ModelInvocationRejectionReason };
+/**
+ * Incremental parser for a streamed (for example SSE) response. The transport keeps the same credential guards,
+ * deadline, redirect and status rules; it retains at most `responseMaxBytes` of wire bytes as evidence while the
+ * parser bounds its own assembled result. `push` never throws; `limit` asks the transport to stop reading.
+ */
+export interface NativeJsonHttpStream {
+  readonly accept: string;
+  readonly wireMaxBytes: number;
+  push(chunk: Buffer): Readonly<{ deltas: readonly ModelInvocationDelta[]; limit: boolean }>;
+  finish(): NativeJsonHttpParsed;
+}
 export interface NativeJsonHttpSendOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
-  readonly parseResponse: (body: Buffer) => { response: ModelInvocationNativeResponse } | { reason: ModelInvocationRejectionReason };
+  /** Exactly one of parseResponse (whole body) and stream (incremental) is required. */
+  readonly parseResponse?: (body: Buffer) => NativeJsonHttpParsed;
+  readonly stream?: NativeJsonHttpStream;
+  /** Presentation-only observer for stream deltas; failures inside it never change the invocation outcome. */
+  readonly onDelta?: ModelInvocationDeltaSink;
 }
 
 function statusOf(value: number | undefined): number | null {
@@ -73,19 +90,49 @@ function ownData(input: unknown, required: readonly string[], optional: readonly
   return Object.freeze(output);
 }
 
+/** Holds streamed text while it could still be the start of the bearer value, so no prefix of an echo is presented. */
+class DeltaGate {
+  private readonly pending = { text: '', reasoning: '' };
+  private readonly guards: Record<ModelInvocationDelta['kind'], CredentialEchoGuard> | undefined;
+  constructor(secret: Buffer | undefined, private readonly sink: ModelInvocationDeltaSink | undefined) {
+    this.guards = secret ? { text: new CredentialEchoGuard(secret), reasoning: new CredentialEchoGuard(secret) } : undefined;
+  }
+  /** Returns false when the text completes an echo of the credential. */
+  push(delta: ModelInvocationDelta): boolean {
+    const guard = this.guards?.[delta.kind];
+    if (guard?.push(Buffer.from(delta.text, 'utf8'))) return false;
+    this.pending[delta.kind] += delta.text;
+    if (!guard?.hasPartialPrefix()) this.flush(delta.kind);
+    return true;
+  }
+  flush(kind: ModelInvocationDelta['kind']): void {
+    const text = this.pending[kind]; this.pending[kind] = '';
+    if (!text || !this.sink) return;
+    for (const delta of splitModelInvocationDelta(kind, text)) {
+      try { this.sink(delta); } catch { /* Presentation failures never change the governed outcome. */ }
+    }
+  }
+}
+
 export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, options: NativeJsonHttpSendOptions,
   outerSignal?: AbortSignal): Promise<ModelInvocationNativeResult> {
   const request = ownData(requestInput, ['definition', 'limits', 'body', 'adapter']);
-  const optionValues = ownData(options, ['parseResponse'], ['resolveCredential']);
+  const optionValues = ownData(options, [], ['parseResponse', 'resolveCredential', 'stream', 'onDelta']);
   const definition = parseNativeJsonHttpDefinition(request.definition);
   const limits = parseNativeJsonHttpLimits(request.limits);
   const adapter = nativeJsonHttpAdapterSchema.safeParse(ownData(request.adapter, ['id', 'version']));
   const body = request.body, parseResponse = optionValues.parseResponse, resolveCredential = optionValues.resolveCredential;
-  if (!adapter.success || typeof body !== 'string' || typeof parseResponse !== 'function'
+  const stream = optionValues.stream as NativeJsonHttpStream | undefined, onDelta = optionValues.onDelta;
+  if (!adapter.success || typeof body !== 'string' || (parseResponse === undefined) === (stream === undefined)
+    || (parseResponse !== undefined && typeof parseResponse !== 'function')
+    || (stream !== undefined && (typeof stream !== 'object' || stream === null || typeof stream.push !== 'function'
+      || typeof stream.finish !== 'function' || typeof stream.accept !== 'string'
+      || !Number.isSafeInteger(stream.wireMaxBytes) || stream.wireMaxBytes < limits.responseMaxBytes))
+    || (onDelta !== undefined && (typeof onDelta !== 'function' || stream === undefined))
     || (resolveCredential !== undefined && typeof resolveCredential !== 'function')) {
     throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_INVALID');
   }
-  const stableOptions = Object.freeze({ parseResponse: parseResponse as NativeJsonHttpSendOptions['parseResponse'],
+  const stableOptions = Object.freeze({ ...(parseResponse ? { parseResponse: parseResponse as NonNullable<NativeJsonHttpSendOptions['parseResponse']> } : {}),
     ...(resolveCredential ? { resolveCredential: resolveCredential as NonNullable<NativeJsonHttpSendOptions['resolveCredential']> } : {}) });
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_TOO_LARGE');
   if (outerSignal?.aborted) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_CANCELLED');
@@ -94,6 +141,7 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
   if (signal.aborted) throw new NativeJsonHttpError(timeout.aborted ? 'NATIVE_JSON_HTTP_TIMEOUT' : 'NATIVE_JSON_HTTP_CANCELLED');
   const secret = credential === undefined ? undefined : Buffer.from(credential, 'utf8');
   const endpoint = new URL(definition.endpoint);
+  const gate = stream ? new DeltaGate(secret, onDelta as ModelInvocationDeltaSink | undefined) : undefined;
   return new Promise((resolve, rejectPromise) => {
     const secure = endpoint.protocol === 'https:';
     const agent = secure ? new HttpsAgent({ keepAlive: false, proxyEnv: {}, rejectUnauthorized: true,
@@ -108,9 +156,12 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
       agent.destroy();
       if (error) { response?.destroy(); req.destroy(); rejectPromise(error); } else if (value) resolve(value);
     };
-    const settleRejected = (reason: ModelInvocationRejectionReason, complete: boolean) => {
+    const settleRejected = (reasonInput: ModelInvocationRejectionReason, completeInput: boolean) => {
       if (settled) return;
       if (retainedCredential?.hasPartialPrefix()) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
+      // Only a fully retained body is complete evidence; a stream past the retention cap is bounded, not complete.
+      const complete = completeInput && observedBytes === retainedBytes;
+      const reason = complete || reasonInput === 'interrupted' ? reasonInput : 'response-limit';
       try { done(undefined, rejected(adapter.data, reason, status, retainedBody(), complete, observedBytes)); }
       catch { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_RESPONSE_TOO_LARGE')); }
     };
@@ -123,10 +174,14 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
     const abort = () => interrupted(new NativeJsonHttpError(timeout.aborted ? 'NATIVE_JSON_HTTP_TIMEOUT' : 'NATIVE_JSON_HTTP_CANCELLED'));
     const send = secure ? httpsRequest : httpRequest;
     const req = send(endpoint, { agent, method: 'POST', headers: { 'content-type': 'application/json',
-      'content-length': String(Buffer.byteLength(body, 'utf8')), accept: 'application/json',
+      'content-length': String(Buffer.byteLength(body, 'utf8')), accept: stream ? stream.accept : 'application/json',
       ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }) } }, incoming => {
       response = incoming; const currentStatus = statusOf(incoming.statusCode); status = currentStatus;
       if (currentStatus === null) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN')); return; }
+      // Only a successful streamed body is parsed incrementally. Its wire bound replaces the retention cap, which then
+      // bounds evidence only; the parser bounds the assembled result. Error and redirect bodies stay evidence only.
+      const streaming = stream !== undefined && currentStatus >= 200 && currentStatus < 300;
+      const wireMaxBytes = streaming ? stream.wireMaxBytes : limits.responseMaxBytes;
       incoming.on('data', (chunk: Buffer) => {
         if (settled) return;
         observedBytes += chunk.byteLength;
@@ -136,21 +191,30 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
           if (retainedCredential?.push(prefix)) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
         }
         if (wireCredential?.push(chunk)) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
-        if (observedBytes > limits.responseMaxBytes) settleRejected('response-limit', false);
+        if (observedBytes > wireMaxBytes) { settleRejected('response-limit', false); return; }
+        if (!streaming) return;
+        const parsed = stream.push(chunk);
+        for (const delta of parsed.deltas) {
+          if (!gate!.push(delta)) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO')); return; }
+        }
+        if (parsed.limit) settleRejected('response-limit', false);
       });
       incoming.on('error', () => { if (!settled) interrupted(new NativeJsonHttpError('NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN')); });
       incoming.on('end', () => {
         if (settled) return;
         try {
-          if (credential) {
+          if (credential && !streaming) {
             let decoded: unknown;
             try { decoded = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retainedBody())); } catch { decoded = undefined; }
             if (decoded !== undefined && hasCredential(decoded, credential)) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO');
           }
           if (currentStatus >= 300 && currentStatus < 400) { settleRejected('redirect', true); return; }
           if (currentStatus < 200 || currentStatus >= 300) { settleRejected('http-status', true); return; }
-          const parsed = stableOptions.parseResponse(retainedBody());
-          if ('reason' in parsed) settleRejected(parsed.reason, true); else done(undefined, parsed.response);
+          const parsed = streaming ? stream.finish() : stableOptions.parseResponse!(retainedBody());
+          if ('reason' in parsed) { settleRejected(parsed.reason, parsed.reason !== 'interrupted'); return; }
+          if (credential && streaming && hasCredential(parsed.response, credential)) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_CREDENTIAL_ECHO');
+          gate?.flush('reasoning'); gate?.flush('text');
+          done(undefined, parsed.response);
         } catch (error) {
           done(error instanceof NativeJsonHttpError ? error : new NativeJsonHttpError('NATIVE_JSON_HTTP_RESPONSE_TOO_LARGE'));
         }
