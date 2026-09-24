@@ -20,7 +20,8 @@
     "policy": "policy.json",
     "runtimeSocket": "state/runtime.sock",
     "runtimeLog": "state/runtime-service.log",
-    "ledgerBackups": "state/backups"
+    "ledgerBackups": "state/backups",
+    "terminalHistory": "state/terminal-history.jsonl"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

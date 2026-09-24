@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
-import { ensureConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
+import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory } from '../../../src/composition/core/cli/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -37,4 +37,14 @@ it('never starts a service over an endpoint that fails ownership checks', async 
   let launched = 0;
   await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; })).rejects.toMatchObject({ code: expect.stringMatching(/UNSAFE/) });
   expect(launched).toBe(0);
+});
+
+it('keeps composer history per project unless disabled, and never stores an entry that carried pasted content', async () => {
+  const f = await fixture();
+  const history = await openConfiguredTerminalHistory(f.project, f.options);
+  await history!.append({ text: 'visible line', pastes: [] });
+  await history!.append({ text: 'see [Pasted 40 lines]', pastes: [{ chip: '[Pasted 40 lines]' }] });
+  expect((await (await openConfiguredTerminalHistory(f.project, f.options))!.load()).map(entry => entry.text)).toEqual(['visible line']);
+  const off = await fixture({ persistHistory: false });
+  expect(await openConfiguredTerminalHistory(off.project, off.options)).toBeNull();
 });

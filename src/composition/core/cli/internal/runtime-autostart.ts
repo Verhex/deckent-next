@@ -2,7 +2,7 @@ import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DeckentError, ErrorRegistry, loadConfig, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
+import { launchDetachedRuntimeService, openTerminalHistoryFile, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import type { RuntimeServiceDescriptor } from '#engine/index.js';
@@ -86,4 +86,17 @@ export async function restartConfiguredRuntimeService(projectRoot: string, optio
     await delay(POLL_MS);
   }
   throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: '-' } });
+}
+
+/** The interactive terminal's composer history for this project, or null when disabled in `terminal.persistHistory`.
+ * Entries that carried pasted content are not stored (only the visible line would survive, as a chip label). */
+export async function openConfiguredTerminalHistory(projectRoot: string, options: ConfigLoadOptions = {}) {
+  registerProviderConfig();
+  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
+  const file = openTerminalHistoryFile(await prepareProductFile(config.productLayout, 'terminalHistory'));
+  return Object.freeze({
+    load: () => file.load(),
+    append: async (entry: { readonly text: string; readonly pastes: readonly unknown[] }) => { if (entry.pastes.length === 0) await file.append(entry); },
+  });
 }

@@ -101,6 +101,19 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
     } finally { await server.dispose(); }
   });
 
+  it('carries bounded typed-error parameters in v11 and leaves them out of older lifecycle answers', async () => {
+    const { options } = await fixture();
+    const server = await startLocalRuntimeSocketServer(options, async request => ({ schemaVersion: 11, requestId: request.requestId, ok: false,
+      error: { code: 'CONFIG_VALIDATION', category: 'config', params: { issues: 'terminal.scopeId: unrecognized key' } } }));
+    try {
+      await expect(requestLocalRuntime(options, { schemaVersion: 11, requestId: 'request-1', operation: 'inspectRun', input: {} }))
+        .resolves.toMatchObject({ ok: false, error: { code: 'CONFIG_VALIDATION', params: { issues: 'terminal.scopeId: unrecognized key' } } });
+      const older = await requestLocalRuntime(options, { schemaVersion: 10, requestId: 'request-2', operation: 'describeService', input: {} });
+      expect(older).toMatchObject({ ok: false, error: { code: 'CONFIG_VALIDATION', category: 'config' } });
+      expect(JSON.stringify(older)).not.toContain('params');
+    } finally { await server.dispose(); }
+  });
+
   it('rejects the retired v7 request envelope before dispatch', async () => {
     const { options } = await fixture(); let calls = 0;
     const server = await startLocalRuntimeSocketServer(options, async request => {

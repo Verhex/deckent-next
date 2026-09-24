@@ -1,6 +1,6 @@
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
-import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceErrorParams } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
@@ -93,7 +93,9 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
       const failure = queryFailure(error);
-      return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false, error: { code: failure.code, category: failure.category } };
+      const params = runtimeServiceErrorParams(failure.params);
+      return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
+        error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
   });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;

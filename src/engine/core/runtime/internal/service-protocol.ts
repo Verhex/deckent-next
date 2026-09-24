@@ -3,6 +3,16 @@ import { identitySchema, modelInvocationDeltaSchema, parseModelInvocationCancell
   parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand } from '#domain/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 11 as const;
+export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
+export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
+/** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
+export function runtimeServiceErrorParams(params: Readonly<Record<string, unknown>> | undefined): Record<string, string | number> | undefined {
+  if (!params) return undefined;
+  const entries = Object.entries(params).filter((entry): entry is [string, string | number] => typeof entry[1] === 'string'
+    || (typeof entry[1] === 'number' && Number.isFinite(entry[1]))).slice(0, RUNTIME_SERVICE_ERROR_PARAMS)
+    .map(([key, value]) => [key.slice(0, 64), typeof value === 'string' ? value.slice(0, RUNTIME_SERVICE_ERROR_PARAM_CHARS) : value] as const);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
 
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
@@ -40,7 +50,10 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
 const success = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, ok: z.literal(true), result: z.unknown() })
   .strict().refine(value => Object.hasOwn(value, 'result'), { path: ['result'], message: 'RUNTIME_SERVICE_RESULT_REQUIRED' }).readonly();
 const failure = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, ok: z.literal(false),
-  error: z.object({ code: identitySchema, category: z.enum(['error', 'usage', 'config']) }).strict().readonly(),
+  error: z.object({ code: identitySchema, category: z.enum(['error', 'usage', 'config']),
+    /** Message parameters of the typed error (same text the caller would see locally); bounded, never raw causes. */
+    params: z.record(z.string().max(64), z.union([z.string().max(RUNTIME_SERVICE_ERROR_PARAM_CHARS), z.number().finite()]))
+      .refine(value => Object.keys(value).length <= RUNTIME_SERVICE_ERROR_PARAMS).optional() }).strict().readonly(),
 }).strict().readonly();
 export const runtimeServiceResponseSchema = z.union([success, failure]).readonly();
 /** Largest number of deltas one stream frame carries; the producer coalesces and splits within it. */

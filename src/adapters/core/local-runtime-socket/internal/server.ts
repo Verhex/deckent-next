@@ -83,8 +83,9 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
         request = runtimeServiceRequestSchema.parse({ ...lifecycle, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION });
       }
     } catch { socket.destroy(); return; }
-    const versioned = (response: RuntimeServiceResponse): RuntimeServiceResponse =>
-      replyVersion === RUNTIME_SERVICE_SCHEMA_VERSION ? response : { ...response, schemaVersion: replyVersion } as unknown as RuntimeServiceResponse;
+    // Older lifecycle versions get their own envelope: no error params (added in v11).
+    const versioned = (response: RuntimeServiceResponse): RuntimeServiceResponse => replyVersion === RUNTIME_SERVICE_SCHEMA_VERSION ? response
+      : { ...response, schemaVersion: replyVersion, ...(response.ok ? {} : { error: { code: response.error.code, category: response.error.category } }) } as unknown as RuntimeServiceResponse;
     // Prove a correlated error can be delivered before admitting any effect. Tiny limits must not fail after dispatch.
     let limitFrame: Buffer;
     try { limitFrame = encodeServiceFrame(versioned(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT')), options.responseMaxBytes); }

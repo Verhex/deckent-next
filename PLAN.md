@@ -86,7 +86,7 @@ yönetişim aynı; sahte sunucuda ilk delta 170 ms, canlı vLLM ilk parça 488 m
 Tab tamamlama, `?` kısayollar, çift Ctrl+C çıkış), P3 görüntü (akış bölütleyici, markdown/kod/diff, düşünme anlatımı, genişliğe uyan durum satırı), P4 iş yüzeyi
 (canlı worker satırı ve paneli, `/transcript`, `/approvals` y/N, `/cancel`); birimler `terminal-kit`/`terminal-render`/`terminal-composer`/`terminal`.
 Saat düzeltmesi (Jev 6086297e): WSL2'de duvar saati ~30 sn'de 2,1–2,2 sn geri atlıyor; süreç içi tabanlı saat + karar zamanı ≥ oluşturma.
-Açık: geçmiş kalıcılığı ve `@` aday adapter'ları (portlar hazır), araç döngüsü + D15b (A), satır modu akışı.
+Kalıcı girdi geçmişi (0600, yapıştırma içeriği yazılmaz) ve servis hata parametreleri protokolde bağlandı. Açık: `@` aday okuma portu (scope/policy), araç döngüsü + D15b (A), satır modu akışı, P1 karar listesi.
 
 ### Güncel öncelik — owner 2026-09-22
 

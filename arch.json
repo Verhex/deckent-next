@@ -204,6 +204,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/terminal-history",
         "src/engine/core/runtime",
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
@@ -724,6 +725,7 @@
     },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal",
@@ -1333,6 +1335,12 @@
     "src/adapters/core/inference-metrics": {
       "dependencies": [],
       "plan": "PROVIDERS"
+    },
+    "src/adapters/core/terminal-history": {
+      "dependencies": [
+        "src/adapters/core/native-connection"
+      ],
+      "plan": "SURFACES"
     },
     "src/adapters/core/runtime-launcher": {
       "dependencies": [],

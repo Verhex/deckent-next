@@ -400,7 +400,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, Tab
   slash completion with argument hints, `?` shortcuts; it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
   clears a draft or arms exit (second press within 2 s exits); Ctrl+D exits on an empty idle line; while busy
-  Esc/Ctrl+C cancel the turn. History persistence and `@` mention candidates are ports; the surface reads no files.
+  Esc/Ctrl+C cancel the turn. History and `@` mention candidates are ports; the surface reads no files. History persistence is the
+  `terminal-history` adapter: private per-project `state/terminal-history.jsonl` (0600, no-follow, append-only, last 500
+  entries, compacted when doubled), visible line only — entries that carried pasted content are never stored and secret
+  shapes are redacted; `terminal.persistHistory: false` disables it. `@` candidates still need a scoped read port.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed
@@ -426,7 +429,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   existing older ledger once at startup, before accepting connections: a consistent copy is written first
   (`VACUUM INTO` the `ledgerBackups` resource `state/backups/ledger-v<N>-<time>.db`, 0600, never over an existing file),
   then the normal single-transaction migration runs and the service reports from/to versions. A missing or current
-  ledger is untouched; clients and read paths never migrate. Open: idle stop, error parameters across the protocol.
+  ledger is untouched; clients and read paths never migrate. Typed error responses carry bounded message
+  parameters (≤ 8 keys, strings ≤ 512 chars; omitted for older lifecycle versions), so a remote error renders the same
+  text as a local one. Open: idle stop policy for the background service.
 - **Adapters:** `deckent terminal workline [--scope <id>]` is the Ink view and requires TTY stdin and stdout
   (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session [--scope <id>]` is line mode and also serves piped
   input (slash input stays local: `/status` answers locally, unknown commands are reported, never sent to the model); `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime

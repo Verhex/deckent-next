@@ -44,7 +44,9 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const response = onDelta
         ? await streamLocalRuntime(socketOptions(config.service, endpoint), request, deltas => { for (const delta of deltas) onDelta(delta); }, signal)
         : await requestLocalRuntime(socketOptions(config.service, endpoint), request, signal);
-      if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
+      if (!response.ok) throw ErrorRegistry.has(response.error.code)
+        ? ErrorRegistry.createError(response.error.code, response.error.params ? { params: response.error.params } : {})
+        : ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }
   };

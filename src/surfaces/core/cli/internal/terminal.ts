@@ -257,10 +257,13 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
     ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
+  // History is a convenience: an unavailable history file never blocks the terminal.
+  const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
   await runTerminalWorkline({
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
+    ...(inputHistory ? { inputHistory } : {}),
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly ChatTurnMessage[], signal: AbortSignal) =>
       context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },

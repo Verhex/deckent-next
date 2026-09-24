@@ -9,6 +9,8 @@ import { CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js
 export const terminalConfigSchema = z.object({
   /** Scope the interactive terminal (`deckent` with no arguments) works in; `--scope` overrides it. */
   scopeId: z.string().min(1).max(128).optional(),
+  /** Keep the composer's visible input history across sessions in this project (private file; pastes never stored). */
+  persistHistory: z.boolean().default(true),
   /** Interactive terminals start the runtime service when none is running (owner 2026-09-23); false only connects. */
   autostartService: z.boolean().default(true),
   /** Deadline for an automatically started runtime service to answer on its endpoint. */
