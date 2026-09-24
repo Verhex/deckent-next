@@ -473,9 +473,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   and no-tool rules; `responseMaxBytes` bounds the retained evidence prefix and the assembled `chat.completion` (with a
   wire digest in a `deckent_stream` block — the native object of a streamed call is assembled provenance, never the
   provider's verbatim body), and total wire bytes are bounded at 16× it plus 1024 bytes per requested completion token (4× the
-  measured vLLM framing), so a long legitimate answer is not rejected after it was billed; the bound limits bandwidth, not
-  memory. The first invalid chunk (malformed, tool call, model change, usage over budget, data after `[DONE]`) ends the read
-  at once and closes the connection, so the provider stops generating; its cause is recorded only when every observed byte
+  measured vLLM framing), so a long legitimate answer is not rejected after it was billed (an allowance, not a guarantee for
+  every provider's framing); the bound limits bandwidth, not memory. The first invalid chunk (malformed, tool call, model change, usage over budget, data after `[DONE]`) ends the read
+  at once and closes the connection (whether a remote provider then stops computing or billing is not proven by it); its
+  cause is recorded only when every observed byte
   is retained (evidence `complete` means that, not that the provider finished), otherwise the reason is `response-limit`,
   because a semantic rejection cause is only claimed with complete evidence (S decisions, Jev aac0af98/e2faa91b).
   A stream without `[DONE]`, finish and usage is interrupted (uncertain, never retried). Streamed text is withheld while it could still begin an echoed bearer credential.
@@ -782,9 +783,12 @@ path; at attempt end the events are sealed as an artifact and recorded in `worke
 (tokens, cache-read ratio, cost basis, tool classes, files touched, errors) and the live activity phase are
 pure recomputations from events — no model call, no scoring. `task transcript` (SDK/CLI) needs attempt
 `read-output`. Events are untrusted worker evidence: they never grant authority, acceptance or terminal truth;
-failure to record or seal never changes execution. Claude is normalized; Codex/Cursor report only
-`session.started` and unmapped counts until their normalizers land (B09-3). Structured final report, budgets
-(B09-2), `report workers` and live `workers watch` phases (B09-3) remain open.
+failure to record or seal never changes execution. Claude and Codex are normalized (Codex `exec --json`: thread/turn/item
+events of the pinned 0.155.1 CLI — command executions are shell calls, each `file_change` path is its own edit/write call,
+agent text is a redacted excerpt, reasoning and command output are never kept, cached input tokens are counted apart, one
+turn ends the session; mapped from the binary's event vocabulary, not yet from a recorded live run). Cursor reports only
+`session.started` and unmapped counts until its normalizer lands. Structured final report, budgets (B09-2),
+`report workers` and live `workers watch` phases (B09-3) remain open.
 
 ### Next execution host cutover (2026-09-21)
 

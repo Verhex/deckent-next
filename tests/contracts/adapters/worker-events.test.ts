@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { createNormalizerState, flushUnmapped, normalizeClaudeLine, redactText, secretValues } from '#adapters/index.js';
+import { createCodexState, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, redactText, secretValues } from '#adapters/index.js';
 import { summarizeWorkerEvents, workerActivityPhase, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const fixture = new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url);
@@ -68,4 +68,40 @@ it('counts unknown native events instead of dropping them and rejects events out
     expect.objectContaining({ kind: 'unmapped', nativeType: 'system:future_subtype', count: 1 })]);
   expect(workerEventSchema.safeParse({ schemaVersion: 2, sequence: 1, atMs: 0, kind: 'unmapped', nativeType: 'x', count: 1 }).success).toBe(false);
   expect(workerEventSchema.safeParse({ schemaVersion: 1, sequence: 1, atMs: 0, kind: 'message', role: 'assistant', textBytes: 1, thinking: false, excerpt: 'x'.repeat(241) }).success).toBe(false);
+});
+
+it('maps a codex exec --json stream onto the same schema: shell and patch calls, redacted agent text, cached tokens apart, one ended session (B09-3)', () => {
+  // Event and field names as carried by the pinned Codex 0.155.1 binary; synthetic lines, not a recorded run.
+  const lines = [
+    { type: 'thread.started', thread_id: 't1' }, { type: 'turn.started' },
+    { type: 'item.completed', item: { id: 'item_0', type: 'reasoning', text: 'private plan' } },
+    { type: 'item.started', item: { id: 'item_1', type: 'command_execution', command: 'npm test -- --token=sk-abcdefghijkl', aggregated_output: '', exit_code: null, status: 'in_progress' } },
+    { type: 'item.completed', item: { id: 'item_1', type: 'command_execution', command: 'npm test', aggregated_output: 'ok\n', exit_code: 0, status: 'completed' } },
+    { type: 'item.completed', item: { id: 'item_2', type: 'file_change', changes: [{ path: '/workspace/src/a.ts', kind: 'update' }, { path: '/workspace/b.md', kind: 'add' }], status: 'completed' } },
+    { type: 'item.completed', item: { id: 'item_3', type: 'command_execution', command: 'false', aggregated_output: 'boom', exit_code: 1, status: 'failed' } },
+    { type: 'item.completed', item: { id: 'item_4', type: 'agent_message', text: 'Done; secret-value-123 stays out.' } },
+    { type: 'item.completed', item: { id: 'item_5', type: 'todo_list', items: [] } },
+    { type: 'item.completed', item: { id: 'item_6', type: 'brand_new_item' } },
+    { type: 'turn.completed', usage: { input_tokens: 1200, cached_input_tokens: 1000, output_tokens: 80, reasoning_output_tokens: 30 } },
+  ].map(line => JSON.stringify(line));
+  const state = createNormalizerState(['secret-value-123'], 1_000), codex = createCodexState();
+  const events = [...lines.flatMap((line, index) => normalizeCodexLine(line, state, codex, 1_000 + index * 100)), ...flushUnmapped(state, 99_999)]
+    .map(event => workerEventSchema.parse(event)) as WorkerEvent[];
+  expect(events.filter(event => event.kind === 'tool.call').map(event => event.kind === 'tool.call' && [event.toolId, event.name, event.toolClass, event.target]))
+    .toEqual([['item_1', 'shell', 'shell', null], ['item_2:0', 'apply_patch', 'edit', 'src/a.ts'], ['item_2:1', 'apply_patch', 'write', 'b.md'], ['item_3', 'shell', 'shell', null]]);
+  const shell = events.find(event => event.kind === 'tool.call' && event.toolId === 'item_1');
+  expect(shell).toMatchObject({ detail: expect.not.stringContaining('sk-abcdefghijkl') });
+  expect(events.filter(event => event.kind === 'tool.result').map(event => event.kind === 'tool.result' && [event.toolId, event.status]))
+    .toEqual([['item_1', 'ok'], ['item_2:0', 'ok'], ['item_2:1', 'ok'], ['item_3', 'error']]);
+  const messages = events.filter(event => event.kind === 'message');
+  expect(messages).toMatchObject([{ thinking: true, excerpt: '' }, { thinking: false, excerpt: 'Done; [REDACTED] stays out.' }]);
+  expect(events.filter(event => event.kind === 'usage')).toMatchObject([{ tokens: { input: 200, cacheRead: 1000, output: 80, thinking: 30 } }]);
+  expect(events.filter(event => event.kind === 'unmapped')).toMatchObject([{ nativeType: 'item:brand_new_item', count: 1 }]);
+  const summary = summarizeWorkerEvents(events);
+  expect(summary).toMatchObject({ outcome: 'success', turns: 1, toolErrors: 1, filesTouched: ['b.md', 'src/a.ts'], tokens: { input: 200, cacheRead: 1000, output: 80 } });
+  expect(summary.cacheReadRatio).toBeCloseTo(1000 / 1200);
+  expect(workerActivityPhase(events)).toMatchObject({ phase: 'finished' });
+  // A failed turn ends the session as an error, and a started-then-completed item is one call, not two.
+  const failed = normalizeCodexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'x' } }), createNormalizerState([], 0), createCodexState(), 10);
+  expect(failed).toMatchObject([{ kind: 'session.ended', outcome: 'error' }]);
 });

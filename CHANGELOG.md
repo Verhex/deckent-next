@@ -4,6 +4,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- EXECUTION/B09-3 (first slice): Codex workers are normalized onto the Worker Event Contract inside the container bridge
+  (shell and patch calls with workspace paths, redacted agent excerpts, cached tokens apart, session end), so Codex workers
+  show live phases instead of a permanent "starting"; Cursor remains unmapped until its stream format is verified.
+- DOCS: streaming wording narrowed per Astra 2061 (a closed connection does not prove the provider stopped or billing ended;
+  the per-token allowance is not a guarantee for every provider).
+
 - SURFACES/F26 S (owner delegated, Jev aac0af98/e2faa91b): the streamed wire bound adds 1024 bytes per requested completion
   token to 16× `responseMaxBytes`, so long legitimate answers are no longer rejected after billing; the first invalid chunk
   stops the read and closes the connection (no draining) and its cause is kept whenever every observed byte is retained

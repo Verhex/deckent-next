@@ -1,4 +1,11 @@
-# Anlık iş akışı — Opus 5.5; origin/main = d4cff1a; S akış kararları uygulandı (doğrulamada); sıradaki A-1 araç döngüsü tasarımı ∥ B09-3
+# Anlık iş akışı — Opus 5.5; origin/main = ae52cda; B09-3 Codex normalizer teslimde; sıradaki: deckent-dev terminal analizi (owner öncelik); GPU yasağı
+
+## Owner 2026-09-24 akşam — yön ve GPU
+
+İki ayrı iş: (1) Claude Code sınıfı native terminal (tam bağlamlı tek model, izin/araç/Deckent takibi; 32k yerel bağlam yetmez;
+önce deckent-dev terminalinin kapsamlı analizi), (2) vLLM yerel paralel worker altyapısı. A-1 tasarımı (Astra 2062) bu ayrıma göre
+güncellenecek. GPU owner'a ayrıldı: vLLM container durduruldu (31 GB → 2,5 GB), terminal/canlı model/benchmark yok; CPU testleri serbest.
+B09-3 ilk dilim: Codex normalizer'ı (ikili olay sözlüğünden; canlı Codex koşumu yok), mutasyon kanıtlı (`proof/F26-B09-3-CODEX/`).
 
 ## S akış kararları — 2026-09-24 akşam
 
@@ -6,6 +13,13 @@ Owner Opus'a bıraktı. Jev aac0af98 `proposed_package` 0,97; uygulamada domain 
 → Jev e2faa91b `keep_invariant_stop_early` 1,00 (madde 3/4 düzeltildi, domain sözleşmesi değişmedi). Sonuç: token'a bağlı tel sınırı, ilk
 geçersiz parçada durma, tam kanıtla neden korunması, `TERMINAL_CHAT_INVOCATION_PENDING`, `deckent_stream` belgelendi. Mutasyon 3/3 kırıldı
 (`proof/F26-S-STREAM-DECISIONS/`).
+
+Astra 2026-09-24: 2060 incelemesi, `ae52cda99afb67124298fbc8d6236f2b01c3cb83` için PASS; bu karar diff'iyle sınırlı,
+geniş streaming kapanışı değil. Bağımsız hedefli koşum: 2 dosya / 16 test geçti (3,22 s); gerçek yerel HTTP bağlantısı
+erken kapanıyor, runtime→terminal ilk delta 153 ms / sağlayıcı bitişi 434 ms, replay ikinci provider isteği üretmiyor.
+Yazarın verify logu 1808/316 + native25 + host55, exit0 ve üç negatif mutasyon logu incelendi; tam suite yeniden koşulmadı.
+`complete`, gözlenen baytların tutulmasıdır; erken red sağlayıcının tamamlanması veya faturanın durması kanıtı değildir.
+Sonraki adım: Opus bu sınırlı PASS ile mevcut A-1 ∥ B09-3 sırasına devam eder; commit/push bu incelemede yapılmadı.
 
 ## 2026-09-24 akşam
 

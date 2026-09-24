@@ -111,6 +111,68 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
   } else miss(type);
   return events;
 }
+const CODEX_KNOWN = new Set(['thread.started', 'turn.started', 'item.updated']);
+/** Codex state beyond the shared normalizer state: seen tool items and running token totals for the final summary. */
+export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; readonly tokens: { input: number; output: number; cacheRead: number; thinking: number | null } }
+export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, tokens: { input: 0, output: 0, cacheRead: 0, thinking: null } }; }
+/**
+ * Maps one line of `codex exec --json` onto contract events (B09-3). Event names are the ones the pinned Codex 0.155.1
+ * binary carries (thread/turn/item events; agent_message, reasoning, command_execution, file_change, mcp_tool_call,
+ * web_search, todo_list items). Agent text is kept only as a redacted excerpt, reasoning and command output never.
+ * `codex exec` runs one turn, so turn.completed/turn.failed end the session.
+ */
+export function normalizeCodexLine(line: string, state: NormalizerState, codex: CodexNormalizerState, now = Date.now()): BridgeEvent[] {
+  const events: BridgeEvent[] = [];
+  const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
+  const miss = (type: string) => state.unmapped.set(type.slice(0, 64), (state.unmapped.get(type.slice(0, 64)) ?? 0) + 1);
+  const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
+  let data: Record<string, unknown>;
+  try { const parsed: unknown = JSON.parse(line); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { miss('non-object'); return events; } data = parsed as Record<string, unknown>; }
+  catch { if (line.trim()) miss('non-json'); return events; }
+  const type = typeof data.type === 'string' ? data.type : 'untyped';
+  const call = (id: string, name: string, toolClass: string, target: string | null, detail: string | null) => {
+    if (codex.calls.has(id)) return;
+    codex.calls.add(id); emit('tool.call', { toolId: id, name, toolClass, target, detail: detail || null });
+  };
+  if (type === 'item.started' || type === 'item.completed') {
+    const item = (data.item ?? {}) as Record<string, unknown>, itemType = typeof item.type === 'string' ? item.type : 'untyped';
+    const id = red(item.id, 96) || `item-${state.sequence + 1}`, done = type === 'item.completed';
+    const status = typeof item.status === 'string' ? item.status : '';
+    if (itemType === 'agent_message') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(item.text ?? '')), thinking: false, excerpt: red(item.text, 240) }); }
+    else if (itemType === 'reasoning') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(item.text ?? '')), thinking: true, excerpt: '' }); }
+    else if (itemType === 'command_execution') {
+      call(id, 'shell', 'shell', null, red(item.command, 240));
+      if (done) emit('tool.result', { toolId: id, status: status === 'completed' && item.exit_code === 0 ? 'ok' : 'error',
+        bytes: Buffer.byteLength(typeof item.aggregated_output === 'string' ? item.aggregated_output : '') });
+    } else if (itemType === 'file_change') {
+      // One apply_patch may touch several files: one call per path so every touched file is attributed.
+      const changes = Array.isArray(item.changes) ? item.changes as Record<string, unknown>[] : [];
+      changes.slice(0, 64).forEach((change, index) => {
+        const target = relative(change.path, state.cwd), changeId = `${id}:${index}`;
+        call(changeId, 'apply_patch', change.kind === 'add' ? 'write' : 'edit', target === null ? null : red(target, 256) || null, String(change.kind ?? '').slice(0, 16) || null);
+        if (done) emit('tool.result', { toolId: changeId, status: status === 'completed' ? 'ok' : 'error', bytes: 0 });
+      });
+    } else if (itemType === 'mcp_tool_call' || itemType === 'web_search') {
+      const name = itemType === 'web_search' ? 'web_search' : red(`mcp:${String(item.server ?? '')}/${String(item.tool ?? '')}`, 64);
+      call(id, name, 'network', null, itemType === 'web_search' ? red(item.query, 240) : null);
+      if (done) emit('tool.result', { toolId: id, status: status === 'failed' ? 'error' : 'ok', bytes: 0 });
+    } else if (itemType !== 'todo_list') miss(`item:${itemType}`);
+  } else if (type === 'turn.completed' || type === 'turn.failed') {
+    codex.turns++;
+    const usage = (data.usage ?? {}) as Record<string, unknown>, cached = num(usage.cached_input_tokens);
+    // OpenAI input totals include cached tokens; the contract counts them apart, like Claude's cache_read.
+    const tokens = { input: Math.max(0, num(usage.input_tokens) - cached), output: num(usage.output_tokens), cacheRead: cached, cacheWrite: 0,
+      thinking: typeof usage.reasoning_output_tokens === 'number' ? num(usage.reasoning_output_tokens) : null };
+    if (type === 'turn.completed') {
+      emit('usage', { tokens });
+      codex.tokens.input += tokens.input; codex.tokens.output += tokens.output; codex.tokens.cacheRead += tokens.cacheRead;
+      if (tokens.thinking !== null) codex.tokens.thinking = (codex.tokens.thinking ?? 0) + tokens.thinking;
+    }
+    emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
+      apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens, cacheWrite: 0 }, permissionDenials: 0 });
+  } else if (!CODEX_KNOWN.has(type)) miss(type);
+  return events;
+}
 /** Unmapped native event types are reported as counts, never silently dropped. */
 export function flushUnmapped(state: NormalizerState, now = Date.now()): BridgeEvent[] {
   const events: BridgeEvent[] = [];
@@ -227,6 +289,7 @@ async function main() {
   let tail = ''; let bytes = 0; let pending = '';
   const state = createNormalizerState([...secretValues(setup.credential), proxy]);
   const channel = eventChannel(socketPath);
+  const codex = createCodexState();
   if (setup.provider !== 'claude') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
   const observe = (part: Buffer) => {
@@ -236,6 +299,7 @@ async function main() {
     if (pending.length > 1_048_576) { state.unmapped.set('oversized-line', (state.unmapped.get('oversized-line') ?? 0) + 1); pending = ''; }
     for (const line of lines) {
       if (setup.provider === 'claude') channel.push(normalizeClaudeLine(line, state));
+      else if (setup.provider === 'codex') channel.push(normalizeCodexLine(line, state, codex));
       else if (line.trim()) state.unmapped.set(`${setup.provider}-event`, (state.unmapped.get(`${setup.provider}-event`) ?? 0) + 1);
     }
   };
@@ -249,6 +313,7 @@ async function main() {
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
     : /connect|proxy|network|fetch failed|socket|ENOTFOUND|ECONN/i.test(tail) ? 'connection' : 'native';
   if (pending && setup.provider === 'claude') channel.push(normalizeClaudeLine(pending, state));
+  if (pending && setup.provider === 'codex') channel.push(normalizeCodexLine(pending, state, codex));
   channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
     failure: result.code === 0 ? null : failure }) + '\n');

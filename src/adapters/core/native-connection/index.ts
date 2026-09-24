@@ -2,5 +2,5 @@ export { nativeSubscriptionSchema, NativeConnectionError, readLocalNativeCredent
 export type { NativeSubscription } from './internal/credential.js';
 export { openNativeConnection, isPublicNativeAddress } from './internal/gateway.js';
 export { inspectNativeClientHello } from './internal/tls-hello.js';
-export { normalizeClaudeLine, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
+export { normalizeClaudeLine, normalizeCodexLine, createCodexState, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
 export type { NormalizerState } from './internal/worker.js';
