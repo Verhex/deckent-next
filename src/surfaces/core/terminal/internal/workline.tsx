@@ -3,6 +3,10 @@ import { render, Box, Static, Text, useApp, useInput, type Instance } from 'ink'
 import type { WorklineInkPalette } from './ink-palette.js';
 import { WorklinePaletteProvider, useWorklinePalette } from './ink-palette-context.js';
 import { StatusStrip } from './status-strip.js';
+import { renderCompleteReply } from './render/assistant-stream.js';
+import type { AssistantRenderLabels } from './render/assistant-view.js';
+import { RenderGlyphsContext, resolveRenderGlyphs } from './render/glyphs.js';
+import { assistantLedgerEntries } from './render/ledger-units.js';
 import { parseSlashLine } from './slash-registry.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
@@ -28,6 +32,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly runCard: string;
   readonly workerCard: string;
   readonly watchFailed: string;
+  /** Rendered-answer strings (terminal.render.*): narration, footer, code label, status facts. */
+  readonly render: AssistantRenderLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -152,6 +158,7 @@ export function WorklineApp(props: WorklineProps) {
 
   const runTurn = useCallback(async (text: string) => {
     push([chat('user', text)]);
+    const startedAtMs = Date.now();
     const controller = new AbortController();
     turn.current = controller;
     setBusy(true);
@@ -159,7 +166,8 @@ export function WorklineApp(props: WorklineProps) {
     try {
       const reply = await completeTurn(messages, controller.signal);
       history.current = boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: reply }], historyMessages);
-      push([chat('assistant', reply)]);
+      // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
+      push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
     } catch (error) {
       history.current = messages;
       push([notice('error', errorText(error))]);
@@ -224,7 +232,7 @@ export function WorklineApp(props: WorklineProps) {
   }, { isActive: !work.modalOpen }); // an open decision card owns the keys (P4)
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
-    ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
+    render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   return (
     <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -232,7 +240,8 @@ export function WorklineApp(props: WorklineProps) {
       </Static>
       {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy} />
+      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}
+        queued={queue.current.length} labels={labels.render} />
       <Box borderStyle="round" paddingX={1}>
         <Text>{labels.prompt}{line}</Text>
       </Box>
@@ -247,12 +256,15 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly stdin?: NodeJS.ReadStream;
   readonly stdout?: NodeJS.WriteStream;
   readonly signal?: AbortSignal;
+  /** ASCII decoration for terminals that cannot be assumed to draw Unicode. */
+  readonly ascii?: boolean;
 }
 
 /** Ctrl+C is handled by the view (cancel a running turn, otherwise exit); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
-  const { palette, stdin, stdout, signal, ...props } = options;
-  const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: createElement(WorklineApp, props) }),
+  const { palette, stdin, stdout, signal, ascii, ...props } = options;
+  const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
+  const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
     { exitOnCtrlC: false, patchConsole: false, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });

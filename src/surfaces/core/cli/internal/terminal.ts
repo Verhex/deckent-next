@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline';
 import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
-import { runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type ChatTurnMessage, type WorklineLabels,
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type ChatTurnMessage, type WorklineLabels,
   type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { phaseLabel } from './transcript.js';
@@ -123,6 +123,14 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
+    render: {
+      assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
+      thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
+      tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),
+      truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),
+      failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
+      moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
+    },
   };
 }
 
@@ -250,7 +258,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),
-    palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })),
+    palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })), ascii: prefersAsciiGlyphs(env),
     ...(ledger ? { ledger } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),

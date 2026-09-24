@@ -22,3 +22,13 @@ export { resolveWorkerRef, type WorkSurfaceLabels } from './internal/workline-ac
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';
 export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from './internal/turn-stream.js';
+export { EMPTY_SEGMENTER, FENCE_CHUNK_LINES, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './internal/render/stream-segmenter.js';
+export { narrationOf, renderAssistantStream, renderCompleteReply, startAssistantStream, type AssistantStreamState, type AssistantStreamStep, type AssistantUnit,
+  type FooterUnit, type Narration } from './internal/render/assistant-stream.js';
+export { renderMarkdown, type MarkdownOptions } from './internal/render/markdown.js';
+export { renderedText, type RenderedLine, type Span } from './internal/render/spans.js';
+export { prefersAsciiGlyphs, resolveRenderGlyphs, RenderGlyphsContext, type RenderGlyphs } from './internal/render/glyphs.js';
+export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput } from './internal/render/status-row.js';
+export { AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from './internal/render/assistant-view.js';
+export { assistantLedgerEntries, streamStepEntries } from './internal/render/ledger-units.js';
+export { cells, truncateEnd, truncateStart, wrapCells } from './internal/render/text-width.js';
