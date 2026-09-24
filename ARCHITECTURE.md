@@ -533,6 +533,21 @@ Current compiled entries include the CLI and MCP composition binaries; the CLI s
 MCP share the implemented inspection, activation, installation and runtime-control contracts; capability-specific
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
+
+**Agent terminal direction (owner 2026-09-24) and tool contract (T-L1).** The terminal becomes a Claude Code-class agent
+terminal: one full-context model, an engine-owned governed tool loop, permission modes, Deckent tracking and management through
+commands, queries and MCP, no terminal budgets (automatic compaction for an endless flow), local model first and API providers
+after; the local vLLM worker lane is separate. The shell runs on the user's machine with permission modes — a policy/permission
+boundary, not an isolation claim. Tools are data (`domain/core/agent-tool`: name, version, class `read|edit|shell|deckent|mcp`,
+JSON input schema); a tool never grants authority. T-L1 ships the read class as `adapters/core/workspace-read`, ported from the
+legacy native tools minus their defects: `read_file` (bounded content view from line 1 for a plain path, `outline` with headings
+and size/longest-line statistics, numbered ranges with long-line elision naming the exact `lineByteOffset` continuation, search),
+`list_dir`, `grep` (long lines are searched and elided, skipped binary/oversized files are reported instead of a bare "no
+matches"), `glob`. Every result is byte-bounded by the tool itself (16 KiB default) and states any cut; fitting results into the
+model context is the loop's job in one token unit. Reads resolve the real path inside the workspace (traversal, absolute paths and
+symlink targets outside are refused), a Core deny floor (`.env*`, keys, credentials, `.git/**`, Deckent host/approval/audit state)
+is registry data, generated directories are skipped, files are read through one no-follow descriptor with a size and change check.
+
 ## Package contract
 
 - Public API is `index.ts`; everything else is internal.

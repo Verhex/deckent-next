@@ -1,4 +1,10 @@
-# Anlık iş akışı — Opus 5.5; origin/main = 4eec455; terminal yerel/host yönü (2065); Codex REVISE; GPU yasağı
+# Anlık iş akışı — Opus 5.5; T-L1 okuma araçları teslimde; sonraki T-L2 araç çağrısı (openai-chat) → T-L3 engine döngüsü; GPU yasağı
+
+## T-L1 — araç sözleşmesi + okuma/arama araçları (2026-09-24 gece)
+
+Legacy `native-read-file.ts`/`native-grep.ts`/`chat-tool-exec.ts`'den taşındı (asenkron fs; düz yol da sınırlı görünüm). Testler owner vakasını
+(1,25 MB, 10 KB satır) ve legacy RC-C'yi (uzun satırda grep) yeniden üretir; mutasyon 2/2 (`proof/F26-T-L1-READ-TOOLS/`). Açık owner sorusu:
+canlı profildeki ömür boyu `maxCalls: 50`. Canlı yerel koşum GPU iznini bekler.
 
 ## Terminal analizi — 2026-09-24 gece
 

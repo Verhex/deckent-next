@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURFACES/T-L1: agent tool contract (`domain/core/agent-tool`) and the terminal's read/search tools (`adapters/core/workspace-read`:
+  read_file outline/range/search with long-line continuations, list_dir, grep, glob), ported from the legacy terminal with every
+  result byte-bounded, workspace real-path confinement, symlink-escape refusal and a Core deny floor for secrets and Deckent host state.
+
 - EXECUTION/B09-3 (first slice): Codex workers are normalized onto the Worker Event Contract inside the container bridge
   (shell and patch calls with workspace paths, redacted agent excerpts, cached tokens apart, session end), so Codex workers
   show live phases instead of a permanent "starting"; Cursor remains unmapped until its stream format is verified.

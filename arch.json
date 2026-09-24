@@ -1211,6 +1211,12 @@
       ],
       "plan": "EXECUTION"
     },
+    "src/adapters/core/workspace-read": {
+      "dependencies": [
+        "src/domain/core/agent-tool"
+      ],
+      "plan": "SURFACES"
+    },
     "src/adapters/core/worker-observation": {
       "dependencies": [
         "src/domain/core/attempt",
@@ -1410,6 +1416,10 @@
         "src/composition/core/scoped-request"
       ],
       "plan": "EXECUTION"
+    },
+    "src/domain/core/agent-tool": {
+      "dependencies": [],
+      "plan": "CONTRACT"
     },
     "src/domain/core/worker-event": {
       "dependencies": [],
