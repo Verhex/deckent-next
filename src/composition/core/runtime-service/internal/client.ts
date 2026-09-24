@@ -1,7 +1,7 @@
-import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, loadConfig, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, requestLocalRuntime, streamLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -31,7 +31,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
-    onDelta?: ModelInvocationDeltaSink): Promise<unknown> => {
+    onDelta?: ModelInvocationDeltaSink, version: RuntimeServiceLifecycleVersion = RUNTIME_SERVICE_SCHEMA_VERSION): Promise<unknown> => {
     try {
       registerProviderConfig();
       const config = await loadConfig(projectRoot, { ...options, heal: false });
@@ -40,13 +40,27 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
-      const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId, operation, input, ...capacity };
+      const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       const response = onDelta
         ? await streamLocalRuntime(socketOptions(config.service, endpoint), request, deltas => { for (const delta of deltas) onDelta(delta); }, signal)
         : await requestLocalRuntime(socketOptions(config.service, endpoint), request, signal);
       if (!response.ok) throw ErrorRegistry.createError(ErrorRegistry.has(response.error.code) ? response.error.code : 'RUNTIME_SERVICE_TRANSPORT');
       return response.result;
     } catch (error) { throw queryFailure(error); }
+  };
+  /** Lifecycle operations retry once in each older protocol version of the window when the connection closed unanswered
+   * (a service started from an older build drops current-version envelopes). describe is read-only; shutdown is durable. */
+  const lifecycle = async (operation: 'describeService' | 'shutdownService', input: unknown): Promise<unknown> => {
+    try { return await call(operation, input); }
+    catch (error) {
+      if (!(error instanceof DeckentError) || error.code !== 'LOCAL_RUNTIME_TRANSPORT') throw error;
+      let last: unknown = error;
+      for (const version of RUNTIME_SERVICE_LIFECYCLE_VERSIONS.slice(1)) {
+        try { return await call(operation, input, undefined, undefined, undefined, version); }
+        catch (retry) { last = retry; }
+      }
+      throw last;
+    }
   };
   // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
@@ -111,13 +125,13 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       } catch (error) { throw queryFailure(error); }
     },
     async describeService() {
-      const parsed = runtimeServiceDescriptorSchema.safeParse(await call('describeService', {}));
+      const parsed = runtimeServiceDescriptorSchema.safeParse(await lifecycle('describeService', {}));
       if (!parsed.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       return parsed.data;
     },
     async shutdownService(command: ShutdownCommand) {
       const expected = shutdownCommandSchema.parse(command);
-      const value = await call('shutdownService', expected) as ServiceShutdownAdmissionResult;
+      const value = await lifecycle('shutdownService', expected) as ServiceShutdownAdmissionResult;
       if (!value || typeof value.replayed !== 'boolean') throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       const parsed = shutdownAdmissionSchema.safeParse(value.admission);
       if (!parsed.success || JSON.stringify(parsed.data.command) !== JSON.stringify(expected)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');

@@ -83,6 +83,24 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket request admi
     } finally { await server.dispose(); }
   });
 
+  it('keeps describe and shutdown reachable in the previous protocol version and answers in that version; nothing else', async () => {
+    const { options } = await fixture(); const seen: string[] = [];
+    const server = await startLocalRuntimeSocketServer(options, async request => {
+      seen.push(`${request.schemaVersion}:${request.operation}`); return { schemaVersion: 11, requestId: request.requestId, ok: true, result: { operation: request.operation } };
+    });
+    try {
+      // An older (v10) client describing a service started from a newer build gets a v10 answer.
+      await expect(requestLocalRuntime(options, { schemaVersion: 10, requestId: 'request-1', operation: 'describeService', input: {} }))
+        .resolves.toMatchObject({ requestId: 'request-1', ok: true, result: { operation: 'describeService' } });
+      // Effectful or other operations stay current-version only (refused before dispatch, no client-side downgrade either).
+      await expect(requestLocalRuntime(options, { schemaVersion: 10, requestId: 'request-2', operation: 'inspectRun', input: {} } as never)).rejects.toThrow();
+      const raw = await connect(options.endpoint);
+      raw.end(encodeServiceFrame({ schemaVersion: 10, requestId: 'request-3', operation: 'inspectRun', input: {} }, options.inputMaxBytes));
+      await once(raw, 'close');
+      expect(seen).toEqual(['11:describeService']);
+    } finally { await server.dispose(); }
+  });
+
   it('rejects the retired v7 request envelope before dispatch', async () => {
     const { options } = await fixture(); let calls = 0;
     const server = await startLocalRuntimeSocketServer(options, async request => {

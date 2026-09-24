@@ -61,6 +61,23 @@ export class RuntimeServiceProtocolError extends Error {
     this.name = 'RuntimeServiceProtocolError';
   }
 }
+/**
+ * Lifecycle compatibility window (Jev 898c8af3): `describeService` and `shutdownService` stay reachable across protocol
+ * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
+ * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
+ */
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 10] as const);
+export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(10)]);
+export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
+  operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
+  .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();
+export type RuntimeServiceLifecycleRequest = z.infer<typeof runtimeServiceLifecycleRequestSchema>;
+/** Parses a lifecycle answer from a service speaking `version`; the envelope is otherwise identical across the window. */
+export function parseRuntimeServiceLifecycleResponse(requestId: string, version: RuntimeServiceLifecycleVersion, value: unknown): RuntimeServiceResponse {
+  const envelope = z.object({ schemaVersion: z.literal(version) }).passthrough().parse(value);
+  return parseRuntimeServiceResponse(requestId, { ...envelope, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION });
+}
 export function parseRuntimeServiceResponse(requestId: string, value: unknown): RuntimeServiceResponse {
   const expected = identitySchema.parse(requestId);
   const response = runtimeServiceResponseSchema.parse(value);

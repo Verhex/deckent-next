@@ -1,7 +1,7 @@
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
-import { isRuntimeServiceStreamingOperation, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
+import { isRuntimeServiceStreamingOperation, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
 import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './stream-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
@@ -71,12 +71,23 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
   });
   socket.once('end', () => {
     clearTimeout(headerTimer);
-    let request: RuntimeServiceRequest;
-    try { request = runtimeServiceRequestSchema.parse(decoder.finish()); }
-    catch { socket.destroy(); return; }
+    let request: RuntimeServiceRequest, replyVersion: number = RUNTIME_SERVICE_SCHEMA_VERSION;
+    try {
+      const raw = decoder.finish();
+      const current = runtimeServiceRequestSchema.safeParse(raw);
+      if (current.success) request = current.data;
+      else {
+        // Lifecycle compatibility window: an older client may still describe or stop this service.
+        const lifecycle = runtimeServiceLifecycleRequestSchema.parse(raw);
+        replyVersion = lifecycle.schemaVersion;
+        request = runtimeServiceRequestSchema.parse({ ...lifecycle, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION });
+      }
+    } catch { socket.destroy(); return; }
+    const versioned = (response: RuntimeServiceResponse): RuntimeServiceResponse =>
+      replyVersion === RUNTIME_SERVICE_SCHEMA_VERSION ? response : { ...response, schemaVersion: replyVersion } as unknown as RuntimeServiceResponse;
     // Prove a correlated error can be delivered before admitting any effect. Tiny limits must not fail after dispatch.
     let limitFrame: Buffer;
-    try { limitFrame = encodeServiceFrame(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT'), options.responseMaxBytes); }
+    try { limitFrame = encodeServiceFrame(versioned(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT')), options.responseMaxBytes); }
     catch { socket.destroy(); return; }
     // Streamed deltas share the response byte limit per frame and, in total, one more response's worth of bytes.
     const stream = isRuntimeServiceStreamingOperation(request.operation)
@@ -92,7 +103,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
         responseTimer.unref();
         try {
           let frame: Buffer;
-          try { frame = encodeServiceFrame(response, options.responseMaxBytes); }
+          try { frame = encodeServiceFrame(versioned(response), options.responseMaxBytes); }
           catch (error) {
             if (!(error instanceof ServiceFrameError) || error.code !== 'SERVICE_FRAME_LIMIT') throw error;
             frame = limitFrame;
@@ -104,7 +115,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
       }, () => {
         stream?.finish();
         if (!disconnected) {
-          try { socket.end(encodeServiceFrame(transportFailure(request.requestId), options.responseMaxBytes)); } catch { socket.destroy(); }
+          try { socket.end(encodeServiceFrame(versioned(transportFailure(request.requestId)), options.responseMaxBytes)); } catch { socket.destroy(); }
         }
       });
   });

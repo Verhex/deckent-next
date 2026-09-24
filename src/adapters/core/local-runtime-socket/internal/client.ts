@@ -1,6 +1,7 @@
 import { Socket } from 'node:net';
-import { isRuntimeServiceStreamingOperation, parseRuntimeServiceResponse, RuntimeServiceProtocolError, runtimeServiceRequestSchema,
-  runtimeServiceStreamFrameSchema, type RuntimeServiceRequest, type RuntimeServiceResponse, type RuntimeServiceStreamFrame } from '#engine/index.js';
+import { isRuntimeServiceStreamingOperation, parseRuntimeServiceLifecycleResponse, parseRuntimeServiceResponse, RUNTIME_SERVICE_SCHEMA_VERSION, RuntimeServiceProtocolError,
+  runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceStreamFrameSchema, type RuntimeServiceLifecycleRequest, type RuntimeServiceRequest,
+  type RuntimeServiceResponse, type RuntimeServiceStreamFrame } from '#engine/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder } from './framing.js';
 import { assertOwnedSocket, LocalRuntimeSocketError, resolveSocketOptions, type LocalRuntimeSocketOptions } from './endpoint.js';
 
@@ -18,9 +19,11 @@ function connected(socket: Socket, endpoint: string, timeoutMs: number, signal?:
   });
 }
 export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
-  value: RuntimeServiceRequest, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
+  value: RuntimeServiceRequest | RuntimeServiceLifecycleRequest, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
   if (signal?.aborted) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
-  const request = runtimeServiceRequestSchema.parse(value);
+  // An older lifecycle version is only for describing/stopping a service started from an older build.
+  const legacy = value.schemaVersion !== RUNTIME_SERVICE_SCHEMA_VERSION ? runtimeServiceLifecycleRequestSchema.parse(value) : null;
+  const request = legacy ?? runtimeServiceRequestSchema.parse(value);
   const resolved = await resolveSocketOptions(options);
   const frame = encodeServiceFrame(request, resolved.inputMaxBytes);
   await assertOwnedSocket(resolved.endpoint);
@@ -49,7 +52,8 @@ export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
     socket.once('end', () => {
       if (settled) return;
       try {
-        const response = parseRuntimeServiceResponse(request.requestId, decoder.finish());
+        const response = legacy ? parseRuntimeServiceLifecycleResponse(request.requestId, legacy.schemaVersion, decoder.finish())
+          : parseRuntimeServiceResponse(request.requestId, decoder.finish());
         settled = true;
         signal?.removeEventListener('abort', abort);
         // A half-open socket stays ref'd after FIN and keeps the operator process alive after /exit.

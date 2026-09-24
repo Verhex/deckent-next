@@ -416,7 +416,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   **Lifecycle (T0b, Jev 8bb2a0c7):** the service descriptor carries an optional `build` (source tree digest and commit);
   a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
   build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
-  be in flight. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
+  be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
+  in protocol versions [10, current] and answered in the request's version; a client retries these two only, once per
+  older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
+  from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). Every other operation
+  is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
   descriptor; a service without `service.identity` cannot be stopped that way (`RUNTIME_SHUTDOWN_UNAVAILABLE` says how
   to configure identity and a shutdown grant) and the terminal banner says so. **Upgrade:** `runtime serve` upgrades an
   existing older ledger once at startup, before accepting connections: a consistent copy is written first
