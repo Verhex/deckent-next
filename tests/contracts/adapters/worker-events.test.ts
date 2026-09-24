@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { createCodexState, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, redactText, secretValues } from '#adapters/index.js';
+import { createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, normalizeClaudeLine, normalizeCodexLine, redactText, secretValues } from '#adapters/index.js';
 import { summarizeWorkerEvents, workerActivityPhase, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const fixture = new URL('../../fixtures/worker-events/claude-stream.jsonl', import.meta.url);
@@ -104,4 +104,56 @@ it('maps a codex exec --json stream onto the same schema: shell and patch calls,
   // A failed turn ends the session as an error, and a started-then-completed item is one call, not two.
   const failed = normalizeCodexLine(JSON.stringify({ type: 'turn.failed', error: { message: 'x' } }), createNormalizerState([], 0), createCodexState(), 10);
   expect(failed).toMatchObject([{ kind: 'session.ended', outcome: 'error' }]);
+});
+
+it('keeps secrets out of every Codex-derived field, never turns unknown status into success, and survives malformed input (Astra 2066)', () => {
+  const secret = 'probe-secret-value';
+  const state = createNormalizerState([secret], 0), codex = createCodexState();
+  const lines = [
+    { type: secret }, { type: `x\u0007${secret}` },
+    { type: 'item.completed', item: { id: 'a', type: secret } },
+    { type: 'item.completed', item: { id: 'b', type: 'file_change', status: 'completed', changes: [{ path: '/workspace/a.ts', kind: secret }, null, { path: 7 }] } },
+    { type: 'item.completed', item: { id: 'c', type: 'mcp_tool_call', server: secret, tool: 'x', arguments: {} } },
+    { type: 'item.completed', item: null }, { type: 'turn.completed', usage: 'bad' },
+  ].map(line => JSON.stringify(line));
+  const events = [...lines.flatMap(line => normalizeCodexLine(line, state, codex, 5)), ...flushUnmapped(state, 6)].map(event => workerEventSchema.parse(event)) as WorkerEvent[];
+  expect(JSON.stringify(events)).not.toContain(secret);
+  // The unknown change kind is an edit without a claimed kind; the MCP call without a status gets no success result.
+  expect(events.find(event => event.kind === 'tool.call' && event.toolId === 'b:0')).toMatchObject({ toolClass: 'edit', detail: null });
+  expect(events.some(event => event.kind === 'tool.result' && event.toolId === 'c')).toBe(false);
+  const unmapped = Object.fromEntries(events.flatMap(event => event.kind === 'unmapped' ? [[event.nativeType, event.count]] : []));
+  expect(unmapped).toMatchObject({ 'file_change.kind': 1, 'file_change.change-invalid': 2, 'mcp_tool_call.status': 1, 'item-invalid': 1 });
+  expect(events.find(event => event.kind === 'session.ended')).toMatchObject({ outcome: 'success', tokens: { input: 0, output: 0 } });
+});
+
+it('attributes every file of a large patch up to the cap and counts the rest; long and shared-prefix ids stay distinct and schema-valid', () => {
+  const state = createNormalizerState([], 0), codex = createCodexState();
+  const changes = Array.from({ length: 600 }, (_, i) => ({ path: `/workspace/f${i}.ts`, kind: 'update' }));
+  const longA = 'x'.repeat(100) + 'A', longB = 'x'.repeat(100) + 'B';
+  const lines = [{ type: 'item.completed', item: { id: 'p', type: 'file_change', status: 'completed', changes } },
+    { type: 'item.started', item: { id: longA, type: 'command_execution', command: 'a', aggregated_output: '', status: 'in_progress' } },
+    { type: 'item.completed', item: { id: longA, type: 'command_execution', command: 'a', aggregated_output: '', exit_code: 0, status: 'completed' } },
+    { type: 'item.completed', item: { id: longB, type: 'command_execution', command: 'b', aggregated_output: '', exit_code: 1, status: 'failed' } }].map(line => JSON.stringify(line));
+  const events = [...lines.flatMap(line => normalizeCodexLine(line, state, codex, 1)), ...flushUnmapped(state, 2)].map(event => workerEventSchema.parse(event)) as WorkerEvent[];
+  expect(events.filter(event => event.kind === 'tool.call' && event.name === 'apply_patch')).toHaveLength(512);
+  expect(events).toContainEqual(expect.objectContaining({ kind: 'unmapped', nativeType: 'file_change.changes-over-cap', count: 88 }));
+  const shells = events.filter(event => event.kind === 'tool.call' && event.name === 'shell');
+  expect(shells).toHaveLength(2); expect(new Set(shells.map(event => event.kind === 'tool.call' && event.toolId)).size).toBe(2);
+  const results = events.filter(event => event.kind === 'tool.result' && shells.some(call => call.kind === 'tool.call' && call.toolId === event.toolId));
+  expect(results.map(event => event.kind === 'tool.result' && event.status)).toEqual(['ok', 'error']);
+});
+
+it('never lets a normalizer or delivery fault escape the bridge line observer, and keeps observing afterwards', () => {
+  const state = createNormalizerState([], 0), delivered: unknown[] = [];
+  let fail = true;
+  const observer = createNativeLineObserver('codex', state, createCodexState(), events => { if (fail) { fail = false; throw new Error('channel down'); } delivered.push(...events); });
+  const lines = [JSON.stringify({ type: 'item.completed', item: { id: 'm', type: 'agent_message', text: 'first' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: 'b', type: 'file_change', status: 'completed', changes: [null] } }),
+    JSON.stringify({ type: 'item.completed', item: { id: 'n', type: 'agent_message', text: 'after' } })];
+  expect(() => observer.observe(Buffer.from(lines.join('\n') + '\n'))).not.toThrow();
+  expect(() => observer.observe(Buffer.from('{"type":"turn.completed","usage":{}}'))).not.toThrow();
+  observer.flush();
+  expect(delivered).toContainEqual(expect.objectContaining({ kind: 'message', excerpt: 'after' }));
+  expect(delivered).toContainEqual(expect.objectContaining({ kind: 'session.ended', outcome: 'success' }));
+  expect(state.unmapped.get('normalizer-error')).toBe(1);
 });

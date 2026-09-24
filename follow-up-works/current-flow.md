@@ -1,5 +1,21 @@
 # Anlık iş akışı — Opus 5.5; T-L1 okuma araçları teslimde; sonraki T-L2 araç çağrısı (openai-chat) → T-L3 engine döngüsü; GPU yasağı
 
+## Astra 2066–2068 (2026-09-24 gece) — işlendi ve tüketildi
+
+- **2066 REVISE B09-3 Codex (`4eec455`, push edilmişti):** R1 P1 yeni alanlarda sır maskelenmiyor (`miss` nativeType, `file_change.kind`
+  detail) → tüm taşınan alanlara redaksiyon, `kind` izinli enum; R2 P1 bozuk iç içe veri (`changes:[null]`) normalizer'ı düşürür, stdout
+  dinleyicisi exception sınırı yok → doğrula, bozuk kaydı sayılı kanıta çevir, gözlem callback'i yürütmeyi etkilemesin; R3 P2 >64 değişiklik
+  sessiz eksik, `id(96)+':i'` şema sınırını aşar → tümünü işle veya kaybı say, sınırlı kararlı kimlik; MCP bilinmeyen status başarı sayılmasın.
+  Kaynak: codex rust-v0.155.1 `sdk/typescript/src/items.ts`. Astra probe: `proof/ASTRA-2062-2064-20260924/`.
+- **2067/2068 terminal tasarımı REVISE (2068 owner yönüne göre günceller):** D1 onay kaynak+normalize argüman özeti+principal+scope+
+  turn/toolCall kimliğine bağlı, kart gruplaması izin kapsamı değil, require-approval/deny bypass yok; D3 ilk engine döngüsünde turnId + scoped
+  commandId + single-flight + round invocationRef + toolCall/effectRef + makbuz (yeniden bağlanma/duplicate ikinci ücretli çağrı üretmez);
+  D4 host dosya/komut sınırı dürüst (TOCTOU, hardlink, .git hook/config, meta-tool bypass negatifleri; deny-list güvenlik sınırı değil);
+  D5 sağlayıcıdan bağımsız turn içerik/araç/sonuç/hata/kullanım sözleşmesi, bozuk çağrı asla yürütülmez; D6 legacy kanıt tarihli
+  (narration/interim/reasoning-control mekanizmaları legacy'de var, sorumlulukları alınır). 2068: varsayılan container ve zorunlu toplam
+  bütçe geri çekildi; `maxCalls:50` döngüde aşılmaz, terminale uygun sürümlü allocation semantiği owner kararı; T-L3'e durable turn +
+  asgari context admission + auto-compaction; T-L4'e gerçek permission/effect köprüsü. İstenen: T-L2 öncesi kısa sözleşme notu.
+
 ## T-L1 — araç sözleşmesi + okuma/arama araçları (2026-09-24 gece)
 
 Legacy `native-read-file.ts`/`native-grep.ts`/`chat-tool-exec.ts`'den taşındı (asenkron fs; düz yol da sınırlı görünüm). Testler owner vakasını

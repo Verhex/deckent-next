@@ -36,6 +36,11 @@ export interface NormalizerState { sequence: number; readonly startMs: number; c
 export function createNormalizerState(secrets: readonly string[], startMs = Date.now()): NormalizerState {
   return { sequence: 0, startMs, cwd: '/workspace', usageIds: new Set(), unmapped: new Map(), secrets };
 }
+/** Unmapped native type names are worker text too: redacted and bounded before they become counts (Astra 2066 R1). */
+export function countUnmapped(state: NormalizerState, raw: string, count = 1): void {
+  const key = redactText(raw, state.secrets, 64) || 'empty';
+  state.unmapped.set(key, (state.unmapped.get(key) ?? 0) + count);
+}
 const num = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function relative(path: unknown, cwd: string): string | null {
   if (typeof path !== 'string' || !path) return null;
@@ -48,7 +53,7 @@ function relative(path: unknown, cwd: string): string | null {
 export function normalizeClaudeLine(line: string, state: NormalizerState, now = Date.now()): BridgeEvent[] {
   const events: BridgeEvent[] = [];
   const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
-  const miss = (type: string) => state.unmapped.set(type.slice(0, 64), (state.unmapped.get(type.slice(0, 64)) ?? 0) + 1);
+  const miss = (type: string) => countUnmapped(state, type);
   const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
   let data: Record<string, unknown>;
   try { const parsed: unknown = JSON.parse(line); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { miss('non-object'); return events; } data = parsed as Record<string, unknown>; }
@@ -112,54 +117,85 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
   return events;
 }
 const CODEX_KNOWN = new Set(['thread.started', 'turn.started', 'item.updated']);
-/** Codex state beyond the shared normalizer state: seen tool items and running token totals for the final summary. */
+const CODEX_CHANGE_KINDS: Readonly<Record<string, 'write' | 'edit'>> = { add: 'write', update: 'edit', delete: 'edit' };
+/** Changes attributed per file_change item; the rest are counted as unmapped, never silently dropped (Astra 2066 R3). */
+const CODEX_MAX_CHANGES = 512;
+/** Codex state beyond the shared normalizer state: seen tool items (by native id) and running token totals for the summary. */
 export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; readonly tokens: { input: number; output: number; cacheRead: number; thinking: number | null } }
 export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, tokens: { input: 0, output: 0, cacheRead: 0, thinking: null } }; }
+const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 /**
- * Maps one line of `codex exec --json` onto contract events (B09-3). Event names are the ones the pinned Codex 0.155.1
- * binary carries (thread/turn/item events; agent_message, reasoning, command_execution, file_change, mcp_tool_call,
- * web_search, todo_list items). Agent text is kept only as a redacted excerpt, reasoning and command output never.
- * `codex exec` runs one turn, so turn.completed/turn.failed end the session.
+ * Maps one line of `codex exec --json` onto contract events (B09-3). Shapes follow the pinned Codex 0.155.1 SDK item types
+ * (openai/codex rust-v0.155.1 sdk/typescript/src/items.ts): command_execution, file_change, mcp_tool_call, web_search,
+ * agent_message, reasoning, todo_list, error. Agent text is a redacted excerpt; reasoning and command output are never kept.
+ * Unknown or malformed values are counted as unmapped and never become success; this function never throws (observation must
+ * not change execution). `codex exec` runs one turn, so turn.completed/turn.failed end the session.
  */
 export function normalizeCodexLine(line: string, state: NormalizerState, codex: CodexNormalizerState, now = Date.now()): BridgeEvent[] {
   const events: BridgeEvent[] = [];
+  try { mapCodexLine(line, state, codex, now, events); }
+  catch { countUnmapped(state, 'codex-invalid'); }
+  return events;
+}
+function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormalizerState, now: number, events: BridgeEvent[]): void {
   const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
-  const miss = (type: string) => state.unmapped.set(type.slice(0, 64), (state.unmapped.get(type.slice(0, 64)) ?? 0) + 1);
+  const miss = (type: string, count = 1) => countUnmapped(state, type, count);
   const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
-  let data: Record<string, unknown>;
-  try { const parsed: unknown = JSON.parse(line); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { miss('non-object'); return events; } data = parsed as Record<string, unknown>; }
-  catch { if (line.trim()) miss('non-json'); return events; }
+  let parsed: unknown;
+  try { parsed = JSON.parse(line); } catch { if (line.trim()) miss('non-json'); return; }
+  const data = record(parsed);
+  if (!data) { miss('non-object'); return; }
   const type = typeof data.type === 'string' ? data.type : 'untyped';
-  const call = (id: string, name: string, toolClass: string, target: string | null, detail: string | null) => {
-    if (codex.calls.has(id)) return;
-    codex.calls.add(id); emit('tool.call', { toolId: id, name, toolClass, target, detail: detail || null });
+  /** Stable, bounded, schema-valid tool id: a plain short native id as is, otherwise a digest (never the redacted text). */
+  const toolId = (raw: string, suffix = '') => {
+    const base = raw.length > 0 && raw.length <= 64 && /^[A-Za-z0-9_.:-]+$/.test(raw) && red(raw, 96) === raw ? raw : `h${createHash('sha256').update(raw).digest('hex').slice(0, 40)}`;
+    return `${base}${suffix}`;
+  };
+  const call = (key: string, id: string, name: string, toolClass: string, target: string | null, detail: string | null) => {
+    if (codex.calls.has(key)) return;
+    codex.calls.add(key); emit('tool.call', { toolId: id, name, toolClass, target, detail: detail || null });
   };
   if (type === 'item.started' || type === 'item.completed') {
-    const item = (data.item ?? {}) as Record<string, unknown>, itemType = typeof item.type === 'string' ? item.type : 'untyped';
-    const id = red(item.id, 96) || `item-${state.sequence + 1}`, done = type === 'item.completed';
-    const status = typeof item.status === 'string' ? item.status : '';
-    if (itemType === 'agent_message') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(item.text ?? '')), thinking: false, excerpt: red(item.text, 240) }); }
-    else if (itemType === 'reasoning') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(item.text ?? '')), thinking: true, excerpt: '' }); }
-    else if (itemType === 'command_execution') {
-      call(id, 'shell', 'shell', null, red(item.command, 240));
-      if (done) emit('tool.result', { toolId: id, status: status === 'completed' && item.exit_code === 0 ? 'ok' : 'error',
+    const item = record(data.item);
+    if (!item || typeof item.id !== 'string' || typeof item.type !== 'string') { miss('item-invalid'); return; }
+    const rawId = item.id, id = toolId(rawId), done = type === 'item.completed', status = item.status;
+    if (item.type === 'agent_message') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(typeof item.text === 'string' ? item.text : ''), thinking: false, excerpt: red(item.text, 240) }); }
+    else if (item.type === 'reasoning') { if (done) emit('message', { role: 'assistant', textBytes: Buffer.byteLength(typeof item.text === 'string' ? item.text : ''), thinking: true, excerpt: '' }); }
+    else if (item.type === 'command_execution') {
+      call(rawId, id, 'shell', 'shell', null, red(item.command, 240));
+      if (!done) return;
+      if (status === 'completed' || status === 'failed') emit('tool.result', { toolId: id, status: status === 'completed' && item.exit_code === 0 ? 'ok' : 'error',
         bytes: Buffer.byteLength(typeof item.aggregated_output === 'string' ? item.aggregated_output : '') });
-    } else if (itemType === 'file_change') {
-      // One apply_patch may touch several files: one call per path so every touched file is attributed.
-      const changes = Array.isArray(item.changes) ? item.changes as Record<string, unknown>[] : [];
-      changes.slice(0, 64).forEach((change, index) => {
-        const target = relative(change.path, state.cwd), changeId = `${id}:${index}`;
-        call(changeId, 'apply_patch', change.kind === 'add' ? 'write' : 'edit', target === null ? null : red(target, 256) || null, String(change.kind ?? '').slice(0, 16) || null);
-        if (done) emit('tool.result', { toolId: changeId, status: status === 'completed' ? 'ok' : 'error', bytes: 0 });
+      else miss('command_execution.status');
+    } else if (item.type === 'file_change') {
+      // One apply_patch may touch several files: one call per path so every touched file is attributed, up to the cap.
+      const changes = Array.isArray(item.changes) ? item.changes : [];
+      changes.slice(0, CODEX_MAX_CHANGES).forEach((entry, index) => {
+        const change = record(entry);
+        if (!change || typeof change.path !== 'string') { miss('file_change.change-invalid'); return; }
+        const kind = typeof change.kind === 'string' ? CODEX_CHANGE_KINDS[change.kind] : undefined;
+        if (!kind) miss('file_change.kind');
+        const target = relative(change.path, state.cwd), changeId = toolId(rawId, `:${index}`);
+        call(`${rawId}\u0000${index}`, changeId, 'apply_patch', kind ?? 'edit', target === null ? null : red(target, 256) || null, kind ? String(change.kind) : null);
+        if (!done) return;
+        if (status === 'completed' || status === 'failed') emit('tool.result', { toolId: changeId, status: status === 'completed' ? 'ok' : 'error', bytes: 0 });
+        else miss('file_change.status');
       });
-    } else if (itemType === 'mcp_tool_call' || itemType === 'web_search') {
-      const name = itemType === 'web_search' ? 'web_search' : red(`mcp:${String(item.server ?? '')}/${String(item.tool ?? '')}`, 64);
-      call(id, name, 'network', null, itemType === 'web_search' ? red(item.query, 240) : null);
-      if (done) emit('tool.result', { toolId: id, status: status === 'failed' ? 'error' : 'ok', bytes: 0 });
-    } else if (itemType !== 'todo_list') miss(`item:${itemType}`);
+      if (changes.length > CODEX_MAX_CHANGES) miss('file_change.changes-over-cap', changes.length - CODEX_MAX_CHANGES);
+    } else if (item.type === 'mcp_tool_call') {
+      call(rawId, id, red(`mcp:${String(item.server ?? '')}/${String(item.tool ?? '')}`, 64) || 'mcp', 'network', null, null);
+      if (!done) return;
+      // An unknown or missing status never becomes success.
+      if (status === 'completed' || status === 'failed') emit('tool.result', { toolId: id, status: status === 'completed' ? 'ok' : 'error', bytes: 0 });
+      else miss('mcp_tool_call.status');
+    } else if (item.type === 'web_search') {
+      call(rawId, id, 'web_search', 'network', null, red(item.query, 240));
+      if (done) emit('tool.result', { toolId: id, status: 'ok', bytes: 0 });
+    } else if (item.type === 'error') { if (done) miss('item:error'); }
+    else if (item.type !== 'todo_list') miss(`item:${item.type}`);
   } else if (type === 'turn.completed' || type === 'turn.failed') {
     codex.turns++;
-    const usage = (data.usage ?? {}) as Record<string, unknown>, cached = num(usage.cached_input_tokens);
+    const usage = record(data.usage) ?? {}, cached = num(usage.cached_input_tokens);
     // OpenAI input totals include cached tokens; the contract counts them apart, like Claude's cache_read.
     const tokens = { input: Math.max(0, num(usage.input_tokens) - cached), output: num(usage.output_tokens), cacheRead: cached, cacheWrite: 0,
       thinking: typeof usage.reasoning_output_tokens === 'number' ? num(usage.reasoning_output_tokens) : null };
@@ -171,7 +207,29 @@ export function normalizeCodexLine(line: string, state: NormalizerState, codex: 
     emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
       apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens, cacheWrite: 0 }, permissionDenials: 0 });
   } else if (!CODEX_KNOWN.has(type)) miss(type);
-  return events;
+}
+/**
+ * Splits a native stdout stream into lines and normalizes each onto contract events. Observation never changes execution:
+ * a normalizer or delivery fault is counted as unmapped and never thrown into the child process listeners (Astra 2066 R2).
+ */
+export function createNativeLineObserver(provider: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void) {
+  let pending = '';
+  const normalizeLine = (line: string) => {
+    try {
+      if (provider === 'claude') push(normalizeClaudeLine(line, state));
+      else if (provider === 'codex') push(normalizeCodexLine(line, state, codex));
+      else if (line.trim()) countUnmapped(state, `${provider}-event`);
+    } catch { countUnmapped(state, 'normalizer-error'); }
+  };
+  return {
+    observe(part: Buffer) {
+      pending += part.toString('utf8');
+      const lines = pending.split('\n'); pending = lines.pop() ?? '';
+      if (pending.length > 1_048_576) { countUnmapped(state, 'oversized-line'); pending = ''; }
+      for (const line of lines) normalizeLine(line);
+    },
+    flush() { if (pending) normalizeLine(pending); pending = ''; },
+  };
 }
 /** Unmapped native event types are reported as counts, never silently dropped. */
 export function flushUnmapped(state: NormalizerState, now = Date.now()): BridgeEvent[] {
@@ -286,23 +344,14 @@ async function main() {
     argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(delivery.task),
     segments: delivery.segments }) + '\n'));
   // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
-  let tail = ''; let bytes = 0; let pending = '';
+  let tail = ''; let bytes = 0;
   const state = createNormalizerState([...secretValues(setup.credential), proxy]);
   const channel = eventChannel(socketPath);
   const codex = createCodexState();
   if (setup.provider !== 'claude') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
-  const observe = (part: Buffer) => {
-    capture(part);
-    pending += part.toString('utf8');
-    const lines = pending.split('\n'); pending = lines.pop() ?? '';
-    if (pending.length > 1_048_576) { state.unmapped.set('oversized-line', (state.unmapped.get('oversized-line') ?? 0) + 1); pending = ''; }
-    for (const line of lines) {
-      if (setup.provider === 'claude') channel.push(normalizeClaudeLine(line, state));
-      else if (setup.provider === 'codex') channel.push(normalizeCodexLine(line, state, codex));
-      else if (line.trim()) state.unmapped.set(`${setup.provider}-event`, (state.unmapped.get(`${setup.provider}-event`) ?? 0) + 1);
-    }
-  };
+  const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events));
+  const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);
   const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {
     child.on('error', () => resolve({ code: null, signal: null }));
@@ -312,8 +361,7 @@ async function main() {
     : /quota|rate.limit|usage.limit|429/i.test(tail) ? 'capacity'
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
     : /connect|proxy|network|fetch failed|socket|ENOTFOUND|ECONN/i.test(tail) ? 'connection' : 'native';
-  if (pending && setup.provider === 'claude') channel.push(normalizeClaudeLine(pending, state));
-  if (pending && setup.provider === 'codex') channel.push(normalizeCodexLine(pending, state, codex));
+  lineObserver.flush();
   channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
     failure: result.code === 0 ? null : failure }) + '\n');

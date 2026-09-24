@@ -4,6 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- EXECUTION/B09-3 REVISE (Astra 2066): Codex normalization redacts every carried field (also unmapped type names, for Claude too),
+  counts unknown kinds/statuses and malformed nested data instead of reporting success or throwing, attributes up to 512 files per
+  patch and counts the rest, and uses bounded stable tool ids; the bridge's line observer is exception-safe so observation can never
+  change execution.
+
 - SURFACES/T-L1: agent tool contract (`domain/core/agent-tool`) and the terminal's read/search tools (`adapters/core/workspace-read`:
   read_file outline/range/search with long-line continuations, list_dir, grep, glob), ported from the legacy terminal with every
   result byte-bounded, workspace real-path confinement, symlink-escape refusal and a Core deny floor for secrets and Deckent host state.

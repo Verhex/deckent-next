@@ -801,7 +801,11 @@ pure recomputations from events — no model call, no scoring. `task transcript`
 failure to record or seal never changes execution. Claude and Codex are normalized (Codex `exec --json`: thread/turn/item
 events of the pinned 0.155.1 CLI — command executions are shell calls, each `file_change` path is its own edit/write call,
 agent text is a redacted excerpt, reasoning and command output are never kept, cached input tokens are counted apart, one
-turn ends the session; mapped from the binary's event vocabulary, not yet from a recorded live run). Cursor reports only
+turn ends the session; shapes follow the pinned Codex 0.155.1 SDK item types, not yet a recorded live run). Every carried
+field, unmapped type names included, is redacted before bounding; unknown kinds and statuses are counted as unmapped and never
+become success; malformed nested data is counted, and the bridge's line observer never lets a normalizer or delivery fault reach
+the child process listeners; a file_change attributes up to 512 paths and counts the rest; tool ids are stable, bounded digests
+when the native id is long or unsafe (Astra 2066). Cursor reports only
 `session.started` and unmapped counts until its normalizer lands. Structured final report, budgets (B09-2),
 `report workers` and live `workers watch` phases (B09-3) remain open.
 
