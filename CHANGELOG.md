@@ -4,6 +4,14 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURFACES/T-L1 REVISE (Astra 2072): read tools open every path descriptor-relative from the workspace root with no-follow per
+  component and re-check the descriptor's path (parent/root swaps refused), refuse hard-linked files, open non-blocking and read
+  only regular files, run regular expressions in a cancellable worker thread, carry the cancel signal into every tool, cut every
+  result branch to the cap, validate argument sizes and limits, and report directories and special files they could not scan.
+  Linux/WSL only; other platforms fail closed.
+- EXECUTION/B09-3 REVISE (Astra 2073): Codex change kinds are matched on own keys only (prototype names are unknown kinds);
+  malformed usage is reported as unknown, not as zero tokens.
+
 - EXECUTION/B09-3 REVISE (Astra 2066): Codex normalization redacts every carried field (also unmapped type names, for Claude too),
   counts unknown kinds/statuses and malformed nested data instead of reporting success or throwing, attributes up to 512 files per
   patch and counts the rest, and uses bounded stable tool ids; the bridge's line observer is exception-safe so observation can never

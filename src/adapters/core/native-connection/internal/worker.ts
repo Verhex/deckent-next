@@ -121,8 +121,8 @@ const CODEX_CHANGE_KINDS: Readonly<Record<string, 'write' | 'edit'>> = { add: 'w
 /** Changes attributed per file_change item; the rest are counted as unmapped, never silently dropped (Astra 2066 R3). */
 const CODEX_MAX_CHANGES = 512;
 /** Codex state beyond the shared normalizer state: seen tool items (by native id) and running token totals for the summary. */
-export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; readonly tokens: { input: number; output: number; cacheRead: number; thinking: number | null } }
-export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, tokens: { input: 0, output: 0, cacheRead: 0, thinking: null } }; }
+export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; thinking: number | null } }
+export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, thinking: null } }; }
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 /**
  * Maps one line of `codex exec --json` onto contract events (B09-3). Shapes follow the pinned Codex 0.155.1 SDK item types
@@ -173,7 +173,8 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
       changes.slice(0, CODEX_MAX_CHANGES).forEach((entry, index) => {
         const change = record(entry);
         if (!change || typeof change.path !== 'string') { miss('file_change.change-invalid'); return; }
-        const kind = typeof change.kind === 'string' ? CODEX_CHANGE_KINDS[change.kind] : undefined;
+        // Own keys only: '__proto__', 'constructor' and other inherited names are unknown kinds, not an allowed enum (Astra 2073).
+        const kind = typeof change.kind === 'string' && Object.hasOwn(CODEX_CHANGE_KINDS, change.kind) ? CODEX_CHANGE_KINDS[change.kind] : undefined;
         if (!kind) miss('file_change.kind');
         const target = relative(change.path, state.cwd), changeId = toolId(rawId, `:${index}`);
         call(`${rawId}\u0000${index}`, changeId, 'apply_patch', kind ?? 'edit', target === null ? null : red(target, 256) || null, kind ? String(change.kind) : null);
@@ -195,12 +196,20 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
     else if (item.type !== 'todo_list') miss(`item:${item.type}`);
   } else if (type === 'turn.completed' || type === 'turn.failed') {
     codex.turns++;
-    const usage = record(data.usage) ?? {}, cached = num(usage.cached_input_tokens);
+    // A missing or malformed usage record is unknown, never a measured zero (Astra 2073).
+    const usage = record(data.usage);
+    if (!usage) {
+      if (data.usage !== undefined) miss('usage-invalid');
+      emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
+        apiDurationMs: null, costUsd: null, costBasis: null, tokens: codex.measured ? { ...codex.tokens, cacheWrite: 0 } : null, permissionDenials: 0 });
+      return;
+    }
+    const cached = num(usage.cached_input_tokens);
     // OpenAI input totals include cached tokens; the contract counts them apart, like Claude's cache_read.
     const tokens = { input: Math.max(0, num(usage.input_tokens) - cached), output: num(usage.output_tokens), cacheRead: cached, cacheWrite: 0,
       thinking: typeof usage.reasoning_output_tokens === 'number' ? num(usage.reasoning_output_tokens) : null };
     if (type === 'turn.completed') {
-      emit('usage', { tokens });
+      emit('usage', { tokens }); codex.measured = true;
       codex.tokens.input += tokens.input; codex.tokens.output += tokens.output; codex.tokens.cacheRead += tokens.cacheRead;
       if (tokens.thinking !== null) codex.tokens.thinking = (codex.tokens.thinking ?? 0) + tokens.thinking;
     }

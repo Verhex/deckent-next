@@ -1,4 +1,31 @@
-# Anlık iş akışı — Opus 5.5; T-L1 okuma araçları teslimde; sonraki T-L2 araç çağrısı (openai-chat) → T-L3 engine döngüsü; GPU yasağı
+# Anlık iş akışı — Opus 5.5; Astra 2072–2074 REVISE uygulanıyor, sonra T-L2; owner: yerel terminal allocation limitsiz (maxCalls:null) onaylı; GPU yasağı
+
+## Astra 2072–2074 (2026-09-25) — işlendi ve tüketildi; owner allocation kararı
+
+Owner 2026-09-25: yerel terminal profilinde ömür boyu çağrı sınırı yok (`maxCalls: null`, sürümlü ve audit'li; maxInFlight, policy,
+kapasite ve harcama yetkisi sürer; API profilleri etkilenmez).
+- **2073 REVISE (Codex, 5fddba0):** `CODEX_CHANGE_KINDS[kind]` prototip anahtarlarını (`__proto__`, `constructor`, `toString`) izinli sanıyor
+  → Object.hasOwn/Map; geçersiz usage 0 token gibi gösterilmesin.
+- **2072 REVISE (T-L1, a522aa0):** R1 P1 resolve→open TOCTOU (üst dizin değişimi dış dosyayı okuyor) ve korunan dosyaya hardlink →
+  tanımlayıcıya göre (fd-relative) erişim, desteklenen platform garantisi; R2 P1 senkron regex (catastrophic backtracking) ve FIFO open
+  servisi bloklar, sinyal araçlara ulaşmıyor → iptal edilebilir yürütücü, bloklamayan tip kontrolü, sinyal yayılımı; R3 P2 hata/meta
+  dalları bayt sınırını aşıyor → tüm dallarda ortak sınır + argüman boyutu doğrulama; R4 P2 derinlik/readdir atlamaları sessiz → yapısal
+  "tam taranmadı" sayımı. Astra probe: `proof/ASTRA-2069-2071-20260925/`.
+- **2074 ANALYSIS (sözleşme notu):** okuma araçları T-L3'te policy'den geçer; `UNIQUE(scopeId, turnId)` + içerik uyuşmazlığında tipli çakışma
+  + asıl principal; sıkıştırma korunan kayıtları engine'in kanonik durumundan taşır, sıkıştırma çağrısı yönetilen ve idempotent; olay akışı
+  cursor/sequence; tekrar tespiti yalnız saf okumalar için sürüm/tazelikle; `maxCalls:null` yalnız ömür boyu sınırı kaldırır.
+
+## Astra 2026-09-25 — 2069/2070/2071 incelemesi
+
+HEAD `5fddba00bafe4f0fe2dc0250879ed5720bd477ad`. Bağımsız 2 dosya/11 test PASS (2,07s); ek kaynak probe'ları:
+T-L1 resolve→open parent swap dış dosyayı okudu; denied hardlink okundu; pre-abort read status ok;
+16 KiB cap'te 20119 B search / 20044 B hata; derin dosya “no matches” içinde sessiz atlandı. 30 a+! / `^(a+)+$`
+regex 25ms abort timer'ını kilitledi; FIFO'da timer çalıştı ama read bitmedi (ikisi de 1500ms parent kill, fixture temizlendi).
+Codex önceki 6 negatif probe düzeldi; kalan P2 `CODEX_CHANGE_KINDS` inherited property lookup → schema-invalid call + ok result.
+Kanıt: dış `proof/ASTRA-2069-2071-20260925/`; yazar verify1813/317 ve 1816/317 exit0 logları incelendi, tam suite tekrar yok.
+2071 notu ana tasarım düzeltmelerini karşılıyor; read policy T-L3'te, scoped turn unique/conflict/replay auth, canonical compaction
+ve query freshness ayrımı netleşmeli. Allocation önerisi bu incelemeyle kabul edilmedi. Sonraki adım Opus'un dar düzeltmeleri;
+ürün kodu/build/commit/push/GPU/canlı model çalıştırılmadı.
 
 ## Astra 2066–2068 (2026-09-24 gece) — işlendi ve tüketildi
 

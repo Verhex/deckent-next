@@ -123,7 +123,16 @@ it('keeps secrets out of every Codex-derived field, never turns unknown status i
   expect(events.some(event => event.kind === 'tool.result' && event.toolId === 'c')).toBe(false);
   const unmapped = Object.fromEntries(events.flatMap(event => event.kind === 'unmapped' ? [[event.nativeType, event.count]] : []));
   expect(unmapped).toMatchObject({ 'file_change.kind': 1, 'file_change.change-invalid': 2, 'mcp_tool_call.status': 1, 'item-invalid': 1 });
-  expect(events.find(event => event.kind === 'session.ended')).toMatchObject({ outcome: 'success', tokens: { input: 0, output: 0 } });
+  // Malformed usage is unknown, not a measured zero.
+  expect(events.find(event => event.kind === 'session.ended')).toMatchObject({ outcome: 'success', tokens: null });
+  expect(unmapped).toMatchObject({ 'usage-invalid': 1 });
+  // Inherited property names are unknown kinds too (Astra 2073).
+  const proto = createNormalizerState([], 0), protoCodex = createCodexState();
+  const protoEvents = [...['__proto__', 'constructor', 'toString', 'hasOwnProperty'].flatMap((kind, i) => normalizeCodexLine(JSON.stringify({ type: 'item.completed',
+    item: { id: `k${i}`, type: 'file_change', status: 'completed', changes: [{ path: '/workspace/a.ts', kind }] } }), proto, protoCodex, 1)), ...flushUnmapped(proto, 2)]
+    .map(event => workerEventSchema.parse(event)) as WorkerEvent[];
+  expect(protoEvents.filter(event => event.kind === 'tool.call').every(event => event.kind === 'tool.call' && event.toolClass === 'edit' && event.detail === null)).toBe(true);
+  expect(protoEvents).toContainEqual(expect.objectContaining({ kind: 'unmapped', nativeType: 'file_change.kind', count: 4 }));
 });
 
 it('attributes every file of a large patch up to the cap and counts the rest; long and shared-prefix ids stay distinct and schema-valid', () => {

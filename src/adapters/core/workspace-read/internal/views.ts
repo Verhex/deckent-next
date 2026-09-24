@@ -110,15 +110,20 @@ export function compileSearchPattern(pattern: string, literal: boolean, ignoreCa
   try { return new RegExp(source, ignoreCase ? 'iu' : 'u'); } catch { return null; }
 }
 
-/** grep -n style search with bounded context; `nextStartLine` resumes right after the last shown match. */
-export function renderSearchView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
+/** The pattern as shown in a meta line: bounded, so a long pattern cannot push a result past its byte cap (Astra 2072 R3). */
+export const metaPattern = (pattern: string) => JSON.stringify(sliceUtf8(Buffer.from(pattern, 'utf8'), 256));
+
+/**
+ * grep -n style search with bounded context; `nextStartLine` resumes right after the last shown match. The matching line indexes
+ * come from the cancellable regex runner, never from a regular expression evaluated on this thread.
+ */
+export function renderSearchView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget, matchingLines: ReadonlySet<number> | null): string {
   const lines = splitLines(text), totalLines = lines.length, patternText = req.pattern ?? '';
-  const re = patternText.length === 0 ? null : compileSearchPattern(patternText, req.literal, req.ignoreCase);
-  if (re === null) return `[deckent] read_file: mode=search pattern=${JSON.stringify(patternText)} error=invalid-pattern totalLines=${totalLines} matches=0 shown=0 hasMore=false`;
+  if (matchingLines === null) return `[deckent] read_file: mode=search pattern=${metaPattern(patternText)} error=invalid-pattern totalLines=${totalLines} matches=0 shown=0 hasMore=false`;
   const bodyBudget = Math.max(0, budget.maxTotalBytes - META_RESERVE_BYTES), body: string[] = [];
   let used = 0, matches = 0, shown = 0, hasMore = false, next: number | null = null, lastEmitted = 0;
   for (let i = Math.max(0, req.startLine - 1); i < totalLines; i++) {
-    if (!re.test(lines[i]!)) continue;
+    if (!matchingLines.has(i)) continue;
     matches++;
     if (shown >= req.maxMatches) { hasMore = true; next = i + 1; break; }
     const from = Math.max(i - req.context, lastEmitted), to = Math.min(totalLines - 1, i + req.context), block: string[] = [];
@@ -128,14 +133,14 @@ export function renderSearchView(text: string, req: ReadFileViewRequest, budget:
     if (used + bytes > bodyBudget) { hasMore = true; next = i + 1; break; }
     body.push(blockText); used += bytes; shown++; lastEmitted = to + 1;
   }
-  const meta = `[deckent] read_file: mode=search pattern=${JSON.stringify(patternText)}${req.literal ? ' literal=true' : ''}${req.ignoreCase ? ' ignoreCase=true' : ''}`
+  const meta = `[deckent] read_file: mode=search pattern=${metaPattern(patternText)}${req.literal ? ' literal=true' : ''}${req.ignoreCase ? ' ignoreCase=true' : ''}`
     + ` totalLines=${totalLines} matches=${hasMore ? `${matches}+` : matches} shown=${shown} context=${req.context} hasMore=${hasMore}`
     + `${next !== null ? ` nextStartLine=${next}` : ''} maxBytesPerLine=${budget.maxBytesPerLine}`;
   return [meta, ...body].join('\n');
 }
 
-/** The rendered view is at most `budget.maxTotalBytes` by construction. */
-export function renderReadFileView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget): string {
+/** The rendered view body stays within `budget.maxTotalBytes`; the caller enforces the final cap on every branch. */
+export function renderReadFileView(text: string, req: ReadFileViewRequest, budget: ReadFileBudget, matchingLines: ReadonlySet<number> | null = null): string {
   const effective = req.maxBytesPerLine !== undefined ? resolveReadFileBudget(budget.maxTotalBytes, req.maxBytesPerLine) : budget;
-  return req.mode === 'outline' ? renderOutlineView(text, req, effective) : req.mode === 'search' ? renderSearchView(text, req, effective) : renderRangeView(text, req, effective);
+  return req.mode === 'outline' ? renderOutlineView(text, req, effective) : req.mode === 'search' ? renderSearchView(text, req, effective, matchingLines) : renderRangeView(text, req, effective);
 }

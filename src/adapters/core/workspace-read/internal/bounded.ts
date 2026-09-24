@@ -1,4 +1,4 @@
-import { constants, open } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 
 // Ported from the legacy terminal (deckent-dev src/cli/repl/native-read-file.ts, native-grep.ts): every rendered result is
 // bounded by construction, long lines are elided behind a marker that names the exact continuation, nothing is silently cut.
@@ -45,25 +45,24 @@ export function boundLine(line: string, lineNumber: number, byteOffset: number, 
   return { text: `${prefix}${head} ${marker(total - next, next)}`, elidedBytes: total - next };
 }
 
-export type ReadSkipKind = 'binary' | 'too-large' | 'read-error';
+export type ReadSkipKind = 'binary' | 'too-large' | 'read-error' | 'cancelled';
 export type BoundedRead = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly kind: ReadSkipKind; readonly detail: string };
 
-const BINARY_PROBE_BYTES = 8192;
+const BINARY_PROBE_BYTES = 8192, READ_CHUNK_BYTES = 1 << 20;
 /**
- * One descriptor, no symlink follow on the final component, size checked before and after (a file changed while reading is
- * reported, not returned), allocation capped at the limit, NUL bytes mean binary.
+ * Reads an already opened and checked regular file (see scope.open / openWalkedFile): allocation capped at the file size, size
+ * and mtime compared before and after (a file changed while reading is reported, not returned), NUL bytes mean binary, the
+ * signal is honoured between chunks. The handle is always closed.
  */
-export async function readBoundedTextFile(fileAbs: string, maxFileBytes: number): Promise<BoundedRead> {
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
+export async function readBoundedTextFile(handle: FileHandle, maxFileBytes: number, signal?: AbortSignal): Promise<BoundedRead> {
   try {
-    handle = await open(fileAbs, constants.O_RDONLY | constants.O_NOFOLLOW);
     const before = await handle.stat();
-    if (!before.isFile()) return { ok: false, kind: 'read-error', detail: 'not a file' };
     if (before.size > maxFileBytes) return { ok: false, kind: 'too-large', detail: `${before.size} bytes > limit ${maxFileBytes}` };
     const buf = Buffer.alloc(before.size + 1);
     let read = 0;
     while (read < buf.length) {
-      const { bytesRead } = await handle.read(buf, read, buf.length - read, null);
+      if (signal?.aborted) return { ok: false, kind: 'cancelled', detail: 'cancelled' };
+      const { bytesRead } = await handle.read(buf, read, Math.min(READ_CHUNK_BYTES, buf.length - read), null);
       if (bytesRead === 0) break;
       read += bytesRead;
     }
@@ -75,5 +74,5 @@ export async function readBoundedTextFile(fileAbs: string, maxFileBytes: number)
     if (body.subarray(0, BINARY_PROBE_BYTES).includes(0)) return { ok: false, kind: 'binary', detail: 'contains NUL byte' };
     return { ok: true, text: body.toString('utf8') };
   } catch { return { ok: false, kind: 'read-error', detail: 'read failed' }; }
-  finally { await handle?.close().catch(() => undefined); }
+  finally { await handle.close().catch(() => undefined); }
 }

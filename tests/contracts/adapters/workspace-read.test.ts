@@ -1,12 +1,13 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createWorkspaceReadTools, WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
+import { createWorkspaceReadTools, createWorkspaceScope, MAX_WALK_DEPTH, WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { agentToolSpecSchema } from '#domain/index.js';
 
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(roots.splice(0).map(async root => { execFileSync('chmod', ['-R', 'u+rwx', root]); await rm(root, { recursive: true, force: true }); })); });
 
 async function workspace(files: Record<string, string | Buffer>) {
   const base = await mkdtemp(join(tmpdir(), 'dn-workspace-read-')); roots.push(base);
@@ -57,7 +58,7 @@ it('keeps every read inside the workspace: traversal, absolute paths, symlink es
     expect(result.text).not.toContain('secret');
   }
   const listing = await tools.execute('list_dir', {});
-  expect(listing.text.split('\n')).toEqual(expect.arrayContaining(['src/', 'keys/', 'link.txt']));
+  expect(listing.text.split('\n')).toEqual(expect.arrayContaining(['src/', 'keys/', 'link.txt@']));
   expect(listing.text).not.toMatch(/^\.env$/m); expect(listing.text).toMatch(/protected entr/);
   const grep = await tools.execute('grep', { pattern: 'secret' });
   expect(grep.text).not.toContain('TOKEN'); expect(grep.text).toContain('no matches');
@@ -73,8 +74,82 @@ it('finds hits on long lines, reports skipped files instead of a bare "no matche
   expect(Buffer.byteLength(all.text)).toBeLessThanOrEqual(4096);
   expect(all.text).toMatch(/truncated/); expect(all.text).not.toContain('node_modules');
   const none = await tools.execute('grep', { pattern: 'zzz-absent' });
-  expect(none.text).toMatch(/no matches in \d+ scanned file\(s\); 1 file\(s\) not fully scanned/); expect(none.text).toContain('skipped bin.dat (binary');
+  expect(none.text).toMatch(/no matches in \d+ scanned file\(s\); the search was not complete/); expect(none.text).toContain('skipped bin.dat (binary');
   expect((await tools.execute('glob', { pattern: '**/*.ts' })).text).toBe('src/one.ts');
   expect((await tools.execute('read_file', { path: 'bin.dat' })).text).toContain('error=binary');
   expect(await tools.execute('write_file', { path: 'x' })).toMatchObject({ status: 'error', text: '[deckent] write_file: error=unknown-tool' });
+});
+
+it('keeps the boundary under races: a swapped parent or root and a hard-linked protected file never yield their content (Astra 2072 R1)', async () => {
+  const { base, root } = await workspace({ 'dir/a.txt': 'inside\n', '.env': 'DENIED-SENTINEL\n' });
+  await mkdir(join(base, 'out')); await writeFile(join(base, 'out/a.txt'), 'OUTSIDE-SENTINEL\n');
+  const scope = await createWorkspaceScope(root);
+  const resolved = await scope.resolve('dir/a.txt');
+  expect(resolved).toMatchObject({ ok: true, rel: 'dir/a.txt' });
+  // The parent is replaced by a symlink to an outside directory between the check and the open.
+  await rename(join(root, 'dir'), join(root, 'dir-old')); await symlink(join(base, 'out'), join(root, 'dir'));
+  expect(await scope.open('dir/a.txt', 'file')).toEqual({ ok: false, error: 'path-changed' });
+  await link(join(root, '.env'), join(root, 'alias.txt'));
+  const tools = await createWorkspaceReadTools(root);
+  const alias = await tools.execute('read_file', { path: 'alias.txt' });
+  expect(alias.text).toContain('error=hardlink-refused'); expect(alias.text).not.toContain('SENTINEL');
+  const grep = await tools.execute('grep', { pattern: 'SENTINEL' });
+  expect(grep.text).not.toMatch(/SENTINEL\n|:1:/); expect(grep.text).toContain('skipped alias.txt (hard link refused)');
+  // The whole root is swapped for a symlink to a look-alike tree outside.
+  await mkdir(join(base, 'fake')); await writeFile(join(base, 'fake/a.txt'), 'OUTSIDE-SENTINEL\n');
+  await rename(root, join(base, 'ws-old')); await symlink(join(base, 'fake'), root);
+  const swapped = await tools.execute('read_file', { path: 'a.txt' });
+  expect(swapped.status).toBe('error'); expect(swapped.text).not.toContain('SENTINEL');
+});
+
+it('stops a catastrophic regular expression on cancel without stalling the service, and never blocks on a FIFO (Astra 2072 R2)', async () => {
+  const { root } = await workspace({ 'evil.txt': Array.from({ length: 4 }, () => `${'a'.repeat(32)}!`).join('\n') + '\n' });
+  execFileSync('mkfifo', [join(root, 'pipe')]);
+  const tools = await createWorkspaceReadTools(root);
+  for (const call of [{ name: 'grep', args: { pattern: '^(a+)+$' } }, { name: 'read_file', args: { path: 'evil.txt', pattern: '^(a+)+$' } }]) {
+    const controller = new AbortController(); let ticks = 0;
+    const ticker = setInterval(() => { ticks++; }, 10);
+    setTimeout(() => controller.abort(), 150);
+    const started = performance.now();
+    const result = await tools.execute(call.name, call.args, controller.signal);
+    clearInterval(ticker);
+    expect(result.text).toContain('error=cancelled');
+    expect(performance.now() - started).toBeLessThan(2000);
+    // The service thread kept running timers while the expression backtracked in the worker.
+    expect(ticks).toBeGreaterThan(5);
+  }
+  const fifoStarted = performance.now();
+  expect((await tools.execute('read_file', { path: 'pipe' })).text).toContain('error=not-a-file');
+  expect((await tools.execute('grep', { pattern: 'x' })).text).toContain('1 special file(s) (FIFO, socket or device) not read');
+  expect(performance.now() - fifoStarted).toBeLessThan(2000);
+  const aborted = new AbortController(); aborted.abort();
+  expect(await tools.execute('read_file', { path: 'evil.txt' }, aborted.signal)).toEqual({ status: 'error', text: '[deckent] read_file: error=cancelled' });
+});
+
+it('bounds every result branch, validates argument sizes and limits, and keeps multibyte text valid (Astra 2072 R3)', async () => {
+  const { root } = await workspace({ 'ğ.txt': 'çok baytlı satır\n'.repeat(400) });
+  const tools = await createWorkspaceReadTools(root, { limits: { maxResultBytes: 1024 } });
+  const results = [await tools.execute('read_file', { path: 'ğ.txt', pattern: 'x'.repeat(2000) }), await tools.execute('read_file', { path: 'y'.repeat(3000) }),
+    await tools.execute('read_file', { path: 'ğ.txt' }), await tools.execute('grep', { pattern: 'ç' }), await tools.execute('list_dir', {}), await tools.execute('glob', { pattern: '*' })];
+  for (const result of results) { expect(Buffer.byteLength(result.text)).toBeLessThanOrEqual(1024); expect(Buffer.from(result.text).toString('utf8')).toBe(result.text); }
+  expect((await tools.execute('read_file', { path: 'z'.repeat(5000) })).text).toContain('argument-too-long name=path');
+  // Many skipped files with long names make the grep trailer alone larger than the cap: the final cut must still hold.
+  const noisy: Record<string, Buffer> = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`${'n'.repeat(180)}${i}.bin`, Buffer.from([0, 1])]));
+  const { root: noisyRoot } = await workspace(noisy);
+  const noisyTools = await createWorkspaceReadTools(noisyRoot, { limits: { maxResultBytes: 1024 } });
+  const trailer = await noisyTools.execute('grep', { pattern: 'x' });
+  expect(Buffer.byteLength(trailer.text)).toBeLessThanOrEqual(1024); expect(trailer.text).toContain('result cut at the 1024-byte cap');
+  await expect(createWorkspaceReadTools(root, { limits: { maxResultBytes: 10 } })).rejects.toThrow('WORKSPACE_READ_LIMITS_INVALID');
+});
+
+it('reports directories it could not scan instead of claiming no matches (Astra 2072 R4)', async () => {
+  const deep = Array.from({ length: MAX_WALK_DEPTH + 3 }, (_, i) => `d${i}`).join('/');
+  const { root } = await workspace({ [`${deep}/deep.txt`]: 'DEEP-MATCH\n', 'locked/inner.txt': 'LOCKED-MATCH\n', 'top.txt': 'nothing\n' });
+  await chmod(join(root, 'locked'), 0o000);
+  const tools = await createWorkspaceReadTools(root);
+  const grep = await tools.execute('grep', { pattern: 'MATCH' });
+  expect(grep.text).toContain('the search was not complete');
+  expect(grep.text).toMatch(/beyond depth 32/); expect(grep.text).toMatch(/1 unreadable directory|1 director(y|ies) changed/);
+  const glob = await tools.execute('glob', { pattern: '**/deep.txt' });
+  expect(glob.text).toContain('no matches in the scanned part'); expect(glob.text).toContain('beyond depth 32');
 });

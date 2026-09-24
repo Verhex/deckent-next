@@ -546,7 +546,15 @@ and size/longest-line statistics, numbered ranges with long-line elision naming 
 matches"), `glob`. Every result is byte-bounded by the tool itself (16 KiB default) and states any cut; fitting results into the
 model context is the loop's job in one token unit. Reads resolve the real path inside the workspace (traversal, absolute paths and
 symlink targets outside are refused), a Core deny floor (`.env*`, keys, credentials, `.git/**`, Deckent host/approval/audit state)
-is registry data, generated directories are skipped, files are read through one no-follow descriptor with a size and change check.
+is registry data, generated directories are skipped. **Boundary under races (Astra 2072):** every open walks the real path's
+components from a root descriptor (`/proc/self/fd/<fd>/<name>`, openat semantics) with no-follow on each component and re-checks
+the opened descriptor's own path, so a parent or root swapped for a symlink after the check is refused; files with more than one
+link are refused (a hard link can alias a protected file); files open non-blocking and must be regular, so FIFOs and devices never
+stall the service; walks list directories through their descriptors and count what they could not cover (depth > 32, unreadable,
+changed, special files) instead of reporting absence. Regular expressions run in a worker thread that is terminated on cancel, the
+signal reaches every tool, and every result branch is cut to the cap with a stated marker; path/pattern arguments and limits are
+validated. The guarantee is Linux-only (WSL included); other platforms fail closed until they have an equivalent. Engine per-call
+authorization is not wired in T-L1; the read adapter is not an admitted terminal execution surface by itself (T-L3).
 
 ## Package contract
 
@@ -952,4 +960,3 @@ because the layout revision (part of attempt identity) hashes the resource regis
 candidates under the workspaces resource. `atStartup` emits the read-only currency report after `runtime serve` is ready and never
 builds. Codex workers now run with `-c check_for_update_on_startup=false`; Claude workers keep `DISABLE_AUTOUPDATER=1`; Cursor stays an
 explicit unsupported exception.
-
