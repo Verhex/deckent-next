@@ -433,7 +433,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   frames and exactly one ordinary response frame. Delta frames are presentation: each ≤ `service.responseMaxBytes`, all
   together ≤ one more `responseMaxBytes`, coalesced per event-loop turn; when exhausted they stop for good, so the client
   always holds a prefix and completes the answer from the recorded result. A replayed command sends no deltas and never
-  reaches the provider again (a replay while the first call is still running returns its pending receipt). Disconnect
+  reaches the provider again (a concurrent duplicate gets the pending receipt without deltas, engine-tested; the terminal
+  composition currently reports that as `TERMINAL_CHAT_INVOCATION_FAILED` with state `pending`). Disconnect
   stops delivery only; the client sends the same governed cancellation command as the plain turn (the peer's session
   ends with its connection, so the service cannot cancel on its behalf). `openai-chat-http` v4 accepts `stream: true`
   with required `stream_options.include_usage` and parses SSE incrementally with the same deadline, redirect, model-match

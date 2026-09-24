@@ -102,7 +102,7 @@ function fixture(options: { deltas?: readonly string[]; liveControllers?: boolea
   return { app, calls, store, controllers, registrations, get stored() { return stored; } };
 }
 
-describe('model invocation application', () => {
+describe('model invocation streamed deltas', () => {
   it('passes streamed deltas only to a fresh send; a replayed command presents none and never sends again', async () => {
     const f = fixture({ deltas: ['Mer', 'haba'] }), seen: string[] = [], replaySeen: string[] = [];
     const first = await f.app.invoke(command, undefined, undefined, undefined, delta => seen.push(delta.text));
@@ -116,7 +116,17 @@ describe('model invocation application', () => {
     await expect(failed.app.invoke(command, undefined, undefined, undefined, delta => partial.push(delta.text)))
       .resolves.toMatchObject({ receipt: { outcome: { state: 'unknown', reason: 'transport-error' } } });
     expect(partial).toEqual(['partial']);
+    // A concurrent duplicate never attaches to the live send: it gets the pending claim (outcome null) and no deltas.
+    const racing = fixture({ deltas: ['x'], concurrentBarrier: true }), sinks: string[][] = [[], []];
+    const results = await Promise.all([0, 1].map(index => racing.app.invoke(command, undefined, undefined, undefined, delta => sinks[index]!.push(delta.text))));
+    const fresh = results.findIndex(result => !result.replayed), replayed = 1 - fresh;
+    expect(fresh).toBeGreaterThanOrEqual(0); expect(racing.calls.sends).toBe(1);
+    expect(sinks[fresh]).toEqual(['x']); expect(sinks[replayed]).toEqual([]);
+    expect(results[replayed]).toMatchObject({ replayed: true, response: null }); expect(results[replayed]!.receipt.outcome).toBeNull();
   });
+});
+
+describe('model invocation application', () => {
   it('releases live controller custody on claim/permission failures, prevention, native failure, settlement and concurrent replay', async () => {
     const cases = [{ claimError: true }, { permitError: true }, { permission: 'prevented' as const },
       { sendError: true }, { responseWriteError: true }, {}, { concurrentBarrier: true }];
