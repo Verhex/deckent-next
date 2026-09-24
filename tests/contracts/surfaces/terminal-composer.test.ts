@@ -117,6 +117,15 @@ describe('composer multiline, history and search', () => {
     expect(run([K.up], draft(`a${FAMILY}b\ncd`, `a${FAMILY}b\nc`.length)).state.cursor).toBe(1);
   });
 
+  it('keeps walking history through recalled slash commands instead of moving the popup selection', () => {
+    const entries: ComposerHistoryEntry[] = ['/workers', '/runs', 'hello'].map(value => ({ text: value, pastes: [] }));
+    let { state } = run([{ type: 'history', entries }, K.up, K.up, K.up]);
+    expect(state.text).toBe('/workers');
+    state = run([K.down, K.down], state).state;
+    expect(state.text).toBe('hello');
+    expect(run([K.down], state).state.text).toBe('');
+  });
+
   it('skips consecutive duplicates and bounds in-session history', () => {
     let { state } = run([...typed('same'), K.submit, ...typed('same'), K.submit]);
     expect(state.history.map(entry => entry.text)).toEqual(['same']);

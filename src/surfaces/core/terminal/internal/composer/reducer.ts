@@ -244,7 +244,9 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
     if (key.type === 'escape' || (key.type === 'text' && key.text === '?')) return step(state);
   } else if (key.type === 'text' && key.text === '?' && !state.text) return step({ ...state, shortcuts: true });
   const menu = composerMenu(state, context.commands);
-  const handled = menu && menuKey(state, key, menu);
+  // While walking history, Up/Down keep walking even when a recalled `/command` opens the popup.
+  const walking = state.browsing !== null && key.type === 'move' && (key.to === 'up' || key.to === 'down');
+  const handled = menu && !walking && menuKey(state, key, menu);
   if (handled) return handled;
   switch (key.type) {
     case 'text': return textKey(state, key.text, context);
