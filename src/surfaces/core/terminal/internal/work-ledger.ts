@@ -1,5 +1,5 @@
 import type { RunView, WorkerObservation, WorkerObservationReport, WorkerSidecars } from '#engine/index.js';
-import type { AssistantUnit } from './render/assistant-stream.js';
+import type { AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 
 export const WORK_LEDGER_SCHEMA_VERSION = 1;
 

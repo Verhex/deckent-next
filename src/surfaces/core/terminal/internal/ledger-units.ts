@@ -1,5 +1,5 @@
-import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from '../work-ledger.js';
-import type { AssistantStreamStep, AssistantUnit } from './assistant-stream.js';
+import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from './work-ledger.js';
+import type { AssistantStreamStep, AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 
 /** Finished assistant units as append-only ledger rows (kind `chat`, so the Desktop bridge keeps excluding them). */
 export function assistantLedgerEntries(units: readonly AssistantUnit[]): WorkLedgerEntry[] {

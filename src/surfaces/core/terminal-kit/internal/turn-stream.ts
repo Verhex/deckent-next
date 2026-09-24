@@ -1,4 +1,5 @@
-import type { ChatTurnMessage } from './ledger-buffer.js';
+/** One chat message as sent to the model for a turn. */
+export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 
 /**
  * Surface-facing streaming turn contract (S-STREAM, Jev 1370d942). The producer (composition over the runtime protocol)

@@ -17,7 +17,11 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
-  watchStarted: 'WATCH-ON', watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work };
+  watchStarted: 'WATCH-ON', watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN', work,
+  render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
+    tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
+    code: 'code', moreAbove: '{count} more above', queued: '{count} queued' },
+  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
 
 class Screen extends Writable {
   text = '';
@@ -187,9 +191,17 @@ describe('work surface: approvals', () => {
     await view.card('A-SUBJECT ap-2', 'selected by number');
   });
 
-  it('announces new pending approvals once on the heartbeat without opening a card', async () => {
+  it('does not list approvals more often than every 10 s by default, even with a fast worker heartbeat', async () => {
     const fake = approvals([approval('ap-1')]);
     const view = mount({ ledger: fake.ledger, pollMs: 40 });
+    await until(() => view.stdout.text.includes('A-NOTIFY 1'), 'first notice');
+    await settle(600);
+    expect(fake.lists()).toBe(1);
+  });
+
+  it('announces new pending approvals once on the heartbeat without opening a card', async () => {
+    const fake = approvals([approval('ap-1')]);
+    const view = mount({ ledger: fake.ledger, pollMs: 40, approvalPollMs: 40 });
     await until(() => view.stdout.text.includes('A-NOTIFY 1'), 'first notice');
     fake.records.set('ap-9', approval('ap-9')); fake.records.set('ap-8', approval('ap-8'));
     await until(() => view.stdout.text.includes('A-NOTIFY 2'), 'second notice');

@@ -692,8 +692,27 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-kit": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-render": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-composer": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-composer",
         "src/domain/core/inference-serving",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
@@ -703,6 +722,8 @@
     },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal",
         "src/domain/core/attempt",
         "src/domain/core/model-activation",

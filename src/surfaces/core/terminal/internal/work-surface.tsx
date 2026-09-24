@@ -18,6 +18,8 @@ export interface WorkSurfaceInput {
   readonly pollMs: number;
   /** The live panel shows only while the worker watch runs; it is cleared when the watch stops. */
   readonly watchingWorkers: boolean;
+  /** Approval notification cadence; defaults to max(pollMs, APPROVAL_NOTIFY_MIN_MS). */
+  readonly approvalPollMs?: number;
 }
 
 type Modal =
@@ -40,7 +42,7 @@ function phaseCounts(run: RunView): string {
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
 
-export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers }: WorkSurfaceInput) {
+export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const [modal, setModal] = useState<Modal>(null);
@@ -52,7 +54,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
 
   // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
   // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
-  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage), Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
+  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage), approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
     const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
     if (!current()) return;
     const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());

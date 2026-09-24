@@ -1,8 +1,8 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
 export { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
-export { WorklinePaletteProvider } from './internal/ink-palette-context.js';
-export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from './internal/slash-registry.js';
-export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from './internal/ink-palette.js';
+export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
+export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from '#surfaces/core/terminal-kit/index.js';
 export {
   WORKLINE_BRIDGE_SCHEMA_VERSION,
   buildWorklineBridgeSnapshot,
@@ -21,14 +21,20 @@ export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, decisionKey, EMPTY_APPROVAL
 export { resolveWorkerRef, type WorkSurfaceLabels } from './internal/workline-actions.js';
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';
-export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from './internal/turn-stream.js';
-export { EMPTY_SEGMENTER, FENCE_CHUNK_LINES, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './internal/render/stream-segmenter.js';
+export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+export { EMPTY_SEGMENTER, FENCE_CHUNK_LINES, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from '#surfaces/core/terminal-render/index.js';
 export { narrationOf, renderAssistantStream, renderCompleteReply, startAssistantStream, type AssistantStreamState, type AssistantStreamStep, type AssistantUnit,
-  type FooterUnit, type Narration } from './internal/render/assistant-stream.js';
-export { renderMarkdown, type MarkdownOptions } from './internal/render/markdown.js';
-export { renderedText, type RenderedLine, type Span } from './internal/render/spans.js';
-export { prefersAsciiGlyphs, resolveRenderGlyphs, RenderGlyphsContext, type RenderGlyphs } from './internal/render/glyphs.js';
-export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput } from './internal/render/status-row.js';
-export { AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from './internal/render/assistant-view.js';
-export { assistantLedgerEntries, streamStepEntries } from './internal/render/ledger-units.js';
-export { cells, truncateEnd, truncateStart, wrapCells } from './internal/render/text-width.js';
+  type FooterUnit, type Narration } from '#surfaces/core/terminal-render/index.js';
+export { renderMarkdown, type MarkdownOptions } from '#surfaces/core/terminal-render/index.js';
+export { renderedText, type RenderedLine, type Span } from '#surfaces/core/terminal-render/index.js';
+export { prefersAsciiGlyphs, resolveRenderGlyphs, RenderGlyphsContext, type RenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+export { fitStatusRow, worklineStatusSegments, type StatusSegment, type StatusRowLayout, type WorklineStatusInput } from '#surfaces/core/terminal-render/index.js';
+export { AssistantLive, AssistantUnitRow, footerText, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+export { assistantLedgerEntries, streamStepEntries } from './internal/ledger-units.js';
+export { cells, truncateEnd, truncateStart, wrapCells } from '#surfaces/core/terminal-render/index.js';
+export { Composer, type ComposerLabels, type ComposerProps } from '#surfaces/core/terminal-composer/index.js';
+export { COMPOSER_LIMITS, EMPTY_COMPOSER, composerMenu, exitArmed, reduceComposer, searchMatches, type ComposerContext, type ComposerHistoryEntry,
+  type ComposerHistoryPort, type ComposerIntent, type ComposerKey, type ComposerMenu, type ComposerState, type ComposerStep } from '#surfaces/core/terminal-composer/index.js';
+export { composerKey } from '#surfaces/core/terminal-composer/index.js';
+export { PASTE_COLLAPSE, expandChips, mentionAt, pendingArgument, slashMatches, type ComposerMentionPort, type PasteChip, type PastePolicy } from '#surfaces/core/terminal-composer/index.js';
+export { caretRow, displayWidth, graphemes, layoutRows } from '#surfaces/core/terminal-composer/index.js';

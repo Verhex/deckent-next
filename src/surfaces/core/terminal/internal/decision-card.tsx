@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { useWorklinePalette } from './ink-palette-context.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { decisionKey } from './approval-watch.js';
 
 export interface DecisionCardProps {

@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
-import type { InkRoleStyle, WorklineInkPalette } from '../ink-palette.js';
-import { useWorklinePalette } from '../ink-palette-context.js';
+import type { InkRoleStyle, WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { RenderedLine, Span } from './spans.js';
 
 /** Maps the pure span model onto the active palette; the `none` tier resolves every role and attribute to nothing. */

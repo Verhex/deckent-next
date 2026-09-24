@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Text, useAnimation, useWindowSize } from 'ink';
-import { useWorklinePalette } from './ink-palette-context.js';
-import { useRenderGlyphs } from './render/glyphs.js';
-import { spanStyle } from './render/lines-view.js';
-import { fitStatusRow, worklineStatusSegments, type WorklineStatusLabels } from './render/status-row.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { spanStyle } from '#surfaces/core/terminal-render/index.js';
+import { fitStatusRow, worklineStatusSegments, type WorklineStatusLabels } from '#surfaces/core/terminal-render/index.js';
 
 export interface StatusStripProps {
   /** Scope (or the pre-joined `scope · model` target); shrinks from the start before anything wraps. */

@@ -246,7 +246,11 @@
     },
     "terminal.workline.hint": {
       "before": "Slash: /help /status /workers /run <id> /watch-workers /watch-runs /watch-stop /exit",
-      "after": "Slash: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /transcript <n> /approvals /cancel <id> /exit"
+      "after": "Enter send · Alt+Enter new line · Tab completes /commands · Up/Down history · Ctrl+R search · ? shortcuts"
+    },
+    "terminal.workline.banner": {
+      "before": "Deckent workline. Esc cancels a running turn; /exit or Ctrl+C when idle quits.",
+      "after": "Deckent workline. Esc cancels a running turn; /exit, Ctrl+D or Ctrl+C twice when idle quits."
     }
   },
   "tr": {
@@ -604,7 +608,11 @@
     },
     "terminal.workline.hint": {
       "before": "Komutlar: /help /status /workers /run <id> /watch-workers /watch-runs /watch-stop /exit",
-      "after": "Komutlar: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /transcript <n> /approvals /cancel <id> /exit"
+      "after": "Enter gönder · Alt+Enter yeni satır · Tab /komutları tamamlar · Yukarı/Aşağı geçmiş · Ctrl+R ara · ? kısayollar"
+    },
+    "terminal.workline.banner": {
+      "before": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit veya Ctrl+C çıkar.",
+      "after": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit, Ctrl+D veya iki kez Ctrl+C çıkar."
     }
   }
 }

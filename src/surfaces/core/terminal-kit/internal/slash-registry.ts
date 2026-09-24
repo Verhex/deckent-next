@@ -2,6 +2,8 @@
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
+  /** Catalog key of the argument hint; set only for commands that take an argument. */
+  readonly argumentKey?: string;
 }
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
@@ -10,7 +12,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'watch-workers', descriptionKey: 'terminal.slash.watchWorkers' },
   { name: 'watch-runs', descriptionKey: 'terminal.slash.watchRuns' },
   { name: 'watch-stop', descriptionKey: 'terminal.slash.watchStop' },
-  { name: 'run', descriptionKey: 'terminal.slash.run' },
+  { name: 'run', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
   { name: 'runs', descriptionKey: 'terminal.slash.runs' },
   { name: 'transcript', descriptionKey: 'terminal.slash.transcript' },
   { name: 'approvals', descriptionKey: 'terminal.slash.approvals' },

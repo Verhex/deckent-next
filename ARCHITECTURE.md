@@ -395,7 +395,12 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 
 - **Regions:** banner, status strip (scope, chat model, busy/cancelling), work ledger (append-only chat,
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
-  the slash catalog is data (`slash-registry`).
+  the slash catalog is data (`slash-registry`). **Composer (P2):** the single input owner is a pure reducer plus a
+  small Ink view (`terminal/internal/composer`): grapheme/cell-aware caret, readline editing and kill/yank, multiline
+  (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, Tab
+  slash completion with argument hints, `?` shortcuts; it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
+  clears a draft or arms exit (second press within 2 s exits); Ctrl+D exits on an empty idle line; while busy
+  Esc/Ctrl+C cancel the turn. History persistence and `@` mention candidates are ports; the surface reads no files.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed

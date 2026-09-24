@@ -1,5 +1,5 @@
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
-import { useWorklinePalette } from '../ink-palette-context.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { AssistantUnit, FooterUnit, Narration } from './assistant-stream.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';

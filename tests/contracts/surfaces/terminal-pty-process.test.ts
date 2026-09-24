@@ -197,9 +197,10 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.output).not.toMatch(colour);
   });
 
-  it('exits on idle Ctrl+C in a real terminal', async () => {
+  it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {
     const f = await project();
-    const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [['Deckent workline', '\u0003']]);
+    const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'],
+      [['Deckent workline', '\u0003'], ['Press Ctrl+C again to exit', '\u0003']]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
   });

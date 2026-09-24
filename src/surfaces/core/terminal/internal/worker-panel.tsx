@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { useWorklinePalette } from './ink-palette-context.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkLedgerWorkerEntry } from './work-ledger.js';
 import { fillTemplate, formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
 

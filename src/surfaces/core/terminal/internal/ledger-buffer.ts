@@ -27,7 +27,8 @@ export function compactLedger(buffer: LedgerBuffer, printed: number, compactAt =
   return Object.freeze({ ...buffer, epoch: buffer.epoch + 1, pending: Object.freeze(buffer.pending.slice(printed)) });
 }
 
-export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+import type { ChatTurnMessage } from '#surfaces/core/terminal-kit/index.js';
+export type { ChatTurnMessage };
 
 /** Keeps the system instruction and the newest messages; `limit` counts every message including the system one. */
 export function boundChatHistory(system: ChatTurnMessage, history: readonly ChatTurnMessage[], limit: number): readonly ChatTurnMessage[] {

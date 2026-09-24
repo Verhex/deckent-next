@@ -1,8 +1,8 @@
 import { Box, Text } from 'ink';
-import { useWorklinePalette } from './ink-palette-context.js';
+import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
-import { AssistantUnitRow, type AssistantRenderLabels } from './render/assistant-view.js';
+import { AssistantUnitRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 
 export interface LedgerEntryLabels {
   readonly runCard: string;

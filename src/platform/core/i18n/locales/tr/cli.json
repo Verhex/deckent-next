@@ -700,8 +700,8 @@
   "terminal.status.inferenceAbsent": "inference_serving profili yapılandırılmamış.",
   "terminal.status.inference": "Çıkarım profili {profile} · token bütçesi {tokenBudget} · max-seq {maxSeqs} · uç {endpoint}",
   "terminal.status.hint": "Etkileşimli terminal: `deckent`. Satır modu: `deckent terminal session [--scope <id>]`.",
-  "terminal.workline.banner": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit veya Ctrl+C çıkar.",
-  "terminal.workline.hint": "Komutlar: /help /status /workers /run <id> /runs /watch-workers /watch-runs /watch-stop /transcript <n> /approvals /cancel <id> /exit",
+  "terminal.workline.banner": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit, Ctrl+D veya iki kez Ctrl+C çıkar.",
+  "terminal.workline.hint": "Enter gönder · Alt+Enter yeni satır · Tab /komutları tamamlar · Yukarı/Aşağı geçmiş · Ctrl+R ara · ? kısayollar",
   "terminal.workline.watchStarted": "Worker izleme açık — yeni worker'lar work ledger'a eklenir.",
   "terminal.workline.watchRunsStarted": "Run izleme açık — revizyon/faz değişince run kartları eklenir.",
   "terminal.workline.watchStopped": "Worker ve run izleme durdu.",
@@ -804,5 +804,10 @@
   "terminal.cancel.alreadyRequested": "İptal zaten istendi; onaylamak worker'lara teslimi yeniden dener.",
   "terminal.cancel.prompt": "y iptal iste · n çalışmaya devam · Enter/Esc devam (varsayılan)",
   "terminal.cancel.pending": "İptal isteniyor…",
-  "terminal.cancel.kept": "{run} run'ı iptal edilmedi."
+  "terminal.cancel.kept": "{run} run'ı iptal edilmedi.",
+  "terminal.composer.pasteChip": "[{lines} satır yapıştırıldı]",
+  "terminal.composer.search": "(geçmişte ara)",
+  "terminal.composer.exitArmed": "Çıkmak için Ctrl+C tuşuna tekrar basın.",
+  "terminal.composer.shortcuts": "Klavye kısayolları\nEnter  gönder (tur çalışırken sıraya alınır)\nShift+Enter · Alt+Enter · Ctrl+J · \\ sonra Enter  yeni satır\nEsc · Ctrl+C  çalışan turu iptal et · Esc menüyü kapatır\nCtrl+C  taslağı temizle · boş satırda iki kez: çık\nCtrl+D  boş satırda çık\nYukarı/Aşağı  taslak satırları arasında gez · uçlarda geçmiş\nCtrl+R  geçmişte ara (tekrar Ctrl+R: daha eski, Enter: al)\nTab  /komut veya @yol tamamla\nSol/Sağ · Ctrl/Alt+Sol/Sağ  karakter · kelime\nHome/End · Ctrl+A/Ctrl+E  satır başı · satır sonu\nCtrl+W · Alt+Backspace  önceki kelimeyi sil\nCtrl+U · Ctrl+K · Ctrl+Y  satır başına kadar kes · satır sonuna kadar kes · keseni geri yapıştır\n?  bu panel (boş satır) · Esc kapatır",
+  "terminal.slash.runArgument": "<run-kimliği>"
 }

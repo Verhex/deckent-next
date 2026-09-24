@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mapPath = join(root, 'design/tokens/terminal.map.json');
-const outPath = join(root, 'src/surfaces/core/terminal/internal/generated/palette.ts');
+const outPath = join(root, 'src/surfaces/core/terminal-kit/internal/generated/palette.ts');
 
 /** NOVA primitive hex/256 used when map references a primitive name. */
 const PRIMITIVES = {

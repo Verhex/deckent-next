@@ -2,7 +2,7 @@ import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
-import { WORKLINE_SLASH_COMMANDS } from './slash-registry.js';
+import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 

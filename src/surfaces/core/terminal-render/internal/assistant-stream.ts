@@ -1,4 +1,4 @@
-import type { TurnDelta } from '../turn-stream.js';
+import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './stream-segmenter.js';
 
 /**
