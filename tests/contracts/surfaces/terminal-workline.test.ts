@@ -15,6 +15,9 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
     toolStatus: { error: 'TOOL-FAILED', denied: 'TOOL-DENIED', 'approval-required': 'TOOL-APPROVAL', 'invalid-arguments': 'TOOL-INVALID',
       duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED' }, context: 'CTX {approx}{percent}% of {window}', compacted: 'COMPACTED {count}' },
+  sessions: { entry: 'SESSION {index} {session} {count} {preview}', none: 'NO-SESSIONS', notFound: 'SESSION-NOT-FOUND', unavailable: 'NO-SESSION-PORT',
+    saveFailed: 'SAVE-FAILED', resumed: 'RESUMED {count} {session}', started: 'NEW-SESSION', context: 'CTX {approx}{prompt}/{window} {percent}% {count}',
+    contextNone: 'CTX-NONE {count}' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
 // The /help notice joins commands with " · "; the slash popup lists them one per row, so this only matches the notice.
 const HELP_NOTICE = '/watch-runs · /watch-stop';
@@ -139,6 +142,41 @@ describe('ledger buffer (Ink Static contract)', () => {
     view.stdin.write('next\r'); await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'SUMMARY' }, { role: 'user', content: 'first question' },
       { role: 'assistant', content: 'answer', toolCalls: [] }, { role: 'user', content: 'next' }]);
+  });
+
+  it('saves every turn, resumes an earlier conversation into the next turn, starts a new one, and reports the context', async () => {
+    const saved: { sessionId: string; messages: readonly { role: string; content: string }[] }[] = [];
+    const earlier = { sessionId: '11111111-2222-4333-8444-555555555555', updatedAtMs: 0, messages: 2, preview: 'old question' };
+    const port = { async save(input: { sessionId: string; messages: readonly { role: string; content: string }[] }) { saved.push(input); },
+      async list() { return [earlier]; },
+      async load(id: string) { return id === earlier.sessionId ? [{ role: 'user' as const, content: 'old question' },
+        { role: 'assistant' as const, content: 'old answer', toolCalls: [] }] : null; } };
+    const seen: (readonly { role: string; content: string }[])[] = [];
+    const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+      seen.push(messages);
+      yield { kind: 'context' as const, promptTokens: 1500, windowTokens: 6000, quality: 'provider-count' as const };
+      yield { kind: 'message' as const, message: { role: 'assistant' as const, content: `reply ${seen.length}`, toolCalls: [] } };
+      yield { kind: 'text' as const, text: `reply ${seen.length}` }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 20, sessions: port });
+    await settle(20); view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX-NONE 0'), 'no context yet');
+    view.stdin.write('first\r'); await until(() => saved.length === 1, 'first save');
+    // The whole history without the system prompt is saved after the turn, and the measured context is reported.
+    expect(saved[0]!.messages).toEqual([{ role: 'user', content: 'first' }, { role: 'assistant', content: 'reply 1', toolCalls: [] }]);
+    view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1500/6000 25% 2'), 'context line');
+    view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('SESSION 1 11111111 2 old question'), 'listing');
+    view.stdin.write('/resume 1\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
+    view.stdin.write('continue\r'); await until(() => seen.length === 2, 'second turn');
+    expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'old question' },
+      { role: 'assistant', content: 'old answer', toolCalls: [] }, { role: 'user', content: 'continue' }]);
+    await until(() => saved.length === 2, 'saved into the resumed session');
+    expect(saved[1]!.sessionId).toBe(earlier.sessionId);
+    view.stdin.write('/new\r'); await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session');
+    view.stdin.write('fresh\r'); await until(() => seen.length === 3, 'third turn');
+    expect(seen[2]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'fresh' }]);
+    await until(() => saved.length === 3, 'third save');
+    expect(saved[2]!.sessionId).not.toBe(earlier.sessionId); expect(saved[2]!.sessionId).not.toBe(saved[0]!.sessionId);
+    view.stdin.write('/resume 9\r'); await until(() => view.stdout.text.includes('SESSION-NOT-FOUND'), 'unknown session');
   });
 
   it('bounds agent history at a user message so a tool result never loses the call that asked for it', () => {

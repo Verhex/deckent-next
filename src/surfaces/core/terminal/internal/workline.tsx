@@ -16,6 +16,7 @@ import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
+import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
@@ -39,6 +40,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   /** Rendered-answer strings (terminal.render.*): narration, footer, code label, status facts. */
   readonly render: AssistantRenderLabels;
   readonly composer: ComposerLabels;
+  /** `/resume`, `/context`, `/new` strings (T-L5c); absent when the surface has no session port. */
+  readonly sessions?: ConversationSessionLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -64,6 +67,8 @@ export interface WorklineProps {
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
   readonly inputHistory?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
+  /** Conversation snapshots of this scope for `/resume` (T-L5c). */
+  readonly sessions?: ConversationSessionPort;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -96,6 +101,7 @@ export function WorklineApp(props: WorklineProps) {
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
+  const session = useConversationSession(props.sessions, labels.sessions);
   const turn = useRef<AbortController | null>(null);
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
@@ -181,6 +187,7 @@ export function WorklineApp(props: WorklineProps) {
         for await (const delta of props.streamTurn(messages, controller.signal)) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
+          session.noteContext(delta);
           // A compaction replaces every non-system message the turn started from, including what it appended so far.
           if (delta.kind === 'compacted') { base = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')]; appended = []; }
           const step: AssistantStreamStep = renderAssistantStream(state, delta, Date.now());
@@ -192,9 +199,11 @@ export function WorklineApp(props: WorklineProps) {
         // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
         history.current = next.length || base !== messages ? boundAgentHistory(base[0]!, [...base, ...next], historyMessages) : messages;
+        push(await session.save(history.current));
       } else {
         const reply = await completeTurn(plainChatHistory(messages), controller.signal);
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
+        push(await session.save(history.current));
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
         push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
       }
@@ -207,12 +216,19 @@ export function WorklineApp(props: WorklineProps) {
       setBusy(false);
       setCancelling(false);
     }
-  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, systemPrompt]);
+  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, session, systemPrompt]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const perform = useCallback(async (line: string): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line); return true; }
+    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
+      setBusy(true);
+      try { push(await session.run(slash.command, slash.args, history)); }
+      catch (error) { push([notice('error', errorText(error))]); }
+      finally { setBusy(false); }
+      return true;
+    }
     const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService) });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
     if (action?.exit) { exit(); return false; }
@@ -231,7 +247,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the

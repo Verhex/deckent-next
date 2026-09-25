@@ -602,7 +602,15 @@ labelled `user` message: the model-written summary plus the earlier user message
 and digest) and the earlier tool calls, both copied from the history, never from the model; it is context only and grants no
 authority. The turn emits `compacted` (surface: one line "N earlier messages were summarized"), measures again and applies
 admission. A failed or unreadable summary keeps the history unchanged and closes the turn with a note; nothing more is sent. Open:
-no deterministic model-free fallback yet, and a newest exchange larger than the window cannot be compacted (admission then refuses). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+no deterministic model-free fallback yet, and a newest exchange larger than the window cannot be compacted (admission then refuses).
+**Conversation sessions (T-L5c, Jev 9ae569b1).** The workline saves the whole current history (system prompt excluded) after every
+turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
+atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
+compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
+`/resume` lists this scope's recent sessions and `/resume <n|id>` continues one (its messages become the history; later turns save
+into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
+context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
+pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

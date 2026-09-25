@@ -21,7 +21,8 @@
     "runtimeSocket": "state/runtime.sock",
     "runtimeLog": "state/runtime-service.log",
     "ledgerBackups": "state/backups",
-    "terminalHistory": "state/terminal-history.jsonl"
+    "terminalHistory": "state/terminal-history.jsonl",
+    "terminalSessions": "state/terminal-sessions"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

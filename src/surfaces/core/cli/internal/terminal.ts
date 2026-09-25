@@ -1,8 +1,9 @@
 import { createInterface } from 'node:readline';
 import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels,
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels,
   type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
+import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { phaseLabel } from './transcript.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -123,29 +124,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
-    render: {
-      assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
-      thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
-      tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),
-      truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),
-      failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
-      moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
-      tool: t('terminal.render.tool', {}, locale), toolRunning: t('terminal.render.toolRunning', {}, locale),
-      context: t('terminal.render.context', {}, locale), compacted: t('terminal.render.compacted', {}, locale),
-      toolStatus: { error: t('terminal.render.toolStatus.error', {}, locale), denied: t('terminal.render.toolStatus.denied', {}, locale),
-        'approval-required': t('terminal.render.toolStatus.approvalRequired', {}, locale),
-        'invalid-arguments': t('terminal.render.toolStatus.invalidArguments', {}, locale),
-        duplicate: t('terminal.render.toolStatus.duplicate', {}, locale), cancelled: t('terminal.render.toolStatus.cancelled', {}, locale) },
-    },
-    composer: { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
-      exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
-      slash: { 'terminal.slash.status': t('terminal.slash.status', {}, locale), 'terminal.slash.workers': t('terminal.slash.workers', {}, locale),
-        'terminal.slash.watchWorkers': t('terminal.slash.watchWorkers', {}, locale), 'terminal.slash.watchRuns': t('terminal.slash.watchRuns', {}, locale),
-        'terminal.slash.watchStop': t('terminal.slash.watchStop', {}, locale), 'terminal.slash.run': t('terminal.slash.run', {}, locale),
-        'terminal.slash.runArgument': t('terminal.slash.runArgument', {}, locale), 'terminal.slash.runs': t('terminal.slash.runs', {}, locale),
-        'terminal.slash.serviceRestart': t('terminal.slash.serviceRestart', {}, locale), 'terminal.slash.exit': t('terminal.slash.exit', {}, locale),
-        'terminal.slash.help': t('terminal.slash.help', {}, locale), 'terminal.slash.transcript': t('terminal.slash.transcript', {}, locale),
-        'terminal.slash.approvals': t('terminal.slash.approvals', {}, locale), 'terminal.slash.cancel': t('terminal.slash.cancel', {}, locale) } },
+    render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale),
   };
 }
 
@@ -265,11 +244,14 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
+  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
+  const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   await runTerminalWorkline({
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
+    ...(sessions ? { sessions } : {}),
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal) =>
       context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },

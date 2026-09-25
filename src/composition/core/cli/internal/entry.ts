@@ -8,7 +8,7 @@ import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegra
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
+import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
@@ -38,6 +38,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
+    openTerminalSessions: (projectRoot, options) => openConfiguredTerminalSessions(projectRoot, options),
     stopRuntimeService: (projectRoot, options) => stopConfiguredRuntimeService(projectRoot, options),
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),

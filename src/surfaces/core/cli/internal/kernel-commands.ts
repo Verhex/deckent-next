@@ -28,6 +28,7 @@ export type InferenceMetricsReading =
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
+import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
 
 export interface RuntimeServiceReadinessView {
   readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
@@ -54,6 +55,7 @@ export interface CommandContext {
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
+  openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;

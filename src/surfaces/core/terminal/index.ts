@@ -1,4 +1,5 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
+export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary } from './internal/workline-sessions.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
   type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';

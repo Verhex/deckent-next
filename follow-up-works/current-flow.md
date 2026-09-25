@@ -1,4 +1,17 @@
-# Anlık iş akışı — Opus 5.5; T-L5b otomatik sıkıştırma teslimde; T-L5a `b4926ac` ve T-L3b2–T-L3d + canlı etkinleştirme Astra incelemesinde
+# Anlık iş akışı — Opus 5.5; T-L5c oturumlar teslimde; T-L5a/b (2088) ve önceki dilimler Astra incelemesinde
+
+## T-L5c — konuşma oturumları (2026-09-26, Jev 9ae569b1 `snapshot_per_session` 0,99)
+- Her turdan sonra tüm geçmiş (sistem hariç) oturum başına tek anlık görüntü: yönetilen `terminalSessions` dizini, 0600, no-follow, atomik,
+  gizli bilgi kalıpları maskeli, en çok 50 oturum / 16 MiB (sınır aşımı maskelemeden önce reddedilir). Sıkıştırma dosyayı yeniden yazar →
+  legacy'deki resume çift ekleme kusuru yapısal olarak yok. `/resume` (liste), `/resume <n|kimlik>` (devam), `/new`, `/context`.
+  `terminal.persistHistory` anahtarına bağlı. Etiket kurucular yeni `surfaces/core/terminal-labels` birimine taşındı (cli birim bütçesi).
+- Bulunan kusur: ortak `redactText` URL kimlik deseni uzun harf dizilerinde karesel geri izliyordu (80k karakter 2,7 s; 2M ≈ 27 dk) — şema
+  `{0,31}` ile sınırlandı (2M: 2 ms), worker olay maskelemesi de düzeldi.
+- Testler: depo (tek anlık görüntü, sıkıştırma sonrası çift yok, 0600, sistem yok, scope yalıtımı, kötü kimlik, maskeleme, symlink reddi,
+  budama, büyük boyut reddi, doğrusal maskeleme süresi), workline (kayıt, /context, /resume liste+yükleme → sonraki tur, /new, bulunamadı).
+  Mutasyonlar 1–6 düştü (`proof/F26-T-L5C-SESSIONS/`; 6 önce asılı kaldı → boyut denetimi maskelemenin önüne alındı).
+- Doğrulama: owner 2026-09-26 "tam verify sürekli koşmasın" → dilimde yalnız typecheck, eslint, lint-arch, hedefli testler (oturum 4, workline 19,
+  maskeleme 37); **tam verify bekliyor**, push öncesi grup için bir kez koşulacak.
 
 ## T-L5b — otomatik sıkıştırma (2026-09-26, Jev 6460731d `engine_epoch_summary` 0,98)
 - Aynı ölçümle: istem + paylar > pencerenin %75'i → plan (sistem + en yeni 8 mesaj, araç çağrısı grubu bölünmez), eski kısım araçsız yönetilen

@@ -1,8 +1,8 @@
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, loadConfig, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, openTerminalHistoryFile, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
+import { DeckentError, ErrorRegistry, loadConfig, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import type { RuntimeServiceDescriptor } from '#engine/index.js';
@@ -125,4 +125,12 @@ export async function openConfiguredTerminalHistory(projectRoot: string, options
     load: () => file.load(),
     append: async (entry: { readonly text: string; readonly pastes: readonly unknown[] }) => { if (entry.pastes.length === 0) await file.append(entry); },
   });
+}
+
+/** Conversation snapshots for `/resume` (T-L5c): the same owner switch as the composer history; null when it is off. */
+export async function openConfiguredTerminalSessions(projectRoot: string, options: ConfigLoadOptions = {}) {
+  registerProviderConfig();
+  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
+  return openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'));
 }

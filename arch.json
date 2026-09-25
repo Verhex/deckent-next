@@ -711,6 +711,15 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-labels": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/surfaces/core/terminal",
+        "src/surfaces/core/terminal-composer",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-render": {
       "dependencies": [
         "src/surfaces/core/terminal-kit"
@@ -737,6 +746,7 @@
     },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/terminal-labels",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
@@ -1386,6 +1396,7 @@
     },
     "src/adapters/core/terminal-history": {
       "dependencies": [
+        "src/domain/core/agent-turn",
         "src/adapters/core/native-connection"
       ],
       "plan": "SURFACES"

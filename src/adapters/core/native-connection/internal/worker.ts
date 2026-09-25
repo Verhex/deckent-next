@@ -12,7 +12,8 @@ import { createHash } from 'node:crypto';
 type BridgeEvent = Record<string, unknown> & { kind: string };
 const SECRET_PATTERNS = [/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, /\b(?:sk|pk|rk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{8,}/g,
   /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passwd|authorization|cookie)\s*[:=]\s*\S+/gi,
-  /[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi, /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g];
+  // A bounded scheme keeps this linear: an unbounded `[a-z][a-z0-9+.-]*` backtracked quadratically on long letter runs (T-L5c).
+  /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s/@:]+:[^\s/@]+@/gi, /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g];
 /** Removes known secret values and credential-shaped text, strips control characters and bounds the length. */
 export function redactText(value: string, secrets: readonly string[], max: number): string {
   let out = value;
