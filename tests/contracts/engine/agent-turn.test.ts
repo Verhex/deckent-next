@@ -101,3 +101,31 @@ it('runs 25 policy-allowed reads without a single approval prompt (legacy owner 
   expect(result).toMatchObject({ finish: 'stop', toolCalls: 25 }); expect(p.authorized).toHaveLength(25);
   expect(events.filter(event => event.kind === 'tool.finished' && event.status === 'ok')).toHaveLength(25);
 });
+
+it('measures every round before sending it, reports the context, and never sends a round that cannot fit the window (T-L5)', async () => {
+  const p = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('fits')]);
+  const measured: number[] = [];
+  const measure: AgentTurnPorts['measure'] = async input => { measured.push(input.round);
+    return { promptTokens: input.round === 1 ? 1000 : 1500, windowTokens: 8000, quality: 'provider-count' }; };
+  const events: AgentTurnEvent[] = [];
+  const ok = await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event),
+    admission: { outputReserveTokens: 4096, safetyReserveTokens: 2048 } }, { ...p.value, measure });
+  expect(ok).toMatchObject({ finish: 'stop', rounds: 2 }); expect(measured).toEqual([1, 2]);
+  expect(events.filter(event => event.kind === 'context')).toEqual([
+    { kind: 'context', round: 1, promptTokens: 1000, windowTokens: 8000, quality: 'provider-count' },
+    { kind: 'context', round: 2, promptTokens: 1500, windowTokens: 8000, quality: 'provider-count' }]);
+  // 1900 + 4096 + 2048 > 8000: the second round is refused before any send, with a note naming the numbers.
+  const full = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('never')]);
+  const refused = await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: () => undefined,
+    admission: { outputReserveTokens: 4096, safetyReserveTokens: 2048 } },
+  { ...full.value, measure: async input => ({ promptTokens: input.round === 1 ? 1000 : 1900, windowTokens: 8000, quality: 'upper-bound' }) });
+  expect(refused).toMatchObject({ finish: 'error', rounds: 2, toolCalls: 1 }); expect(full.invoked).toEqual([1]);
+  expect(refused.note).toMatch(/1900 prompt tokens \(upper bound\) \+ 6144 reserved > 8000.*Nothing was sent/);
+  // An unknown window or a failed measurement never blocks a round: the provider stays the arbiter.
+  const unknown = ports([answer('ok')]);
+  expect(await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: () => undefined },
+    { ...unknown.value, measure: async () => ({ promptTokens: 10 ** 9, windowTokens: null, quality: 'upper-bound' }) })).toMatchObject({ finish: 'stop' });
+  const failing = ports([answer('ok')]);
+  expect(await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: () => undefined },
+    { ...failing.value, measure: async () => { throw new Error('counter down'); } })).toMatchObject({ finish: 'stop' });
+});

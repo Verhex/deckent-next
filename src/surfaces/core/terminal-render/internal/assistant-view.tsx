@@ -13,6 +13,8 @@ export type AssistantRenderLabels = Readonly<{
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
   /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
+  /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
+  context: string;
 }>;
 
 const INDENT = 2;
@@ -29,6 +31,8 @@ export function footerText(unit: FooterUnit, labels: AssistantRenderLabels, sepa
   const parts = [fillTemplate(labels.elapsed, { seconds: seconds(unit.elapsedMs) })];
   if (unit.promptTokens !== null && unit.completionTokens !== null) parts.push(fillTemplate(labels.tokens, { prompt: unit.promptTokens, completion: unit.completionTokens }));
   if (unit.reasoningTokens) parts.push(fillTemplate(labels.reasoningTokens, { count: unit.reasoningTokens }));
+  if (unit.context?.windowTokens) parts.push(fillTemplate(labels.context, { approx: unit.context.quality === 'upper-bound' ? '~' : '',
+    percent: Math.min(999, Math.ceil(unit.context.promptTokens * 100 / unit.context.windowTokens)), window: unit.context.windowTokens }));
   if (unit.finish === 'cancelled') parts.push(labels.cancelled);
   if (unit.finish === 'error') parts.push(labels.failed);
   return parts.join(` ${separator} `);

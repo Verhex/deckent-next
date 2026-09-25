@@ -122,6 +122,24 @@ describe('ledger buffer (Ink Static contract)', () => {
     expect(seen[1]![3]).toMatchObject({ role: 'tool', toolCallId: 'c1', content: 'export const a = 1;' });
   });
 
+  it('replaces the history with a compaction and continues the next turn from it', async () => {
+    const seen: (readonly { role: string; content: string }[])[] = [];
+    const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+      seen.push(messages);
+      if (seen.length > 1) { yield { kind: 'done' as const, finish: 'stop' as const }; return; }
+      yield { kind: 'compacted' as const, replacedMessages: 3, messages: [{ role: 'user' as const, content: 'SUMMARY' },
+        { role: 'user' as const, content: 'first question' }] };
+      yield { kind: 'message' as const, message: { role: 'assistant' as const, content: 'answer', toolCalls: [] } };
+      yield { kind: 'text' as const, text: 'answer' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10 });
+    await settle(20); view.stdin.write('first question\r');
+    await until(() => view.stdout.text.includes('answer'), 'answer');
+    view.stdin.write('next\r'); await until(() => seen.length === 2, 'second turn');
+    expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'SUMMARY' }, { role: 'user', content: 'first question' },
+      { role: 'assistant', content: 'answer', toolCalls: [] }, { role: 'user', content: 'next' }]);
+  });
+
   it('bounds agent history at a user message so a tool result never loses the call that asked for it', () => {
     const system = { role: 'system' as const, content: 'S' };
     const call = { id: 'c', name: 'read_file', argumentsJson: '{}' };

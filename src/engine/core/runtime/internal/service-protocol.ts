@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { agentTurnStreamEventSchema, identitySchema, modelInvocationDeltaSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 12 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 13 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -73,7 +73,7 @@ export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOper
 /** Largest number of turn events one event frame carries. */
 export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
 /**
- * v12 `chatTurn` answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
+ * `chatTurn` (v12; v13 adds the `context` and `compacted` events) answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
  * delta frames, event frames carry required data (the turn's `message` events are the client's history): each frame is bounded,
  * the stream as a whole is not (a turn has no budget), and the producer waits for the peer to drain instead of dropping. A peer
  * that disconnects before the response cancels the turn. A replayed turn sends at most its stored answer as a text event.
@@ -94,9 +94,9 @@ export class RuntimeServiceProtocolError extends Error {
  * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 11] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 12] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(11)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(12)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

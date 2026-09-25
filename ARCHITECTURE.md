@@ -580,7 +580,20 @@ the start), `message` (history, never rendered) and `done` with the engine's clo
 a later round's reasoning starts a fresh narration; the footer sums completion tokens over rounds and shows the note. The next turn's
 history is exactly the previous turn's `message` events; the history window (until T-L5 token admission) starts at a user message,
 so a tool result never loses its call, and keeps the newest exchange whole. Aborting (Esc/Ctrl+C) sends `cancelChatTurn` at once.
-Line mode (`terminal session`, piped) still sends plain governed invocations without tools. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+Line mode (`terminal session`, piped) still sends plain governed invocations without tools.
+**Context measurement and admission (T-L5a, protocol v13, Jev 90c2e32b).** Before every round the loop measures the prompt once and
+every decision reads that one measurement: the `context` event (round, prompt tokens, window, quality), admission, and — with T-L5b —
+compaction. Measurement is the provider's own count of exactly the round's request: `ModelInvocationApplication.measure` runs the
+same principal, policy (`invoke`), binding, activation and profile checks as `invoke` (shared `admittedTarget`), then the native port's
+optional `measure` — no claim, receipt, spending or model execution. `openai-chat-http` counts through a same-origin
+`tokenizeEndpoint` (vLLM-style `POST /tokenize` with the same model, messages and tools the round sends), only when the binding
+declares `token-count`; its own deadline is 2 s + 250 ms/KiB (≤ 30 s), its answer ≤ 8 MiB, and any failure is `null`, never a failed
+turn. Without a counter the prompt is a conservative upper bound (every UTF-8 byte of messages and tools a token, plus 64 per
+request, 16 per message, 32 per tool), always labelled `upper-bound`. The window is the smaller of the profile's
+`contextWindowTokens` and the provider's report (unknown → no admission decision; the provider stays the arbiter). A round whose
+prompt + `maxCompletionTokens` + 2048 safety tokens exceeds the window is never sent: the turn closes with a note naming the
+numbers and quality. The footer shows `context [~]N% of W`. v13 also fixes the `compacted` event shape: its `messages` replace every
+non-system message the client holds (the client keeps its system prompt); the workline already applies it. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

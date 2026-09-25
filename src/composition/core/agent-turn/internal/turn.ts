@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { chatTurnCancellationSchema, chatTurnCommandSchema, type AgentToolSpec, type AgentTurnMessage,
+import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { createWorkspaceReadTools, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
-import { invokePeerConfiguredModel, loadPeerInvocationContext, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
+import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
@@ -29,6 +29,17 @@ function canonical(value: unknown): string {
 }
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
+/** Tokens kept free beyond the completion limit (legacy default): chat template and tokenizer differences never overflow a round. */
+export const CHAT_TURN_SAFETY_RESERVE_TOKENS = 2_048;
+/**
+ * Conservative prompt bound when the provider has no counter (legacy formula): every UTF-8 byte of messages and tools counts as a
+ * token, plus fixed overheads per request, message and tool. It never under-counts; it is always labelled `upper-bound`.
+ */
+export function chatTurnPromptUpperBound(nativeRequest: JsonObject): number {
+  const request = nativeRequest as { messages?: unknown[]; tools?: unknown[] };
+  const messages = request.messages ?? [], tools = request.tools ?? [];
+  return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * messages.length + 32 * tools.length;
+}
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
@@ -56,7 +67,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const command = parsed.data;
   registerProviderConfig();
   const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer);
-  const chat = readTerminalChatConfig(await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>);
+  const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
+  const chat = readTerminalChatConfig(config);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
@@ -69,6 +81,19 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
     binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`) })}`);
 
+  // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
+  const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
+    .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
+    .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference))?.contextWindowTokens ?? null;
+  /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
+  const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
+    schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
+    scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+    nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(messages), max_completion_tokens: chat.maxCompletionTokens,
+      stream: true, stream_options: { include_usage: true },
+      ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
+        parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
+
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
   const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal]);
@@ -79,12 +104,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const ports: AgentTurnPorts = {
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
         await channel.drained();
-        const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
-          scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-          nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(messages), max_completion_tokens: chat.maxCompletionTokens,
-            stream: true, stream_options: { include_usage: true },
-            ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
-              parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject };
+        const invocation = roundCommand(round, messages, declared);
         let shownText = '', shownReasoning = '';
         let result: Awaited<ReturnType<typeof invokePeerConfiguredModel>>;
         try {
@@ -112,6 +132,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },
       authorize: tool => toolAuthority.decide(tool, command.scopeId, context.principal),
+      async measure({ round, messages, tools: declared }, measureSignal) {
+        const invocation = roundCommand(round, messages, declared);
+        const counted = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal).catch(() => null);
+        const windows = [profileWindow, counted?.windowTokens ?? null].filter((value): value is number => value !== null);
+        const windowTokens = windows.length ? Math.min(...windows) : null;
+        if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
+        return { promptTokens: chatTurnPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
+      },
       describe: (_tool, args) => displayTarget(args),
       async execute(tool, args, toolSignal) {
         await channel.drained();
@@ -121,7 +149,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       now: () => Date.now(),
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: Date.now() },
-      messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); } }, store, ports);
+      messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
+      admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS } }, store, ports);
     await channel.drained();
     const last = result.appended.at(-1);
     const answer = last?.role === 'assistant' && last.toolCalls.length === 0 && last.content ? last.content : null;

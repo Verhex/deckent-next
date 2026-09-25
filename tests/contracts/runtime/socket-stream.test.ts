@@ -19,7 +19,7 @@ const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model'
 const command = { schemaVersion: 1, commandId: 'command-1', scopeId: 'scope-1', reference, catalogRevision: 'catalog-1',
   expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) },
   nativeRequest: { model: 'native-model', messages: [{ role: 'user', content: 'hi' }] } };
-const streamRequest = (requestId = 'request-1') => ({ schemaVersion: 12 as const, requestId, operation: 'invokeModelStream' as const,
+const streamRequest = (requestId = 'request-1') => ({ schemaVersion: 13 as const, requestId, operation: 'invokeModelStream' as const,
   input: command, delivery: { maxResultBytes: 2048 } });
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 async function rawServer(endpoint: string, onRequest: (socket: Socket) => void) {
@@ -54,18 +54,18 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket streaming', 
         stream.emit({ kind: 'reasoning', text: 'th' }); stream.emit({ kind: 'reasoning', text: 'ink' });
         await tick(); stream.emit({ kind: 'text', text: 'Mer' }); await tick(); stream.emit({ kind: 'text', text: 'haba' });
       }
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: { done: true } };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: { done: true } };
     });
     try {
       const batches: ModelInvocationDelta[][] = [];
       const response = await streamLocalRuntime(options, streamRequest(), deltas => batches.push([...deltas]));
-      expect(response).toEqual({ schemaVersion: 12, requestId: 'request-1', ok: true, result: { done: true } });
+      expect(response).toEqual({ schemaVersion: 13, requestId: 'request-1', ok: true, result: { done: true } });
       expect(batches.flat()).toEqual([{ kind: 'reasoning', text: 'think' }, { kind: 'text', text: 'Mer' }, { kind: 'text', text: 'haba' }]);
       expect(batches[0]).toEqual([{ kind: 'reasoning', text: 'think' }]);
-      await expect(requestLocalRuntime(options, { schemaVersion: 12, requestId: 'request-2', operation: 'inspectRun', input: {} }))
+      await expect(requestLocalRuntime(options, { schemaVersion: 13, requestId: 'request-2', operation: 'inspectRun', input: {} }))
         .resolves.toMatchObject({ ok: true });
       expect(channels[0]).toBeDefined(); expect(channels[1]).toBeUndefined();
-      await expect(streamLocalRuntime(options, { schemaVersion: 12, requestId: 'request-3', operation: 'inspectRun', input: {} }, () => undefined))
+      await expect(streamLocalRuntime(options, { schemaVersion: 13, requestId: 'request-3', operation: 'inspectRun', input: {} }, () => undefined))
         .rejects.toBeInstanceOf(LocalRuntimeSocketError);
     } finally { await server.dispose(); }
   });
@@ -76,7 +76,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket streaming', 
     const server = await startLocalRuntimeSocketServer(options, async (request, _peer, stream) => {
       if (request.requestId === 'escape') stream!.emit({ kind: 'text', text: control });
       else for (const word of words) { stream!.emit({ kind: 'text', text: word }); await tick(); }
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: null };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const escaped: ModelInvocationDelta[][] = [];
@@ -99,7 +99,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket streaming', 
       stream!.emit({ kind: 'text', text: 'first' });
       for (let index = 0; index < 10; index++) { await new Promise(resolve => setTimeout(resolve, 10)); stream!.emit({ kind: 'text', text: '.' }); }
       finished();
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: null };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const pending = streamLocalRuntime(options, streamRequest(), () => controller.abort(), controller.signal);
@@ -111,8 +111,8 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket streaming', 
   it('rejects out-of-order, foreign, missing-final and trailing frames from a peer', async () => {
     const options = await fixture();
     const frame = (value: unknown) => encodeServiceFrame(value, 4096);
-    const delta = (sequence: number, requestId = 'request-1') => frame({ schemaVersion: 12, requestId, kind: 'delta', sequence, deltas: [{ kind: 'text', text: 'x' }] });
-    const final = frame({ schemaVersion: 12, requestId: 'request-1', ok: true, result: null });
+    const delta = (sequence: number, requestId = 'request-1') => frame({ schemaVersion: 13, requestId, kind: 'delta', sequence, deltas: [{ kind: 'text', text: 'x' }] });
+    const final = frame({ schemaVersion: 13, requestId: 'request-1', ok: true, result: null });
     for (const [replies, expected] of [[[delta(1), final], 'RUNTIME_SERVICE_CORRELATION'], [[delta(0, 'other'), final], 'RUNTIME_SERVICE_CORRELATION'],
       [[delta(0)], 'SERVICE_FRAME_TRUNCATED'], [[final, delta(0)], 'SERVICE_FRAME_EXTRA']] as const) {
       const raw = await rawServer(options.endpoint, socket => { for (const reply of replies) socket.write(reply); socket.end(); });

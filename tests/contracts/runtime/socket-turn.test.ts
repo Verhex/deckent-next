@@ -14,7 +14,7 @@ async function fixture(responseMaxBytes = 4096): Promise<LocalRuntimeSocketOptio
     acceptRetryDelayMs: 25, acceptRetryLimit: 3, headerTimeoutMs: 1_000, responseTimeoutMs: 1_000 };
 }
 afterEach(async () => { await Promise.all(owned.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
-const turnRequest = (requestId = 'request-1') => ({ schemaVersion: 12 as const, requestId, operation: 'chatTurn' as const, delivery: { maxResultBytes: 2048 },
+const turnRequest = (requestId = 'request-1') => ({ schemaVersion: 13 as const, requestId, operation: 'chatTurn' as const, delivery: { maxResultBytes: 2048 },
   input: { schemaVersion: 1, scopeId: 'scope-1', turnId: 'turn-1', messages: [{ role: 'user', content: 'hi' }] } });
 const toolMessage = (i: number): AgentTurnStreamEvent => ({ kind: 'message', message: { role: 'tool', toolCallId: `c${i}`, name: 'read_file', content: `${i}:${'r'.repeat(900)}` } });
 
@@ -26,12 +26,12 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
       // 200 tool messages of ~1 KiB each: ~50 × responseMaxBytes, with the producer waiting for the peer between steps.
       for (let i = 0; i < 200; i++) { turn!.emit(toolMessage(i)); if (i % 10 === 9) await turn!.drained(); }
       turn!.emit({ kind: 'text', text: 'It ' }); turn!.emit({ kind: 'text', text: 'exports a.' });
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: { done: true } };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: { done: true } };
     });
     try {
       const events: AgentTurnStreamEvent[] = [];
       const response = await turnLocalRuntime(options, turnRequest(), batch => events.push(...batch));
-      expect(response).toEqual({ schemaVersion: 12, requestId: 'request-1', ok: true, result: { done: true } });
+      expect(response).toEqual({ schemaVersion: 13, requestId: 'request-1', ok: true, result: { done: true } });
       const messages = events.filter(event => event.kind === 'message');
       expect(messages).toEqual(Array.from({ length: 200 }, (_, i) => toolMessage(i)));
       // Adjacent text is coalesced, never reordered.
@@ -53,7 +53,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
       const until = performance.now() + 2_000;
       while (!turn!.signal.aborted && performance.now() < until) await new Promise(wake => setTimeout(wake, 10));
       resolveAborted(turn!.signal.aborted);
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: null };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: null };
     });
     try {
       const controller = new AbortController();
@@ -73,7 +73,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
       signal = turn!.signal;
       turn!.emit({ kind: 'message', message: { role: 'tool', toolCallId: 'c1', name: 'read_file', content: 'x'.repeat(4096) } });
       await turn!.drained();
-      return { schemaVersion: 12, requestId: request.requestId, ok: true, result: { aborted: turn!.signal.aborted } };
+      return { schemaVersion: 13, requestId: request.requestId, ok: true, result: { aborted: turn!.signal.aborted } };
     });
     try {
       const events: AgentTurnStreamEvent[] = [];
@@ -85,7 +85,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
 
   it('refuses a turn stream for a non-turn operation before connecting', async () => {
     const options = await fixture();
-    await expect(turnLocalRuntime(options, { schemaVersion: 12, requestId: 'r', operation: 'inspectRun', input: {} }, () => undefined))
+    await expect(turnLocalRuntime(options, { schemaVersion: 13, requestId: 'r', operation: 'inspectRun', input: {} }, () => undefined))
       .rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
   });
 });

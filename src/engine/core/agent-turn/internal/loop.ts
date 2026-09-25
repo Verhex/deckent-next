@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { AgentToolCall, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish, AgentTurnMessage } from '#domain/index.js';
+import type { AgentContextQuality, AgentToolCall, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
+  AgentTurnMessage } from '#domain/index.js';
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
 export type AgentRoundOutcome =
@@ -20,6 +21,12 @@ export interface AgentTurnPorts {
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
   execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<AgentToolOutcome>;
   now(): number;
+  /**
+   * The prompt of a round as the provider will see it (T-L5): its own token count, or a tagged conservative upper bound, and the
+   * served window when known. One measurement per round drives admission, the surface's context line and (T-L5b) compaction.
+   */
+  measure?(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
+    signal: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
@@ -30,6 +37,8 @@ export interface AgentTurnInput {
   readonly tools: readonly AgentToolSpec[];
   readonly signal: AbortSignal;
   readonly emit: (event: AgentTurnEvent) => void;
+  /** Tokens a round must leave free in the window: the completion limit it asks for and a safety margin (T-L5). */
+  readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number };
 }
 
 export interface AgentTurnResult {
@@ -90,6 +99,21 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   for (;;) {
     if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
     rounds++;
+    if (ports.measure) {
+      let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
+      try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
+      if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+      if (measured) {
+        emit({ kind: 'context', round: rounds, ...measured });
+        const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
+        // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
+        if (measured.windowTokens !== null && measured.promptTokens + reserve > measured.windowTokens) {
+          return finish('error', `The conversation no longer fits the model's context window: ${measured.promptTokens} prompt tokens`
+            + `${measured.quality === 'upper-bound' ? ' (upper bound)' : ''} + ${reserve} reserved > ${measured.windowTokens}. Nothing was sent for`
+            + ` this round. ${summary()}. Start a new conversation or ask a shorter question.`);
+        }
+      }
+    }
     let outcome: AgentRoundOutcome;
     try { outcome = await ports.invokeRound({ round: rounds, messages, tools: input.tools }, delta => emit(delta), signal); }
     catch { outcome = { status: 'failed', state: signal.aborted ? 'cancelled' : 'unavailable' }; }

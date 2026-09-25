@@ -38,7 +38,12 @@ export interface ModelInvocationNativePort {
   send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult>;
   /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
   observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendReportedMeasurement | null;
+  /** Context measurement (T-L5): the provider's own token count of exactly the prepared request and, when reported, the served
+   * window. Null when this model or server has no counter or the count failed; never a model execution, receipt or spend. */
+  measure?(prepared: unknown, signal?: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null } | null>;
 }
+/** A provider count of one prepared request (T-L5); callers use a tagged upper bound when there is none. */
+export interface ModelInvocationMeasurement { readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: 'provider-count' }
 export interface ModelInvocationNativeRegistry {
   resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null;
   /** Called only after initial identity, policy, activation and profile checks; no secrets or model execution. */
@@ -116,6 +121,46 @@ export class ModelInvocationApplication {
     private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime,
     private readonly spending?: ModelInvocationSpendingAuthority) {}
 
+  /** Binding, activation and profile of a command as `invoke` admits them, and the native port that serves the profile. */
+  private async admittedTarget(command: ReturnType<typeof parseModelInvocationCommand>) {
+    const binding = await this.bindings.inspect(command.reference);
+    if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
+      || binding.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationError('MODEL_INVOCATION_BINDING_CONFLICT');
+    const activationReader = await this.openActivationReader(); let activation;
+    try { activation = await activationReader.loadRecord(command.scopeId, command.reference); }
+    finally { activationReader.close(); }
+    if (!activation || activation.state !== 'active' || activation.catalogRevision !== command.catalogRevision
+      || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
+    const profile = await this.profiles.resolve(command.scopeId, command.reference);
+    if (!profile || profile.scopeId !== command.scopeId || !exactReference(profile.reference, command.reference)
+      || profile.bindingDigest !== command.expectedBinding.digest
+      || !binding.definition.model.protocols.some(protocol => protocol.family === profile.protocol.family
+        && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
+    const native = this.natives.resolve(profile);
+    if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    return { binding, activation, profile, native };
+  }
+
+  /**
+   * Context measurement (T-L5): the provider's token count of exactly the request `invoke` would send for this command, under the
+   * same principal, policy (`invoke`), binding, activation and profile checks — the prompt reaches the same provider origin, so
+   * the same authority applies. No claim, receipt, spending or model execution. Null when there is no counter.
+   */
+  async measure(input: unknown, credential?: unknown, signal?: AbortSignal): Promise<ModelInvocationMeasurement | null> {
+    const command = parseModelInvocationCommand(input);
+    const principal = await authenticate(this.verifier, credential, command.scopeId);
+    modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke',
+      { scopeId: command.scopeId, reference: command.reference }, principal));
+    const { binding, profile, native } = await this.admittedTarget(command);
+    if (!native.measure) return null;
+    const prepared = await native.prepare(profile, binding.definition, command.nativeRequest);
+    if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+    const counted = await native.measure(prepared, signal);
+    if (!counted || !Number.isSafeInteger(counted.promptTokens) || counted.promptTokens < 0
+      || (counted.windowTokens !== null && (!Number.isSafeInteger(counted.windowTokens) || counted.windowTokens <= 0))) return null;
+    return Object.freeze({ promptTokens: counted.promptTokens, windowTokens: counted.windowTokens, quality: 'provider-count' as const });
+  }
+
   /** `onDelta` observes a freshly sent streamed response only; a replayed command never reaches the provider again. */
   async invoke(input: unknown, credential?: unknown, signal?: AbortSignal, delivery?: ModelInvocationDelivery,
     onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationResult> {
@@ -135,21 +180,7 @@ export class ModelInvocationApplication {
         }
         return checkInvocationResultDelivery(publicResult(true, prior), delivery);
       }
-      const binding = await this.bindings.inspect(command.reference);
-      if (binding.status !== 'declared' || binding.catalogRevision !== command.catalogRevision
-        || binding.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationError('MODEL_INVOCATION_BINDING_CONFLICT');
-      const activationReader = await this.openActivationReader(); let activation;
-      try { activation = await activationReader.loadRecord(command.scopeId, command.reference); }
-      finally { activationReader.close(); }
-      if (!activation || activation.state !== 'active' || activation.catalogRevision !== command.catalogRevision
-        || activation.binding.digest !== command.expectedBinding.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ACTIVATION_CONFLICT');
-      const profile = await this.profiles.resolve(command.scopeId, command.reference);
-      if (!profile || profile.scopeId !== command.scopeId || !exactReference(profile.reference, command.reference)
-        || profile.bindingDigest !== command.expectedBinding.digest
-        || !binding.definition.model.protocols.some(protocol => protocol.family === profile.protocol.family
-          && protocol.version === profile.protocol.version)) throw new ModelInvocationError('MODEL_INVOCATION_PROFILE_CONFLICT');
-      const native = this.natives.resolve(profile);
-      if (!native) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
+      const { binding, activation, profile, native } = await this.admittedTarget(command);
       if (!this.spending) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
       const prepared = await native.prepare(profile, binding.definition, command.nativeRequest);

@@ -1,4 +1,4 @@
-import type { AgentToolCallStatus, AgentTurnMessage } from '#domain/index.js';
+import type { AgentContextQuality, AgentToolCallStatus, AgentTurnMessage } from '#domain/index.js';
 
 /** One chat message as sent to the model for a plain (tool-less) turn. */
 export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -21,6 +21,10 @@ export type TurnDelta =
     readonly status: AgentToolCallStatus | null; readonly ms: number | null }
   /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
   | { readonly kind: 'message'; readonly message: AgentChatMessage }
+  /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. */
+  | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
+  /** The history was compacted (T-L5b): `messages` replaces every non-system message of the caller's history. */
+  | { readonly kind: 'compacted'; readonly messages: readonly AgentChatMessage[]; readonly replacedMessages: number }
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */
   | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
 

@@ -1,7 +1,7 @@
 export { ModelInvocationApplication, ModelInvocationPurgeApplication } from './internal/application.js';
 export type { ModelInvocationAcquisitionInput } from './internal/acquisition.js';
 export type { ModelInvocationSpending, ModelInvocationSpendingAuthority, ModelInvocationSpendingInput } from './internal/spending.js';
-export type { ModelInvocationAuthorizer, ModelInvocationNativePort, ModelInvocationNativeRegistry,
+export type { ModelInvocationAuthorizer, ModelInvocationMeasurement, ModelInvocationNativePort, ModelInvocationNativeRegistry,
   ModelInvocationProfileSource, ModelInvocationResult, ModelInvocationRuntime } from './internal/application.js';
 export { ModelInvocationInspectionApplication } from './internal/inspection.js';
 export type { ModelInvocationInspection, ModelInvocationInspectionReader, ModelInvocationInspectionRecord } from './internal/inspection.js';

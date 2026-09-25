@@ -1,4 +1,21 @@
-# Anlık iş akışı — Opus 5.5; canlı kurulumda araçlı terminal etkin (owner onayı 2026-09-25); T-L3b2–T-L3d Astra incelemesinde (2083–2086)
+# Anlık iş akışı — Opus 5.5; T-L5a bağlam ölçümü/kabul teslimde; T-L3b2–T-L3d + canlı etkinleştirme Astra incelemesinde (2083–2087)
+
+## T-L5a — bağlam ölçümü ve kabul (2026-09-25, Jev 90c2e32b `provider_counter_single_measure` 0,99)
+- Legacy incelemesi (salt okunur): sayaç (Anthropic count_tokens, llama.cpp tokenize) + muhafazakâr üst sınır, pencere = min(config, sunucu),
+  kabul = girdi ≤ pencere − çıktı payı − güvenlik payı; kusurlar: bayt=token, chars/4 ile kesin sayımın karışması, iki tetikleyicinin farklı
+  kalitede ölçüme bakması, tek neden kodu iki büyüklük, resume'da sıkıştırma öncesi mesajların çift eklenmesi.
+- Next: tur başına tek ölçüm (sağlayıcı sayımı ya da `upper-bound` etiketli üst sınır); `context` olayı, kabul ve (T-L5b) sıkıştırma aynı
+  ölçümü okur. `ModelInvocationApplication.measure` invoke ile aynı yetki önekinden geçer (ortak `admittedTarget`), kayıt/harcama yok.
+  openai-chat `tokenizeEndpoint` aynı origin zorunlu, yalnız `token-count` yetenekli bağlamada; hata → null. Profil `contextWindowTokens`.
+  Sığmayan tur hiç gönderilmez (not sayıları ve kaliteyi söyler). Altbilgi `bağlam [~]%N / W`. Protokol v13 (`context`, `compacted`);
+  `compacted.messages` sistem dışı geçmişin yerine geçer (istemci sistem mesajını korur — workline testi bunu yakaladı).
+- Testler: adaptör (aynı origin, sayılan = gönderilen, hata/500/bozuk/bağlantı yok → null, yetenek/uç yoksa istek yok), döngü (ölçüm olayı,
+  sığmayan tur gönderilmez, pencere bilinmiyorsa/ölçüm hatasında tur sürer), e2e (iki turda /tokenize gövdesi = gönderilen mesaj+araç, pencere
+  min, sığmayan turda sağlayıcıya 0 istek; sayaçsız modelde üst sınır ≥ gönderilen bayt), workline sıkıştırma. Mutasyonlar 1–6 düştü
+  (`proof/F26-T-L5A-CONTEXT-ADMISSION/`; 6 önce hayatta kaldı → bağlantı reddi testi eklendi).
+- Verify: verify-1 lint (`no-useless-assignment`) → düzeltildi; verify-2 `terminal-work-surface` yoklama aralığı −2877 ms (WSL duvar saati geri
+  atladı; test `Date.now` kullanıyordu → `performance.now`); verify-3 exit 0 (1866/324, native 25, host 55).
+- Canlı: katalogda `token-count` (qwen38 v4) + profil `tokenizeEndpoint`/`contextWindowTokens` → owner betiği `migrate-qwen38-v4-token-count.mjs`.
 
 ## Canlı etkinleştirme — araçlı terminal (2026-09-25, owner "1-ok 2-ok 3-ok")
 - Yedekler: `proof/F26-T-L3-LIVE-ACTIVATION-2026-09-25/backup/` (config, policy, ledger v35 VACUUM kopyası, integrity ok).

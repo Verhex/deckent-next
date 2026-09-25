@@ -52,6 +52,8 @@ export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(
   allocation: z.object({ id: identitySchema, maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive() }).strict().readonly(),
   limits: z.object({ requestMaxBytes: counterSchema.positive(), responseMaxBytes: counterSchema.positive(),
     timeoutMs: counterSchema.positive() }).strict().readonly(),
+  // Context window this deployment serves (T-L5); the same model may be served at different lengths. Absent = the provider's report.
+  contextWindowTokens: counterSchema.positive().optional(),
 }).strict().readonly();
 export const modelInvocationRequestEvidenceSchema = modelInvocationCommandSchema.unwrap().omit({ nativeRequest: true })
   .extend({ requestDigest: digest }).strict().readonly();

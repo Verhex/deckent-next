@@ -737,6 +737,7 @@
   "terminal.render.code": "code",
   "terminal.render.moreAbove": "{count} more lines above",
   "terminal.render.queued": "{count} queued",
+  "terminal.render.context": "context {approx}{percent}% of {window}",
   "terminal.render.tool": "{name} {target}",
   "terminal.render.toolRunning": "{tool} · {seconds}s",
   "terminal.render.toolStatus.error": "failed",

@@ -737,6 +737,7 @@
   "terminal.render.code": "kod",
   "terminal.render.moreAbove": "yukarıda {count} satır daha",
   "terminal.render.queued": "{count} sırada",
+  "terminal.render.context": "bağlam {approx}%{percent} / {window}",
   "terminal.render.tool": "{name} {target}",
   "terminal.render.toolRunning": "{tool} · {seconds} sn",
   "terminal.render.toolStatus.error": "başarısız",

@@ -24,22 +24,23 @@ afterEach(async () => {
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
-const model = { id: 'chat', version: 1, nativeId: 'native-chat',
-  protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }] }] };
-const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: [model] }] };
+const modelWith = (tokenCount: boolean) => ({ id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
+  capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, ...(tokenCount ? [{ id: 'token-count', version: 1, state: 'supported' }] : [])] }] });
+const catalogWith = (tokenCount: boolean) => ({ schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: [modelWith(tokenCount)] }] });
 const tariff = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } as const;
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean };
-async function runtime(options: { toolGrant?: boolean } = {}) {
+async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windowTokens?: number; countedTokens?: number } = {}) {
+  const model = modelWith(options.tokenize === true), catalog = catalogWith(options.tokenize === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
     mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
-  const state = { requests: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
+  const state = { requests: [] as Record<string, unknown>[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
     object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   const usage = `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
@@ -47,6 +48,11 @@ async function runtime(options: { toolGrant?: boolean } = {}) {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', part => body.push(part));
     req.on('end', () => {
+      if (req.url === '/tokenize') {
+        state.tokenize.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ count: options.countedTokens ?? 500, max_model_len: 131072, tokens: [] })); return;
+      }
       state.requests.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
       const step = state.script[state.requests.length - 1] ?? { content: 'no script' };
       res.writeHead(200, { 'content-type': 'text/event-stream' }); res.on('close', () => { state.closed++; });
@@ -69,8 +75,10 @@ async function runtime(options: { toolGrant?: boolean } = {}) {
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
-      definition: { endpoint: `http://127.0.0.1:${address.port}/v1/chat/completions`, maxOutputTokens: 256, authentication: { type: 'none' }, tariff } },
-    allocation: { id: 'allocation', maxCalls: null, maxInFlight: 2 }, limits: { requestMaxBytes: 262144, responseMaxBytes: 65536, timeoutMs: 5000 } };
+      definition: { endpoint: `http://127.0.0.1:${address.port}/v1/chat/completions`, maxOutputTokens: 256, authentication: { type: 'none' }, tariff,
+        ...(options.tokenize ? { tokenizeEndpoint: `http://127.0.0.1:${address.port}/tokenize` } : {}) } },
+    allocation: { id: 'allocation', maxCalls: null, maxInFlight: 2 }, limits: { requestMaxBytes: 262144, responseMaxBytes: 65536, timeoutMs: 5000 },
+    ...(options.windowTokens ? { contextWindowTokens: options.windowTokens } : {}) };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
@@ -149,6 +157,43 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(units[2]).toMatchObject({ kind: 'footer', finish: 'stop', promptTokens: 20, completionTokens: 16 });
   }, 30_000);
 
+  it('measures each round with the provider counter on exactly what it sends, and refuses a round that cannot fit before any send (T-L5)', async () => {
+    const f = await runtime({ tokenize: true, windowTokens: 100_000 }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    expect(await f.client().chatTurn(ask('turn-ctx'), event => events.push(event))).toMatchObject({ finish: 'stop', rounds: 2 });
+    // One count per round, of the same messages and tools the round sent (the anti-unit-mixing proof).
+    expect(f.state.tokenize).toHaveLength(2);
+    for (const [index, counted] of f.state.tokenize.entries()) {
+      expect(counted['messages']).toEqual(f.state.requests[index]!['messages']);
+      expect(counted['tools']).toEqual(f.state.requests[index]!['tools']);
+    }
+    // The window is the smaller of the profile's and the provider's.
+    expect(events.filter(event => event.kind === 'context')).toEqual([
+      { kind: 'context', round: 1, promptTokens: 500, windowTokens: 100_000, quality: 'provider-count' },
+      { kind: 'context', round: 2, promptTokens: 500, windowTokens: 100_000, quality: 'provider-count' }]);
+
+    const full = await runtime({ tokenize: true, windowTokens: 4_000, countedTokens: 3_000 }); await full.start();
+    full.state.script = [{ content: 'never' }];
+    const refused = await full.client().chatTurn(ask('turn-full'), () => undefined);
+    expect(refused).toMatchObject({ finish: 'error', rounds: 1, answer: null });
+    expect(refused.note).toMatch(/3000 prompt tokens \+ 2176 reserved > 4000.*Nothing was sent/);
+    expect(full.state.requests).toEqual([]);
+  }, 30_000);
+
+  it('uses a labelled upper bound and sends no counter request when the model has no counter', async () => {
+    const f = await runtime({ windowTokens: 100_000 }); await f.start();
+    f.state.script = [{ content: 'Plain answer.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-bound'), event => events.push(event));
+    expect(f.state.tokenize).toEqual([]);
+    const context = events.find(event => event.kind === 'context');
+    expect(context).toMatchObject({ kind: 'context', round: 1, windowTokens: 100_000, quality: 'upper-bound' });
+    // Never under-counts: at least one token per byte of what was sent.
+    const sent = f.state.requests[0]!;
+    expect((context as { promptTokens: number }).promptTokens).toBeGreaterThanOrEqual(Buffer.byteLength(JSON.stringify({ messages: sent['messages'], tools: sent['tools'] })));
+  }, 30_000);
+
   it('answers a tool call the policy does not grant as denied, never runs it, and still finishes the turn', async () => {
     const f = await runtime({ toolGrant: false }); await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'I may not read it.' }];
@@ -164,7 +209,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const f = await runtime(); await f.start();
     f.state.script = [{ hold: true }];
     const client = f.client(); let seen = false;
-    const running = client.chatTurn(ask('turn-cancel'), () => { seen = true; });
+    // Wait for the provider's stream (the first event is now the pre-send `context` measurement).
+    const running = client.chatTurn(ask('turn-cancel'), event => { if (event.kind === 'text') seen = true; });
     const until = performance.now() + 5_000;
     while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
     expect(seen).toBe(true);
@@ -183,7 +229,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const f = await runtime(); await f.start();
     f.state.script = [{ hold: true }];
     const controller = new AbortController(); let seen = 0;
-    const pending = f.client().chatTurn(ask('turn-gone'), () => { if (++seen === 3) controller.abort(); }, controller.signal);
+    const pending = f.client().chatTurn(ask('turn-gone'), event => { if (event.kind === 'text' && ++seen === 3) controller.abort(); }, controller.signal);
     await expect(pending).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
     const until = performance.now() + 5_000;
     const state = () => f.rows("SELECT state FROM agent_turns WHERE turn_id='turn-gone'") as { state: string }[];

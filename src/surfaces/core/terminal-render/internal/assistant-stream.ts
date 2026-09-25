@@ -10,8 +10,9 @@ import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type Liv
 export type TurnFinish = Extract<TurnDelta, { kind: 'done' }>['finish'];
 export type AnswerUnit = Readonly<{ kind: Segment['kind']; markdown: string; lead: boolean }>;
 export type ReasoningUnit = Readonly<{ kind: 'reasoning'; tokens: number; approximate: boolean; elapsedMs: number }>;
+export type ContextView = Readonly<{ promptTokens: number; windowTokens: number | null; quality: Extract<TurnDelta, { kind: 'context' }>['quality'] }>;
 export type FooterUnit = Readonly<{ kind: 'footer'; elapsedMs: number; promptTokens: number | null; completionTokens: number | null;
-  reasoningTokens: number | null; finish: TurnFinish; note?: string | null }>;
+  reasoningTokens: number | null; finish: TurnFinish; note?: string | null; context?: ContextView }>;
 type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number }>;
@@ -31,6 +32,8 @@ export type AssistantStreamState = Readonly<{
   /** Completion tokens of earlier rounds of the same turn (a tool round starts a new model round). */
   earlierCompletionTokens: number;
   activeTool: ActiveTool | null;
+  /** The latest round's measured prompt against the window (T-L5). */
+  context: ContextView | null;
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -48,7 +51,7 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 
 export function startAssistantStream(nowMs: number): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
-    earlierCompletionTokens: 0, activeTool: null });
+    earlierCompletionTokens: 0, activeTool: null, context: null });
 }
 
 function reasoningSummary(state: AssistantStreamState, nowMs: number): ReasoningUnit {
@@ -74,7 +77,10 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
 
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
-  if (delta.kind === 'message') return step(state, []);
+  if (delta.kind === 'message' || delta.kind === 'compacted') return step(state, []);
+  if (delta.kind === 'context') {
+    return step(Object.freeze({ ...state, context: Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality }) }), []);
+  }
   if (delta.kind === 'usage') {
     // Each round reports its own usage: the prompt is the latest context, completions add up over the turn.
     const earlier = state.earlierCompletionTokens + (state.usage?.completionTokens ?? 0);
@@ -108,7 +114,7 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   const usage = state.usage;
   const footer: FooterUnit = Object.freeze({ kind: 'footer', elapsedMs: Math.max(0, nowMs - state.startedAtMs), promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage ? state.earlierCompletionTokens + usage.completionTokens : null, reasoningTokens: usage?.reasoningTokens ?? null, finish: delta.finish,
-    ...(delta.note ? { note: delta.note } : {}) });
+    ...(delta.note ? { note: delta.note } : {}), ...(state.context ? { context: state.context } : {}) });
   const done = Object.freeze({ ...state, phase: 'done' as const, segmenter: flushed.state, answered: true, activeTool: null });
   return step(done, [...summary, ...answerUnits(flushed.segments, state.answered)], footer);
 }

@@ -75,14 +75,15 @@ const baseLedger = { scopeId: 'scope-a', async listWorkers() { return report(Dat
 describe('work surface: live worker panel', () => {
   it('shows human-readable worker lines in the dynamic region fed only by the heartbeat poll', async () => {
     const polls: number[] = [];
-    const view = mount({ pollMs: 60, ledger: { ...baseLedger, async listWorkers() { polls.push(Date.now()); return report(Date.now()); } } });
+    const view = mount({ pollMs: 60, ledger: { ...baseLedger, async listWorkers() { polls.push(performance.now()); return report(Date.now()); } } });
     await view.type('/watch-workers\r');
     await until(() => view.stdout.text.includes('LIVE-PANEL'), 'panel');
     expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts · 12 s ago · 18.4k tokens (cache 50%)');
     expect(view.stdout.text).toContain('worker 2 · codex · starting · 2 s ago · 4 provider events not itemized yet');
     expect(view.stdout.text).toContain('worker 3 · docker · running');
     await settle(400);
-    // Single-flight polls never run faster than the heartbeat: at most one per interval after the first.
+    // Single-flight polls never run faster than the heartbeat: at most one per interval after the first. Intervals use the
+    // monotonic clock: the WSL wall clock steps back by seconds (a -2877 ms interval was observed in a full verify).
     for (let index = 1; index < polls.length; index++) expect(polls[index]! - polls[index - 1]!).toBeGreaterThanOrEqual(55);
     await view.type('/watch-stop\r');
     await until(() => view.frame().includes('WATCH-OFF') && !view.frame().includes('LIVE-PANEL'), 'panel cleared when the watch stops');

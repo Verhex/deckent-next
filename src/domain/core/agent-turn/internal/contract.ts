@@ -27,10 +27,16 @@ export type AgentTurnEvent =
   | { readonly kind: 'usage'; readonly round: number; readonly promptTokens: number; readonly completionTokens: number }
   /** Each assistant or tool message the turn appends, in order: the client's history continues from exactly these. */
   | { readonly kind: 'message'; readonly message: AgentTurnMessage }
+  /** The prompt of a round as measured before it was sent (T-L5): the provider's count, or a tagged upper bound. */
+  | { readonly kind: 'context'; readonly round: number; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
+  /** The history was compacted (T-L5b): `messages` replaces every non-system message the client holds; its system prompt stays. */
+  | { readonly kind: 'compacted'; readonly messages: readonly AgentTurnMessage[]; readonly replacedMessages: number }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
 export type AgentToolCallStatus = 'ok' | 'error' | 'denied' | 'approval-required' | 'invalid-arguments' | 'duplicate' | 'cancelled';
 export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
+/** `provider-count`: the provider's own tokenizer on exactly the round's request; `upper-bound`: a conservative byte-based bound. */
+export type AgentContextQuality = 'provider-count' | 'upper-bound';
 
 const count = z.number().int().nonnegative().safe();
 const finishSchema = z.enum(['stop', 'length', 'cancelled', 'error']);
@@ -46,6 +52,9 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count }).strict(),
   z.object({ kind: z.literal('usage'), round: z.number().int().positive().safe(), promptTokens: count, completionTokens: count }).strict(),
   z.object({ kind: z.literal('message'), message: agentTurnMessageSchema }).strict(),
+  z.object({ kind: z.literal('context'), round: z.number().int().positive().safe(), promptTokens: count, windowTokens: z.number().int().positive().safe().nullable(),
+    quality: z.enum(['provider-count', 'upper-bound']) }).strict(),
+  z.object({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }).strict(),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 

@@ -131,6 +131,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
       moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
       tool: t('terminal.render.tool', {}, locale), toolRunning: t('terminal.render.toolRunning', {}, locale),
+      context: t('terminal.render.context', {}, locale),
       toolStatus: { error: t('terminal.render.toolStatus.error', {}, locale), denied: t('terminal.render.toolStatus.denied', {}, locale),
         'approval-required': t('terminal.render.toolStatus.approvalRequired', {}, locale),
         'invalid-arguments': t('terminal.render.toolStatus.invalidArguments', {}, locale),

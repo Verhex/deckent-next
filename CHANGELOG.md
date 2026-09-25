@@ -8,6 +8,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L5a: every agent round is measured before it is sent — the provider's own token count of exactly that request (vLLM
+  `/tokenize` via a same-origin `tokenizeEndpoint` when the model declares `token-count`, under the invocation's authority) or a
+  labelled conservative upper bound — and a round that cannot fit the window is never sent; the footer shows the context percent.
+  Profiles may declare `contextWindowTokens`. Runtime protocol v13 (`context` and `compacted` turn events; lifecycle v12–v13).
+
 - SURFACES/T-L3d: the interactive terminal runs agent turns: one line per tool call (status and seconds, a live line while it runs),
   the closure note in the footer, history continued from the turn's messages (tool calls and results) with a window that never splits
   a call from its result, and Esc/Ctrl+C cancelling the turn at once. Line mode stays tool-less.

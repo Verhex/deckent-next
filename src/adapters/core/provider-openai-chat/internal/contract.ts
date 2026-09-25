@@ -23,7 +23,9 @@ export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: '
 export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1; currency: string;
   inputMinorUnitsPerMillionTokens: 0; outputMinorUnitsPerMillionTokens: 0 }>;
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number;
-  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff }>;
+  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff;
+  /** vLLM-style `POST /tokenize` of the same origin (T-L5); used only when the binding declares `token-count`. */
+  tokenizeEndpoint?: string }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
 export type OpenAiChatToolCall = Readonly<{ id: string; type: 'function'; function: Readonly<{ name: string; arguments: string }> }>;
 export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'user'; content: string }>
@@ -40,6 +42,8 @@ export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
 export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
 /** Catalog capability a model binding must declare (state supported) before any tool definition is sent to it. */
 export const OPENAI_CHAT_TOOL_CALLS_CAPABILITY = 'tool-calls';
+/** The server counts tokens of a chat request (messages and tools, the same body the round sends) at `tokenizeEndpoint`. */
+export const OPENAI_CHAT_TOKEN_COUNT_CAPABILITY = 'token-count';
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
 const positive = z.number().int().positive().safe();
@@ -57,7 +61,7 @@ const tariffSchema = z.object({ kind: z.literal('operator-static'), version: z.l
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: positive,
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
     z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
-  tls: z.object({ caPem: certificate }).strict().optional(), tariff: tariffSchema }).strict();
+  tls: z.object({ caPem: certificate }).strict().optional(), tariff: tariffSchema, tokenizeEndpoint: z.string().min(1).optional() }).strict();
 const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
   timeoutMs: positive.max(2_147_483_647) }).strict();
 const toolCallSchema = z.object({ id: z.string().min(1).max(256), type: z.literal('function'),
@@ -94,9 +98,14 @@ export function parseOpenAiChatHttpDefinition(input: unknown): OpenAiChatHttpDef
   if (!parsed || !parsed.success || !isCanonicalEndpoint(parsed.data.endpoint, parsed.data.authentication.type, parsed.data.tls !== undefined)) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   }
+  // The counter sees the same prompt as the round: it must be the same origin (scheme, host, port), so egress is identical.
+  const tokenize = parsed.data.tokenizeEndpoint;
+  if (tokenize !== undefined && (!isCanonicalEndpoint(tokenize, parsed.data.authentication.type, parsed.data.tls !== undefined)
+    || new URL(tokenize).origin !== new URL(parsed.data.endpoint).origin)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   const authentication = Object.freeze({ ...parsed.data.authentication });
   return Object.freeze({ endpoint: parsed.data.endpoint, maxOutputTokens: parsed.data.maxOutputTokens, authentication,
-    ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}), tariff: Object.freeze({ ...parsed.data.tariff }) });
+    ...(parsed.data.tls ? { tls: Object.freeze({ ...parsed.data.tls }) } : {}), tariff: Object.freeze({ ...parsed.data.tariff }),
+    ...(tokenize !== undefined ? { tokenizeEndpoint: tokenize } : {}) });
 }
 
 export function parseOpenAiChatHttpLimits(input: unknown): OpenAiChatHttpLimits {

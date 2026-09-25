@@ -3,7 +3,7 @@ import type { ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
-  OPENAI_CHAT_TOOL_CALLS_CAPABILITY,
+  OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY,
   openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
@@ -20,6 +20,41 @@ const messageSchema = z.object({ role: z.literal('assistant'), content: z.string
 const choiceSchema = z.object({ index: z.literal(0), finish_reason: finishReason, message: messageSchema }).passthrough();
 const responseSchema = z.object({ id: z.string().min(1), object: z.literal('chat.completion'), created: z.number().int().nonnegative().safe(),
   model: z.string().min(1), choices: z.array(choiceSchema).length(1), usage: z.unknown().optional() }).passthrough();
+
+/** Largest `/tokenize` answer read (the server lists every token id: ~7 bytes each, so a 131k-token prompt is about 1 MiB). */
+export const OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
+const tokenizeSchema = z.object({ count: z.number().int().nonnegative().safe(), max_model_len: z.number().int().positive().safe().optional() }).passthrough();
+/** Legacy deadline for a counter: 2 s plus 250 ms per KiB of request, at most 30 s (never the round's own timeout). */
+const tokenizeTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.ceil(bodyBytes / 1024) * 250);
+
+/**
+ * Provider count of exactly what the round sends (T-L5): the same model, messages and tools as the prepared body, posted to the
+ * same-origin `tokenizeEndpoint`. Any failure — status, timeout, cancel, malformed answer — is null: the caller then uses a tagged
+ * upper bound, and a counter never fails a turn.
+ */
+async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatRequest, options: OpenAiChatNativePortOptions, signal?: AbortSignal) {
+  const endpoint = prepared.definition.tokenizeEndpoint;
+  if (!endpoint) return null;
+  const body = JSON.stringify({ model: prepared.request.model, messages: prepared.request.messages,
+    ...(prepared.request.tools ? { tools: prepared.request.tools } : {}) });
+  try {
+    const result = await sendNativeJsonHttp({ definition: { endpoint, authentication: prepared.definition.authentication,
+      ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) },
+    limits: { requestMaxBytes: prepared.limits.requestMaxBytes, responseMaxBytes: OPENAI_CHAT_TOKENIZE_RESPONSE_MAX_BYTES,
+      timeoutMs: tokenizeTimeoutMs(Buffer.byteLength(body, 'utf8')) },
+    body, adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION } },
+    { ...(options.resolveCredential ? { resolveCredential: options.resolveCredential } : {}), parseResponse: raw => {
+      let value: unknown;
+      try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)); } catch { return { reason: 'invalid-response' }; }
+      const parsed = tokenizeSchema.safeParse(value);
+      if (!parsed.success) return { reason: 'invalid-response' };
+      return { response: { schemaVersion: 1, native: { count: parsed.data.count, maxModelLen: parsed.data.max_model_len ?? null }, usage: null } };
+    } }, signal);
+    if ('kind' in result) return null;
+    const native = result.native as { count: number; maxModelLen: number | null };
+    return Object.freeze({ promptTokens: native.count, windowTokens: native.maxModelLen });
+  } catch { return null; }
+}
 
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
 export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown): PreparedOpenAiChatRequest {
@@ -80,7 +115,7 @@ export const openAiChatProtocol = Object.freeze({ family: OPENAI_CHAT_COMPLETION
 
 /** Structural native port for the engine resolver. Only preparation validates the profile and binding; it has no network effect. */
 export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions = {}): ModelInvocationNativePort {
-  const preparedTokens = new WeakSet<object>();
+  const preparedTokens = new WeakSet<object>(), countable = new WeakSet<object>();
   return Object.freeze({
     responseBytesUpperBound(prepared: unknown): bigint {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
@@ -113,13 +148,24 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
         throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       }
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request);
-      preparedTokens.add(prepared); return prepared;
+      preparedTokens.add(prepared);
+      // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
+      if (adapterDefinition.tokenizeEndpoint && binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+        && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOKEN_COUNT_CAPABILITY && capability.version === 1 && capability.state === 'supported'))) {
+        countable.add(prepared);
+      }
+      return prepared;
     },
     async send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult> {
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
         throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       }
       preparedTokens.delete(prepared); return sendPreparedOpenAiChatHttpRequest(prepared as PreparedOpenAiChatRequest, options, signal, onDelta);
+    },
+    async measure(prepared: unknown, signal?: AbortSignal) {
+      if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+      preparedTokens.delete(prepared);
+      return countable.has(prepared) ? countPreparedOpenAiChatRequest(prepared as PreparedOpenAiChatRequest, options, signal) : null;
     },
   });
 }

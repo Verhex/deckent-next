@@ -84,7 +84,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
         request = runtimeServiceRequestSchema.parse({ ...lifecycle, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION });
       }
     } catch { socket.destroy(); return; }
-    // An older lifecycle version gets its own envelope version (v11 has the same envelope, error params included).
+    // An older lifecycle version gets its own envelope version (v12 has the same envelope, error params included).
     const versioned = (response: RuntimeServiceResponse): RuntimeServiceResponse => replyVersion === RUNTIME_SERVICE_SCHEMA_VERSION ? response
       : { ...response, schemaVersion: replyVersion } as unknown as RuntimeServiceResponse;
     // Prove a correlated error can be delivered before admitting any effect. Tiny limits must not fail after dispatch.

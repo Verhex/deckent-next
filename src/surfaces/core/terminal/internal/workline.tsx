@@ -177,10 +177,12 @@ export function WorklineApp(props: WorklineProps) {
       if (props.streamTurn) {
         // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
         let state = startAssistantStream(startedAtMs), answer = '';
-        const appended: AgentChatMessage[] = [];
+        let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         for await (const delta of props.streamTurn(messages, controller.signal)) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
+          // A compaction replaces every non-system message the turn started from, including what it appended so far.
+          if (delta.kind === 'compacted') { base = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')]; appended = []; }
           const step: AssistantStreamStep = renderAssistantStream(state, delta, Date.now());
           state = step.state;
           const entries = streamStepEntries(step);
@@ -189,7 +191,7 @@ export function WorklineApp(props: WorklineProps) {
         }
         // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
-        history.current = next.length ? boundAgentHistory(messages[0]!, [...messages, ...next], historyMessages) : messages;
+        history.current = next.length || base !== messages ? boundAgentHistory(base[0]!, [...base, ...next], historyMessages) : messages;
       } else {
         const reply = await completeTurn(plainChatHistory(messages), controller.signal);
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
