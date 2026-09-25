@@ -2,15 +2,17 @@ import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, typ
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { LocalRuntimeSocketError, registerProviderConfig, requestLocalRuntime, streamLocalRuntime } from '#adapters/index.js';
+import { LocalRuntimeSocketError, registerProviderConfig, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
   providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
-  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink } from '#domain/index.js';
+  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink,
+  chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, type AgentTurnStreamEvent,
+  type ChatTurnCancellation, type ChatTurnCancellationResult, type ChatTurnCommand, type ChatTurnResult } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
-import { parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
+import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
   type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
 
@@ -27,12 +29,17 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   inspectModelInvocation(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   inspectProviderSpendAccount(query: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAccountInspection>;
   auditProviderSpendAccount(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
+  /** v12 agent turn: required turn events (the history continues from its `message` events), then the bounded turn result.
+   * Aborting disconnects, which cancels the turn at its next write; `cancelChatTurn` cancels at once. */
+  chatTurn(command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal): Promise<ChatTurnResult>;
+  cancelChatTurn(command: ChatTurnCancellation): Promise<ChatTurnCancellationResult>;
 }>;
 
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
-    onDelta?: ModelInvocationDeltaSink, version: RuntimeServiceLifecycleVersion = RUNTIME_SERVICE_SCHEMA_VERSION): Promise<unknown> => {
+    onDelta?: ModelInvocationDeltaSink, version: RuntimeServiceLifecycleVersion = RUNTIME_SERVICE_SCHEMA_VERSION,
+    onEvent?: (event: AgentTurnStreamEvent) => void): Promise<unknown> => {
     try {
       registerProviderConfig();
       const config = await loadConfig(projectRoot, { ...options, heal: false });
@@ -44,9 +51,12 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const requestId = randomUUID();
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
+        || operation === 'chatTurn' || operation === 'cancelChatTurn'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
-      const response = onDelta
+      const response = onEvent
+        ? await turnLocalRuntime(socketOptions(config.service, endpoint), request, events => { for (const event of events) onEvent(event); }, signal)
+        : onDelta
         ? await streamLocalRuntime(socketOptions(config.service, endpoint), request, deltas => { for (const delta of deltas) onDelta(delta); }, signal)
         : await requestLocalRuntime(socketOptions(config.service, endpoint), request, signal);
       if (!response.ok) throw ErrorRegistry.has(response.error.code)
@@ -73,9 +83,28 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
-    && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount').map(operation =>
+    && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
+    && operation !== 'chatTurn' && operation !== 'cancelChatTurn').map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
+    async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
+      try {
+        const parsed = chatTurnCommandSchema.safeParse(input);
+        if (!parsed.success || typeof onEvent !== 'function') throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+        const result = chatTurnResultSchema.safeParse(await call('chatTurn', parsed.data, undefined, signal, undefined, RUNTIME_SERVICE_SCHEMA_VERSION, onEvent));
+        if (!result.success || result.data.turnId !== parsed.data.turnId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw queryFailure(error); }
+    },
+    async cancelChatTurn(input: ChatTurnCancellation) {
+      try {
+        const parsed = chatTurnCancellationSchema.safeParse(input);
+        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+        const result = chatTurnCancellationResultSchema.safeParse(await call('cancelChatTurn', parsed.data));
+        if (!result.success || result.data.turnId !== parsed.data.turnId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw queryFailure(error); }
+    },
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);

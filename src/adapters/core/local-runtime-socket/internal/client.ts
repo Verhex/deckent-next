@@ -1,7 +1,7 @@
 import { Socket } from 'node:net';
-import { isRuntimeServiceStreamingOperation, parseRuntimeServiceLifecycleResponse, parseRuntimeServiceResponse, RUNTIME_SERVICE_SCHEMA_VERSION, RuntimeServiceProtocolError,
-  runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceStreamFrameSchema, type RuntimeServiceLifecycleRequest, type RuntimeServiceRequest,
-  type RuntimeServiceResponse, type RuntimeServiceStreamFrame } from '#engine/index.js';
+import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, parseRuntimeServiceLifecycleResponse, parseRuntimeServiceResponse, RUNTIME_SERVICE_SCHEMA_VERSION,
+  RuntimeServiceProtocolError, runtimeServiceEventFrameSchema, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceStreamFrameSchema,
+  type RuntimeServiceEventFrame, type RuntimeServiceLifecycleRequest, type RuntimeServiceRequest, type RuntimeServiceResponse, type RuntimeServiceStreamFrame } from '#engine/index.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError, ServiceFrameStreamDecoder } from './framing.js';
 import { assertOwnedSocket, LocalRuntimeSocketError, resolveSocketOptions, type LocalRuntimeSocketOptions } from './endpoint.js';
 
@@ -81,17 +81,43 @@ export async function requestLocalRuntime(options: LocalRuntimeSocketOptions,
  */
 export async function streamLocalRuntime(options: LocalRuntimeSocketOptions, value: RuntimeServiceRequest,
   onDeltas: (deltas: RuntimeServiceStreamFrame['deltas']) => void, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
-  if (signal?.aborted) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
   const request = runtimeServiceRequestSchema.parse(value);
   if (!isRuntimeServiceStreamingOperation(request.operation)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
+  // Delta frames share one response limit in total; the final frame has its own.
+  return framedLocalRuntime(options, request, limit => 2 * (limit + 4), frame => {
+    const delta = runtimeServiceStreamFrameSchema.safeParse(frame);
+    if (!delta.success) return null;
+    return { requestId: delta.data.requestId, sequence: delta.data.sequence, deliver: () => onDeltas(delta.data.deltas) };
+  }, signal);
+}
+
+/**
+ * Turn operation (v12 `chatTurn`): ordered event frames, then exactly one response frame and EOF. Each frame is bounded, the
+ * stream is not (a turn has no budget). Event frames are required data; a consumer failure is the caller's to surface.
+ * Aborting disconnects, and a disconnected peer cancels the turn on the service.
+ */
+export async function turnLocalRuntime(options: LocalRuntimeSocketOptions, value: RuntimeServiceRequest,
+  onEvents: (events: RuntimeServiceEventFrame['events']) => void, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
+  const request = runtimeServiceRequestSchema.parse(value);
+  if (!isRuntimeServiceTurnOperation(request.operation)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
+  return framedLocalRuntime(options, request, () => null, frame => {
+    const event = runtimeServiceEventFrameSchema.safeParse(frame);
+    if (!event.success) return null;
+    return { requestId: event.data.requestId, sequence: event.data.sequence, deliver: () => onEvents(event.data.events), required: true };
+  }, signal);
+}
+
+type FramePart = { readonly requestId: string; readonly sequence: number; readonly deliver: () => void; readonly required?: boolean };
+async function framedLocalRuntime(options: LocalRuntimeSocketOptions, request: RuntimeServiceRequest, total: (responseMaxBytes: number) => number | null,
+  part: (frame: unknown) => FramePart | null, signal?: AbortSignal): Promise<RuntimeServiceResponse> {
+  if (signal?.aborted) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
   const resolved = await resolveSocketOptions(options);
   const frame = encodeServiceFrame(request, resolved.inputMaxBytes);
   await assertOwnedSocket(resolved.endpoint);
   const socket = new Socket({ allowHalfOpen: true });
   try { await connected(socket, resolved.endpoint, resolved.headerTimeoutMs, signal); }
   catch (error) { socket.destroy(); throw connectFailure(error); }
-  // Delta frames share one response limit in total; the final frame has its own.
-  const decoder = new ServiceFrameStreamDecoder(resolved.responseMaxBytes, 2 * (resolved.responseMaxBytes + 4));
+  const decoder = new ServiceFrameStreamDecoder(resolved.responseMaxBytes, total(resolved.responseMaxBytes));
   return await new Promise((resolve, reject) => {
     let settled = false, sequence = 0, final: RuntimeServiceResponse | null = null;
     const fail = (error: unknown) => {
@@ -107,13 +133,14 @@ export async function streamLocalRuntime(options: LocalRuntimeSocketOptions, val
         if (!Buffer.isBuffer(chunk)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
         for (const value of decoder.push(chunk)) {
           if (final) throw new ServiceFrameError('SERVICE_FRAME_EXTRA');
-          const delta = runtimeServiceStreamFrameSchema.safeParse(value);
-          if (!delta.success) { final = parseRuntimeServiceResponse(request.requestId, value); continue; }
-          if (delta.data.requestId !== request.requestId || delta.data.sequence !== sequence) {
+          const parsed = part(value);
+          if (!parsed) { final = parseRuntimeServiceResponse(request.requestId, value); continue; }
+          if (parsed.requestId !== request.requestId || parsed.sequence !== sequence) {
             throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_CORRELATION');
           }
           sequence += 1;
-          try { onDeltas(delta.data.deltas); } catch { /* A presentation failure never changes the response. */ }
+          if (parsed.required) parsed.deliver();
+          else try { parsed.deliver(); } catch { /* A presentation failure never changes the response. */ }
         }
       } catch (error) { fail(error); }
     });

@@ -434,7 +434,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
   build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
-  in protocol versions [10, current] and answered in the request's version; a client retries these two only, once per
+  in the previous and the current protocol version ([11, 12] since v12) and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
   from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
   shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
@@ -459,7 +459,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
   cancellation of that invocation. There is no direct/unmanaged HTTP backend and no silent fallback.
   **Streaming (S-STREAM, implemented end to end 2026-09-24):** `streamTerminalChatTurn` yields the surface
-  `TurnDelta` contract over runtime protocol **v11** `invokeModelStream`: the same governed invocation as `invokeModel`
+  `TurnDelta` contract over runtime protocol `invokeModelStream` (since v11): the same governed invocation as `invokeModel`
   (authorization, activation, reservation before send, settlement, durable command replay), answered by ordered delta
   frames and exactly one ordinary response frame. Delta frames are presentation: each ≤ `service.responseMaxBytes`, all
   together ≤ one more `responseMaxBytes`, coalesced per event-loop turn; when exhausted they stop for good, so the client
@@ -554,7 +554,25 @@ call or finish. The turn is finished with its outcome even when the loop throws 
 an answered turn whose outcome could not be stored is returned with `recorded: false` and stays running until the next start.
 Turns left running by a stopped service are closed as interrupted (`error` with a fixed note) by `interruptRunning`, never
 resumed; a damaged row is reported and left as it is without blocking the others. The service start wiring (after exclusive
-socket ownership, like the ledger upgrade) is part of the runtime operation slice. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+socket ownership, like the ledger upgrade) runs at every `runtime serve`.
+**Runtime agent turn (T-L3c, protocol v12, Jev 9df04efb).** `chatTurn` runs one durable agent turn inside the runtime service:
+the principal comes from the connection; the model, `maxCompletionTokens` and tools from fresh configuration (`terminal.chat`);
+the client sends only its history ending with the new user message (untrusted context, bound to the turn id by a digest over
+history, model, catalog revision, binding, completion limit and tool list). Every round is the existing governed invocation under
+`commandId = sha256('turn-round:1', scope, turn, round)`; its failure closes the turn with the typed code in the note. Tools are
+declared to the model only when its binding declares `tool-calls`; each call is decided by `AgentToolPolicyAuthorization`
+(`agent-tool`/`invoke`, id = tool name; an unreadable policy is `deny`) and runs as a workspace read tool on the project. The answer
+streams as v12 **event frames** (`text`, `reasoning`, `tool.started`, `tool.finished`, `usage`, `message`) followed by one response
+frame with the bounded `ChatTurnResult` (finish, note, rounds, tool calls, the final answer when it fits the replay bound and the
+delivery, `replayed`, `recorded`). Event frames are required data, not presentation: the client's history continues from exactly the
+`message` events. Each frame is bounded by `service.responseMaxBytes`; the stream as a whole is not (no turn budget); the loop waits
+for the peer to drain before each round and tool call, and at most `4 × responseMaxBytes` may wait unread before the turn is
+cancelled; an event that cannot fit one frame cancels the turn instead of being dropped. A peer that disconnects cancels the turn
+at the next write (a Unix peer that closed after its request is not visible earlier); `cancelChatTurn` of the same principal
+cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns. Stores:
+`agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
+Reading tools needs an explicit policy grant (`agent-tool`, ids `read_file`, `list_dir`, `grep`, `glob`, action `invoke`);
+without it every call is `denied`. The terminal surface does not use `chatTurn` yet (next slice). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

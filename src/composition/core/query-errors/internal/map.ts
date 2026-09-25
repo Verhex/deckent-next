@@ -7,7 +7,7 @@ import { ModelActivationError } from '#domain/index.js';
 import { ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
-import { ModelActivationStoreError } from '#engine/index.js';
+import { ModelActivationStoreError, AgentTurnStoreError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
@@ -32,6 +32,7 @@ export function queryFailure(error: unknown): DeckentError {
     ? 'MODEL_INVOCATION_PROFILE_CONFLICT' : error.code === 'TARIFF_CONFLICT' ? 'PROVIDER_SPEND_CONFLICT' : 'MODEL_INVOCATION_INVALID');
   if (error instanceof ModelInvocationError || error instanceof ModelInvocationStoreError || error instanceof OpenAiChatHttpError) return ErrorRegistry.createError(error.code);
   if (error instanceof ModelActivationError || error instanceof ModelActivationStoreError) return ErrorRegistry.createError(error.code);
+  if (error instanceof AgentTurnStoreError) return ErrorRegistry.createError(error.code);
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
     || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError

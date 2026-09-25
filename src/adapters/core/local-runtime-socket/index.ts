@@ -5,7 +5,8 @@ export type { LocalRuntimeSocketErrorCode, LocalRuntimeSocketOptions } from './i
 export { acquireLocalRuntimeSocketGuard, startLocalRuntimeSocketServer } from './internal/server.js';
 export type { LocalRuntimeSocketGuard, LocalRuntimeSocketServer, RuntimeServiceHandler } from './internal/server.js';
 export type { RuntimeServiceStreamChannel } from './internal/stream-channel.js';
-export { requestLocalRuntime, streamLocalRuntime } from './internal/client.js';
+export type { RuntimeServiceTurnChannel } from './internal/event-channel.js';
+export { requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from './internal/client.js';
 export type { LocalPeerIdentity } from './internal/peer.js';
 export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './internal/authentication.js';
 export { createLocalPeerSession } from './internal/authentication.js';

@@ -40,7 +40,8 @@ it('answers without tools in one round and ends with exactly one done', async ()
   const p = ports([answer('It exports a.')]);
   const { result, events } = await run(p);
   expect(result).toMatchObject({ finish: 'stop', rounds: 1, toolCalls: 0, note: null });
-  expect(events.map(event => event.kind)).toEqual(['text', 'usage', 'done']);
+  expect(events.map(event => event.kind)).toEqual(['text', 'usage', 'message', 'done']);
+  expect(events[2]).toEqual({ kind: 'message', message: { role: 'assistant', content: 'It exports a.', toolCalls: [] } });
 });
 
 it('runs declared tool calls visibly, feeds results back, and always shows the answer that follows the tools', async () => {
@@ -52,8 +53,10 @@ it('runs declared tool calls visibly, feeds results back, and always shows the a
     { kind: 'tool.started', callId: 'c1', name: 'read_file', target: 'src/a.ts' }, expect.objectContaining({ kind: 'tool.finished', callId: 'c1', status: 'ok' }),
     { kind: 'tool.started', callId: 'c2', name: 'grep', target: 'export' }, expect.objectContaining({ kind: 'tool.finished', callId: 'c2', status: 'ok' })]);
   // Legacy defect: the answer after a short tool round was stored but never rendered. Here it is always emitted.
-  expect(events.at(-2)).toMatchObject({ kind: 'usage', round: 2 }); expect(events.filter(event => event.kind === 'text')).toEqual([{ kind: 'text', text: 'It exports a.' }]);
+  expect(events.at(-3)).toMatchObject({ kind: 'usage', round: 2 }); expect(events.filter(event => event.kind === 'text')).toEqual([{ kind: 'text', text: 'It exports a.' }]);
   expect(result.appended.map(message => message.role)).toEqual(['assistant', 'tool', 'tool', 'assistant']);
+  // The client's history is exactly the message events, in order.
+  expect(events.flatMap(event => event.kind === 'message' ? [event.message] : [])).toEqual(result.appended);
 });
 
 it('answers malformed arguments, unknown tools, denied and approval-gated calls with typed results and never runs them', async () => {

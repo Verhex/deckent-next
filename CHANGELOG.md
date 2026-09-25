@@ -8,6 +8,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L3c: runtime protocol v12 `chatTurn` and `cancelChatTurn`: one durable agent turn inside the runtime service with
+  governed rounds, per-call tool policy (`agent-tool`/`invoke`) and workspace read tools; required event frames (no total bound,
+  producer waits for the peer, oversize or unread backlog cancels instead of dropping); disconnect, same-principal cancel and
+  service stop cancel a turn; turns left running are closed as interrupted at `runtime serve` under endpoint custody. The finished
+  turn record keeps a bounded answer and a digest of the appended messages, never tool results. Lifecycle window is now v11–v12.
+
 - SURFACES/T-L3b2: durable agent turns (ledger v37 `agent_turns`, `agent_turn_tool_calls`): a turn id is claimed for one principal and
   request; a finished turn replays its stored answer without a model round, a running one is in progress, a different request under
   the same id conflicts; every settled tool call is recorded by digest; turns left running are closed as interrupted, never resumed.

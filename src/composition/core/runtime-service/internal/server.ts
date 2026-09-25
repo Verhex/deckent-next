@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
-  type LocalRuntimeSocketGuard } from '#adapters/index.js';
+  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore } from '#adapters/index.js';
 import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -16,6 +16,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
+import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
+import { createRuntimeChatTurnHost } from '#composition/core/agent-turn/index.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
@@ -25,6 +27,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
   onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
   onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
+  /** Turns a stopped service left running, closed as interrupted at this start; damaged rows are reported, not closed. */
+  onAgentTurnsInterrupted?(result: { readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }): void | Promise<void>;
 }
 
 /** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
@@ -36,6 +40,19 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
   const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
     new Date(), { validate: validateDockerSupervisorProfile });
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
+}
+
+/** Agent turns left running by a stopped service are closed as interrupted, never resumed. Like the upgrade, this runs only
+ * under endpoint custody: a second start that fails to take the guard never closes a live service's turns. */
+async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
+  let path: string;
+  try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
+  catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
+  const store = await openSqliteAgentTurnStore(path, config.storage.sqlite, 'forbid');
+  try {
+    const result = await store.interruptRunning(Date.now());
+    if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
+  } finally { store.close(); }
 }
 
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
@@ -55,6 +72,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
   config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard) {
   await upgradeLedgerAtStart(config, observer);
+  await interruptAgentTurnsAtStart(config, observer);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
     onPage: (command, result) => observer.onReconciliationPage?.(command, result),
@@ -62,6 +80,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   }, options) : null;
   const instanceId = randomUUID();
   const modelHost = { ownerId: instanceId, controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
+  // Service stop cancels running turns (they close as cancelled, not interrupted).
+  const turnStop = new AbortController();
+  const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal);
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
     onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
     onError: (command, error) => observer.onModelCancellationError?.(command, error),
@@ -75,14 +96,14 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const remoteShutdowns = new Map<string, Promise<void>>();
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
-  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => { controller.abort(); return recovery; }, {
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => { controller.abort(); turnStop.abort(); return recovery; }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
   }, work => lifecycle.admit(work, 'execution'), options);
-  const server = await guard.start(async (request, peer, stream) => {
+  const server = await guard.start(async (request, peer, stream, turn) => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
@@ -100,6 +121,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)
+          : request.operation === 'chatTurn' || request.operation === 'cancelChatTurn'
+          ? executeConfiguredRuntimeChatTurnOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost, turn)
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {

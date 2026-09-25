@@ -18,8 +18,8 @@ export async function invokeConfiguredModel(projectRoot: string, input: ModelInv
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
   peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,
-  onDelta?: ModelInvocationDeltaSink) {
-  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), options, undefined, delivery, host, onDelta);
+  onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) {
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), options, signal, delivery, host, onDelta);
 }
 async function invoke(input: ModelInvocationCommand,
   loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,

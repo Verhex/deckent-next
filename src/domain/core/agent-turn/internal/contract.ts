@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentToolCallSchema } from '#domain/core/agent-tool/index.js';
+import { identitySchema } from '#domain/core/primitives/index.js';
 
 /**
  * Provider-neutral conversation of one agent turn (T-L3). Messages that come from the client — history, earlier tool results,
@@ -24,7 +25,51 @@ export type AgentTurnEvent =
   | { readonly kind: 'tool.started'; readonly callId: string; readonly name: string; readonly target: string | null }
   | { readonly kind: 'tool.finished'; readonly callId: string; readonly name: string; readonly status: AgentToolCallStatus; readonly ms: number; readonly bytes: number }
   | { readonly kind: 'usage'; readonly round: number; readonly promptTokens: number; readonly completionTokens: number }
+  /** Each assistant or tool message the turn appends, in order: the client's history continues from exactly these. */
+  | { readonly kind: 'message'; readonly message: AgentTurnMessage }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
 export type AgentToolCallStatus = 'ok' | 'error' | 'denied' | 'approval-required' | 'invalid-arguments' | 'duplicate' | 'cancelled';
 export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
+
+const count = z.number().int().nonnegative().safe();
+const finishSchema = z.enum(['stop', 'length', 'cancelled', 'error']);
+const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', 'invalid-arguments', 'duplicate', 'cancelled']);
+/**
+ * Turn events on the wire (runtime `chatTurn`): every event but `done`, whose content is the operation's result. `message` events
+ * are required data (the client's history), not presentation; the transport never drops them silently.
+ */
+export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), text: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('reasoning'), text: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('tool.started'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), target: z.string().max(4096).nullable() }).strict(),
+  z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count }).strict(),
+  z.object({ kind: z.literal('usage'), round: z.number().int().positive().safe(), promptTokens: count, completionTokens: count }).strict(),
+  z.object({ kind: z.literal('message'), message: agentTurnMessageSchema }).strict(),
+]);
+export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
+
+/**
+ * One terminal agent turn (runtime `chatTurn`). The principal comes from the connection, never from input; the model, tools and
+ * limits come from the service's configuration. `messages` is the client's history ending with the new user message: untrusted
+ * context, bound to the turn id by its digest (the same id with a different history is a conflict, never an old answer).
+ */
+export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
+  messages: z.array(agentTurnMessageSchema).min(1) }).strict().refine(command => command.messages.at(-1)?.role === 'user',
+  { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
+export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
+export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);
+
+/** The bounded result of a turn: the final answer when it fits the replay bound, never the tool results (they came as events). */
+export const chatTurnResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema, finish: finishSchema,
+  note: z.string().max(4096).nullable(), rounds: count, toolCalls: count, answer: z.string().nullable(), answerBytes: count,
+  replayed: z.boolean(), recorded: z.boolean() }).strict().readonly();
+export type ChatTurnResult = z.infer<typeof chatTurnResultSchema>;
+
+/** Cancels the caller's own running turn at once (the same principal that started it); a disconnect cancels at the next write. */
+export const chatTurnCancellationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema }).strict().readonly();
+export type ChatTurnCancellation = z.infer<typeof chatTurnCancellationSchema>;
+export const parseChatTurnCancellation = (value: unknown): ChatTurnCancellation => chatTurnCancellationSchema.parse(value);
+export const chatTurnCancellationResultSchema = z.object({ schemaVersion: z.literal(1), turnId: identitySchema,
+  state: z.enum(['cancelling', 'not-running']) }).strict().readonly();
+export type ChatTurnCancellationResult = z.infer<typeof chatTurnCancellationResultSchema>;

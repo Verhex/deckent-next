@@ -1,12 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { agentTurnMessageSchema } from '#domain/index.js';
-import { AgentTurnStoreError, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
+import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
 const id = z.string().min(1).max(256), count = z.number().int().nonnegative().safe(), digest = z.string().regex(/^[a-f0-9]{64}$/);
-const outcomeSchema = z.object({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: z.string().nullable(), rounds: count, toolCalls: count,
-  appended: z.array(agentTurnMessageSchema) }).strict();
+const outcomeSchema = z.object({ finish: z.enum(['stop', 'length', 'cancelled', 'error']), note: z.string().max(4096).nullable(), rounds: count, toolCalls: count,
+  answer: z.string().nullable(), answerBytes: count, appendedDigest: digest.nullable() }).strict()
+  .refine(outcome => outcome.answer === null ? outcome.answerBytes === 0 || outcome.answerBytes > AGENT_TURN_ANSWER_MAX_BYTES
+    : Buffer.byteLength(outcome.answer, 'utf8') === outcome.answerBytes && outcome.answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES);
 const turnSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, principalKey: id, requestDigest: digest, claimedAtMs: count,
   finishedAtMs: count.nullable(), outcome: outcomeSchema.nullable() }).strict()
   .refine(turn => (turn.finishedAtMs === null) === (turn.outcome === null));
@@ -37,7 +38,11 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
   }
   private guard<T>(work: () => T): T {
     try { return work(); }
-    catch (error) { if (error instanceof AgentTurnStoreError) throw error; throw new AgentTurnStoreError('AGENT_TURN_UNAVAILABLE'); }
+    catch (error) {
+      if (error instanceof AgentTurnStoreError) throw error;
+      // A record that fails its schema on write is the caller's invalid input, not an unavailable store.
+      throw new AgentTurnStoreError(error instanceof z.ZodError ? 'AGENT_TURN_INVALID' : 'AGENT_TURN_UNAVAILABLE');
+    }
   }
   async claim(claim: AgentTurnClaim) {
     return this.guard(() => this.transaction(() => {
@@ -87,7 +92,8 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
           corrupt.push(Object.freeze({ scopeId: row.scope_id, turnId: row.turn_id })); continue;
         }
         const calls = (this.db.prepare('SELECT count(*) AS n FROM agent_turn_tool_calls WHERE scope_id=? AND turn_id=?').get(row.scope_id, row.turn_id) as { n: number }).n;
-        const finished = turnSchema.parse({ ...turn, finishedAtMs: atMs, outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: calls, appended: [] } });
+        const finished = turnSchema.parse({ ...turn, finishedAtMs: atMs, outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: calls,
+          answer: null, answerBytes: 0, appendedDigest: null } });
         this.db.prepare("UPDATE agent_turns SET state='finished',record=? WHERE scope_id=? AND turn_id=? AND state='running'").run(JSON.stringify(finished), row.scope_id, row.turn_id);
       }
       return Object.freeze({ interrupted: rows.length - corrupt.length, corrupt: Object.freeze(corrupt) });

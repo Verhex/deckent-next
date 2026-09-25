@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAgentTurnStore } from '#adapters/index.js';
-import { AGENT_TURN_INTERRUPTED_NOTE, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, agentTurnResultDigest, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent } from '#domain/index.js';
 
 const roots: string[] = [];
@@ -12,7 +12,7 @@ afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursi
 const options = { journalMode: 'wal' as const, durability: 'full' as const, busyTimeoutMs: 2_000 };
 async function file() { const root = await mkdtemp(join(tmpdir(), 'dn-agent-turn-')); roots.push(root); return join(root, 'ledger.db'); }
 const claim = (turnId = 't1', requestDigest = 'a'.repeat(64), principalKey = 'host:1000') => ({ scopeId: 'scope', turnId, principalKey, requestDigest, claimedAtMs: 10 });
-const outcome = { finish: 'stop' as const, note: null, rounds: 1, toolCalls: 0, appended: [{ role: 'assistant' as const, content: 'hi', toolCalls: [] }] };
+const outcome = { finish: 'stop' as const, note: null, rounds: 1, toolCalls: 0, answer: 'hi', answerBytes: 2, appendedDigest: 'e'.repeat(64) };
 const code = (promise: Promise<unknown>) => promise.then(() => 'ok', (error: { code?: string }) => error.code);
 
 it('binds a turn id to one principal and request: running is in progress, finished replays, anything else conflicts', async () => {
@@ -48,7 +48,8 @@ it('closes turns left running by a stopped service as interrupted at the next st
   try {
     expect(await second.interruptRunning(100)).toEqual({ interrupted: 1, corrupt: [] });
     expect(await second.interruptRunning(101)).toEqual({ interrupted: 0, corrupt: [] });
-    expect(await second.claim(claim('left'))).toEqual({ status: 'finished', outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: 1, appended: [] } });
+    expect(await second.claim(claim('left'))).toEqual({ status: 'finished', outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: 1,
+      answer: null, answerBytes: 0, appendedDigest: null } });
     expect(await second.claim(claim('done'))).toEqual({ status: 'finished', outcome });
   } finally { second.close(); }
 });
@@ -103,6 +104,10 @@ it('records every settled tool call of a durable turn and replays a finished tur
       expect(JSON.parse(rows[0]!.record)).toMatchObject({ round: 1, index: 0, callId: 'c1', tool: 'read_file', target: 'src/a.ts', status: 'ok',
         bytes: Buffer.byteLength('contents of src/a.ts'), resultDigest: agentTurnResultDigest('contents of src/a.ts') });
       expect(rows[0]!.record).not.toContain('contents of');
+      // The turn record is bounded: summary, final answer and a digest of the appended messages, never the tool results.
+      const turn = db.prepare('SELECT record FROM agent_turns').get() as { record: string };
+      expect(turn.record).not.toContain('contents of');
+      expect(JSON.parse(turn.record).outcome).toMatchObject({ answer: 'It exports a.', answerBytes: 13, appendedDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
     } finally { db.close(); }
     const again = ports(rounds), replayEvents: AgentTurnEvent[] = [];
     const replay = await runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'what?' }], tools: [readFile],
@@ -110,6 +115,7 @@ it('records every settled tool call of a durable turn and replays a finished tur
     expect(again.invoked).toEqual([]);
     expect(replay).toMatchObject({ finish: 'stop', rounds: 2, toolCalls: 1, replayed: true });
     expect(replayEvents).toEqual([{ kind: 'text', text: 'It exports a.' }, { kind: 'done', finish: 'stop', note: null }]);
+    expect(replay.appended).toEqual([{ role: 'assistant', content: 'It exports a.', toolCalls: [] }]);
   } finally { store.close(); }
 });
 
@@ -135,5 +141,23 @@ it('returns an answered turn whose outcome could not be stored as unrecorded, an
     expect(await code(store.claim(claim()))).toBe('AGENT_TURN_IN_PROGRESS');
     await expect(runDurableAgentTurn({ claim: claim('t2'), messages: [{ role: 'user', content: 'what?' }], tools: [readFile], signal: new AbortController().signal,
       emit: event => { if (event.kind === 'done') throw new Error('surface closed'); } }, failingFinish, ports(rounds).value)).rejects.toThrow('surface closed');
+  } finally { store.close(); }
+});
+
+it('keeps an answer larger than the replay bound by size only, and a replay then shows no partial text', async () => {
+  const store = await openSqliteAgentTurnStore(await file(), options);
+  try {
+    const big = 'x'.repeat(AGENT_TURN_ANSWER_MAX_BYTES + 1);
+    await runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'long?' }], tools: [readFile], signal: new AbortController().signal,
+      emit: () => undefined }, store, ports([{ status: 'responded', content: big, reasoning: '', toolCalls: [], finish: 'stop', usage: null }]).value);
+    expect(await store.claim(claim())).toMatchObject({ status: 'finished', outcome: { answer: null, answerBytes: AGENT_TURN_ANSWER_MAX_BYTES + 1 } });
+    const events: AgentTurnEvent[] = [];
+    const replay = await runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'long?' }], tools: [readFile], signal: new AbortController().signal,
+      emit: event => events.push(event) }, store, ports([]).value);
+    expect(replay).toMatchObject({ replayed: true, appended: [] }); expect(events).toEqual([{ kind: 'done', finish: 'stop', note: null }]);
+    // A stored answer must match its recorded size; an outcome claiming a kept answer above the bound is refused.
+    await store.claim(claim('other'));
+    expect(await code(store.finish('scope', 'other', { ...outcome, answer: big, answerBytes: big.length }, 1))).toBe('AGENT_TURN_INVALID');
+    expect(await code(store.finish('scope', 'other', { ...outcome, answerBytes: 3 }, 1))).toBe('AGENT_TURN_INVALID');
   } finally { store.close(); }
 });

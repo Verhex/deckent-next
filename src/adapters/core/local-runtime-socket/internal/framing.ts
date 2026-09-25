@@ -48,19 +48,19 @@ export class ServiceFrameDecoder {
 
 /**
  * Client side of a streamed response: yields each complete bounded frame in order. `maxFrameBytes` bounds every
- * payload and `maxTotalBytes` the whole connection; `finish()` proves EOF did not cut a frame.
+ * payload and `maxTotalBytes` the whole connection (null: a turn stream, bounded per frame only); `finish()` proves EOF did not cut a frame.
  */
 export class ServiceFrameStreamDecoder {
-  private readonly maximum: number; private readonly total: number; private buffered: Buffer = Buffer.alloc(0); private received = 0; private finished = false;
-  constructor(maxFrameBytes: number, maxTotalBytes: number) {
+  private readonly maximum: number; private readonly total: number | null; private buffered: Buffer = Buffer.alloc(0); private received = 0; private finished = false;
+  constructor(maxFrameBytes: number, maxTotalBytes: number | null) {
     this.maximum = limit(maxFrameBytes); this.total = maxTotalBytes;
-    if (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < maxFrameBytes + 4) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
+    if (maxTotalBytes !== null && (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < maxFrameBytes + 4)) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
   }
   push(chunk: Buffer): unknown[] {
     if (this.finished) throw new ServiceFrameError('SERVICE_FRAME_FINISHED');
     if (!Buffer.isBuffer(chunk)) throw new ServiceFrameError('SERVICE_FRAME_TRUNCATED');
     this.received += chunk.byteLength;
-    if (this.received > this.total) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
+    if (this.total !== null && this.received > this.total) throw new ServiceFrameError('SERVICE_FRAME_LIMIT');
     this.buffered = this.buffered.byteLength === 0 ? chunk : Buffer.concat([this.buffered, chunk]);
     const frames: unknown[] = [];
     while (this.buffered.byteLength >= 4) {

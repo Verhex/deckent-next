@@ -1,4 +1,22 @@
-# Anlık iş akışı — Opus 5.5; T-L3b2 kalıcı turn kaydı `00c5814` incelemede (2083); 2081 (T-L3b çekirdek) ve 2082 (2078/2079 düzeltmeleri) incelemede
+# Anlık iş akışı — Opus 5.5; T-L3c runtime `chatTurn` (protokol v12) teslimde; 2081–2084 Astra incelemesinde
+
+## T-L3c — runtime `chatTurn` (2026-09-25)
+- Protokol v12: `chatTurn` (akışlı, olay çerçeveleri) ve `cancelChatTurn`; yaşam döngüsü penceresi v11–v12. Olay çerçeveleri zorunlu veri:
+  her çerçeve sınırlı, akışın toplamı sınırsız; döngü her tur ve araç çağrısından önce eşin boşaltmasını bekler; okunmadan bekleyen
+  4×responseMaxBytes aşılırsa ya da tek çerçeveye sığmayan olay gelirse turn iptal olur (düşürme yok).
+- Servis: turn sahibi principal bağlantıdan; model/araçlar config'ten; her tur mevcut yönetilen çağrı (`turn-round:1` komut kimliği);
+  araç yetkisi `AgentToolPolicyAuthorization` (engine, başarısız policy okuması = deny); araçlar yalnız bağlama `tool-calls` bildiriyorsa.
+  Tur hatası kapanış notunda tipli kodla (ör. `MODEL_INVOCATION_RESULT_LIMIT` bu şekilde bulundu: iç tur çağrısına taşıma teslim sınırı
+  geçirilmiyordu → kaldırıldı, sonuç servis içinde kalıyor ve profil yanıt sınırıyla bağlı).
+- İptal: bağlantı kopması (bir sonraki yazmada), aynı principal'ın `cancelChatTurn`'ü (anında), servis durması. Başlangıçta yarım turn'ler
+  soket sahipliğinden sonra kesildi notuyla kapanır; ikinci başlatma canlı servisin turn'üne dokunmaz.
+- Turn kaydı sınırlı (Jev 9df04efb): özet + ≤256 KiB son cevap + eklenen mesajların digest'i; araç sonuçları kayıtta yok.
+- Testler: `runtime/socket-turn.test.ts` (4), `composition/runtime-chat-turn.test.ts` (5: araç turu + replay + çakışma, policy reddi,
+  anında iptal, bağlantı kopunca iptal, başlangıçta kesme + ikinci başlatma), protokol testi, store testleri (7).
+  Mutasyonlar 1–6 (araçlar hep izinli, büyük olay düşürülür, kopuş dinlenmez, rastgele tur komutu, akışa toplam sınır, başlangıç kesmesi yok)
+  her biri bir testi düşürdü: `proof/F26-T-L3C-CHAT-TURN/`.
+- Açık: terminal yüzeyi henüz `chatTurn` kullanmıyor (T-L3d); canlı kurulumda `agent-tool` policy izni ve `tool-calls` yetenekli yeni profil
+  (sınırsız allocation) kabul koşusunda yedekli yapılacak; başka principal'ın iptal edemediği test edilmedi (tek OS kullanıcısı).
 
 ## T-L3b2 — kalıcı agent turn kaydı (2026-09-25)
 - Engine: `runDurableAgentTurn` önce `(scopeId, turnId)` talep eder; kimlik principal + istek digest'ine bağlı. Bitmiş turn aynı istekle

@@ -80,7 +80,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   const seenReads = new Map<string, string>();
   let rounds = 0, toolCalls = 0;
-  const push = (message: AgentTurnMessage) => { messages.push(message); appended.push(message); };
+  const push = (message: AgentTurnMessage) => { messages.push(message); appended.push(message); emit({ kind: 'message', message }); };
   const finish = (value: AgentTurnFinish, note: string | null): AgentTurnResult => {
     emit({ kind: 'done', finish: value, note });
     return Object.freeze({ finish: value, appended: Object.freeze([...appended]), rounds, toolCalls, note });

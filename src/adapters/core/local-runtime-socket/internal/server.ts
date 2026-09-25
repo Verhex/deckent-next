@@ -1,9 +1,10 @@
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
-import { isRuntimeServiceStreamingOperation, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
+import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
 import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './stream-channel.js';
+import { createServerTurnChannel, type RuntimeServiceTurnChannel } from './event-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
@@ -13,9 +14,9 @@ export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
   response: RuntimeServiceResponse;
   afterResponseOrDisconnect: () => void;
 }>;
-/** `stream` is present only for streamed operations; its deltas precede the one final response frame. */
+/** `stream` is present only for streamed operations and `turn` only for turn operations; their frames precede the one final response frame. */
 export type RuntimeServiceHandler = (request: RuntimeServiceRequest, peer: LocalPeerIdentity,
-  stream?: RuntimeServiceStreamChannel) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
+  stream?: RuntimeServiceStreamChannel, turn?: RuntimeServiceTurnChannel) => RuntimeServiceHandlerReply | Promise<RuntimeServiceHandlerReply>;
 export interface LocalRuntimeSocketServer { readonly endpoint: string; readonly termination: Promise<PeerClosure>; stopAccepting(): void; disconnectClients(): void; dispose(): Promise<void> }
 
 function listen(server: Server, endpoint: string): Promise<void> {
@@ -83,9 +84,9 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
         request = runtimeServiceRequestSchema.parse({ ...lifecycle, schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION });
       }
     } catch { socket.destroy(); return; }
-    // Older lifecycle versions get their own envelope: no error params (added in v11).
+    // An older lifecycle version gets its own envelope version (v11 has the same envelope, error params included).
     const versioned = (response: RuntimeServiceResponse): RuntimeServiceResponse => replyVersion === RUNTIME_SERVICE_SCHEMA_VERSION ? response
-      : { ...response, schemaVersion: replyVersion, ...(response.ok ? {} : { error: { code: response.error.code, category: response.error.category } }) } as unknown as RuntimeServiceResponse;
+      : { ...response, schemaVersion: replyVersion } as unknown as RuntimeServiceResponse;
     // Prove a correlated error can be delivered before admitting any effect. Tiny limits must not fail after dispatch.
     let limitFrame: Buffer;
     try { limitFrame = encodeServiceFrame(versioned(transportFailure(request.requestId, 'RUNTIME_SERVICE_RESPONSE_LIMIT')), options.responseMaxBytes); }
@@ -93,9 +94,12 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
     // Streamed deltas share the response byte limit per frame and, in total, one more response's worth of bytes.
     const stream = isRuntimeServiceStreamingOperation(request.operation)
       ? createServerStreamChannel(socket, request.requestId, options.responseMaxBytes, options.responseMaxBytes) : undefined;
-    void Promise.resolve().then(() => stream ? handler(request, peer, stream) : handler(request, peer)).then(reply)
+    // Turn events are required data: bounded per frame and by what may wait unread, never in total (Jev 9df04efb).
+    const turn = isRuntimeServiceTurnOperation(request.operation)
+      ? createServerTurnChannel(socket, request.requestId, options.responseMaxBytes, 4 * options.responseMaxBytes) : undefined;
+    void Promise.resolve().then(() => stream ? handler(request, peer, stream) : turn ? handler(request, peer, undefined, turn) : handler(request, peer)).then(reply)
       .then(value => {
-        stream?.finish();
+        stream?.finish(); turn?.finish();
         let response = value.response;
         afterResponseOrDisconnect = value.afterResponseOrDisconnect;
         if (disconnected) { finishHandoff(); return; }
@@ -114,7 +118,7 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
           });
         } catch { socket.destroy(); }
       }, () => {
-        stream?.finish();
+        stream?.finish(); turn?.finish();
         if (!disconnected) {
           try { socket.end(encodeServiceFrame(versioned(transportFailure(request.requestId)), options.responseMaxBytes)); } catch { socket.destroy(); }
         }

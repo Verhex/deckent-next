@@ -1,5 +1,5 @@
 export { OPENAI_CHAT_WIRE_LIMITS, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY,
-  OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits,
+  OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OpenAiChatHttpError, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits,
   parseOpenAiChatTextRequest } from './internal/contract.js';
 export type { OpenAiChatHttpAuthentication, OpenAiChatHttpDefinition, OpenAiChatHttpErrorCode, OpenAiChatHttpLimits, OpenAiChatHttpResponse, OpenAiChatOperatorTariff,
   OpenAiChatTextMessage, OpenAiChatTextRequest } from './internal/contract.js';

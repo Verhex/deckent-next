@@ -50,7 +50,7 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
     reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
   } satisfies Record<Exclude<RuntimeServiceOperation, 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
-    | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount'>, RuntimeOperationHandler>;
+    | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'chatTurn' | 'cancelChatTurn'>, RuntimeOperationHandler>;
   if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
   return handlers[request.operation as keyof typeof handlers](request.input);
 }
