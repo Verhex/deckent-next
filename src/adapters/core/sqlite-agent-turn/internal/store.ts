@@ -78,13 +78,19 @@ export class SqliteAgentTurnStore implements AgentTurnStore {
   async interruptRunning(atMs: number) {
     return this.guard(() => this.transaction(() => {
       const rows = this.db.prepare("SELECT scope_id,turn_id FROM agent_turns WHERE state='running'").all() as { scope_id: string; turn_id: string }[];
+      const corrupt: { scopeId: string; turnId: string }[] = [];
       for (const row of rows) {
-        const turn = this.load(row.scope_id, row.turn_id)!;
+        let turn: Turn;
+        try { turn = this.load(row.scope_id, row.turn_id)!; }
+        catch (error) {
+          if (!(error instanceof AgentTurnStoreError) || error.code !== 'AGENT_TURN_CORRUPT') throw error;
+          corrupt.push(Object.freeze({ scopeId: row.scope_id, turnId: row.turn_id })); continue;
+        }
         const calls = (this.db.prepare('SELECT count(*) AS n FROM agent_turn_tool_calls WHERE scope_id=? AND turn_id=?').get(row.scope_id, row.turn_id) as { n: number }).n;
         const finished = turnSchema.parse({ ...turn, finishedAtMs: atMs, outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: calls, appended: [] } });
         this.db.prepare("UPDATE agent_turns SET state='finished',record=? WHERE scope_id=? AND turn_id=? AND state='running'").run(JSON.stringify(finished), row.scope_id, row.turn_id);
       }
-      return rows.length;
+      return Object.freeze({ interrupted: rows.length - corrupt.length, corrupt: Object.freeze(corrupt) });
     }));
   }
 }

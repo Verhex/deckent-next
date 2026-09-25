@@ -1,4 +1,4 @@
-# Anlık iş akışı — Opus 5.5; T-L3b2 kalıcı turn kaydı (ledger v37) teslimde; 2081 (T-L3b çekirdek) ve 2082 (2078/2079 düzeltmeleri) incelemede
+# Anlık iş akışı — Opus 5.5; T-L3b2 kalıcı turn kaydı `00c5814` incelemede (2083); 2081 (T-L3b çekirdek) ve 2082 (2078/2079 düzeltmeleri) incelemede
 
 ## T-L3b2 — kalıcı agent turn kaydı (2026-09-25)
 - Engine: `runDurableAgentTurn` önce `(scopeId, turnId)` talep eder; kimlik principal + istek digest'ine bağlı. Bitmiş turn aynı istekle
@@ -8,6 +8,14 @@
 - Adapter `sqlite-agent-turn` (ledger v37: `agent_turns`, `agent_turn_tool_calls`); v36→v37 yükseltmesi genel yedekli yükseltme testinde.
 - Testler `tests/contracts/adapters/agent-turn-store.test.ts` (5). Mutasyonlar 1–6 (digest yok sayma, hata yolunda bitirmeme, kesme yok,
   durum denetimi yok, replay'de yeniden çalıştırma, çalışan turn'ü yeniden talep) her biri bir testi düşürdü: `proof/F26-T-L3B2-DURABLE-TURN/`.
+- Commit `00c5814` (verify-2 exit 0: 1840/320, host 55; verify-1 57 hata: eski ledger fixture'ları yeni tabloları düşürmüyordu + kabukta
+  Docker imaj değişkeni yoktu → düzeltildi). Astra REQUEST_REVIEW 2083; push yok.
+- Hata yolu düzeltmeleri (advisor bulguları): döngü cevapladı ama `finish` yazılamadıysa cevap `recorded:false` ile döner (turn bir sonraki
+  başlangıca kadar running); döngü hatası store hatasıyla maskelenmez; `interruptRunning` bozuk satırı raporlar, diğerlerini kapatır.
+  Mutasyon 7–9 düştü; verify-3 exit 0 (1841/320, native 25, host 55).
+- **Açık düzeltme (2083'e ek):** bitmiş turn kaydı tüm eklenen mesajları (araç sonuçları dahil) boyut sınırı ve purge yolu olmadan saklıyor.
+  Jev 9df04efb: `events_and_bounded_record` 0,84 (bounded .76, accepted .77, replay_honesty .72) → `chatTurn` diliminde mesajlar zorunlu olay
+  akışıyla (üretici geri basıncı, kümülatif üst sınır yok, kopan eş turn'ü iptal eder), kayıtta özet + sınırlı son cevap + mesaj digest'i.
 - Açık: servis başlangıcında `interruptRunning` çağrısı ve runtime `chatTurn` işlemi sonraki dilim; canlı profil değişikliği T-L3 kabulünde.
 
 ## Astra 2078–2080 (2026-09-25) — işlendi ve tüketildi

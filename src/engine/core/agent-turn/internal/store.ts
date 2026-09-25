@@ -40,7 +40,8 @@ export interface AgentTurnStore {
   claim(claim: AgentTurnClaim): Promise<{ readonly status: 'new' } | { readonly status: 'finished'; readonly outcome: AgentTurnOutcome }>;
   recordToolCall(record: AgentTurnToolCallRecord): Promise<void>;
   finish(scopeId: string, turnId: string, outcome: AgentTurnOutcome, atMs: number): Promise<void>;
-  interruptRunning(atMs: number): Promise<number>;
+  /** Closes every intact running turn; a damaged row is reported and left as it is, never blocking the others. */
+  interruptRunning(atMs: number): Promise<{ readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }>;
 }
 
 export const agentTurnResultDigest = (text: string) => createHash('sha256').update(`agent-tool-result:1\0${text}`).digest('hex');

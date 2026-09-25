@@ -550,9 +550,11 @@ same principal after the turn finished returns the stored outcome (the last answ
 while it runs a second claim is `AGENT_TURN_IN_PROGRESS`; a different request or principal is `AGENT_TURN_CONFLICT`; a row whose
 state and record disagree is `AGENT_TURN_CORRUPT`. Every settled tool call is recorded (round, index, call id, tool and version,
 arguments digest, display target, status, bytes and result digest — not the result text); a finished turn accepts no further
-call or finish. The turn is finished with its outcome even when the loop throws. Turns left running by a stopped service are
-closed as interrupted (`error` with a fixed note) by `interruptRunning`, never resumed; the service start wiring is part of the
-runtime operation slice. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+call or finish. The turn is finished with its outcome even when the loop throws (a store failure never masks the loop's error);
+an answered turn whose outcome could not be stored is returned with `recorded: false` and stays running until the next start.
+Turns left running by a stopped service are closed as interrupted (`error` with a fixed note) by `interruptRunning`, never
+resumed; a damaged row is reported and left as it is without blocking the others. The service start wiring (after exclusive
+socket ownership, like the ledger upgrade) is part of the runtime operation slice. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

@@ -46,23 +46,25 @@ it('closes turns left running by a stopped service as interrupted at the next st
   first.close();
   const second = await openSqliteAgentTurnStore(path, options);
   try {
-    expect(await second.interruptRunning(100)).toBe(1);
-    expect(await second.interruptRunning(101)).toBe(0);
+    expect(await second.interruptRunning(100)).toEqual({ interrupted: 1, corrupt: [] });
+    expect(await second.interruptRunning(101)).toEqual({ interrupted: 0, corrupt: [] });
     expect(await second.claim(claim('left'))).toEqual({ status: 'finished', outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE, rounds: 0, toolCalls: 1, appended: [] } });
     expect(await second.claim(claim('done'))).toEqual({ status: 'finished', outcome });
   } finally { second.close(); }
 });
 
-it('refuses a damaged turn row instead of trusting it', async () => {
+it('refuses a damaged turn row instead of trusting it, and still closes the intact running turns around it', async () => {
   const path = await file(), store = await openSqliteAgentTurnStore(path, options);
-  await store.claim(claim()); await store.finish('scope', 't1', outcome, 20); store.close();
+  await store.claim(claim()); await store.finish('scope', 't1', outcome, 20); await store.claim(claim('t2')); store.close();
   const db = new DatabaseSync(path);
   // The row says running while its record is finished: the two disagree.
-  db.exec("UPDATE agent_turns SET state='running'"); db.close();
+  db.exec("UPDATE agent_turns SET state='running' WHERE turn_id='t1'"); db.close();
   const reopened = await openSqliteAgentTurnStore(path, options);
   try {
     expect(await code(reopened.claim(claim()))).toBe('AGENT_TURN_CORRUPT');
-    expect(await code(reopened.interruptRunning(30))).toBe('AGENT_TURN_CORRUPT');
+    expect(await reopened.interruptRunning(30)).toEqual({ interrupted: 1, corrupt: [{ scopeId: 'scope', turnId: 't1' }] });
+    expect(await reopened.claim(claim('t2'))).toMatchObject({ status: 'finished', outcome: { finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE } });
+    expect(await code(reopened.claim(claim()))).toBe('AGENT_TURN_CORRUPT');
   } finally { reopened.close(); }
 });
 
@@ -118,5 +120,20 @@ it('still finishes the turn when the loop fails unexpectedly, so the id is never
     await expect(runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'what?' }], tools: [readFile], signal: new AbortController().signal,
       emit: event => { if (event.kind === 'done') throw new Error('surface closed'); } }, store, failing.value)).rejects.toThrow('surface closed');
     expect(await store.claim(claim())).toMatchObject({ status: 'finished', outcome: { finish: 'error', note: expect.stringMatching(/failed before it could finish/) } });
+  } finally { store.close(); }
+});
+
+it('returns an answered turn whose outcome could not be stored as unrecorded, and never masks a loop failure with a store failure', async () => {
+  const store = await openSqliteAgentTurnStore(await file(), options);
+  try {
+    const failingFinish = { claim: store.claim.bind(store), recordToolCall: store.recordToolCall.bind(store), interruptRunning: store.interruptRunning.bind(store),
+      async finish() { throw Object.assign(new Error('AGENT_TURN_UNAVAILABLE'), { code: 'AGENT_TURN_UNAVAILABLE' }); } };
+    const answered = await runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'what?' }], tools: [readFile],
+      signal: new AbortController().signal, emit: () => undefined }, failingFinish, ports(rounds).value);
+    expect(answered).toMatchObject({ finish: 'stop', rounds: 2, recorded: false });
+    // Not stored as finished: the id stays running until the next start closes it as interrupted.
+    expect(await code(store.claim(claim()))).toBe('AGENT_TURN_IN_PROGRESS');
+    await expect(runDurableAgentTurn({ claim: claim('t2'), messages: [{ role: 'user', content: 'what?' }], tools: [readFile], signal: new AbortController().signal,
+      emit: event => { if (event.kind === 'done') throw new Error('surface closed'); } }, failingFinish, ports(rounds).value)).rejects.toThrow('surface closed');
   } finally { store.close(); }
 });
