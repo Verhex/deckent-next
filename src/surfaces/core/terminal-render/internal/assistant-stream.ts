@@ -17,7 +17,9 @@ type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number }>;
 export type ActiveTool = Readonly<{ name: string; target: string | null; startedAtMs: number }>;
-export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | FooterUnit;
+/** The history was compacted during the turn (T-L5b): one visible line, never a silent change. */
+export type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
+export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | CompactionUnit | FooterUnit;
 export type Narration = Readonly<{ tokens: number; approximate: boolean; startedAtMs: number }>;
 
 type Usage = Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>;
@@ -77,7 +79,8 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
 
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
-  if (delta.kind === 'message' || delta.kind === 'compacted') return step(state, []);
+  if (delta.kind === 'message') return step(state, []);
+  if (delta.kind === 'compacted') return step(state, [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
   if (delta.kind === 'context') {
     return step(Object.freeze({ ...state, context: Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality }) }), []);
   }

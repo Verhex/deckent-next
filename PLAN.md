@@ -79,7 +79,7 @@ erken kesilmiyor. 2078/2079 düzeltmeleri 2026-09-25'te uygulandı (gezinti doğ
 ve kalıcı turn kaydı (T-L3b2, ledger v37) hazır; T-L3c runtime `chatTurn` (protokol v12) servis içinde çalışıyor; T-L3d etkileşimli terminal agent turn'lerini kullanıyor
 (araç satırları, kapanış notu, araçlı geçmiş). Owner 2026-09-25 onayıyla canlı kurulumda araçlı terminal etkin (qwen38 v3 `tool-calls`,
 sınırsız `local-qwen-terminal` kotası, `live-read-tools` izni; gerçek terminalde 3 tur doğrulandı). T-L5a (bağlam ölçümü ve kabul,
-protokol v13) hazır; sırada T-L5b otomatik sıkıştırma, sonra oturum kalıcılığı/`/resume`.
+protokol v13) ve T-L5b (otomatik sıkıştırma) hazır; sırada oturum kalıcılığı/`/resume`, `/context` ve `/compact`.
 **Owner 2026-09-25: GPU izni ve vLLM container'ının yeniden oluşturulması onaylandı.** Terminal sunum profili: `--max-model-len 131072
 --max-num-seqs 4 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3` (KV 260.687 token; 131k'da ~2 eşzamanlı);
 betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`, önceki yapılandırma yedekli. Canlı kanıt: T-L2 adapter'ı gerçek

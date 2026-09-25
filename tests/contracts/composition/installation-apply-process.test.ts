@@ -151,4 +151,5 @@ it.skipIf(unsupported || userInfo().uid === 0)('resumes a real pending publicati
   expect(installed).toMatchObject({ status: 'installed', transactionId: pending.transactionId, proposalDigest: evidence.proposalDigest,
     trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
   expect(JSON.parse(await readFile(journalPath, 'utf8'))).toMatchObject({ transactionId: pending.transactionId, phase: 'committed', blockers: [] });
-});
+// Two real installation passes plus a compiled CLI resume: measured 27-31 s on the WSL host (2026-09-25/26), at the 30 s default.
+}, 90_000);

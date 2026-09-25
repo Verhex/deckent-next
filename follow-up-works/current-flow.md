@@ -1,4 +1,18 @@
-# Anlık iş akışı — Opus 5.5; T-L5a bağlam ölçümü/kabul teslimde; T-L3b2–T-L3d + canlı etkinleştirme Astra incelemesinde (2083–2087)
+# Anlık iş akışı — Opus 5.5; T-L5b otomatik sıkıştırma teslimde; T-L5a `b4926ac` ve T-L3b2–T-L3d + canlı etkinleştirme Astra incelemesinde
+
+## T-L5b — otomatik sıkıştırma (2026-09-26, Jev 6460731d `engine_epoch_summary` 0,98)
+- Aynı ölçümle: istem + paylar > pencerenin %75'i → plan (sistem + en yeni 8 mesaj, araç çağrısı grubu bölünmez), eski kısım araçsız yönetilen
+  özet çağrısıyla (`turn-compact:1`, sınırlı düz metin dökümü, legacy JSON biçimi) tek etiketli `user` mesajına; önceki kullanıcı mesajları
+  (≤4000 karakter, kesilirse uzunluk+digest) ve araç çağrıları geçmişten kopyalanır, modelden değil; yetki üretmez. `compacted` olayı,
+  yeniden ölçüm, kabul. Özet başarısızsa geçmiş değişmez, tur notla kapanır, istek gönderilmez. Terminal tek satır gösterir.
+- Testler: engine (eşik üstü sıkıştırma ve içerik, başarısız özet → gönderim yok, eşik altında özet yok, plan araç grubunu bölmez, uzun
+  kullanıcı mesajı digest ile kesilir), e2e (gerçek servis: özet çağrısı `stream:false`/araçsız, iki yönetilen çağrı doğru komut kimlikleriyle,
+  sıkıştırılmış tur 10 mesajla, context 90000 → 900; çitli JSON ayrıştırıldı), workline bildirim satırı. Mutasyonlar 1–6 düştü
+  (`proof/F26-T-L5B-COMPACTION/`).
+- Açık: modelsiz deterministik yedek yok (Jev seçeneği başarısızlıkta turu kapatmak); pencereden büyük en yeni alışveriş sıkıştırılamaz.
+- Verify: v1 ve v2'de `installation-apply-process` "resumes a real pending publication" 30 s sınırında düştü (bu makinede 27–31 s ölçüldü;
+  T-L5b olmadan da 30,75 s) → teste açık 90 s sınır; v3'te `model-invocation` kota testi bir kez `PROVIDER_SPEND_UNAVAILABLE` (fixture'ın 2 s
+  harcama yetkilendirme sınırı yük altında; tek başına 3/3); v4 exit 0 (1870/324, native 25, host 55).
 
 ## T-L5a — bağlam ölçümü ve kabul (2026-09-25, Jev 90c2e32b `provider_counter_single_measure` 0,99)
 - Legacy incelemesi (salt okunur): sayaç (Anthropic count_tokens, llama.cpp tokenize) + muhafazakâr üst sınır, pencere = min(config, sunucu),

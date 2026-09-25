@@ -13,7 +13,7 @@ import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTur
 import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
-import { chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
+import { chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
@@ -32,8 +32,9 @@ const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durabilit
 const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
-type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean };
-async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windowTokens?: number; countedTokens?: number } = {}) {
+type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
+async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
+  count?: (body: { messages: unknown[] }) => number } = {}) {
   const model = modelWith(options.tokenize === true), catalog = catalogWith(options.tokenize === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -51,10 +52,17 @@ async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windo
       if (req.url === '/tokenize') {
         state.tokenize.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ count: options.countedTokens ?? 500, max_model_len: 131072, tokens: [] })); return;
+        const counted = JSON.parse(Buffer.concat(body).toString('utf8')) as { messages: unknown[] };
+        res.end(JSON.stringify({ count: options.count ? options.count(counted) : options.countedTokens ?? 500, max_model_len: 131072, tokens: [] })); return;
       }
       state.requests.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
       const step = state.script[state.requests.length - 1] ?? { content: 'no script' };
+      if (step.summary !== undefined) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'chatcmpl-sum', object: 'chat.completion', created: 1, model: 'native-chat',
+          choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: step.summary } }],
+          usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 } })); return;
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' }); res.on('close', () => { state.closed++; });
       const parts = step.hold ? [] : step.toolCall
         ? [chunk({ role: 'assistant', content: '' }), chunk({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: step.toolCall.name, arguments: '' } }] }),
@@ -179,6 +187,29 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(refused).toMatchObject({ finish: 'error', rounds: 1, answer: null });
     expect(refused.note).toMatch(/3000 prompt tokens \+ 2176 reserved > 4000.*Nothing was sent/);
     expect(full.state.requests).toEqual([]);
+  }, 30_000);
+
+  it('compacts a long history through a governed summary call and continues the turn with it (T-L5b)', async () => {
+    const f = await runtime({ tokenize: true, windowTokens: 100_000, count: body => body.messages.length > 12 ? 90_000 : 900 }); await f.start();
+    f.state.script = [{ summary: '```json\n{"objective":"understand a.ts","findings":["a.ts exports a"],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":["src/a.ts"]}\n```' },
+      { content: 'Still a.' }];
+    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 16 }, (_, i) => i % 2
+      ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
+    { role: 'user' as const, content: 'what does a.ts export now?' }];
+    const events: AgentTurnStreamEvent[] = [];
+    const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-compact', messages: history }, event => events.push(event));
+    expect(result).toMatchObject({ finish: 'stop', rounds: 1, answer: 'Still a.' });
+    // The summary call is a governed, tools-off invocation under the compaction command id; then the round is sent compacted.
+    expect(f.state.requests).toHaveLength(2);
+    expect(f.state.requests[0]).toMatchObject({ stream: false }); expect(f.state.requests[0]!['tools']).toBeUndefined();
+    expect(f.rows('SELECT command_id FROM model_invocations').map(row => (row as { command_id: string }).command_id).sort())
+      .toEqual([chatTurnCompactionCommandId('scope', 'turn-compact', 1), chatTurnRoundCommandId('scope', 'turn-compact', 1)].sort());
+    const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>;
+    expect(compacted.replacedMessages).toBe(9); expect(compacted.messages).toHaveLength(9);
+    expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
+    const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
+    expect(sent[0]).toEqual({ role: 'system', content: 'SYS' }); expect(sent).toHaveLength(10);
+    expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
   }, 30_000);
 
   it('uses a labelled upper bound and sends no counter request when the model has no counter', async () => {

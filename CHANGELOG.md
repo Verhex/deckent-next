@@ -8,6 +8,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L5b: automatic compaction — past 75% of the context window, older messages become one labelled summary (a governed
+  tools-off summary call plus the user's earlier messages and tool calls copied verbatim; grants no authority); the newest exchange stays
+  whole; the terminal shows one line; a failed summary keeps the history and closes the turn with a note.
+
 - SURFACES/T-L5a: every agent round is measured before it is sent — the provider's own token count of exactly that request (vLLM
   `/tokenize` via a same-origin `tokenizeEndpoint` when the model declares `token-count`, under the invocation's authority) or a
   labelled conservative upper bound — and a round that cannot fit the window is never sent; the footer shows the context percent.

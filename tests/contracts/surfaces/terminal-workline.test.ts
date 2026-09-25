@@ -14,7 +14,7 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
     toolStatus: { error: 'TOOL-FAILED', denied: 'TOOL-DENIED', 'approval-required': 'TOOL-APPROVAL', 'invalid-arguments': 'TOOL-INVALID',
-      duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED' } },
+      duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED' }, context: 'CTX {approx}{percent}% of {window}', compacted: 'COMPACTED {count}' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
 // The /help notice joins commands with " · "; the slash popup lists them one per row, so this only matches the notice.
 const HELP_NOTICE = '/watch-runs · /watch-stop';
@@ -135,6 +135,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10 });
     await settle(20); view.stdin.write('first question\r');
     await until(() => view.stdout.text.includes('answer'), 'answer');
+    expect(view.stdout.text).toContain('COMPACTED 3');
     view.stdin.write('next\r'); await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'SUMMARY' }, { role: 'user', content: 'first question' },
       { role: 'assistant', content: 'answer', toolCalls: [] }, { role: 'user', content: 'next' }]);

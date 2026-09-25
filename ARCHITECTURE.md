@@ -593,7 +593,16 @@ request, 16 per message, 32 per tool), always labelled `upper-bound`. The window
 `contextWindowTokens` and the provider's report (unknown → no admission decision; the provider stays the arbiter). A round whose
 prompt + `maxCompletionTokens` + 2048 safety tokens exceeds the window is never sent: the turn closes with a note naming the
 numbers and quality. The footer shows `context [~]N% of W`. v13 also fixes the `compacted` event shape: its `messages` replace every
-non-system message the client holds (the client keeps its system prompt); the workline already applies it. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+non-system message the client holds (the client keeps its system prompt); the workline applies it.
+**Automatic compaction (T-L5b, Jev 6460731d).** On the same measurement, when a round's prompt + reserves passes 75% of the window,
+the engine plans a compaction: the system message and the newest 8 messages (widened so a tool result never loses its call) stay;
+the older part is summarized by a governed, tools-off invocation (`turn-compact:1(scope, turn, n)`, the older messages as a bounded
+plain transcript, legacy JSON shape: objective, findings, decisions, unresolved, next actions, inspected areas). It becomes one
+labelled `user` message: the model-written summary plus the earlier user messages verbatim (each ≤ 4000 characters, cut with length
+and digest) and the earlier tool calls, both copied from the history, never from the model; it is context only and grants no
+authority. The turn emits `compacted` (surface: one line "N earlier messages were summarized"), measures again and applies
+admission. A failed or unreadable summary keeps the history unchanged and closes the turn with a note; nothing more is sent. Open:
+no deterministic model-free fallback yet, and a newest exchange larger than the window cannot be compacted (admission then refuses). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

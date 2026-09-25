@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, runDurableAgentTurn, type AgentRoundOutcome, type AgentTurnPorts,
+import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, runDurableAgentTurn,
+  type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { createWorkspaceReadTools, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
@@ -9,7 +10,7 @@ import { createWorkspaceReadTools, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLET
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, and service stop. */
 export interface RuntimeChatTurnHost {
@@ -40,6 +41,42 @@ export function chatTurnPromptUpperBound(nativeRequest: JsonObject): number {
   const messages = request.messages ?? [], tools = request.tools ?? [];
   return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * messages.length + 32 * tools.length;
 }
+/** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
+export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
+/** Model-facing instruction of the compaction call (protocol text, like tool descriptions). */
+const COMPACTION_INSTRUCTION = 'You compress an earlier part of a conversation between a user and a coding assistant into one JSON object. Output only '
+  + 'that object, with no prose and no markdown fences, of exactly this shape: {"objective":string,"findings":string[],"decisions":string[],'
+  + '"unresolved":string[],"nextActions":string[],"inspectedAreas":string[]}. Every string is short, concrete and drawn from the conversation: '
+  + 'facts found in files or tool results with their paths, decisions made, open questions, what should happen next, files and areas '
+  + 'inspected. Invent nothing. Do not copy the user\'s messages or list the tool calls: Deckent records those itself. Write in the '
+  + 'language of the conversation.';
+/** Each message of the summary input is cut to this many characters (legacy bound). */
+const COMPACTION_MESSAGE_CHARS = 2_000;
+
+/** The older messages as plain text for a tools-off summary call, newest kept within `maxBytes` (older ones are named, not sent). */
+export function chatTurnCompactionTranscript(messages: readonly AgentTurnMessage[], maxBytes: number): string {
+  const cutText = (text: string) => text.length <= COMPACTION_MESSAGE_CHARS ? text : `${text.slice(0, COMPACTION_MESSAGE_CHARS)} …[cut]`;
+  const lines = messages.map(message => message.role === 'assistant'
+    ? `[assistant] ${cutText(message.content)}${message.toolCalls.map(call => `\n  → ${call.name} ${cutText(call.argumentsJson)}`).join('')}`
+    : message.role === 'tool' ? `[tool result ${message.name}] ${cutText(message.content)}` : `[${message.role}] ${cutText(message.content)}`);
+  const kept: string[] = [];
+  let bytes = 0;
+  for (const line of [...lines].reverse()) {
+    const size = Buffer.byteLength(line, 'utf8') + 1;
+    if (bytes + size > maxBytes && kept.length > 0) break;
+    kept.unshift(line); bytes += size;
+  }
+  const omitted = lines.length - kept.length;
+  return [...(omitted ? [`[${omitted} earliest messages omitted from this summary input]`] : []), ...kept].join('\n');
+}
+function parseCompactionSummary(text: string | null): AgentCompactionSummary | null {
+  if (!text) return null;
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { const parsed = agentCompactionSummarySchema.safeParse(JSON.parse(text.slice(start, end + 1))); return parsed.success ? parsed.data : null; }
+  catch { return null; }
+}
+
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
@@ -132,6 +169,17 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },
       authorize: tool => toolAuthority.decide(tool, command.scopeId, context.principal),
+      async summarize({ sequence, messages: older }, summarySignal) {
+        // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
+        const transcript = chatTurnCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
+        const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
+          scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: COMPACTION_INSTRUCTION },
+            { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false } as unknown as JsonObject };
+        const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
+        if (result?.receipt.outcome?.state !== 'responded') return null;
+        return parseCompactionSummary(extractOpenAiChatTextFromInvocation(result));
+      },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);
         const counted = await measurePeerConfiguredModel(projectRoot, invocation, peer, options, measureSignal).catch(() => null);

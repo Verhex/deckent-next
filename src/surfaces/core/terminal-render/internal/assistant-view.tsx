@@ -15,6 +15,8 @@ export type AssistantRenderLabels = Readonly<{
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
   /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
   context: string;
+  /** `{count}` earlier messages were replaced by a summary to fit the context window. */
+  compacted: string;
 }>;
 
 const INDENT = 2;
@@ -47,6 +49,9 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
   if (unit.kind === 'reasoning') {
     return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{fillTemplate(labels.thought, { seconds: seconds(unit.elapsedMs), tokens: tokenText(unit.tokens, unit.approximate) })}</Text></Box>;
+  }
+  if (unit.kind === 'compaction') {
+    return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="wrap">{glyphs.separator} {fillTemplate(labels.compacted, { count: unit.replacedMessages })}</Text></Box>;
   }
   if (unit.kind === 'tool') {
     const failed = unit.status !== 'ok' && unit.status !== 'duplicate';

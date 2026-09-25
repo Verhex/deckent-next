@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { AGENT_COMPACTION_HIGH_WATER, planAgentCompaction, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
@@ -27,6 +28,11 @@ export interface AgentTurnPorts {
    */
   measure?(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     signal: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }>;
+  /**
+   * The model's summary of older messages for compaction (T-L5b): a governed, tools-off invocation whose command id derives from the
+   * turn and `sequence`. Null when it failed; the loop then keeps the history and closes the turn with a typed note.
+   */
+  summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal): Promise<AgentCompactionSummary | null>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
@@ -88,7 +94,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const messages: AgentTurnMessage[] = [...input.messages], appended: AgentTurnMessage[] = [];
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   const seenReads = new Map<string, string>();
-  let rounds = 0, toolCalls = 0;
+  let rounds = 0, toolCalls = 0, compactions = 0;
   const push = (message: AgentTurnMessage) => { messages.push(message); appended.push(message); emit({ kind: 'message', message }); };
   const finish = (value: AgentTurnFinish, note: string | null): AgentTurnResult => {
     emit({ kind: 'done', finish: value, note });
@@ -103,9 +109,28 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
       try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
       if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+      const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
+      if (measured) emit({ kind: 'context', round: rounds, ...measured });
+      // Compaction (T-L5b) on the same measurement: past the high-water mark, older messages become one labelled summary.
+      const plan = measured && measured.windowTokens !== null && ports.summarize
+        && measured.promptTokens + reserve > measured.windowTokens * AGENT_COMPACTION_HIGH_WATER ? planAgentCompaction(messages) : null;
+      if (measured && plan && ports.summarize) {
+        compactions++;
+        let summaryOf: AgentCompactionSummary | null;
+        try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
+        if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+        if (!summaryOf) {
+          return finish('error', `The conversation reached ${measured.promptTokens} of ${measured.windowTokens} context tokens and could not be`
+            + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`);
+        }
+        const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
+        messages.splice(0, messages.length, ...next);
+        emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
+        try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
+        if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+        if (measured) emit({ kind: 'context', round: rounds, ...measured });
+      }
       if (measured) {
-        emit({ kind: 'context', round: rounds, ...measured });
-        const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
         // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
         if (measured.windowTokens !== null && measured.promptTokens + reserve > measured.windowTokens) {
           return finish('error', `The conversation no longer fits the model's context window: ${measured.promptTokens} prompt tokens`

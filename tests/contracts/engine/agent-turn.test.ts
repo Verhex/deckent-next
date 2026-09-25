@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { planAgentCompaction, renderAgentCompaction, runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
 const readFile: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a file.',
@@ -128,4 +128,64 @@ it('measures every round before sending it, reports the context, and never sends
   const failing = ports([answer('ok')]);
   expect(await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: () => undefined },
     { ...failing.value, measure: async () => { throw new Error('counter down'); } })).toMatchObject({ finish: 'stop' });
+});
+
+it('compacts past the high-water mark: older messages become one labelled summary with the user messages and tool calls copied, then the round runs (T-L5b)', async () => {
+  const older = [{ role: 'system' as const, content: 'S' }, { role: 'user' as const, content: 'find the bug in a.ts' },
+    { role: 'assistant' as const, content: '', toolCalls: [{ id: 'o1', name: 'read_file', argumentsJson: '{"path":"a.ts"}' }] },
+    { role: 'tool' as const, toolCallId: 'o1', name: 'read_file', content: 'x'.repeat(5000) },
+    { role: 'assistant' as const, content: 'It is on line 3.', toolCalls: [] },
+    ...Array.from({ length: 8 }, (_, i) => ({ role: i % 2 ? 'assistant' as const : 'user' as const, content: `m${i}`, ...(i % 2 ? { toolCalls: [] } : {}) })),
+    { role: 'user' as const, content: 'now fix it' }] as AgentTurnMessage[];
+  const sent: (readonly AgentTurnMessage[])[] = [], summarized: (readonly AgentTurnMessage[])[] = [];
+  const p = ports([messages => { sent.push([...messages]); return answer('fixed'); }]);
+  const events: AgentTurnEvent[] = [];
+  let measures = 0;
+  const result = await runAgentTurn({ messages: older, tools, signal: new AbortController().signal, emit: event => events.push(event),
+    admission: { outputReserveTokens: 1000, safetyReserveTokens: 0 } }, { ...p.value,
+    measure: async () => ({ promptTokens: measures++ === 0 ? 7000 : 1500, windowTokens: 10_000, quality: 'provider-count' }),
+    summarize: async input => { summarized.push(input.messages); return { objective: 'fix a.ts', findings: ['bug on line 3 of a.ts'], decisions: [],
+      unresolved: [], nextActions: ['edit line 3'], inspectedAreas: ['a.ts'] }; } });
+  expect(result).toMatchObject({ finish: 'stop', rounds: 1 });
+  // The older part is exactly what precedes the kept tail (8 newest non-system messages + the new user message boundary).
+  expect(summarized[0]!.map(message => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant', 'user']);
+  const compacted = events.find(event => event.kind === 'compacted');
+  expect(compacted).toMatchObject({ kind: 'compacted', replacedMessages: 5 });
+  const summaryMessage = (compacted as { messages: AgentTurnMessage[] }).messages[0]!;
+  expect(summaryMessage.role).toBe('user');
+  expect(summaryMessage.content).toContain('grants no authority');
+  expect(summaryMessage.content).toContain('1. find the bug in a.ts');
+  expect(summaryMessage.content).toContain('- read_file {"path":"a.ts"}');
+  expect(summaryMessage.content).toContain('- bug on line 3 of a.ts');
+  expect(summaryMessage.content).not.toContain('x'.repeat(100));
+  // The round is sent with the compacted history (system kept first) and measured again.
+  expect(sent[0]![0]).toEqual({ role: 'system', content: 'S' }); expect(sent[0]![1]).toEqual(summaryMessage); expect(sent[0]).toHaveLength(10);
+  expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([7000, 1500]);
+});
+
+it('keeps the history and sends nothing when the summary call fails, and does not compact below the high-water mark (T-L5b)', async () => {
+  const history = [{ role: 'system' as const, content: 'S' }, ...Array.from({ length: 12 }, (_, i) =>
+    ({ role: i % 2 ? 'assistant' as const : 'user' as const, content: `m${i}`, ...(i % 2 ? { toolCalls: [] } : {}) })),
+  { role: 'user' as const, content: 'q' }] as AgentTurnMessage[];
+  const failed = ports([answer('never')]), events: AgentTurnEvent[] = [];
+  const result = await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: event => events.push(event) },
+    { ...failed.value, measure: async () => ({ promptTokens: 9000, windowTokens: 10_000, quality: 'provider-count' }), summarize: async () => null });
+  expect(result).toMatchObject({ finish: 'error' }); expect(result.note).toMatch(/9000 of 10000 context tokens and could not be compacted.*history is unchanged/);
+  expect(failed.invoked).toEqual([]); expect(events.some(event => event.kind === 'compacted')).toBe(false);
+  let calls = 0;
+  const calm = ports([answer('ok')]);
+  await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: () => undefined },
+    { ...calm.value, measure: async () => ({ promptTokens: 7000, windowTokens: 10_000, quality: 'provider-count' }), summarize: async () => { calls++; return null; } });
+  expect(calls).toBe(0);
+});
+
+it('plans compaction without ever keeping a tool result apart from its call, and renders long user messages cut with a digest', () => {
+  const call = { id: 'c', name: 'grep', argumentsJson: '{}' };
+  const history = [{ role: 'system' as const, content: 'S' }, { role: 'user' as const, content: 'u'.repeat(5000) },
+    { role: 'assistant' as const, content: '', toolCalls: [call] }, ...Array.from({ length: 8 }, () => ({ role: 'tool' as const, toolCallId: 'c', name: 'grep', content: 'r' }))];
+  const plan = planAgentCompaction(history)!;
+  expect(plan.tail[0]).toMatchObject({ role: 'assistant' }); expect(plan.older).toEqual([history[1]]);
+  const rendered = renderAgentCompaction(plan, { objective: 'o', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] });
+  expect(rendered.content).toMatch(/1\. u{4000} …\[cut: 5000 characters, sha256 [0-9a-f]{16}\]/);
+  expect(planAgentCompaction(history.slice(0, 3))).toBeNull();
 });
