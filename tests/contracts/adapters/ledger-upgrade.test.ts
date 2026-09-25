@@ -38,6 +38,7 @@ it('keeps every allocation row across the v36 rebuild and then admits an allocat
   db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
   const record = JSON.stringify({ schemaVersion: 1, scopeId: 'live', allocationId: 'local-qwen-calls', maxCalls: 50, maxInFlight: 2, lifetimeCalls: 26, inFlight: 0 });
   db.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'local-qwen-calls', 50, 2, 26, 0, record);
+  db.prepare('INSERT INTO model_invocation_allocation_checkpoints VALUES(?,?,?,?)').run('live', 'local-qwen-calls', 7, 'c'.repeat(64));
   // v35 cannot hold an allocation without a lifetime total.
   expect(() => db.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'x', null, 1, 0, 0, '{}')).toThrow(/NOT NULL/);
   db.close();
@@ -46,6 +47,10 @@ it('keeps every allocation row across the v36 rebuild and then admits an allocat
   try {
     expect(after.prepare('SELECT scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record FROM model_invocation_allocations').all())
       .toEqual([{ scope_id: 'live', allocation_id: 'local-qwen-calls', max_calls: 50, max_in_flight: 2, lifetime_calls: 26, in_flight: 0, record }]);
+    // The checkpoint child survives the rebuild and still references its parent.
+    expect(after.prepare('SELECT scope_id,allocation_id,revision,digest FROM model_invocation_allocation_checkpoints').all())
+      .toEqual([{ scope_id: 'live', allocation_id: 'local-qwen-calls', revision: 7, digest: 'c'.repeat(64) }]);
+    expect(after.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     after.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'unbounded', null, 1, 0, 0, '{}');
     expect(() => after.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'zero', 0, 1, 0, 0, '{}')).toThrow(/CHECK/);
   } finally { after.close(); }

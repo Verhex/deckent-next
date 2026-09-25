@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { boundLine, readBoundedTextFile, sliceUtf8, splitLines } from './bounded.js';
 import { compileSearchPattern, metaPattern, renderReadFileView, resolveReadFileBudget, resolveReadFileViewRequest } from './views.js';
-import { createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, globToRegExp, openWalkedFile, walkWorkspaceFiles,
+import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, openWalkedFile, walkWorkspaceFiles,
   type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
 
@@ -19,7 +19,7 @@ export interface WorkspaceReadLimits {
 }
 export const DEFAULT_WORKSPACE_READ_LIMITS: WorkspaceReadLimits = Object.freeze({ maxResultBytes: 16_384, maxFileBytes: 16 * 1024 * 1024 });
 const MAX_LIST_ENTRIES = 500, MAX_GLOB_MATCHES = 500, MAX_GREP_HITS = 200, GREP_BYTES_PER_LINE = 2048, MAX_SKIP_NOTES = 32;
-const MAX_PATH_ARG_BYTES = 4096, MAX_PATTERN_ARG_BYTES = 2048;
+const MAX_PATH_ARG_BYTES = 4096, MAX_PATTERN_ARG_BYTES = 2048, MAX_GLOB_ARG_BYTES = 512;
 
 const str = (description: string) => ({ type: 'string', description });
 const int = (description: string) => ({ type: 'integer', minimum: 0, description });
@@ -61,6 +61,9 @@ function rowsWithin(rows: readonly string[], trailer: readonly string[], maxByte
 function argumentProblem(args: Record<string, unknown>): string | null {
   for (const key of ['path'] as const) if (typeof args[key] === 'string' && Buffer.byteLength(args[key], 'utf8') > MAX_PATH_ARG_BYTES) return `argument-too-long name=${key} limit=${MAX_PATH_ARG_BYTES}`;
   for (const key of ['pattern', 'glob'] as const) if (typeof args[key] === 'string' && Buffer.byteLength(args[key], 'utf8') > MAX_PATTERN_ARG_BYTES) return `argument-too-long name=${key} limit=${MAX_PATTERN_ARG_BYTES}`;
+  // A glob is matched per path by a bounded dynamic program; its length bounds that cost.
+  const glob = typeof args['glob'] === 'string' ? args['glob'] : undefined;
+  if (glob !== undefined && Buffer.byteLength(glob, 'utf8') > MAX_GLOB_ARG_BYTES) return `argument-too-long name=glob limit=${MAX_GLOB_ARG_BYTES}`;
   return null;
 }
 function validLimits(limits: WorkspaceReadLimits): WorkspaceReadLimits {
@@ -124,7 +127,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     if (!re) return fail('grep', `invalid-pattern pattern=${quote(pattern)}`);
     const target = await scope.resolve(args['path'], true);
     if (!target.ok) return fail('grep', `${target.error} path=${quote(args['path'] ?? '.')}`);
-    const only = typeof args['glob'] === 'string' && args['glob'] ? globToRegExp(args['glob']) : null;
+    const only = typeof args['glob'] === 'string' && args['glob'] ? createGlobMatcher(args['glob']) : null;
     const hits: string[] = [], skipped: string[] = [];
     let scanned = 0, hitCapped = false;
     const runner = createRegexRunner(signal);
@@ -147,8 +150,8 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       } else if (asFile.error === 'hardlink-refused') skipped.push(`${target.rel} (hard link refused)`);
       else {
         incomplete = describeIncomplete(await walkWorkspaceFiles(scope, target.rel, async (rel, parent, name) => {
-          if (only && !only.test(rel)) return true;
-          const opened = await openWalkedFile(parent, name);
+          if (only && !only(rel)) return true;
+          const opened = await openWalkedFile(scope, parent, name, rel);
           if (!opened.ok) { skipped.push(`${rel} (${opened.reason})`); return true; }
           const read = await readBoundedTextFile(opened.handle, limits.maxFileBytes, signal);
           if (!read.ok) { if (read.kind !== 'cancelled') skipped.push(`${rel} (${read.kind}: ${read.detail})`); return read.kind !== 'cancelled'; }
@@ -172,14 +175,15 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
   const glob = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
     const pattern = typeof args['pattern'] === 'string' ? args['pattern'] : '';
     if (!pattern) return fail('glob', 'empty-pattern');
+    if (Buffer.byteLength(pattern, 'utf8') > MAX_GLOB_ARG_BYTES) return fail('glob', `argument-too-long name=pattern limit=${MAX_GLOB_ARG_BYTES}`);
     const target = await scope.resolve(args['path'], true);
     if (!target.ok) return fail('glob', `${target.error} path=${quote(args['path'] ?? '.')}`);
-    const re = globToRegExp(pattern), matched: string[] = [];
+    const matches = createGlobMatcher(pattern), matched: string[] = [];
     const prefix = target.rel === '' ? '' : `${target.rel}/`;
     let hitCapped = false;
     const incomplete = describeIncomplete(await walkWorkspaceFiles(scope, target.rel, rel => {
       const local = rel.slice(prefix.length);
-      if (!re.test(local)) return true;
+      if (!matches(local)) return true;
       if (matched.length >= MAX_GLOB_MATCHES) { hitCapped = true; return false; }
       matched.push(local); return true;
     }, signal));

@@ -553,8 +553,8 @@ moves to an unbounded allocation under a new id; existing receipts keep verifyin
 **Tool calls over openai-chat (T-L2).** `openai-chat-http` v4 sends `tools`/`tool_choice` and accepts assistant `tool_calls` and
 `tool` messages only when the model binding declares the `tool-calls` capability as supported (catalog data); otherwise any tool
 call is refused as before. Responses may carry calls only to declared tool names, with unique ids and `finish_reason:
-tool_calls`; the legacy `function_call` is never accepted. Streamed calls are assembled by index (fixed id, name and arguments in
-pieces, contiguous indexes) and pass the same check; an undeclared call stops presentation at once; a cut stream is interrupted
+tool_calls`; the legacy `function_call` is never accepted and `tool_choice: none` forbids calls even with tools declared (Astra 2079). Streamed calls are assembled by index (fixed id, name and arguments in
+pieces, contiguous indexes) and pass the same check; a streamed name that no declared name can still match stops the read and presentation at once; a cut stream is interrupted
 (uncertain) and yields no call. Arguments stay the provider's raw text: invalid JSON is the loop's typed tool error to the model.
 The loop sees the provider-neutral `AgentToolCall` (`id`, `name`, `argumentsJson`); native details stay in the native result.
 Review limit (2026-09-25): `tool_choice: none` is not yet enforced on responses, and an undeclared streamed name with a tools
@@ -576,7 +576,10 @@ components from a root descriptor (`/proc/self/fd/<fd>/<name>`, openat semantics
 the opened descriptor's own path, so a parent or root swapped for a symlink after the check is refused; files with more than one
 link are refused (a hard link can alias a protected file); files open non-blocking and must be regular, so FIFOs and devices never
 stall the service; walks list directories through their descriptors and count what they could not cover (depth > 32, unreadable,
-changed, special files) instead of reporting absence. Regular expressions run in a worker thread that is terminated on cancel, the
+changed, special files) instead of reporting absence; every directory and file opened during a walk is re-verified against its
+workspace path too, so a parent moved out mid-walk yields a refusal, not its outside content (Astra 2078). Globs (the glob tool, grep's
+filter and the deny floor) are matched by a dynamic program bounded by pattern × path length, never by a backtracking regex; glob
+patterns are capped at 512 bytes. A descriptor verified at open is read as that object even if it is moved afterwards. Regular expressions run in a worker thread that is terminated on cancel, the
 signal reaches every tool, and every result branch is cut to the cap with a stated marker; path/pattern arguments and limits are
 validated. The guarantee is Linux-only (WSL included); other platforms fail closed until they have an equivalent. Engine per-call
 authorization is not wired in T-L1; the read adapter is not an admitted terminal execution surface by itself (T-L3).

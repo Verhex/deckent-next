@@ -14,19 +14,46 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '**/*.p12', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/.credentials.json', '**/.npmrc', '**/.netrc', '.git/**', '**/.git/**',
   '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**']);
 
-/** Minimal glob: a double star followed by a slash is any run of directories, a double star anything, `*` within a segment,
- * `?` one character; anchored on the '/'-joined relative path. Translated token by token, so no produced fragment is rewritten. */
-export function globToRegExp(pattern: string): RegExp {
-  let out = '';
+type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
+/**
+ * Glob matcher without backtracking (Astra 2078 R2): `**` followed by a slash is any run of whole directories, `**` anything,
+ * `*` any run within a segment, `?` one non-slash character. Matching is a dynamic program over (pattern token, path position),
+ * so its cost is bounded by pattern length × path length for any pattern — a hostile pattern cannot stall the service.
+ */
+export function createGlobMatcher(pattern: string): (path: string) => boolean {
+  const tokens: GlobToken[] = [];
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i]!;
     if (char === '*' && pattern[i + 1] === '*') {
-      if (pattern[i + 2] === '/') { out += '(?:.*/)?'; i += 2; } else { out += '.*'; i += 1; }
-    } else if (char === '*') out += '[^/]*';
-    else if (char === '?') out += '[^/]';
-    else out += char.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      if (pattern[i + 2] === '/') { tokens.push({ kind: 'dirs' }); i += 2; } else { tokens.push({ kind: 'globstar' }); i += 1; }
+    } else if (char === '*') tokens.push({ kind: 'star' });
+    else if (char === '?') tokens.push({ kind: 'one' });
+    else tokens.push({ kind: 'literal', char });
   }
-  return new RegExp(`^${out}$`);
+  return (path: string) => {
+    let current = new Uint8Array(path.length + 1);
+    current[0] = 1;
+    for (const token of tokens) {
+      const next = new Uint8Array(path.length + 1);
+      if (token.kind === 'literal' || token.kind === 'one') {
+        for (let j = 0; j < path.length; j++) {
+          if (current[j] && (token.kind === 'one' ? path[j] !== '/' : path[j] === token.char)) next[j + 1] = 1;
+        }
+      } else if (token.kind === 'star') {
+        for (let j = 0; j <= path.length; j++) next[j] = current[j] || (j > 0 && next[j - 1] && path[j - 1] !== '/') ? 1 : 0;
+      } else if (token.kind === 'globstar') {
+        for (let j = 0; j <= path.length; j++) next[j] = current[j] || (j > 0 && next[j - 1]) ? 1 : 0;
+      } else {
+        let seen = 0;
+        for (let j = 0; j <= path.length; j++) {
+          next[j] = current[j] || (j > 0 && path[j - 1] === '/' && seen) ? 1 : 0;
+          if (current[j]) seen = 1;
+        }
+      }
+      current = next;
+    }
+    return current[path.length] === 1;
+  };
 }
 
 export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'path-denied' | 'not-found' | 'path-changed' | 'not-a-file'
@@ -44,6 +71,8 @@ export interface WorkspaceScope {
   resolve(requested: unknown, allowRoot?: boolean): Promise<ResolvedPath>;
   /** Opens a resolved path descriptor-relative from the workspace root, never following a symlink in any component. */
   open(rel: string, kind: 'file' | 'dir'): Promise<OpenedPath>;
+  /** True while the descriptor still is the workspace path `rel` (its kernel path is re-read). */
+  verify(handle: FileHandle, rel: string): Promise<boolean>;
 }
 
 const toPosix = (path: string) => path.split(sep).join('/');
@@ -63,7 +92,7 @@ export const MAX_WALK_DEPTH = 32;
 export async function createWorkspaceScope(rootInput: string, deny: readonly string[] = DEFAULT_WORKSPACE_READ_DENY): Promise<WorkspaceScope> {
   const supported = process.platform === 'linux' && existsSync('/proc/self/fd');
   const root = await realpath(rootInput);
-  const denyRes = deny.map(globToRegExp);
+  const denyMatchers = deny.map(createGlobMatcher);
   const ignoredDirs = new Set(BASELINE_IGNORED_DIRS);
   try {
     for (const raw of (await readFile(join(root, '.gitignore'), 'utf8')).split('\n')) {
@@ -74,14 +103,14 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
     }
   } catch { /* no readable .gitignore: the baseline stands */ }
   const inside = (abs: string, allowRoot: boolean) => { const rel = relative(root, abs); return rel === '' ? allowRoot : !rel.startsWith('..') && !isAbsolute(rel); };
-  const denied = (rel: string) => rel !== '' && denyRes.some(re => re.test(rel));
+  const denied = (rel: string) => rel !== '' && denyMatchers.some(match => match(rel));
   const close = async (handle: FileHandle | undefined) => { await handle?.close().catch(() => undefined); };
   /** The descriptor must still be the workspace path it was opened as: its kernel path is re-read and compared. */
   const verify = async (handle: FileHandle, rel: string) => {
     try { return await readlink(fdPath(handle)) === (rel === '' ? root : join(root, rel)); } catch { return false; }
   };
   return Object.freeze({
-    root, ignoredDirs, denied,
+    root, ignoredDirs, denied, verify,
     async resolve(requested: unknown, allowRoot = false): Promise<ResolvedPath> {
       if (!supported) return { ok: false, error: 'platform-unsupported' };
       if (requested !== undefined && typeof requested !== 'string') return { ok: false, error: 'path-invalid' };
@@ -144,6 +173,8 @@ export async function walkWorkspaceFiles(scope: WorkspaceScope, startRel: string
         if (depth + 1 > MAX_WALK_DEPTH) { incomplete.depthLimited++; continue; }
         let child: FileHandle;
         try { child = await open(`${fdPath(dir)}/${entry.name}`, DIR_FLAGS); } catch { incomplete.changed++; continue; }
+        // The parent may have moved since its entries were read: the child must still be the workspace path (Astra 2078 R1).
+        if (!await scope.verify(child, rel)) { await child.close().catch(() => undefined); incomplete.changed++; continue; }
         try { if (!await walk(child, rel, depth + 1)) return false; } finally { await child.close().catch(() => undefined); }
       } else if (entry.isFile()) { if (!await visit(rel, dir, entry.name)) return false; }
       // FIFOs, sockets and devices are never opened for content; they are counted, not hidden.
@@ -157,11 +188,12 @@ export async function walkWorkspaceFiles(scope: WorkspaceScope, startRel: string
   return incomplete;
 }
 
-/** Opens a walked file from its parent directory descriptor: no-follow, non-blocking, regular single-link files only. */
-export async function openWalkedFile(parent: FileHandle, name: string): Promise<{ ok: true; handle: FileHandle } | { ok: false; reason: string }> {
+/** Opens a walked file from its parent directory descriptor: no-follow, non-blocking, still at its workspace path, regular single-link files only. */
+export async function openWalkedFile(scope: WorkspaceScope, parent: FileHandle, name: string, rel: string): Promise<{ ok: true; handle: FileHandle } | { ok: false; reason: string }> {
   let handle: FileHandle | undefined;
   try {
     handle = await open(`${fdPath(parent)}/${name}`, FILE_FLAGS);
+    if (!await scope.verify(handle, rel)) { await handle.close(); return { ok: false, reason: 'changed during the walk' }; }
     const info = await handle.stat();
     if (!info.isFile()) { await handle.close(); return { ok: false, reason: 'not a regular file' }; }
     if (info.nlink > 1) { await handle.close(); return { ok: false, reason: 'hard link refused' }; }

@@ -4,7 +4,7 @@ import type { JsonObject, ModelInvocationDelta, ModelInvocationRejectionReason }
 import type { NativeJsonHttpParsed, NativeJsonHttpStream } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema,
   type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
-import { checkedToolCalls } from './tool-calls.js';
+import { checkedToolCalls, couldBeDeclaredTool } from './tool-calls.js';
 
 /**
  * SSE framing costs about 60x the answer text per token (vLLM measured ~240 wire bytes per token). The profile's
@@ -68,7 +68,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (finish !== null || (delta['function_call'] ?? null) !== null) { fail('invalid-response'); return false; }
     const toolDeltas = delta['tool_calls'] ?? null;
     if (toolDeltas !== null) {
-      if (!request.tools || !Array.isArray(toolDeltas)) { fail('invalid-response'); return false; }
+      if (!request.tools || request.tool_choice === 'none' || !Array.isArray(toolDeltas)) { fail('invalid-response'); return false; }
       for (const entry of toolDeltas as unknown[]) {
         const part = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
         const fn = part?.['function'] && typeof part['function'] === 'object' ? part['function'] as Record<string, unknown> : {};
@@ -81,7 +81,12 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
           if (typeof id !== 'string' || id.length === 0 || (current.id !== null && current.id !== id)) { fail('invalid-response'); return false; }
           current.id = id;
         }
-        if (fn['name'] !== undefined && fn['name'] !== null) { if (typeof fn['name'] !== 'string') { fail('invalid-response'); return false; } current.name += fn['name']; }
+        if (fn['name'] !== undefined && fn['name'] !== null) {
+          if (typeof fn['name'] !== 'string') { fail('invalid-response'); return false; }
+          current.name += fn['name'];
+          // An undeclared name stops the read as soon as no declared name can still match it (Astra 2079).
+          if (!couldBeDeclaredTool(current.name, request)) { fail('invalid-response'); return false; }
+        }
         if (fn['arguments'] !== undefined && fn['arguments'] !== null) { if (typeof fn['arguments'] !== 'string') { fail('invalid-response'); return false; } current.arguments += fn['arguments']; }
         calls.set(index, current);
         assembledBytes += Buffer.byteLength(typeof fn['name'] === 'string' ? fn['name'] : '', 'utf8') + Buffer.byteLength(typeof fn['arguments'] === 'string' ? fn['arguments'] : '', 'utf8');

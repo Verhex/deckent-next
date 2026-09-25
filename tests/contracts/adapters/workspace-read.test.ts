@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createWorkspaceReadTools, createWorkspaceScope, MAX_WALK_DEPTH, WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
+import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles, WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { agentToolSpecSchema } from '#domain/index.js';
 
 const roots: string[] = [];
@@ -152,4 +152,42 @@ it('reports directories it could not scan instead of claiming no matches (Astra 
   expect(grep.text).toMatch(/beyond depth 32/); expect(grep.text).toMatch(/1 unreadable directory|1 director(y|ies) changed/);
   const glob = await tools.execute('glob', { pattern: '**/deep.txt' });
   expect(glob.text).toContain('no matches in the scanned part'); expect(glob.text).toContain('beyond depth 32');
+});
+
+it('refuses a walked file whose parent moved out of the workspace during the walk (Astra 2078 R1)', async () => {
+  const { base, root } = await workspace({ 'dir/a.txt': 'inside\n', 'dir/b.txt': 'inside-b\n', 'later/c.txt': 'c\n' });
+  const scope = await createWorkspaceScope(root);
+  const outcomes: Record<string, string> = {};
+  const incomplete = await walkWorkspaceFiles(scope, '', async (rel, parent, name) => {
+    if (rel === 'dir/a.txt') {
+      // After the entries of dir were read, dir leaves the workspace and its other file gets outside content.
+      await rename(join(root, 'dir'), join(base, 'moved')); await writeFile(join(base, 'moved/b.txt'), 'OUTSIDE-SENTINEL\n');
+      await rename(join(root, 'later'), join(base, 'later-moved')); await mkdir(join(base, 'later-moved-marker'));
+    }
+    const opened = await openWalkedFile(scope, parent, name, rel);
+    outcomes[rel] = opened.ok ? 'opened' : opened.reason;
+    if (opened.ok) await opened.handle.close();
+    return true;
+  });
+  expect(outcomes['dir/a.txt']).toBe('changed during the walk');
+  expect(outcomes['dir/b.txt']).toBe('changed during the walk');
+  expect(outcomes['later/c.txt']).toBeUndefined();
+  expect(incomplete.changed).toBeGreaterThanOrEqual(1);
+});
+
+it('matches globs without backtracking, so a hostile pattern cannot stall the service (Astra 2078 R2)', async () => {
+  const match = (pattern: string, path: string) => createGlobMatcher(pattern)(path);
+  expect([match('**/*.ts', 'a.ts'), match('**/*.ts', 'x/y/a.ts'), match('*.ts', 'x/a.ts'), match('src/**', 'src/a/b'), match('src/*/b', 'src/a/b'),
+    match('a?c', 'abc'), match('a?c', 'a/c'), match('**/.env', '.env'), match('.env.*', '.env.local'), match('x.ts', 'x_ts')]).toEqual([true, true, false, true, true, true, false, true, true, false]);
+  const { root } = await workspace({ [`${'a'.repeat(45)}`]: 'x\n', 'one.txt': 'y\n' });
+  const tools = await createWorkspaceReadTools(root);
+  let ticks = 0; const ticker = setInterval(() => { ticks++; }, 5);
+  const started = performance.now();
+  const hostile = `${'*a'.repeat(22)}b`;
+  expect((await tools.execute('glob', { pattern: hostile })).text).toBe('[deckent] glob: no matches');
+  expect((await tools.execute('grep', { pattern: 'x', glob: hostile })).text).toContain('no matches');
+  clearInterval(ticker);
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(ticks).toBeGreaterThanOrEqual(0);
+  expect((await tools.execute('glob', { pattern: '*'.repeat(600) })).text).toContain('argument-too-long');
 });

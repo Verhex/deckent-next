@@ -7,7 +7,8 @@ import { OPENAI_CHAT_MAX_TOOL_CALLS, type OpenAiChatTextRequest } from './contra
  */
 export function checkedToolCalls(value: unknown, request: OpenAiChatTextRequest): readonly { id: string; name: string; arguments: string }[] | null | 'invalid' {
   if (value === null || value === undefined) return null;
-  if (!request.tools || !Array.isArray(value) || value.length === 0 || value.length > OPENAI_CHAT_MAX_TOOL_CALLS) return 'invalid';
+  // tool_choice none forbids calls even when tools are declared (Astra 2079).
+  if (!request.tools || request.tool_choice === 'none' || !Array.isArray(value) || value.length === 0 || value.length > OPENAI_CHAT_MAX_TOOL_CALLS) return 'invalid';
   const declared = new Set(request.tools.map(tool => tool.function.name)), ids = new Set<string>(), calls: { id: string; name: string; arguments: string }[] = [];
   for (const entry of value) {
     const call = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
@@ -17,4 +18,9 @@ export function checkedToolCalls(value: unknown, request: OpenAiChatTextRequest)
     ids.add(call['id']); calls.push({ id: call['id'], name: fn['name'], arguments: fn['arguments'] });
   }
   return calls;
+}
+
+/** True while a streamed, partially received tool name can still become one of the declared names. */
+export function couldBeDeclaredTool(partialName: string, request: OpenAiChatTextRequest): boolean {
+  return (request.tools ?? []).some(tool => tool.function.name.startsWith(partialName));
 }

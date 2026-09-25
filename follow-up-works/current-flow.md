@@ -1,6 +1,25 @@
-# Anlık iş akışı — Opus 5.5; T-L2 fbd962c + REVISE 41c53bc Astra'da; vLLM terminal profili (131k, araç çözücüsü) canlı; sıradaki T-L3
+# Anlık iş akışı — Opus 5.5; Astra 2078/2079 REVISE uygulanıyor; T-L3a PASS (2080); T-L3b çekirdek d64e488 incelemede (2081)
+
+## Astra 2078–2080 (2026-09-25) — işlendi ve tüketildi
+- **2080 PASS T-L3a (`2cb4c79`):** ARCHITECTURE ifadesi "can use it; live activation pending" olarak daraltılacak; Astra probe'u checkpoint çocuğunun
+  korunduğunu doğruladı (yazar testi yalnız ebeveyn satırı ekliyordu).
+- **2078 REVISE T-L1 (`41c53bc`):** Codex PASS. R1 P1 gezintide açılan alt dizin ve dosya yolu doğrulanmıyor (taşınan üst dizin dış içeriği okutuyor)
+  → gezinti açılışlarını ortak doğrulamaya bağla, değişeni incomplete/ret say; R2 P1 glob eşleştirme servis thread'inde geri izleme (`*a`×22+`b`)
+  → sınırlı (backtracking'siz) eşleştirici veya iptal edilebilir yürütücü, grep glob filtresi dahil. D4 "kapatıldı" ifadesi daraltılacak.
+- **2079 REVISE T-L2 (`fbd962c`):** R1 `tool_choice:'none'` iken gelen çağrı reddedilmeli (akışlı + akışsız); R2 araçlar bildirilmişken bilinmeyen
+  ad akışta hiçbir bildirilmiş adın öneki olamadığı anda reddedilmeli (sonraki metin görünmez, bağlantı erken kapanır).
 
 ## GPU izni + vLLM terminal profili (2026-09-25)
+
+Astra 2075–2077 incelemesi, HEAD `2cb4c790f37b01791da0fd19e8f810619c7d1d0f`: **Codex düzeltmeleri ve T-L3a PASS;
+T-L1/T-L2 REVISE.** T-L1 kalan: walked parent dışarı taşındığında sentinel okunuyor (changed=0); glob adversarial pattern
+25ms abort timer'ını kilitledi (probe parent1500ms kill). T-L2: tool_choice none iken call kabulü; declared list dışındaki
+isimden sonra text delta üretimi. Sonraki adım Opus'un bu dört dal için dar düzeltmesi; toplu push PASS yok.
+Bağımsız 8 dosya/54 test PASS; ek v35→v36 allocation+checkpoint revision7/digest korundu, foreign_key_check boş.
+Kanıt dış `proof/ASTRA-2075-2077-20260925/`. Yazar verify1820/317,1823/318,1825/318 exit0 logları ve canlı iki-tool
+adapter logu incelendi; canlı tekrar/GPU/build/tam suite/commit/push yok. Son kaynak kontrolünde başlayan agent-turn WIP
+(domain/engine/policy/test) bu incelemenin kapsamı dışında bırakıldı ve korunuyor. Sözleşme eki tasarım sorularını karşılıyor;
+D4 kapanışı kalan T-L1 dallarının gerçek negatif kanıtına bağlı.
 
 Owner GPU'yu açtı ve container yeniden oluşturmayı onayladı. İlk denemede imajın giriş noktası zaten `vllm serve` olduğu için fazladan `serve`
 argümanı container'ı düşürdü (unless-stopped döngüsü) → betik düzeltildi. Hazır olma ~100 s; KV 260.687 token. Doğrudan API: tek araç çağrısı

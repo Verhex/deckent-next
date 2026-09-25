@@ -105,3 +105,30 @@ it('assembles streamed tool calls across chunks, presents no tool text, and neve
   // The undeclared call stops presentation at once: nothing after it reaches the screen.
   expect(refused.deltas).toEqual([]);
 });
+
+it('refuses calls under tool_choice none and stops a stream at the first undeclared tool name (Astra 2079)', async () => {
+  const none = request(false, { tool_choice: 'none' });
+  const reply = (_b: string, res: ServerResponse) => { res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ id: 'x', object: 'chat.completion', created: 1, model: MODEL, choices: [{ index: 0, finish_reason: 'tool_calls',
+      message: { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })); };
+  expect((await send((await fixture(reply)).endpoint, none)).result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response' } });
+  const streamedNone = await send((await fixture(sse([chunk({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'read_file', arguments: '{}' } }] }), chunk({}, 'tool_calls'), usage, DONE]))).endpoint,
+    request(true, { tool_choice: 'none' }));
+  expect(streamedNone.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response' } });
+  const plain = await send((await fixture(sse([chunk({ content: 'just text' }), chunk({}, 'stop'), usage, DONE]))).endpoint, request(true, { tool_choice: 'none' }));
+  expect(plain.result).toMatchObject({ native: { choices: [{ message: { content: 'just text' } }] } });
+  // A declared prefix is still accepted while the name streams in; the first impossible prefix ends the read at once.
+  let writesAfter = 0, providerClosed = false;
+  const { endpoint } = await fixture((_b, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(chunk({ tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'rea', arguments: '' } }] }));
+    res.write(chunk({ tool_calls: [{ index: 0, function: { name: 'd_x', arguments: '' } }] }));
+    const timer = setInterval(() => { writesAfter++; res.write(chunk({ content: 'AFTER-INVALID' })); }, 10);
+    res.on('close', () => { providerClosed = true; clearInterval(timer); });
+  });
+  const early = await send(endpoint, request(true), undefined, 4000);
+  expect(early.result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response' } });
+  expect(early.deltas).toEqual([]);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(providerClosed).toBe(true); expect(writesAfter).toBeLessThan(20);
+});
