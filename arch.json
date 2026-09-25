@@ -336,6 +336,7 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
+        "src/domain/core/agent-turn",
         "src/domain/core/agent-tool",
         "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
@@ -705,7 +706,9 @@
       "plan": "SURFACES"
     },
     "src/surfaces/core/terminal-kit": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/agent-turn"
+      ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/terminal-render": {

@@ -9,7 +9,10 @@ import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/inde
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteAgentTurnStore, openSqliteModelActivationStore } from '#adapters/index.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
-import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTurn, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
+import type { TurnDelta } from '#surfaces/index.js';
 import { chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
@@ -128,6 +131,22 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(again).toEqual([{ kind: 'text', text: 'It exports a.' }]); expect(f.state.requests).toHaveLength(2);
     await expect(f.client().chatTurn(ask('turn-1', 'something else'), () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_CONFLICT' });
     expect(f.state.requests).toHaveLength(2);
+  }, 30_000);
+
+  it('reaches the terminal renderer: a tool line, the answer and one footer, from the real service through the surface stream', async () => {
+    const f = await runtime(); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' }];
+    const deltas: TurnDelta[] = [];
+    for await (const delta of streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages: ask('x').messages, options: { env: f.env } },
+      { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn })) deltas.push(delta);
+    expect(deltas.filter(delta => delta.kind === 'done')).toEqual([{ kind: 'done', finish: 'stop', note: null }]);
+    expect(deltas.filter(delta => delta.kind === 'message').map(delta => delta.kind === 'message' && delta.message.role)).toEqual(['assistant', 'tool', 'assistant']);
+    let state = startAssistantStream(0); const units: AssistantUnit[] = [];
+    for (const delta of deltas) { const step = renderAssistantStream(state, delta, 10); state = step.state; units.push(...step.staticUnits, ...(step.footer ? [step.footer] : [])); }
+    expect(units.map(unit => unit.kind)).toEqual(['tool', 'text', 'footer']);
+    expect(units[0]).toMatchObject({ kind: 'tool', name: 'read_file', target: 'src/a.ts', status: 'ok' });
+    expect(units[1]).toMatchObject({ kind: 'text', markdown: 'It exports a.' });
+    expect(units[2]).toMatchObject({ kind: 'footer', finish: 'stop', promptTokens: 20, completionTokens: 16 });
   }, 30_000);
 
   it('answers a tool call the policy does not grant as denied, never runs it, and still finishes the turn', async () => {

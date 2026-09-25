@@ -91,6 +91,7 @@
   "resources.table_header_cpu_pct",
   "sync.format_run_label",
   "sync.scope_prompt",
+  "terminal.render.tool",
   "terminal.worker.ordinal",
   "tool.confirm_git_commit",
   "tui.bg_turn.completed",

@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline';
 import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type ChatTurnMessage, type WorklineLabels,
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels,
   type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { phaseLabel } from './transcript.js';
@@ -130,6 +130,11 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),
       failed: t('terminal.render.failed', {}, locale), code: t('terminal.render.code', {}, locale),
       moreAbove: t('terminal.render.moreAbove', {}, locale), queued: t('terminal.render.queued', {}, locale),
+      tool: t('terminal.render.tool', {}, locale), toolRunning: t('terminal.render.toolRunning', {}, locale),
+      toolStatus: { error: t('terminal.render.toolStatus.error', {}, locale), denied: t('terminal.render.toolStatus.denied', {}, locale),
+        'approval-required': t('terminal.render.toolStatus.approvalRequired', {}, locale),
+        'invalid-arguments': t('terminal.render.toolStatus.invalidArguments', {}, locale),
+        duplicate: t('terminal.render.toolStatus.duplicate', {}, locale), cancelled: t('terminal.render.toolStatus.cancelled', {}, locale) },
     },
     composer: { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
       exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
@@ -264,7 +269,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly ChatTurnMessage[], signal: AbortSignal) =>
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal) =>
       context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),

@@ -1,5 +1,6 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
-export { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
+export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
+  type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
 export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from '#surfaces/core/terminal-kit/index.js';

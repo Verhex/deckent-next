@@ -2,7 +2,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, WorklineApp, WorklinePaletteProvider, resolveWorklinePalette,
+import { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, WorklineApp, WorklinePaletteProvider, resolveWorklinePalette,
   type WorklineLabels, type WorklineProps, type WorkLedgerEntry } from '#surfaces/core/terminal/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 
@@ -12,7 +12,9 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
   watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
   render: { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok', elapsed: '{seconds}s',
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
-    code: 'code', moreAbove: '{count} more above', queued: '{count} queued' },
+    code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
+    toolStatus: { error: 'TOOL-FAILED', denied: 'TOOL-DENIED', 'approval-required': 'TOOL-APPROVAL', 'invalid-arguments': 'TOOL-INVALID',
+      duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED' } },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
 // The /help notice joins commands with " · "; the slash popup lists them one per row, so this only matches the notice.
 const HELP_NOTICE = '/watch-runs · /watch-stop';
@@ -88,6 +90,46 @@ describe('ledger buffer (Ink Static contract)', () => {
     await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toContain('assistant:## Title\nFirst **line**\ntail');
     expect(seen[1]!.join('\n')).not.toContain('SECRET-REASONING');
+  });
+
+  it('shows each tool call as one line, prints the closure note, and continues the next turn from the agent history', async () => {
+    const seen: (readonly { role: string; content: string }[])[] = [];
+    const call = { id: 'c1', name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' };
+    const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+      seen.push(messages);
+      if (seen.length > 1) { yield { kind: 'text' as const, text: 'second' }; yield { kind: 'done' as const, finish: 'stop' as const }; return; }
+      yield { kind: 'message' as const, message: { role: 'assistant' as const, content: '', toolCalls: [call] } };
+      yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'read_file', target: 'src/a.ts', status: null, ms: null };
+      yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c1', name: 'read_file', target: 'src/a.ts', status: 'ok' as const, ms: 12 };
+      yield { kind: 'message' as const, message: { role: 'tool' as const, toolCallId: 'c1', name: 'read_file', content: 'export const a = 1;' } };
+      yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c2', name: 'grep', target: 'secret', status: null, ms: null };
+      yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c2', name: 'grep', target: 'secret', status: 'denied' as const, ms: 1 };
+      yield { kind: 'done' as const, finish: 'error' as const, note: 'CLOSURE-NOTE' };
+    };
+    const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10 });
+    await settle(20);
+    view.stdin.write('read it\r');
+    await until(() => view.stdout.text.includes('CLOSURE-NOTE'), 'closure note');
+    expect(view.stdout.text).toContain('TOOL read_file src/a.ts');
+    expect(view.stdout.text).toContain('TOOL grep secret'); expect(view.stdout.text).toContain('TOOL-DENIED');
+    // The tool result is history, never printed as the answer.
+    expect(view.stdout.text).not.toContain('export const a = 1;');
+    view.stdin.write('again\r');
+    await until(() => seen.length === 2, 'second turn');
+    expect(seen[1]!.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'tool', 'user']);
+    expect(seen[1]![3]).toMatchObject({ role: 'tool', toolCallId: 'c1', content: 'export const a = 1;' });
+  });
+
+  it('bounds agent history at a user message so a tool result never loses the call that asked for it', () => {
+    const system = { role: 'system' as const, content: 'S' };
+    const call = { id: 'c', name: 'read_file', argumentsJson: '{}' };
+    const exchange = (n: number) => [{ role: 'user' as const, content: `u${n}` }, { role: 'assistant' as const, content: '', toolCalls: [call] },
+      { role: 'tool' as const, toolCallId: 'c', name: 'read_file', content: `r${n}` }, { role: 'assistant' as const, content: `a${n}`, toolCalls: [] }];
+    const history = [...exchange(1), ...exchange(2), ...exchange(3)];
+    expect(boundAgentHistory(system, history, 6)).toEqual([system, ...exchange(3)]);
+    expect(boundAgentHistory(system, history, 9)).toEqual([system, ...exchange(2), ...exchange(3)]);
+    // The newest exchange stays whole even when it alone exceeds the limit.
+    expect(boundAgentHistory(system, history, 2)).toEqual([system, ...exchange(3)]);
   });
 
   it('keeps appending after any number of rows and bounds only the bridge tail', () => {

@@ -1,6 +1,6 @@
 import type { ModelReference } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import type { TurnDelta } from '#surfaces/core/terminal/index.js';
+import type { AgentChatMessage, TurnDelta } from '#surfaces/core/terminal/index.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 export type TerminalChatPlanView = Readonly<{
@@ -21,12 +21,12 @@ export type TerminalChatTurnHandler = (
 ) => Promise<string>;
 
 /**
- * Streamed form of the same governed turn (runtime `invokeModelStream`): deltas in order, exactly one `done` last.
- * Aborting the signal or leaving the loop early disconnects and requests cancellation of that invocation.
+ * Streamed agent turn (runtime `chatTurn`, T-L3): deltas in order (tool lines and history messages included), exactly one `done`
+ * last. Aborting the signal or leaving the loop early cancels the turn.
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly TerminalChatMessage[] }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[] }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;

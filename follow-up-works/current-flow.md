@@ -1,4 +1,20 @@
-# Anlık iş akışı — Opus 5.5; T-L3c runtime `chatTurn` (protokol v12) teslimde; 2081–2084 Astra incelemesinde
+# Anlık iş akışı — Opus 5.5; T-L3d terminal agent turn teslimde; T-L3c `a298f8d` (2085) ve 2081–2084 Astra incelemesinde
+
+## T-L3d — terminal agent turn (2026-09-25)
+- Etkileşimli terminal artık `chatTurn` kullanıyor (`streamTerminalAgentTurn`): her araç çağrısı tek satır (ad, hedef, saniye, ok değilse
+  durum), çalışırken canlı satır; kapanış notu altbilgide; sonraki turun geçmişi önceki turun `message` olayları (araç çağrısı + sonucu).
+  Geçmiş penceresi kullanıcı mesajında başlar (çağrısız araç sonucu kalmaz), en yeni alışveriş bütün kalır. Esc/Ctrl+C anında `cancelChatTurn`.
+- Satır modu (`terminal session`, pipe) araçsız düz çağrıda kaldı.
+- Testler: workline (araç satırı, not, araçlı geçmiş, pencere), composition akış (eşleme, replay/uyuşmazlık, iptal, erken çıkış, hata),
+  gerçek servis → yüzey → çizici e2e. Mutasyonlar 1–6 düştü: `proof/F26-T-L3D-TERMINAL-AGENT/`.
+- Boş yapılandırmada ilk mesaj servise gitmeden `TERMINAL_CHAT_NOT_CONFIGURED` verir (istemci ön denetimi; PTY testi yakaladı).
+- **Canlı kanıt (izole geçici kurulum, gerçek vLLM, canlı kuruluma dokunulmadı):** `proof/F26-T-L3D-TERMINAL-AGENT/live-acceptance.mjs`,
+  `live-run-1.log`: Qwen3.8-27B-INT4, 6 tur, 7 araç çağrısı (list_dir, read_file ×2, grep ×3; boş desenli grep `invalid-arguments`
+  → model düzeltti), doğru Türkçe cevap; ilk olay 3,7 s, ilk cevap metni 14 s, toplam 20 s; ledger 6 yönetilen çağrı `responded`, turn `finished`.
+- Verify: verify-2'de `installed-runtime-service` onay senaryosu bir kez `RUN_CAPACITY_OR_ORDER` ile düştü (bu dilimin yolu değil);
+  tek başına 2/2 (9/9) geçti; verify-3 exit 0 (1859/323, native 25, host 55). Aralıklı; kök neden kanıtlanmadı.
+- Sırada: canlı kabul — yedekli canlı profil değişikliği (`tool-calls` yetenekli katalog + sınırsız allocation kimliği) ve `agent-tool`
+  policy izni, vLLM terminal profiliyle gerçek terminal turu.
 
 ## T-L3c — runtime `chatTurn` (2026-09-25)
 - Protokol v12: `chatTurn` (akışlı, olay çerçeveleri) ve `cancelChatTurn`; yaşam döngüsü penceresi v11–v12. Olay çerçeveleri zorunlu veri:

@@ -90,3 +90,10 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
   }
   return text;
 }
+
+/** The same configuration check the plain turn makes, before an agent turn contacts the service. */
+export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}): Promise<void> {
+  const plan = await describeTerminalChat(projectRoot, options);
+  if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  if (plan.status === 'model-not-declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+}

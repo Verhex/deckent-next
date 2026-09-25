@@ -572,7 +572,15 @@ at the next write (a Unix peer that closed after its request is not visible earl
 cancels at once (another principal's turn, or an unknown one, is `not-running`); service stop cancels running turns. Stores:
 `agent_turns`/`agent_turn_tool_calls` (T-L3b2). Errors: `AGENT_TURN_IN_PROGRESS | CONFLICT | CORRUPT | INVALID | UNAVAILABLE`.
 Reading tools needs an explicit policy grant (`agent-tool`, ids `read_file`, `list_dir`, `grep`, `glob`, action `invoke`);
-without it every call is `denied`. The terminal surface does not use `chatTurn` yet (next slice). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+without it every call is `denied`.
+**Terminal agent turns (T-L3d).** The interactive terminal's turns are `chatTurn` turns (`streamTerminalAgentTurn`): a fresh turn id per
+turn; service events become surface `TurnDelta`s — `tool` (started, then finished with status and duration; the target carried from
+the start), `message` (history, never rendered) and `done` with the engine's closure note. Each finished tool call prints one line
+(`name target · seconds · status` when not ok); the running call shows a live spinner line; text before a tool call is printed first;
+a later round's reasoning starts a fresh narration; the footer sums completion tokens over rounds and shows the note. The next turn's
+history is exactly the previous turn's `message` events; the history window (until T-L5 token admission) starts at a user message,
+so a tool result never loses its call, and keeps the newest exchange whole. Aborting (Esc/Ctrl+C) sends `cancelChatTurn` at once.
+Line mode (`terminal session`, piped) still sends plain governed invocations without tools. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

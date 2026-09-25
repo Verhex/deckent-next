@@ -8,6 +8,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L3d: the interactive terminal runs agent turns: one line per tool call (status and seconds, a live line while it runs),
+  the closure note in the footer, history continued from the turn's messages (tool calls and results) with a window that never splits
+  a call from its result, and Esc/Ctrl+C cancelling the turn at once. Line mode stays tool-less.
+
 - SURFACES/T-L3c: runtime protocol v12 `chatTurn` and `cancelChatTurn`: one durable agent turn inside the runtime service with
   governed rounds, per-call tool policy (`agent-tool`/`invoke`) and workspace read tools; required event frames (no total bound,
   producer waits for the peer, oversize or unread backlog cancels instead of dropping); disconnect, same-principal cancel and

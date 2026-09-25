@@ -76,8 +76,8 @@ araçlarının policy yetkisi T-L3'ten itibaren zorunlu. Owner 2026-09-25: yerel
 Kalan REVISE (Astra 2078): walked descriptor dışarı taşınan dizini tekrar doğrulamıyor; glob eşleştirme servis thread'ini kilitleyebiliyor.
 T-L2 `fbd962c` REVISE (Astra 2079): yanıt `tool_choice:none` kuralını aşabiliyor; araç listesi varken bildirilmeyen isim sonrasındaki metin
 erken kesilmiyor. 2078/2079 düzeltmeleri 2026-09-25'te uygulandı (gezinti doğrulaması, sınırlı glob, none reddi, erken ad reddi); inceleme bekliyor. T-L3a `2cb4c79` allocation kodu Astra PASS; canlı profil aktivasyonu ve diğer iki dilimin kabulü ayrı. T-L3b çekirdek döngü `d64e488`
-ve kalıcı turn kaydı (T-L3b2, ledger v37) hazır; T-L3c runtime `chatTurn` (protokol v12) servis içinde çalışıyor. Sırada terminal gösterimi
-(T-L3d), bağlam kabulü/sıkıştırma (T-L5) ve canlı profil + policy izni ile kabul koşusu.
+ve kalıcı turn kaydı (T-L3b2, ledger v37) hazır; T-L3c runtime `chatTurn` (protokol v12) servis içinde çalışıyor; T-L3d etkileşimli terminal agent turn'lerini kullanıyor
+(araç satırları, kapanış notu, araçlı geçmiş). Sırada canlı profil + policy izni ile kabul koşusu, sonra bağlam kabulü/sıkıştırma (T-L5).
 **Owner 2026-09-25: GPU izni ve vLLM container'ının yeniden oluşturulması onaylandı.** Terminal sunum profili: `--max-model-len 131072
 --max-num-seqs 4 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3` (KV 260.687 token; 131k'da ~2 eşzamanlı);
 betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`, önceki yapılandırma yedekli. Canlı kanıt: T-L2 adapter'ı gerçek
@@ -93,8 +93,8 @@ satır modu akışı, boşta servis durma politikası. Tahminler hipotezdir; eff
 ### Güncel öncelik — owner 2026-09-22
 
 Enterprise yönetim/kimlik/fleet yüzeyleri acil değildir; erken developer dogfood önkoşulu yapılmaz.
-Kimlik/scope/policy, audit ve kurtarılabilirlik güvenceleri her dilimde korunur. Local LLM/terminal
-Cursor hattındadır; main tarafındaki registry/tier, config, arch ve yüzey değişiklikleri bu hattın
+Kimlik/scope/policy, audit ve kurtarılabilirlik güvenceleri her dilimde korunur. Local LLM/terminal hattı
+2026-09-23'ten beri Opus'tadır (owner 2026-09-24/25 terminal yönü; Cursor worktree'leri yalnız referans).
 
 ## Ana iş alanları ve ilerleme yönü
 

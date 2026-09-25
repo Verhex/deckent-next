@@ -1,5 +1,9 @@
-/** One chat message as sent to the model for a turn. */
+import type { AgentToolCallStatus, AgentTurnMessage } from '#domain/index.js';
+
+/** One chat message as sent to the model for a plain (tool-less) turn. */
 export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+/** One message of an agent turn's history: assistant tool calls and tool results included (T-L3). */
+export type AgentChatMessage = AgentTurnMessage;
 
 /**
  * Surface-facing streaming turn contract (S-STREAM, Jev 1370d942). The producer (composition over the runtime protocol)
@@ -12,9 +16,15 @@ export type TurnDelta =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'reasoning'; readonly text: string }
   | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null }
-  | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error' };
+  /** An agent tool call: `started` with its display target, then `finished` with its typed status and duration (T-L3). */
+  | { readonly kind: 'tool'; readonly phase: 'started' | 'finished'; readonly callId: string; readonly name: string; readonly target: string | null;
+    readonly status: AgentToolCallStatus | null; readonly ms: number | null }
+  /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
+  | { readonly kind: 'message'; readonly message: AgentChatMessage }
+  /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */
+  | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
 
-export type WorklineStreamTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => AsyncIterable<TurnDelta>;
+export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal) => AsyncIterable<TurnDelta>;
 
 /** Collects a stream into the final answer text (for line mode and tests); reasoning is excluded. */
 export async function collectTurnText(stream: AsyncIterable<TurnDelta>): Promise<{ readonly text: string; readonly finish: Extract<TurnDelta, { kind: 'done' }>['finish'] | null }> {

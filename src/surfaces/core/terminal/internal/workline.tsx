@@ -16,7 +16,7 @@ import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
-import { appendLedger, boundChatHistory, compactLedger, EMPTY_LEDGER, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
+import { appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
 import { useWorkSurface } from './work-surface.js';
@@ -95,7 +95,7 @@ export function WorklineApp(props: WorklineProps) {
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
-  const history = useRef<readonly ChatTurnMessage[]>([{ role: 'system', content: systemPrompt }]);
+  const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
   const turn = useRef<AbortController | null>(null);
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
@@ -172,23 +172,27 @@ export function WorklineApp(props: WorklineProps) {
     const controller = new AbortController();
     turn.current = controller;
     setBusy(true);
-    const messages = boundChatHistory({ role: 'system', content: systemPrompt }, [...history.current, { role: 'user', content: text }], historyMessages);
+    const messages = boundAgentHistory({ role: 'system', content: systemPrompt }, [...history.current, { role: 'user', content: text }], historyMessages);
     try {
       if (props.streamTurn) {
         // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
         let state = startAssistantStream(startedAtMs), answer = '';
+        const appended: AgentChatMessage[] = [];
         for await (const delta of props.streamTurn(messages, controller.signal)) {
           if (delta.kind === 'text') answer += delta.text;
+          if (delta.kind === 'message') appended.push(delta.message);
           const step: AssistantStreamStep = renderAssistantStream(state, delta, Date.now());
           state = step.state;
           const entries = streamStepEntries(step);
           if (entries.length) push(entries);
           setLive(delta.kind === 'done' ? null : { step, lead: !state.answered });
         }
-        history.current = answer ? boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: answer }], historyMessages) : messages;
+        // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
+        const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
+        history.current = next.length ? boundAgentHistory(messages[0]!, [...messages, ...next], historyMessages) : messages;
       } else {
-        const reply = await completeTurn(messages, controller.signal);
-        history.current = boundChatHistory(messages[0]!, [...messages, { role: 'assistant', content: reply }], historyMessages);
+        const reply = await completeTurn(plainChatHistory(messages), controller.signal);
+        history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
         push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
       }
@@ -257,7 +261,7 @@ export function WorklineApp(props: WorklineProps) {
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
-      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} /> : null}
+      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} /> : null}
       {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}

@@ -27,11 +27,33 @@ export function compactLedger(buffer: LedgerBuffer, printed: number, compactAt =
   return Object.freeze({ ...buffer, epoch: buffer.epoch + 1, pending: Object.freeze(buffer.pending.slice(printed)) });
 }
 
-import type { ChatTurnMessage } from '#surfaces/core/terminal-kit/index.js';
-export type { ChatTurnMessage };
+import type { AgentChatMessage, ChatTurnMessage } from '#surfaces/core/terminal-kit/index.js';
+export type { AgentChatMessage, ChatTurnMessage };
 
 /** Keeps the system instruction and the newest messages; `limit` counts every message including the system one. */
 export function boundChatHistory(system: ChatTurnMessage, history: readonly ChatTurnMessage[], limit: number): readonly ChatTurnMessage[] {
   const recent = history.filter(message => message.role !== 'system');
   return Object.freeze([system, ...recent.slice(-Math.max(1, limit - 1))]);
+}
+
+/**
+ * Agent history window (until token admission, T-L5): the system instruction and the newest whole exchanges. The window always
+ * starts at a user message, so a tool result is never kept without the assistant call that asked for it; the newest exchange is
+ * kept whole even when it alone exceeds `limit`.
+ */
+export function boundAgentHistory(system: AgentChatMessage, history: readonly AgentChatMessage[], limit: number): readonly AgentChatMessage[] {
+  const recent = history.filter(message => message.role !== 'system');
+  let start = Math.max(0, recent.length - Math.max(1, limit - 1));
+  while (start < recent.length && recent[start]!.role !== 'user') start += 1;
+  if (start >= recent.length) {
+    start = recent.length;
+    while (start > 0 && recent[start - 1]!.role !== 'user') start -= 1;
+    start = Math.max(0, start - 1);
+  }
+  return Object.freeze([system, ...recent.slice(start)]);
+}
+
+/** The plain (tool-less) form of an agent history, for the non-streaming path. */
+export function plainChatHistory(history: readonly AgentChatMessage[]): readonly ChatTurnMessage[] {
+  return Object.freeze(history.flatMap(message => message.role === 'tool' ? [] : [{ role: message.role, content: message.content }]));
 }

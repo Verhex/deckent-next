@@ -1,5 +1,5 @@
-import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationDeltaSink, ModelInvocationQuery,
-  ModelInvocationPurgeCommand } from '#domain/index.js';
+import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ModelInvocationCancellationCommand, ModelInvocationCommand,
+  ModelInvocationDeltaSink, ModelInvocationQuery, ModelInvocationPurgeCommand } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -25,4 +25,13 @@ export function purgeRuntimeModelInvocationContent(projectRoot: string, input: M
 }
 export function cancelRuntimeModelInvocation(projectRoot: string, input: ModelInvocationCancellationCommand, options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).cancelModelInvocation(input);
+}
+/** v12 agent turn over the local runtime: required events, then the bounded result; abort disconnects (cancel at the next write). */
+export function runRuntimeChatTurn(projectRoot: string, input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void,
+  options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).chatTurn(input, onEvent, signal);
+}
+/** Cancels the caller's own running turn at once. */
+export function cancelRuntimeChatTurn(projectRoot: string, input: ChatTurnCancellation, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).cancelChatTurn(input);
 }

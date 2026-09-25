@@ -1,6 +1,6 @@
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import type { AssistantUnit, FooterUnit, Narration } from './assistant-stream.js';
+import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolUnit } from './assistant-stream.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';
 import { renderMarkdown } from './markdown.js';
@@ -11,6 +11,8 @@ import { fillTemplate } from './status-row.js';
 export type AssistantRenderLabels = Readonly<{
   assistant: string; thinking: string; thought: string; elapsed: string; tokens: string; reasoningTokens: string;
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
+  /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
+  tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
 }>;
 
 const INDENT = 2;
@@ -32,16 +34,30 @@ export function footerText(unit: FooterUnit, labels: AssistantRenderLabels, sepa
   return parts.join(` ${separator} `);
 }
 
+export function toolText(unit: Pick<ToolUnit, 'name' | 'target'>, labels: AssistantRenderLabels): string {
+  return fillTemplate(labels.tool, { name: unit.name, target: unit.target ?? '' }).trimEnd();
+}
+
 /** One finished unit of an assistant turn, printed once by `Static` at the width current at print time. */
 export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUnit; readonly labels: AssistantRenderLabels }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
   if (unit.kind === 'reasoning') {
     return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{fillTemplate(labels.thought, { seconds: seconds(unit.elapsedMs), tokens: tokenText(unit.tokens, unit.approximate) })}</Text></Box>;
   }
+  if (unit.kind === 'tool') {
+    const failed = unit.status !== 'ok' && unit.status !== 'duplicate';
+    const tail = [`${seconds(unit.ms)}s`, ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]])].join(` ${glyphs.separator} `);
+    return (
+      <Box paddingLeft={INDENT}>
+        <Text {...(failed ? palette.error : palette.muted)} wrap="truncate-end">{glyphs.separator} {toolText(unit, labels)} {glyphs.separator} {tail}</Text>
+      </Box>
+    );
+  }
   if (unit.kind === 'footer') {
     return (
       <Box flexDirection="column" paddingLeft={INDENT} marginBottom={1}>
         {unit.finish === 'length' && <Text {...palette.warning}>{labels.truncated}</Text>}
+        {unit.note ? <Text {...(unit.finish === 'error' ? palette.error : palette.muted)} wrap="wrap">{unit.note}</Text> : null}
         <Text {...(unit.finish === 'error' ? palette.error : palette.muted)} wrap="truncate-end">{footerText(unit, labels, glyphs.separator)}</Text>
       </Box>
     );
@@ -64,8 +80,9 @@ export function ReasoningNarration({ narration, labels }: { readonly narration: 
 }
 
 /** The small dynamic region of a streaming answer: narration plus the unfinished tail, bounded to its last lines. */
-export function AssistantLive({ tail, narration, labels, lead, maxLines = LIVE_TAIL_LINES }: {
-  readonly tail: LiveTail; readonly narration: Narration | null; readonly labels: AssistantRenderLabels; readonly lead: boolean; readonly maxLines?: number;
+export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES }: {
+  readonly tail: LiveTail; readonly narration: Narration | null; readonly labels: AssistantRenderLabels; readonly lead: boolean;
+  readonly activeTool?: ActiveTool | null; readonly maxLines?: number;
 }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
   const lines = tail.markdown === '' ? [] : renderMarkdown(tail.markdown, { width, glyphs, codeLabel: labels.code });
@@ -76,6 +93,15 @@ export function AssistantLive({ tail, narration, labels, lead, maxLines = LIVE_T
       {lead && lines.length > 0 && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
       {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
       {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
+      {activeTool && <ToolRunning tool={activeTool} labels={labels} />}
     </Box>
   );
+}
+
+/** The one tool call running now, with a spinner and its live seconds. */
+function ToolRunning({ tool, labels }: { readonly tool: ActiveTool; readonly labels: AssistantRenderLabels }) {
+  const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
+  const { frame } = useAnimation({ interval: 120 });
+  const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(Date.now() - tool.startedAtMs) });
+  return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text></Box>;
 }
