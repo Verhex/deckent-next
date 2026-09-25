@@ -134,8 +134,8 @@ async function runtime() {
       let index = 0;
       const next = () => {
         if (res.destroyed) return;
-        if (state.hold) { res.write(chunk({ content: '.' })); state.lastWriteAt = Date.now(); setTimeout(next, 20); return; }
-        if (index < parts.length) { res.write(parts[index++]); state.lastWriteAt = Date.now(); setTimeout(next, 40); } else res.end();
+        if (state.hold) { res.write(chunk({ content: '.' })); state.lastWriteAt = performance.now(); setTimeout(next, 20); return; }
+        if (index < parts.length) { res.write(parts[index++]); state.lastWriteAt = performance.now(); setTimeout(next, 40); } else res.end();
       };
       next();
     });
@@ -180,9 +180,9 @@ async function runtime() {
 describe.skipIf(process.platform !== 'linux')('streamed terminal chat through the runtime service', () => {
   it('streams governed deltas before the provider finishes, settles once, and replays without a second provider request', async () => {
     const f = await runtime(), ports = { invokeStream: invokeRuntimeModelStream, cancel: cancelRuntimeModelInvocation };
-    const started = Date.now(), timeline: { delta: TurnDelta; at: number }[] = [];
+    const started = performance.now(), timeline: { delta: TurnDelta; at: number }[] = [];
     for await (const delta of streamTerminalChatTurn({ projectRoot: f.project, scopeId: 'scope', messages, options: { env: f.env } }, ports)) {
-      timeline.push({ delta, at: Date.now() });
+      timeline.push({ delta, at: performance.now() });
     }
     const firstDeltaMs = timeline[0]!.at - started, lastWriteMs = f.state.lastWriteAt - started;
     console.info(`stream-e2e: first delta ${firstDeltaMs} ms, provider finished ${lastWriteMs} ms, deltas ${timeline.length}`);
@@ -210,10 +210,10 @@ describe.skipIf(process.platform !== 'linux')('streamed terminal chat through th
     for await (const delta of streamTerminalChatTurn({ projectRoot: f.project, scopeId: 'scope', messages, options: { env: f.env },
       signal: controller.signal }, ports)) { seen.push(delta); if (seen.length === 3) controller.abort(); }
     expect(seen.at(-1)).toEqual({ kind: 'done', finish: 'cancelled' });
-    const until = Date.now() + 5_000;
-    while (f.state.closed === 0 && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+    const until = performance.now() + 5_000;
+    while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
     expect(f.state.closed).toBe(1); expect(f.state.requests).toBe(1);
-    while (Date.now() < until && (f.rows(`SELECT count(*) AS count FROM model_invocations WHERE state <> 'claimed'`)[0] as { count: number }).count === 0) {
+    while (performance.now() < until && (f.rows(`SELECT count(*) AS count FROM model_invocations WHERE state <> 'claimed'`)[0] as { count: number }).count === 0) {
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     // The partial stream is an uncertain outcome (never a response, never retried); the cancellation is its own record.

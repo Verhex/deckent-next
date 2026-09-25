@@ -1383,6 +1383,13 @@
       ],
       "plan": "CONTRACT"
     },
+    "src/engine/core/agent-turn": {
+      "dependencies": [
+        "src/domain/core/agent-tool",
+        "src/domain/core/agent-turn"
+      ],
+      "plan": "SURFACES"
+    },
     "src/engine/core/effect": {
       "dependencies": [
         "src/domain/core/effect",
@@ -1420,6 +1427,12 @@
     },
     "src/domain/core/agent-tool": {
       "dependencies": [],
+      "plan": "CONTRACT"
+    },
+    "src/domain/core/agent-turn": {
+      "dependencies": [
+        "src/domain/core/agent-tool"
+      ],
       "plan": "CONTRACT"
     },
     "src/domain/core/worker-event": {

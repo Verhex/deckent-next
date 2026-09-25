@@ -534,9 +534,19 @@ MCP share the implemented inspection, activation, installation and runtime-contr
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
 
+**Agent turn loop (T-L3b, engine core, not yet wired).** `engine/core/agent-turn` `runAgentTurn` runs one turn over ports: a
+governed model round (the composition derives the round command id from the turn so a replay never bills twice) → each declared
+tool call checked against its JSON schema subset, authorized per call (policy resource `agent-tool`, id = tool name, action
+`invoke`; `deny` and `require-approval` are typed results, never bypassed — tool approvals arrive with T-L4) and executed → results
+back to the model → next round, until the model answers without tools, the user cancels, or a round has no answer. No round, call
+or time budget (owner 2026-09-24). Every call emits `tool.started` (display target) and `tool.finished` (status, ms, bytes); the
+turn ends with one `done`; a turn without a model answer (reasoning spent the output budget, a round rejected/unknown, cancel) gets
+an engine-written closure note instead of silence. Identical read calls in one turn are answered with a reference to the earlier
+result, other classes are never deduplicated. Durable turn records, the runtime operation, context admission/compaction and the
+terminal rendering are the next T-L3 slices.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
-`maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile uses it; API
-profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
+`maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
+live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
 still apply. The allocation contract of an id is fixed: changing its limits is `MODEL_INVOCATION_ALLOCATION_CONFLICT`, so a profile
 moves to an unbounded allocation under a new id; existing receipts keep verifying against their own allocation. Ledger v36 rebuilds
 `model_invocation_allocations` row for row with a nullable, positive-when-set `max_calls`.
@@ -547,6 +557,8 @@ tool_calls`; the legacy `function_call` is never accepted. Streamed calls are as
 pieces, contiguous indexes) and pass the same check; an undeclared call stops presentation at once; a cut stream is interrupted
 (uncertain) and yields no call. Arguments stay the provider's raw text: invalid JSON is the loop's typed tool error to the model.
 The loop sees the provider-neutral `AgentToolCall` (`id`, `name`, `argumentsJson`); native details stay in the native result.
+Review limit (2026-09-25): `tool_choice: none` is not yet enforced on responses, and an undeclared streamed name with a tools
+list is rejected only at finish, allowing later text deltas. These are open adapter checks before T-L2 acceptance.
 **Agent terminal direction (owner 2026-09-24) and tool contract (T-L1).** The terminal becomes a Claude Code-class agent
 terminal: one full-context model, an engine-owned governed tool loop, permission modes, Deckent tracking and management through
 commands, queries and MCP, no terminal budgets (automatic compaction for an endless flow), local model first and API providers
@@ -568,6 +580,9 @@ changed, special files) instead of reporting absence. Regular expressions run in
 signal reaches every tool, and every result branch is cut to the cap with a stated marker; path/pattern arguments and limits are
 validated. The guarantee is Linux-only (WSL included); other platforms fail closed until they have an equivalent. Engine per-call
 authorization is not wired in T-L1; the read adapter is not an admitted terminal execution surface by itself (T-L3).
+Review limit (2026-09-25): walked child/file descriptors still lack the path recheck after a directory moves outside the scope;
+glob matching (including grep's glob filter) still runs on the service thread and can block cancellation. The direct-file,
+content-regex, byte-cap and incomplete-walk fixes do not close these two remaining branches.
 
 ## Package contract
 

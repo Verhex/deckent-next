@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURFACES/T-L3b (engine core): `runAgentTurn` — the terminal's agent turn loop over ports (governed rounds, per-call policy with the
+  new `agent-tool`/`invoke` vocabulary, schema-checked arguments, visible tool events, deterministic closure notes, no budgets,
+  read-call dedupe). Not yet wired to the runtime or the terminal.
+
 - PROVIDERS/T-L3a (owner 2026-09-25): model invocation allocations may have no lifetime total (`maxCalls: null`, ledger v36
   rebuilds the allocation table with a nullable `max_calls`); concurrency stays bounded and an allocation id's limits stay fixed.
 

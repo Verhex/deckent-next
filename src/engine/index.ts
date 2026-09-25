@@ -57,3 +57,4 @@ export * from '#engine/core/effect/index.js';
 export * from '#engine/core/worker-observation/index.js';
 export * from '#engine/core/toolchain-currency/index.js';
 export * from '#engine/core/approval/index.js';
+export * from '#engine/core/agent-turn/index.js';
