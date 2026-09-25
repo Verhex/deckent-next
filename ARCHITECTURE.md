@@ -470,7 +470,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   stops delivery only; the client sends the same governed cancellation command as the plain turn (the peer's session
   ends with its connection, so the service cannot cancel on its behalf). `openai-chat-http` v4 accepts `stream: true`
   with required `stream_options.include_usage` and parses SSE incrementally with the same deadline, redirect, model-match
-  and no-tool rules; `responseMaxBytes` bounds the retained evidence prefix and the assembled `chat.completion` (with a
+  and tool-call rules; `responseMaxBytes` bounds the retained evidence prefix and the assembled `chat.completion` (with a
   wire digest in a `deckent_stream` block — the native object of a streamed call is assembled provenance, never the
   provider's verbatim body), and total wire bytes are bounded at 16× it plus 1024 bytes per requested completion token (4× the
   measured vLLM framing), so a long legitimate answer is not rejected after it was billed (an allowance, not a guarantee for
@@ -534,6 +534,13 @@ MCP share the implemented inspection, activation, installation and runtime-contr
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
 
+**Tool calls over openai-chat (T-L2).** `openai-chat-http` v4 sends `tools`/`tool_choice` and accepts assistant `tool_calls` and
+`tool` messages only when the model binding declares the `tool-calls` capability as supported (catalog data); otherwise any tool
+call is refused as before. Responses may carry calls only to declared tool names, with unique ids and `finish_reason:
+tool_calls`; the legacy `function_call` is never accepted. Streamed calls are assembled by index (fixed id, name and arguments in
+pieces, contiguous indexes) and pass the same check; an undeclared call stops presentation at once; a cut stream is interrupted
+(uncertain) and yields no call. Arguments stay the provider's raw text: invalid JSON is the loop's typed tool error to the model.
+The loop sees the provider-neutral `AgentToolCall` (`id`, `name`, `argumentsJson`); native details stay in the native result.
 **Agent terminal direction (owner 2026-09-24) and tool contract (T-L1).** The terminal becomes a Claude Code-class agent
 terminal: one full-context model, an engine-owned governed tool loop, permission modes, Deckent tracking and management through
 commands, queries and MCP, no terminal budgets (automatic compaction for an endless flow), local model first and API providers

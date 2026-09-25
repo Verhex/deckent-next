@@ -334,6 +334,7 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
+        "src/domain/core/agent-tool",
         "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",

@@ -4,6 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PROVIDERS/T-L2: `openai-chat-http` carries tool calls for models whose binding declares the `tool-calls` capability: tools and
+  tool_choice in the request, assistant tool calls and tool results in the conversation, non-streamed and streamed calls validated
+  against the declared tools (unique ids, matching finish, contiguous stream indexes), no call from a cut stream; the terminal chat
+  extracts provider-neutral `AgentToolCall`s.
+
 - SURFACES/T-L1 REVISE (Astra 2072): read tools open every path descriptor-relative from the workspace root with no-follow per
   component and re-check the descriptor's path (parent/root swaps refused), refuse hard-linked files, open non-blocking and read
   only regular files, run regular expressions in a cancellable worker thread, carry the cancel signal into every tool, cut every

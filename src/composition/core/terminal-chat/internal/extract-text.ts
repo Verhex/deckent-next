@@ -1,4 +1,5 @@
 import type { ModelInvocationResult } from '#engine/index.js';
+import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
 
 function firstChoice(result: ModelInvocationResult): Record<string, unknown> | null {
   const native = result.response?.native;
@@ -23,14 +24,25 @@ export function openAiChatStoppedAtLength(result: ModelInvocationResult): boolea
   return firstChoice(result)?.['finish_reason'] === 'length';
 }
 
-/** Untrimmed answer and reasoning text of the assembled result, used to reconcile streamed deltas. */
-export function openAiChatMessageFromInvocation(result: ModelInvocationResult): { content: string; reasoning: string; finish: unknown } | null {
+/**
+ * Untrimmed answer, reasoning text and tool calls of the assembled result (already validated by the adapter against the declared
+ * tools), mapped onto the provider-neutral agent tool call. `null` when the result has no readable message.
+ */
+export function openAiChatMessageFromInvocation(result: ModelInvocationResult):
+  { content: string; reasoning: string; finish: unknown; toolCalls: readonly AgentToolCall[] } | null {
   const choice = firstChoice(result), message = choice?.['message'];
   if (!choice || !message || typeof message !== 'object') return null;
   const record = message as Record<string, unknown>;
   const reasoning = typeof record['reasoning'] === 'string' ? record['reasoning']
     : typeof record['reasoning_content'] === 'string' ? record['reasoning_content'] : '';
-  return { content: typeof record['content'] === 'string' ? record['content'] : '', reasoning, finish: choice['finish_reason'] };
+  const toolCalls: AgentToolCall[] = [];
+  for (const entry of Array.isArray(record['tool_calls']) ? record['tool_calls'] : []) {
+    const call = entry as { id?: unknown; function?: { name?: unknown; arguments?: unknown } };
+    const parsed = agentToolCallSchema.safeParse({ id: call.id, name: call.function?.name, argumentsJson: call.function?.arguments });
+    if (!parsed.success) return null;
+    toolCalls.push(parsed.data);
+  }
+  return { content: typeof record['content'] === 'string' ? record['content'] : '', reasoning, finish: choice['finish_reason'], toolCalls: Object.freeze(toolCalls) };
 }
 
 /** Settled token usage of the result; reasoning tokens when the server reports them. */

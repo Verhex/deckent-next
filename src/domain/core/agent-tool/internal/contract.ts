@@ -28,3 +28,15 @@ export const agentToolOutcomeSchema = z.object({
   text: z.string(),
 }).strict().readonly();
 export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
+
+/**
+ * Provider-neutral tool call as the loop sees it (T-L2): the provider's correlation id, the declared tool name and the raw
+ * arguments text. Native details (OpenAI tool_call_id shapes, Anthropic block ids/signatures) stay in the adapter's native
+ * result. Invalid JSON arguments are answered with a typed tool error; a call from an interrupted response is never executed.
+ */
+export const agentToolCallSchema = z.object({
+  id: z.string().min(1).max(256),
+  name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
+  argumentsJson: z.string(),
+}).strict().readonly();
+export type AgentToolCall = z.infer<typeof agentToolCallSchema>;

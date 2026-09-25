@@ -3,10 +3,12 @@ import type { ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
+  OPENAI_CHAT_TOOL_CALLS_CAPABILITY,
   openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
 import { createOpenAiChatStream } from './stream.js';
+import { checkedToolCalls } from './tool-calls.js';
 
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
@@ -26,7 +28,8 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
   const streamed = nativeRequest.stream === true;
   const body = JSON.stringify({ model: nativeRequest.model, messages: nativeRequest.messages,
     max_completion_tokens: nativeRequest.max_completion_tokens, stream: streamed,
-    ...(streamed ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}) });
+    ...(streamed ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
+    ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}) });
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   return Object.freeze({ definition, limits, request: nativeRequest, body });
 }
@@ -42,10 +45,11 @@ function parseResponse(body: Buffer, prepared: PreparedOpenAiChatRequest): { res
     return { reason: 'response-limit' };
   }
   const choice = parsed.data.choices[0]!;
-  // No tool calls are accepted. Servers such as vLLM always send these keys, as null, when there is none.
-  if ((choice.message['tool_calls'] ?? null) !== null || (choice.message['function_call'] ?? null) !== null) {
-    return { reason: 'invalid-response' };
-  }
+  // Servers such as vLLM always send these keys, as null, when there is none. The legacy function_call is never accepted;
+  // tool_calls only when the request declared tools, and only for declared names (T-L2).
+  if ((choice.message['function_call'] ?? null) !== null) return { reason: 'invalid-response' };
+  const calls = checkedToolCalls(choice.message['tool_calls'] ?? null, prepared.request);
+  if (calls === 'invalid' || (choice.finish_reason === 'tool_calls') !== (calls !== null)) return { reason: 'invalid-response' };
   if (parsed.data.usage === undefined || parsed.data.usage === null) return { response: Object.freeze({ schemaVersion: 1, native: copied.data, usage: null }) };
   const usageCopied = openAiChatWireObjectSchema.safeParse(parsed.data.usage), usage = usageCopied.success && usageSchema.safeParse(usageCopied.data);
   if (!usage || !usage.success || usage.data.completion_tokens > prepared.request.max_completion_tokens) {
@@ -103,6 +107,11 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       const adapterDefinition = parseOpenAiChatHttpDefinition(parsedProfile.data.adapter.definition);
       const request = parseOpenAiChatTextRequest(nativeRequest, adapterDefinition);
       if (request.model !== binding.model.nativeId) throw new OpenAiChatHttpError('OPENAI_CHAT_MODEL_MISMATCH');
+      // Tools are sent only to a model whose binding declares tool calling as supported (catalog data, not a request flag).
+      if (request.tools && !binding.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+        && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported'))) {
+        throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+      }
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request);
       preparedTokens.add(prepared); return prepared;
     },

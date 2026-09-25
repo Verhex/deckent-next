@@ -1,4 +1,10 @@
-# Anlık iş akışı — Opus 5.5; Astra 2072–2074 REVISE uygulanıyor, sonra T-L2; owner: yerel terminal allocation limitsiz (maxCalls:null) onaylı; GPU yasağı
+# Anlık iş akışı — Opus 5.5; Astra REVISE 41c53bc incelemede (2075); T-L2 araç çağrıları teslimde; sonra T-L3 engine döngüsü; GPU yasağı
+
+## T-L2 — openai-chat araç çağrıları (2026-09-25)
+
+Karar: v4 içinde, bağlamanın `tool-calls` yeteneğine bağlı (S-STREAM'in v4'e eklenmesiyle aynı çizgi; `tools` alanı olmayan eski istek ve
+makbuzların davranışı değişmez). Sağlayıcıdan bağımsız `AgentToolCall` domain'de. Canlı vLLM için `--enable-auto-tool-choice
+--tool-call-parser qwen3_xml` bayrakları gerekecek (GPU izni + container yeniden oluşturma owner'da). Mutasyon 4/4 (`proof/F26-T-L2-TOOL-CALLS/`).
 
 ## Astra 2072–2074 (2026-09-25) — işlendi ve tüketildi; owner allocation kararı
 

@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { JsonObject, ModelInvocationDelta, ModelInvocationRejectionReason } from '#domain/index.js';
 import type { NativeJsonHttpParsed, NativeJsonHttpStream } from '#adapters/core/provider-http-json/index.js';
-import { openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema,
+import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema,
   type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from './contract.js';
+import { checkedToolCalls } from './tool-calls.js';
 
 /**
  * SSE framing costs about 60x the answer text per token (vLLM measured ~240 wire bytes per token). The profile's
@@ -39,6 +40,8 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
   let invalid: ModelInvocationRejectionReason | null = null, doneSeen = false;
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
   let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null;
+  // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
+  const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
   const fail = (reason: ModelInvocationRejectionReason) => { invalid ??= reason; };
 
   function event(text: string, out: ModelInvocationDelta[]): boolean {
@@ -61,9 +64,28 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     const choice = chunk.choices[0];
     if (!choice) return false;
     const delta = choice.delta;
-    // No tool calls are accepted; vLLM sends these keys as null when there is none.
-    if (finish !== null || (delta['tool_calls'] ?? null) !== null || (delta['function_call'] ?? null) !== null) {
-      fail('invalid-response'); return false;
+    // vLLM sends these keys as null when there is none. function_call is never accepted; tool_calls only when tools were declared.
+    if (finish !== null || (delta['function_call'] ?? null) !== null) { fail('invalid-response'); return false; }
+    const toolDeltas = delta['tool_calls'] ?? null;
+    if (toolDeltas !== null) {
+      if (!request.tools || !Array.isArray(toolDeltas)) { fail('invalid-response'); return false; }
+      for (const entry of toolDeltas as unknown[]) {
+        const part = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
+        const fn = part?.['function'] && typeof part['function'] === 'object' ? part['function'] as Record<string, unknown> : {};
+        const index = part?.['index'];
+        if (!part || typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= OPENAI_CHAT_MAX_TOOL_CALLS
+          || (part['type'] !== undefined && part['type'] !== null && part['type'] !== 'function')) { fail('invalid-response'); return false; }
+        const current = calls.get(index) ?? { id: null, name: '', arguments: '' };
+        const id = part['id'];
+        if (id !== undefined && id !== null) {
+          if (typeof id !== 'string' || id.length === 0 || (current.id !== null && current.id !== id)) { fail('invalid-response'); return false; }
+          current.id = id;
+        }
+        if (fn['name'] !== undefined && fn['name'] !== null) { if (typeof fn['name'] !== 'string') { fail('invalid-response'); return false; } current.name += fn['name']; }
+        if (fn['arguments'] !== undefined && fn['arguments'] !== null) { if (typeof fn['arguments'] !== 'string') { fail('invalid-response'); return false; } current.arguments += fn['arguments']; }
+        calls.set(index, current);
+        assembledBytes += Buffer.byteLength(typeof fn['name'] === 'string' ? fn['name'] : '', 'utf8') + Buffer.byteLength(typeof fn['arguments'] === 'string' ? fn['arguments'] : '', 'utf8');
+      }
     }
     const thinking = typeof delta.reasoning === 'string' ? delta.reasoning : delta.reasoning_content ?? '';
     if (thinking) { reasoning += thinking; out.push({ kind: 'reasoning', text: thinking }); }
@@ -116,7 +138,14 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
       if (invalid) return { reason: invalid };
       if (lineBytes > 0 || data.length > 0) return { reason: doneSeen ? 'invalid-response' : 'interrupted' };
       if (!doneSeen || !head || finish === null || usage === null) return { reason: 'interrupted' };
-      const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(refusal ? { refusal } : {}) };
+      // Assembled calls go through the same check as a non-streamed response: declared names, unique ids, contiguous indexes.
+      const ordered = [...calls.entries()].sort((a, b) => a[0] - b[0]);
+      if (ordered.some(([index], position) => index !== position)) return { reason: 'invalid-response' };
+      const toolCalls = ordered.length ? ordered.map(([, call]) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) : null;
+      const checked = checkedToolCalls(toolCalls, request);
+      if (checked === 'invalid' || (finish === 'tool_calls') !== (checked !== null)) return { reason: 'invalid-response' };
+      const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(refusal ? { refusal } : {}),
+        ...(checked ? { tool_calls: checked.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) } : {}) };
       const native = { id: head.id, object: 'chat.completion', created: head.created, model: head.model,
         ...(fingerprint === null ? {} : { system_fingerprint: fingerprint }),
         choices: [{ index: 0, finish_reason: finish, message }], usage,
