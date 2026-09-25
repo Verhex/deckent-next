@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V35_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -35,7 +35,7 @@ it('keeps every allocation row across the v36 rebuild and then admits an allocat
   const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
   openSqliteLedger(path, options).close();
   const db = new DatabaseSync(path);
-  db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  db.exec(DOWNGRADE_TO_V35_LEDGER_SQL);
   const record = JSON.stringify({ schemaVersion: 1, scopeId: 'live', allocationId: 'local-qwen-calls', maxCalls: 50, maxInFlight: 2, lifetimeCalls: 26, inFlight: 0 });
   db.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'local-qwen-calls', 50, 2, 26, 0, record);
   db.prepare('INSERT INTO model_invocation_allocation_checkpoints VALUES(?,?,?,?)').run('live', 'local-qwen-calls', 7, 'c'.repeat(64));

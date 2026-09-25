@@ -24,9 +24,16 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 36;
+export const CURRENT_LEDGER_VERSION = 37;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Terminal agent turns (T-L3): one row per (scope, turn) — the durable identity a replay or reconnect meets — and one row per
+  // settled tool call as an audit projection (effectful tools will reference their C11 intent from it).
+  37: `CREATE TABLE agent_turns(scope_id TEXT NOT NULL,turn_id TEXT NOT NULL,principal_key TEXT NOT NULL,request_digest TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('running','finished')),record TEXT NOT NULL,PRIMARY KEY(scope_id,turn_id));
+    CREATE TABLE agent_turn_tool_calls(scope_id TEXT NOT NULL,turn_id TEXT NOT NULL,round INTEGER NOT NULL CHECK(round>=1),
+    call_index INTEGER NOT NULL CHECK(call_index>=0),record TEXT NOT NULL,PRIMARY KEY(scope_id,turn_id,round,call_index),
+    FOREIGN KEY(scope_id,turn_id) REFERENCES agent_turns(scope_id,turn_id)); PRAGMA user_version=37;`,
   // Allocation without a lifetime total (owner 2026-09-25, local terminal profile): max_calls may be NULL, meaning no lifetime cap;
   // concurrency (max_in_flight) stays mandatory. SQLite cannot drop NOT NULL in place, so the parent table and its only child
   // (allocation checkpoints, v19) are rebuilt row for row with deferred foreign keys; renaming the parent rewrites the child's

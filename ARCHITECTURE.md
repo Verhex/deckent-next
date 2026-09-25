@@ -542,8 +542,17 @@ back to the model → next round, until the model answers without tools, the use
 or time budget (owner 2026-09-24). Every call emits `tool.started` (display target) and `tool.finished` (status, ms, bytes); the
 turn ends with one `done`; a turn without a model answer (reasoning spent the output budget, a round rejected/unknown, cancel) gets
 an engine-written closure note instead of silence. Identical read calls in one turn are answered with a reference to the earlier
-result, other classes are never deduplicated. Durable turn records, the runtime operation, context admission/compaction and the
-terminal rendering are the next T-L3 slices.
+result, other classes are never deduplicated. The runtime operation, context admission/compaction and the terminal rendering are
+the next T-L3 slices.
+**Durable agent turns (T-L3b2, ledger v37, Astra 2074 D3).** `runDurableAgentTurn` claims `(scopeId, turnId)` before any round:
+the turn id is bound to the principal key and the composition's request digest. A new id runs the loop; the same request of the
+same principal after the turn finished returns the stored outcome (the last answer and `done` are re-emitted, no model round);
+while it runs a second claim is `AGENT_TURN_IN_PROGRESS`; a different request or principal is `AGENT_TURN_CONFLICT`; a row whose
+state and record disagree is `AGENT_TURN_CORRUPT`. Every settled tool call is recorded (round, index, call id, tool and version,
+arguments digest, display target, status, bytes and result digest — not the result text); a finished turn accepts no further
+call or finish. The turn is finished with its outcome even when the loop throws. Turns left running by a stopped service are
+closed as interrupted (`error` with a fixed note) by `interruptRunning`, never resumed; the service start wiring is part of the
+runtime operation slice. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

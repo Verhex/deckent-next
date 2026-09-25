@@ -20,6 +20,9 @@ export interface AgentTurnPorts {
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
   execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<AgentToolOutcome>;
   now(): number;
+  /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
+  settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
+    readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
 }
 
 export interface AgentTurnInput {
@@ -103,31 +106,34 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         ? `The model reached its output limit before answering (reasoning used the budget). ${summary()}.`
         : `The model returned no answer. ${summary()}.`);
     }
-    for (const call of outcome.toolCalls) {
+    for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
-      const result = (status: AgentToolCallStatus, content: string) => {
+      let digestOf: string | null = null, targetOf: string | null = null;
+      const result = async (status: AgentToolCallStatus, content: string) => {
         push({ role: 'tool', toolCallId: call.id, name: call.name, content });
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8') });
+        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
       };
-      if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
-      if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
+      if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
+      if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
       const checked = checkArguments(tool, call.argumentsJson);
-      emit({ kind: 'tool.started', callId: call.id, name: call.name, target: checked.ok ? ports.describe(tool, checked.args) : null });
-      if (!checked.ok) { result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }
-      const digest = agentToolArgumentsDigest(tool.name, checked.args);
+      targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
+      emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
+      if (!checked.ok) { await result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }
+      const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest;
       if (tool.toolClass === 'read' && seenReads.has(digest)) {
-        result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)} earlier in this turn; its result is above. Change the arguments to read something else.`);
+        await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)} earlier in this turn; its result is above. Change the arguments to read something else.`);
         continue;
       }
       const decision = await ports.authorize(tool);
-      if (decision === 'deny') { result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
+      if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
       // No bypass: an approval-gated call stays blocked until the approval flow for tools exists (T-L4).
-      if (decision === 'require-approval') { result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available in this terminal yet)`); continue; }
+      if (decision === 'require-approval') { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available in this terminal yet)`); continue; }
       toolCalls++;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       if (tool.toolClass === 'read' && outcomeText.status === 'ok') seenReads.set(digest, call.id);
-      result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
+      await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
     }
   }
 }

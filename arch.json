@@ -873,6 +873,14 @@
       ],
       "plan": "PROVIDERS"
     },
+    "src/adapters/core/sqlite-agent-turn": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/agent-turn",
+        "src/engine/core/agent-turn"
+      ],
+      "plan": "SURFACES"
+    },
     "src/adapters/core/sqlite-ledger": {
       "dependencies": [
         "src/domain/core/attempt",

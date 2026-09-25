@@ -1,4 +1,14 @@
-# Anlık iş akışı — Opus 5.5; Astra 2078/2079 REVISE uygulanıyor; T-L3a PASS (2080); T-L3b çekirdek d64e488 incelemede (2081)
+# Anlık iş akışı — Opus 5.5; T-L3b2 kalıcı turn kaydı (ledger v37) teslimde; 2081 (T-L3b çekirdek) ve 2082 (2078/2079 düzeltmeleri) incelemede
+
+## T-L3b2 — kalıcı agent turn kaydı (2026-09-25)
+- Engine: `runDurableAgentTurn` önce `(scopeId, turnId)` talep eder; kimlik principal + istek digest'ine bağlı. Bitmiş turn aynı istekle
+  model turu başlatmadan saklı cevabı ve `done`'u yeniden verir; çalışan turn `AGENT_TURN_IN_PROGRESS`, farklı istek/principal
+  `AGENT_TURN_CONFLICT`, durum/kayıt uyuşmazlığı `AGENT_TURN_CORRUPT`. Her sonuçlanan araç çağrısı digest ile kaydedilir (sonuç metni
+  değil); döngü beklenmedik hata verse de turn bitirilir. Servis durunca yarım kalan turn'ler `interruptRunning` ile kesildi notuyla kapanır.
+- Adapter `sqlite-agent-turn` (ledger v37: `agent_turns`, `agent_turn_tool_calls`); v36→v37 yükseltmesi genel yedekli yükseltme testinde.
+- Testler `tests/contracts/adapters/agent-turn-store.test.ts` (5). Mutasyonlar 1–6 (digest yok sayma, hata yolunda bitirmeme, kesme yok,
+  durum denetimi yok, replay'de yeniden çalıştırma, çalışan turn'ü yeniden talep) her biri bir testi düşürdü: `proof/F26-T-L3B2-DURABLE-TURN/`.
+- Açık: servis başlangıcında `interruptRunning` çağrısı ve runtime `chatTurn` işlemi sonraki dilim; canlı profil değişikliği T-L3 kabulünde.
 
 ## Astra 2078–2080 (2026-09-25) — işlendi ve tüketildi
 - **2080 PASS T-L3a (`2cb4c79`):** ARCHITECTURE ifadesi "can use it; live activation pending" olarak daraltılacak; Astra probe'u checkpoint çocuğunun

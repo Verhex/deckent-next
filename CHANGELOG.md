@@ -8,6 +8,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L3b2: durable agent turns (ledger v37 `agent_turns`, `agent_turn_tool_calls`): a turn id is claimed for one principal and
+  request; a finished turn replays its stored answer without a model round, a running one is in progress, a different request under
+  the same id conflicts; every settled tool call is recorded by digest; turns left running are closed as interrupted, never resumed.
+  Not yet wired to the runtime service.
+
 - SURFACES/T-L3b (engine core): `runAgentTurn` — the terminal's agent turn loop over ports (governed rounds, per-call policy with the
   new `agent-tool`/`invoke` vocabulary, schema-checked arguments, visible tool events, deterministic closure notes, no budgets,
   read-call dedupe). Not yet wired to the runtime or the terminal.
