@@ -20,7 +20,7 @@ export function migrateModelAllocationCheckpoints(db: DatabaseSync): void {
       if (row['scope_id'] !== record.scopeId || row['allocation_id'] !== record.allocationId
         || row['max_calls'] !== record.maxCalls || row['max_in_flight'] !== record.maxInFlight
         || row['lifetime_calls'] !== record.lifetimeCalls || row['in_flight'] !== record.inFlight
-        || record.inFlight > record.lifetimeCalls || record.lifetimeCalls > record.maxCalls || record.inFlight > record.maxInFlight
+        || record.inFlight > record.lifetimeCalls || (record.maxCalls !== null && record.lifetimeCalls > record.maxCalls) || record.inFlight > record.maxInFlight
         || JSON.stringify(record) !== row['record']) invalid();
       const identity = key(record.scopeId, record.allocationId);
       if (allocations.has(identity)) invalid();

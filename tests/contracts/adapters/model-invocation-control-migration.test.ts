@@ -124,6 +124,8 @@ it('rejects corrupt ledger17 identity, orphan evidence, purge references, and al
       if (damage === 'count') db.prepare('UPDATE model_invocation_allocations SET in_flight=0').run();
       if (damage === 'allocation-shape') {
         const row = db.prepare('SELECT record FROM model_invocation_allocations').get() as { record: string };
+        // A genuine ledger17 had no max_calls CHECK (added in v36); the seed reuses the current table, so the damage bypasses it.
+        db.exec('PRAGMA ignore_check_constraints=ON');
         db.prepare('UPDATE model_invocation_allocations SET max_calls=0,record=?').run(JSON.stringify({ ...JSON.parse(row.record), maxCalls: 0, extra: true }));
       }
     } finally { db.close(); }

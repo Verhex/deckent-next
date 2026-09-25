@@ -4,7 +4,7 @@ import { identitySchema, counterSchema, immutableJsonObjectSchema } from '#domai
 import { ModelInvocationStoreError } from '#engine/core/model-invocation/index.js';
 
 const allocationSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, allocationId: identitySchema,
-  maxCalls: counterSchema.positive(), maxInFlight: counterSchema.positive(), lifetimeCalls: counterSchema, inFlight: counterSchema }).strict().readonly();
+  maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive(), lifetimeCalls: counterSchema, inFlight: counterSchema }).strict().readonly();
 export type ModelAllocation = z.infer<typeof allocationSchema>;
 export interface ModelAllocationCheckpoint {
   readonly schemaVersion: 1;
@@ -18,7 +18,7 @@ export function parseModelAllocation(input: unknown): ModelAllocation {
   const copied = immutableJsonObjectSchema.safeParse(input), parsed = copied.success && allocationSchema.safeParse(copied.data);
   if (!parsed || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   const value = parsed.data;
-  if (value.inFlight > value.lifetimeCalls || value.lifetimeCalls > value.maxCalls || value.inFlight > value.maxInFlight) {
+  if (value.inFlight > value.lifetimeCalls || (value.maxCalls !== null && value.lifetimeCalls > value.maxCalls) || value.inFlight > value.maxInFlight) {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
   return value;

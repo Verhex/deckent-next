@@ -48,7 +48,8 @@ export const modelInvocationProfileSchema = z.object({ schemaVersion: z.literal(
   version: counterSchema.positive(), scopeId: identitySchema, reference: modelReferenceSchema, bindingDigest: digest,
   protocol: z.object({ family: identitySchema, version: identitySchema }).strict().readonly(),
   adapter: z.object({ id: identitySchema, version: counterSchema.positive(), definition: invocationEnvelopeSchema }).strict().readonly(),
-  allocation: z.object({ id: identitySchema, maxCalls: counterSchema.positive(), maxInFlight: counterSchema.positive() }).strict().readonly(),
+  // maxCalls null = no lifetime total (explicit, audited profile choice; owner 2026-09-25); maxInFlight always bounds concurrency.
+  allocation: z.object({ id: identitySchema, maxCalls: counterSchema.positive().nullable(), maxInFlight: counterSchema.positive() }).strict().readonly(),
   limits: z.object({ requestMaxBytes: counterSchema.positive(), responseMaxBytes: counterSchema.positive(),
     timeoutMs: counterSchema.positive() }).strict().readonly(),
 }).strict().readonly();

@@ -534,6 +534,12 @@ MCP share the implemented inspection, activation, installation and runtime-contr
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
 
+**Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
+`maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile uses it; API
+profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
+still apply. The allocation contract of an id is fixed: changing its limits is `MODEL_INVOCATION_ALLOCATION_CONFLICT`, so a profile
+moves to an unbounded allocation under a new id; existing receipts keep verifying against their own allocation. Ledger v36 rebuilds
+`model_invocation_allocations` row for row with a nullable, positive-when-set `max_calls`.
 **Tool calls over openai-chat (T-L2).** `openai-chat-http` v4 sends `tools`/`tool_choice` and accepts assistant `tool_calls` and
 `tool` messages only when the model binding declares the `tool-calls` capability as supported (catalog data); otherwise any tool
 call is refused as before. Responses may carry calls only to declared tool names, with unique ids and `finish_reason:

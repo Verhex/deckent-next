@@ -83,7 +83,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore {
         }
         const before = current ?? parseModelAllocation({ schemaVersion: 1, scopeId: command.scopeId, allocationId: configured.id,
           maxCalls: configured.maxCalls, maxInFlight: configured.maxInFlight, lifetimeCalls: 0, inFlight: 0 });
-        if (before.lifetimeCalls >= before.maxCalls) throw new ModelInvocationStoreError('MODEL_INVOCATION_QUOTA_EXHAUSTED');
+        if (before.maxCalls !== null && before.lifetimeCalls >= before.maxCalls) throw new ModelInvocationStoreError('MODEL_INVOCATION_QUOTA_EXHAUSTED');
         if (before.inFlight >= before.maxInFlight) throw new ModelInvocationStoreError('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
         const after = parseModelAllocation({ ...before, lifetimeCalls: before.lifetimeCalls + 1, inFlight: before.inFlight + 1 });
         writeModelAllocation(this.db, checkpoint, after);

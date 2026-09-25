@@ -27,7 +27,7 @@ const actor = { id: 'actor', issuer: 'host', subject: '1000', assurance: 'os-use
 const authorization = { revision: 'policy', ruleId: 'invoke' };
 
 async function file() { const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-')); roots.push(root); return join(root, 'ledger.db'); }
-async function fixture(maxCalls = 3, maxInFlight = 2) {
+async function fixture(maxCalls: number | null = 3, maxInFlight = 2) {
   const path = await file(), activations = await openSqliteModelActivationStore(path, options);
   const activated = await activations.admit({ command: { schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope',
     reference, expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding }, actor,
@@ -317,4 +317,21 @@ it('converges two processes racing the same command on one canonical claim', asy
   expect(db.prepare('SELECT count(*) AS count FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.count).toBe(1);
   expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations WHERE scope_id=? AND allocation_id=?').get('scope', 'allocation'))
     .toEqual({ lifetime_calls: 1, in_flight: 1 }); db.close();
+});
+
+it('admits any number of calls for an allocation without a lifetime total while still bounding concurrency (owner 2026-09-25)', async () => {
+  const base = await fixture(null, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const response = { schemaVersion: 1 as const, native: { id: 'r', choices: [] }, usage: { total_tokens: 1 } };
+  for (let i = 1; i <= 60; i++) {
+    const claimed = await store.claim(admission(base, `command-${i}`, `invocation-${i}`));
+    if (i === 60) {
+      // Concurrency is still enforced: a second call while one is in flight is refused.
+      await expect(store.claim(admission(base, 'command-extra', 'invocation-extra'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+    }
+    await store.permitSend(claimed.record.receipt.claim, 'sender', 18);
+    await store.recordResponse(claimed.record.receipt.claim, response, 20);
+  }
+  // The allocation contract of an id is fixed: switching the same id to a lifetime total is refused, a new id is needed.
+  const capped = { ...base, profile: { ...base.profile, allocation: { ...base.profile.allocation, maxCalls: 100 } } };
+  await expect(store.claim(admission(capped, 'command-capped', 'invocation-capped'))).rejects.toThrow('MODEL_INVOCATION_ALLOCATION_CONFLICT');
 });

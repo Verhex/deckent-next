@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- PROVIDERS/T-L3a (owner 2026-09-25): model invocation allocations may have no lifetime total (`maxCalls: null`, ledger v36
+  rebuilds the allocation table with a nullable `max_calls`); concurrency stays bounded and an allocation id's limits stay fixed.
+
 - PROVIDERS/T-L2: `openai-chat-http` carries tool calls for models whose binding declares the `tool-calls` capability: tools and
   tool_choice in the request, assistant tool calls and tool results in the conversation, non-streamed and streamed calls validated
   against the declared tools (unique ids, matching finish, contiguous stream indexes), no call from a cut stream; the terminal chat

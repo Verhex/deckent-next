@@ -14,6 +14,7 @@ import { ModelActivationApplication, modelInvocationTargetId } from '#engine/ind
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget } from '../../fixtures/priced-provider.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -243,7 +244,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     await writeFile(policyPath, JSON.stringify({ ...policy, grants: [...policy.grants, { id: 'stop', effect: 'allow', actions: ['shutdown'], scopes: ['scope'],
       principals: policy.grants[0]!.principals, resource: { kind: 'service', ids: ['local'] } }] }), { mode: 0o600 });
     const ledgerPath = join(config.layout.root, 'state/ledger.db');
-    const ledger = new DatabaseSync(ledgerPath); ledger.exec(`DROP TABLE worker_event_logs; PRAGMA user_version=${CURRENT_LEDGER_VERSION - 1};`); ledger.close();
+    const ledger = new DatabaseSync(ledgerPath); ledger.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); ledger.close();
     const first = await inPty(f.projectRoot, f.env, [], [['started in the background', 'hello\r'], ['pty-ok', '/exit\r']]);
     // Register the background service for cleanup before any assertion can fail.
     const pid = Number(/\(pid (\d+),/.exec(first.output)?.[1]);

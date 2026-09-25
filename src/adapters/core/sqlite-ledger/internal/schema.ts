@@ -24,9 +24,28 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 35;
+export const CURRENT_LEDGER_VERSION = 36;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // Allocation without a lifetime total (owner 2026-09-25, local terminal profile): max_calls may be NULL, meaning no lifetime cap;
+  // concurrency (max_in_flight) stays mandatory. SQLite cannot drop NOT NULL in place, so the parent table and its only child
+  // (allocation checkpoints, v19) are rebuilt row for row with deferred foreign keys; renaming the parent rewrites the child's
+  // reference to the final name.
+  36: `PRAGMA defer_foreign_keys=ON;
+    CREATE TABLE model_invocation_allocations_v36(scope_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
+    max_calls INTEGER CHECK(max_calls IS NULL OR max_calls>0),max_in_flight INTEGER NOT NULL,lifetime_calls INTEGER NOT NULL,in_flight INTEGER NOT NULL,
+    record TEXT NOT NULL,PRIMARY KEY(scope_id,allocation_id));
+    INSERT INTO model_invocation_allocations_v36(scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record)
+      SELECT scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record FROM model_invocation_allocations;
+    CREATE TABLE model_invocation_allocation_checkpoints_v36(scope_id TEXT NOT NULL,allocation_id TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK(revision>=1),digest TEXT NOT NULL,PRIMARY KEY(scope_id,allocation_id),
+      FOREIGN KEY(scope_id,allocation_id) REFERENCES model_invocation_allocations_v36(scope_id,allocation_id));
+    INSERT INTO model_invocation_allocation_checkpoints_v36(scope_id,allocation_id,revision,digest)
+      SELECT scope_id,allocation_id,revision,digest FROM model_invocation_allocation_checkpoints;
+    DROP TABLE model_invocation_allocation_checkpoints;
+    DROP TABLE model_invocation_allocations;
+    ALTER TABLE model_invocation_allocations_v36 RENAME TO model_invocation_allocations;
+    ALTER TABLE model_invocation_allocation_checkpoints_v36 RENAME TO model_invocation_allocation_checkpoints; PRAGMA user_version=36;`,
   // Sealed worker-reported event logs (B09): artifact receipt of the redacted events plus the deterministic summary.
   35: `CREATE TABLE worker_event_logs(scope_id TEXT NOT NULL,attempt_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,attempt_id)); PRAGMA user_version=35;`,
   // Generic effect intents (C11): one row per operation command; sequence orders intents per external target record.

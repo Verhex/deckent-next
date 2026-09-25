@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { startConfiguredRuntimeService } from '../../../src/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 type Service = Awaited<ReturnType<typeof startConfiguredRuntimeService>>;
 const roots: string[] = [], services: Service[] = [];
@@ -19,7 +20,7 @@ const observer = { async onPage() {}, async onError() {} };
 const version = (path: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare('PRAGMA user_version').get()?.user_version; } finally { db.close(); } };
 /** Puts the ledger back to the previous schema, as an older build left it. */
 function downgrade(path: string) {
-  const db = new DatabaseSync(path); try { db.exec(`DROP TABLE worker_event_logs; PRAGMA user_version=${CURRENT_LEDGER_VERSION - 1};`); } finally { db.close(); }
+  const db = new DatabaseSync(path); try { db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); } finally { db.close(); }
 }
 async function backups(data: string) { try { return await readdir(join(data, 'state/backups')); } catch { return []; } }
 
