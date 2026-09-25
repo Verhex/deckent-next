@@ -73,6 +73,10 @@ hardlink reddi, bloklamayan açma (FIFO), iptal edilebilir regex worker'ı, her 
 yalnız Linux/WSL. Engine yetkili çağrı yolu henüz bağlı değil; bu adapter dilimi tek başına terminal canlı kabulü değildir. Okuma
 araçlarının policy yetkisi T-L3'ten itibaren zorunlu. Owner 2026-09-25: yerel terminal profilinde ömür boyu çağrı sınırı yok
 (`maxCalls: null`, sürümlü ve audit'li; maxInFlight/policy/kapasite/harcama yetkisi sürer).
+**Owner 2026-09-25: GPU izni ve vLLM container'ının yeniden oluşturulması onaylandı.** Terminal sunum profili: `--max-model-len 131072
+--max-num-seqs 4 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3` (KV 260.687 token; 131k'da ~2 eşzamanlı);
+betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`, önceki yapılandırma yedekli. Canlı kanıt: T-L2 adapter'ı gerçek
+vLLM akışında iki paralel araç çağrısını birleştirdi (ilk parça 198 ms, toplam 1,4 s). 8×32k worker profili ayrı ve sonra.
 
 Devam planı: dış çalışma alanı `DEVAM-PLANI-2026-09-24.md` (Astra 2055/2057 değerlendirmesiyle). **S** akış karar listesi
 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)). Sıra: **A-1** yönetilen araç döngüsü tasarımı

@@ -1,4 +1,11 @@
-# Anlık iş akışı — Opus 5.5; Astra REVISE 41c53bc incelemede (2075); T-L2 araç çağrıları teslimde; sonra T-L3 engine döngüsü; GPU yasağı
+# Anlık iş akışı — Opus 5.5; T-L2 fbd962c + REVISE 41c53bc Astra'da; vLLM terminal profili (131k, araç çözücüsü) canlı; sıradaki T-L3
+
+## GPU izni + vLLM terminal profili (2026-09-25)
+
+Owner GPU'yu açtı ve container yeniden oluşturmayı onayladı. İlk denemede imajın giriş noktası zaten `vllm serve` olduğu için fazladan `serve`
+argümanı container'ı düşürdü (unless-stopped döngüsü) → betik düzeltildi. Hazır olma ~100 s; KV 260.687 token. Doğrudan API: tek araç çağrısı
+0,87 s. Adapter üzerinden akışlı: `read_file` + `grep` paralel çağrıları doğru birleşti, ilk parça 198 ms, toplam 1,4 s
+(`proof/F26-T-L2-TOOL-CALLS/live-vllm-stream-tools.log`). Canlı katalog/profilde `tool-calls` yeteneği ve `maxCalls:null` henüz yok (T-L3'te).
 
 ## T-L2 — openai-chat araç çağrıları (2026-09-25)
 
