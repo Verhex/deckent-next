@@ -1,4 +1,19 @@
-# Anlık iş akışı — Opus 5.5; T-L3d terminal agent turn teslimde; T-L3c `a298f8d` (2085) ve 2081–2084 Astra incelemesinde
+# Anlık iş akışı — Opus 5.5; canlı kurulumda araçlı terminal etkin (owner onayı 2026-09-25); T-L3b2–T-L3d Astra incelemesinde (2083–2086)
+
+## Canlı etkinleştirme — araçlı terminal (2026-09-25, owner "1-ok 2-ok 3-ok")
+- Yedekler: `proof/F26-T-L3-LIVE-ACTIVATION-2026-09-25/backup/` (config, policy, ledger v35 VACUUM kopyası, integrity ok).
+- Göç betiği `migrate-qwen38-v3-tools.mjs` owner tarafından çalıştırıldı (otomatik izin denetimi policy yazımını ajana bırakmadı):
+  katalog `local-qwen-3` + `qwen38 v3` (v2 + `tool-calls`, bağlama `4c2782a3…`); profil `local-qwen` v3, kota `local-qwen-terminal`
+  (`maxCalls: null`, maxInFlight 2), çıktı 8192 token, istek/yanıt 1 MiB, 300 s; terminal.chat → v3, 8192; policy `local-qwen-4`:
+  v3 aktivasyon/çağrı hedefleri + `live-read-tools` (`agent-tool` read_file/list_dir/grep/glob, yalnız owner, `live`).
+- `deckent runtime serve`: ledger v35→v37, servis yedeği `live-data/state/backups/ledger-v35-2026-09-25T18-58-40-339Z.db`.
+  Yönetilen aktivasyon `activate-qwen38-v3-tools` (`activate-v3.json`); `terminal status` → ready, qwen38@3.
+- Gerçek terminal (PTY, `deckent`, bu repo üzerinde): 3 tur — agent-turn klasörü + replay sorusu (4 turda list_dir ×2, grep, read_file;
+  11,4 s; doğru), PLAN.md T-L5 (boş desenli grep → invalid-arguments, sonra grep; 6,7 s), store.ts sabiti (grep, 2,8 s, doğru: 262_144).
+  Araç satırları ekranda: canlı `⠋ grep … · 0.0 sn`, biten `· grep … · 0.0s` → bitişte süre birimi sabit "s" idi, yerel etiket kullanacak
+  şekilde düzeltildi (test önceki kodla düşüyor). Kayıtlar `live-terminal-1..3.json`.
+- Açık: canlı policy'de onay listeleme izni olmadığı için terminal açılışında "Onay denetimi başarısız: APPROVAL_DENIED" görünüyor (önceden
+  var olan yapılandırma boşluğu, ayrı policy kararı).
 
 ## T-L3d — terminal agent turn (2026-09-25)
 - Etkileşimli terminal artık `chatTurn` kullanıyor (`streamTerminalAgentTurn`): her araç çağrısı tek satır (ad, hedef, saniye, ok değilse

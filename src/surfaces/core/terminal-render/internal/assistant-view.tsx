@@ -46,7 +46,7 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
   }
   if (unit.kind === 'tool') {
     const failed = unit.status !== 'ok' && unit.status !== 'duplicate';
-    const tail = [`${seconds(unit.ms)}s`, ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]])].join(` ${glyphs.separator} `);
+    const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]])].join(` ${glyphs.separator} `);
     return (
       <Box paddingLeft={INDENT}>
         <Text {...(failed ? palette.error : palette.muted)} wrap="truncate-end">{glyphs.separator} {toolText(unit, labels)} {glyphs.separator} {tail}</Text>

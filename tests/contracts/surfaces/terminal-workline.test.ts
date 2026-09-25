@@ -106,11 +106,13 @@ describe('ledger buffer (Ink Static contract)', () => {
       yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c2', name: 'grep', target: 'secret', status: 'denied' as const, ms: 1 };
       yield { kind: 'done' as const, finish: 'error' as const, note: 'CLOSURE-NOTE' };
     };
-    const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10 });
+    const view = mount({ completeTurn: async () => 'unused', streamTurn, historyMessages: 10,
+      labels: { ...labels, render: { ...labels.render, elapsed: '{seconds} SEC' } } });
     await settle(20);
     view.stdin.write('read it\r');
     await until(() => view.stdout.text.includes('CLOSURE-NOTE'), 'closure note');
-    expect(view.stdout.text).toContain('TOOL read_file src/a.ts');
+    // The duration uses the locale's elapsed label, never a hard-coded unit.
+    expect(view.stdout.text).toContain('TOOL read_file src/a.ts · 0.0 SEC');
     expect(view.stdout.text).toContain('TOOL grep secret'); expect(view.stdout.text).toContain('TOOL-DENIED');
     // The tool result is history, never printed as the answer.
     expect(view.stdout.text).not.toContain('export const a = 1;');
