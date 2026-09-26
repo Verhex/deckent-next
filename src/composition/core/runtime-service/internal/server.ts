@@ -62,8 +62,10 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     if (!approvals.store.pendingToolCalls(null, 1).length) return;
     // The key already exists when such a request exists; a missing key is reported, never created here.
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile).catch(() => null);
-    await observer.onToolCallApprovalsExpired?.(integrity ? { ...expireOrphanedToolCallApprovals(approvals.store, integrity, config.approvals.pageSize),
-      keyUnavailable: false } : { expired: 0, failed: 0, keyUnavailable: true });
+    // The sweep runs whether or not anyone observes it (Astra 2096 R1); the observer only reports its result.
+    const result = integrity ? { ...expireOrphanedToolCallApprovals(approvals.store, integrity, config.approvals.pageSize), keyUnavailable: false }
+      : { expired: 0, failed: 0, keyUnavailable: true };
+    await observer.onToolCallApprovalsExpired?.(result);
   } finally { approvals.close(); }
 }
 

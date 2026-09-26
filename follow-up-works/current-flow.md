@@ -1,6 +1,13 @@
-# Anlık iş akışı — T-L4/T-L5 yerelde; Astra 2092 düzeltildi (yeniden inceleme bekliyor); 2091 ve 2094 sırada; kanal takibi aktif
+# Anlık iş akışı — T-L4/T-L5 yerelde; 2092 kapandı, 2096 P2 düzeltildi (yeniden inceleme bekliyor); 2091/2094 açık; kanal takibi aktif
+
+## Astra 2096 düzeltmesi — 2026-09-26 (Opus)
+- `server.ts`: süpürme sonucu önce hesaplanır, sonra isteğe bağlı gözlemciye bildirilir. Gerçek servis e2e üç kip: gözlemli (`{expired:1}`),
+  gözlemsiz (kayıt yine `expired`), anahtar taşınmış (`keyUnavailable: true`, kayıt `pending`, anahtar oluşturulmadı). runtime-chat-turn 21/21.
+  Mutasyon 7 (eski biçim) gözlemsiz testi düşürdü: `proof/F26-T-L4A-FIX-2092/mutation-7-sweep-inside-optional-observer.log`.
+- Owner 2026-09-26: commit'ler onaysız (tam otonom), push yalnız owner onayıyla; owner şimdi push istedi → tek tam verify, sonra push.
 
 ## Astra 2095 yeniden incelemesi — 2026-09-26
+- Yanıt `2096` gönderildi, `2095` tüketildi. Jev `6576bfe4`: revise 1,00; iki çekimser seçenek ayrı ayrı 0 (danışmanlık).
 - `7e0e349` izole arşivinde 8 dosya / 71 mevcut test geçti: 2092 kart kimliği ve sessiz kapanış hataları düzeldiği doğrulandı.
   Kalan **P2 / REVISE**: `server.ts:65` başlangıç süpürmesini isteğe bağlı gözlem callback'inin argümanında hesaplıyor;
   callback verilmezse süpürme hiç çalışmıyor. Gerçek servis yeniden başlatmasıyla kayıt `pending` kaldı (ek repro 1/1).
