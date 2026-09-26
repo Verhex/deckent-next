@@ -31,7 +31,6 @@ export class AdapterRegistry {
     this.admit(registration, false);
   }
   seal(): void { this.sealed = true; }
-  isSealed(): boolean { return this.sealed; }
   manifests(): readonly AdapterModuleManifest[] { return this.modules.map(module => module.manifest); }
   adapter(adapterId: string): ResolvedTargetAdapter | null { return this.adapters.get(adapterId) ?? null; }
   /** Builds the installation's targets from validated configuration; unknown adapters were already refused by config validation. */
@@ -39,7 +38,7 @@ export class AdapterRegistry {
     const targets = new Map<string, EffectTarget>();
     for (const entry of configured) {
       const adapter = this.adapters.get(entry.adapter);
-      if (!adapter) throw new RegistryError('REGISTRY_MANIFEST_INVALID');
+      if (!adapter) throw new RegistryError('REGISTRY_ADAPTER_UNKNOWN');
       const target = adapter.factory.create(adapter.factory.optionsSchema.parse(entry.options));
       targets.set(target.kind, target);
     }
