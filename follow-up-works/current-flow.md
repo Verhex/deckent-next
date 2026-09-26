@@ -29,19 +29,17 @@
 - Yanıt `2094` kanala yazıldı, talep `2093` tüketildi. Daha önce 2092 ile yanıtlanan 2090 da bu oturumda tüketildi. Sonraki: Opus üç bulguya sınırlı düzeltme ve negatif kanıt getirsin;
   Astra yeni kayıtları ve yeniden inceleme taleplerini izlesin. İzleme izni ürün kapsamını veya canlı policy yetkisini genişletmez.
 
-## Devir — sonraki oturum (2026-09-26)
-- Opus devir kaydı: HEAD `6a53765`; origin/main `4eec455` (≈21 yerel commit, push yok). Devir belgesi sonrası HEAD `aca83b4`; Astra `2093` talebi `2094` REVISE ile yanıtlandı (yukarıda).
-- Sıradaki iki düzeltme dilimi (ayrı commit, her biri tersine çevrilmiş Astra repro'su + negatif test):
-  1. Onay düzeltmeleri (Astra 2092): R1 `work-surface.tsx` decideApproval finally → kartı yalnız aynı approvalId ise kapat; R2
-     `engine/core/approval/internal/tool-call.ts` close(): transition hatasında kaydı yeniden oku; terminal ise yarış, pending/okunamaz
-     ise kapanmış gibi bildirme. Görünürlük yolu (yeni settled değeri → protokol v15, ya da servis başında bekleyen agent-tool-call
-     onaylarını süpürme) karar gerektirir → önce Jev.
-  2. Geçmiş/bellek düzeltmeleri (Astra 2091): R2 loop `appended` birikimi → artımlı digest + sayaç + son yanıt (digest biçimi
+## Devir ve sıra (2026-09-26)
+- origin/main `4eec455`, push yok. 2092 düzeltmesi `7e0e349` (yukarıda, yeniden inceleme istendi).
+- Sıradaki düzeltme dilimleri (ayrı commit, her biri tersine çevrilmiş Astra repro'su + negatif test):
+  1. Geçmiş/bellek (Astra 2091): R2 loop `appended` birikimi → artımlı digest + sayaç + son yanıt (digest biçimi
      `agent-turn-appended:1\0[...]` akışla aynı üretilebilir); R3 sıkıştırmada `seenReads` yalnız `plan.tail`'de kalan sonuçlarla sınırla
      + edit/write başarısında da temizle; R1 `boundAgentHistory(40)` kaldırılınca sınır `service.inputMaxBytes` olur (canlı değeri kontrol et)
      → karar gerektirir → Jev (gerekirse owner); kanıt workline → servis → kayıt/resume sınırında.
-- Sonra: toplu tek `npm run verify` (DECKENT_TEST_DOCKER_IMAGE ile), Astra PASS → push; dist yeniden derlendi (build ok), canlı servis v14
-  için governed yeniden başlatma gerekecek. Ardından T-L4 dilim 3 (host kabuğu) ve 4 (izin modları).
+  2. Dosya yazımı (Astra 2094): R1 kurtarmada içerik eşitliği etkiye özgü kanıt değil; R2 doğrulamadan sonra dışarı taşınan dizine yazım
+     (yeni mekanizma → owner checkpoint olabilir); R3 büyük diff önizlemesi protokol sınırını aşıyor.
+- Sonra: toplu tek `npm run verify` (DECKENT_TEST_DOCKER_IMAGE ile), Astra PASS → push; dist `7e0e349`'e göre eski (build gerek), canlı
+  servis v14 için governed yeniden başlatma gerekecek. Ardından T-L4 dilim 3 (host kabuğu) ve 4 (izin modları).
 
 ## T-L4 dilim 2 — `edit_file`/`write_file` C11 etkisi (2026-09-26)
 - Adaptör `adapters/core/workspace-write`: yazılabilir yol çözümü (normalize, kök içi, deny, sembolik bağlı üst dizin reddi), dosya sürümü
