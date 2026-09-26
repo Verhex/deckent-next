@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -15,7 +15,7 @@ import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTur
 import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
-import { chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
+import { agentFileEffectCommandId, agentShellEffectCommandId, chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
@@ -530,6 +530,69 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(askingEvents.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: safe-read') });
     expect(askingEvents.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
   }, 60_000);
+
+  // Astra 2111 repro (ported, asserting the corrected behavior): bash opens `linked/../public.txt` as the parent of the link's target.
+  it('asks before a path whose `..` follows a symlink, since the shell opens the parent of the link target; a `..` through a real directory stays silent (Astra 2111)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    const outside = await mkdtemp(join(tmpdir(), 'deckent-outside-fixture-')); roots.push(outside);
+    await mkdir(join(outside, 'sub'));
+    await writeFile(join(outside, 'public.txt'), 'OUTSIDE_SYNTHETIC_SENTINEL');
+    await writeFile(join(f.project, 'public.txt'), 'INSIDE_PUBLIC');
+    await symlink(join(outside, 'sub'), join(f.project, 'linked'));
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'cat linked/../public.txt' }) } }, { content: 'Done.' },
+      { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'cat src/../public.txt' }) } }, { content: 'Done.' }];
+    const client = f.client(), linked: AgentTurnStreamEvent[] = [];
+    await client.chatTurn(ask('turn-shell-dotdot'), event => {
+      linked.push(event);
+      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'deny-dotdot', expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' });
+    });
+    expect(linked.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('$ cat linked/../public.txt') });
+    expect(linked.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'denied' });
+    expect(linked.some(event => event.kind === 'tool.output')).toBe(false);
+    expect(toolText(linked)).not.toContain('OUTSIDE_SYNTHETIC_SENTINEL');
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([]);
+    const plain: AgentTurnStreamEvent[] = [];
+    await client.chatTurn(ask('turn-shell-dotdot-plain'), event => plain.push(event));
+    expect(plain.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(toolText(plain)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(cat src\/\.\.\/public\.txt\)\nINSIDE_PUBLIC$/u);
+  }, 30_000);
+
+  // Astra 2113 repro (ported, asserting the corrected behavior): the fixture provider names every tool call `call_1`.
+  it('runs the same command again in a later round as its own effect, although the provider reuses the call id (Astra 2113)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    const step = { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'echo again' }) } };
+    f.state.script = [step, step, { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-shell-repeat'), event => events.push(event));
+    expect(events.filter(event => event.kind === 'tool.finished')).toEqual([expect.objectContaining({ callId: 'call_1', status: 'ok' }),
+      expect.objectContaining({ callId: 'call_1', status: 'ok' })]);
+    expect(events.filter(event => event.kind === 'tool.output').map(event => event.kind === 'tool.output' && event.text)).toEqual(['again\n', 'again\n']);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }, { target_kind: 'host-shell', state: 'settled' }]);
+  }, 30_000);
+
+  it('writes the same change again after the file returned to the same version, never answering it as a replay of the first write (Astra 2113)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('allow') }); await f.start();
+    const write = (content: string) => ({ toolCall: { name: 'write_file', arguments: JSON.stringify({ path: 'src/a.ts', content }) } });
+    f.state.script = [write('export const a = 2;\n'), write('export const a = 1;\n'), write('export const a = 2;\n'), { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-edit-aba'), event => events.push(event));
+    expect(events.filter(event => event.kind === 'tool.finished').map(event => event.kind === 'tool.finished' && event.status)).toEqual(['ok', 'ok', 'ok']);
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(f.rows('SELECT target_id, state FROM effect_intents')).toEqual(Array.from({ length: 3 }, () => ({ target_id: 'src/a.ts', state: 'settled' })));
+  }, 30_000);
+
+  it('derives one effect per execution: a replay of the same round and index is the same command, another round or index is another (Astra 2113)', () => {
+    const digest = 'd'.repeat(64);
+    const shell = agentShellEffectCommandId('scope', 'turn', { round: 2, index: 0 }, digest);
+    expect(agentShellEffectCommandId('scope', 'turn', { round: 2, index: 0 }, digest)).toBe(shell);
+    expect(new Set([shell, agentShellEffectCommandId('scope', 'turn', { round: 3, index: 0 }, digest), agentShellEffectCommandId('scope', 'turn', { round: 2, index: 1 }, digest),
+      agentShellEffectCommandId('scope', 'other', { round: 2, index: 0 }, digest), agentShellEffectCommandId('scope', 'turn', { round: 2, index: 0 }, 'e'.repeat(64))]).size).toBe(5);
+    const file = agentFileEffectCommandId('scope', 'turn', { round: 2, index: 0 }, digest, 'v1');
+    expect(agentFileEffectCommandId('scope', 'turn', { round: 2, index: 0 }, digest, 'v1')).toBe(file);
+    expect(new Set([file, agentFileEffectCommandId('scope', 'turn', { round: 4, index: 0 }, digest, 'v1'), agentFileEffectCommandId('scope', 'turn', { round: 2, index: 1 }, digest, 'v1'),
+      agentFileEffectCommandId('scope', 'turn', { round: 2, index: 0 }, digest, 'v2')]).size).toBe(4);
+  });
 
   it('keeps the turn alive on a very large output: the display is skipped visibly when the client lags, the result stays bounded (T-L4 slice 3c)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();

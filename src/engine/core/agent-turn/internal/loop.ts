@@ -23,8 +23,12 @@ export interface AgentTurnPorts {
   prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true; readonly requireApproval?: boolean } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
-  /** `callId` correlates streamed output (e.g. a shell command's) with the call; the result stays the only history. */
-  execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal, callId: string): Promise<AgentToolOutcome>;
+  /**
+   * `callId` correlates streamed output (e.g. a shell command's) with the call; the result stays the only history. `execution` is the
+   * call's position in the turn (model round, index in its response): the identity of an effect it applies, unique within the turn and
+   * the same on a replay of that call; the provider's call id is not (providers reuse ids across responses; Astra 2113).
+   */
+  execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal, callId: string, execution: AgentToolExecution): Promise<AgentToolOutcome>;
   now(): number;
   /**
    * The prompt of a round as the provider will see it (T-L5): its own token count, or a tagged conservative upper bound, and the
@@ -48,6 +52,9 @@ export interface AgentTurnPorts {
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
 }
+
+/** A tool call's position in its turn: the model round and its index in that round's response. */
+export interface AgentToolExecution { readonly round: number; readonly index: number }
 
 export interface AgentTurnInput {
   readonly messages: readonly AgentTurnMessage[];
@@ -241,7 +248,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       }
       toolCalls++;
       let outcomeText: AgentToolOutcome;
-      try { outcomeText = await ports.execute(tool, checked.args, signal, call.id); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
+      try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       // A successful write may change what any earlier read saw: those reads run again.
       if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();
       const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);

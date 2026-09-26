@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
 import type { ShellPathContext, ShellPathVerdict, ShellReasonCode, ShellWord } from '#engine/index.js';
 import type { WorkspacePathError, WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -6,6 +7,8 @@ import type { WorkspacePathError, WorkspaceScope } from '#adapters/core/workspac
 /** Default per-argument bound of shell glob expansion (legacy DEFAULT_MAX_GLOB_MATCHES); over it the command is not read-only. */
 export const SHELL_GLOB_MAX_MATCHES = 10_000;
 const GLOB_CHARS = /[*?[]/u;
+/** A `..` path component: the kernel resolves it against the real path before it (after any symlink), never lexically. */
+const PARENT_SEGMENT = /(?:^|\/)\.\.(?:\/|$)/u;
 
 const POSIX_CLASSES: Readonly<Record<string, string>> = {
   alpha: 'A-Za-z', digit: '0-9', alnum: 'A-Za-z0-9', upper: 'A-Z', lower: 'a-z', space: ' \\t\\n\\r\\f\\v',
@@ -73,8 +76,10 @@ function globSegmentRegExp(segment: string): RegExp | null {
   return new RegExp(`^${leadingDotAllowed ? '' : '(?!\\.)'}${out}$`, 'u');
 }
 
-/** sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. */
+/** sh-style expansion of one glob argument (no brace expansion; `**` is `*`), bounded; `null` over the bound. A `..` after a glob
+ *  segment is unsupported: joining it lexically would name the match's lexical parent, not the one the kernel opens (Astra 2111). */
 function expandGlob(base: string, pattern: string, bound: number): string[] | null | 'unsupported' {
+  if (PARENT_SEGMENT.test(pattern)) return 'unsupported';
   let frontier = [base];
   for (const segment of pattern.split('/').filter(part => part.length > 0)) {
     const next: string[] = [];
@@ -95,23 +100,37 @@ function expandGlob(base: string, pattern: string, bound: number): string[] | nu
   return frontier.length > bound ? null : frontier;
 }
 
+type Refused = Extract<ShellPathVerdict, { readonly ok: false }>;
 const fromScope = (error: WorkspacePathError): ShellReasonCode =>
   error === 'path-outside-workspace' ? 'PATH_OUTSIDE_ROOT' : error === 'path-denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED';
 
 /**
  * The shell classifier's path check over the workspace scope (T-L4 slice 3a): one mechanism with the read tools and edits. A path
  * argument is read-only only when it lies lexically inside the root, is not denied, exists, and its real path (every symlink
- * resolved) is inside and not denied. A glob is expanded with sh rules against the real directory (dotfiles only for a leading
- * dot, bounded), and every match passes the same check; no match (sh would pass the literal) or too many is GLOB_EXPANSION. Git
- * pathspecs are checked lexically only. Not covered: intermediate symlink hops that leave the root and return (the final real path
- * is what the shell reads); the verdict is taken before the command runs, so a later swap is not excluded.
+ * resolved) is inside and not denied. A path with a `..` component is checked as the kernel opens it (Astra 2111): components in
+ * order, so `link/..` is the parent of the link's target, never the lexical parent; that object must exist, be inside and not
+ * denied. A glob is expanded with sh rules against the real directory (dotfiles only for a leading dot, bounded), and every match
+ * passes the same check; no match (sh would pass the literal) or too many is GLOB_EXPANSION, a `..` after a glob segment is
+ * GLOB_UNSUPPORTED. Git pathspecs are checked lexically only (git normalizes them itself). Not covered: intermediate symlink hops
+ * that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a
+ * later swap is not excluded.
  */
 export function createShellPathContext(scope: WorkspaceScope, maxGlobMatches = SHELL_GLOB_MAX_MATCHES): ShellPathContext & { readonly examined: readonly string[] } {
   const examined: string[] = [];
-  const fail = (reasonCode: ShellReasonCode, word: ShellWord): ShellPathVerdict => ({ ok: false, reasonCode, detail: word.text });
+  const fail = (reasonCode: ShellReasonCode, word: ShellWord): Refused => ({ ok: false, reasonCode, detail: word.text });
   const resolved = async (rel: string, word: ShellWord): Promise<ShellPathVerdict> => {
     const found = await scope.resolve(rel === '' ? '.' : rel, true);
     return found.ok ? { ok: true } : fail(fromScope(found.error), word);
+  };
+  /** The object the kernel opens for `path` from the root: native realpath(3) on the unnormalized text resolves `..` after each
+   *  symlink as the kernel does (path.resolve, join or realpathSync would drop `link/..` lexically first). */
+  const opened = async (path: string, word: ShellWord): Promise<{ readonly ok: true; readonly abs: string; readonly rel: string } | Refused> => {
+    let real: string;
+    try { real = await realpath(posix.isAbsolute(path) ? path : `${scope.root}/${path}`); } catch { return fail('PATH_UNRESOLVED', word); }
+    const rel = posix.relative(scope.root, real);
+    if (rel.startsWith('..') || posix.isAbsolute(rel)) return fail('PATH_OUTSIDE_ROOT', word);
+    if (scope.denied(rel)) return fail('PATH_PROTECTED', word);
+    return { ok: true, abs: real, rel };
   };
   return {
     examined,
@@ -129,10 +148,18 @@ export function createShellPathContext(scope: WorkspaceScope, maxGlobMatches = S
       examined.push(rel === '' ? '.' : rel);
       if (scope.denied(rel)) return fail('PATH_PROTECTED', word);
       if (lexicalOnly) return { ok: true };
-      if (globAt < 0) return resolved(rel, word);
-      const base = await resolved(rel, word);
+      const parent = PARENT_SEGMENT.test(prefix);
+      if (globAt < 0) {
+        if (!parent) return resolved(rel, word);
+        const target = await opened(raw, word);
+        return target.ok ? resolved(target.rel, word) : target;
+      }
+      // With a `..` in the literal prefix, sh lists the directory the kernel opens: that one is checked and expanded.
+      const dir = parent ? await opened(prefix, word) : { ok: true as const, abs, rel };
+      if (!dir.ok) return dir;
+      const base = await resolved(dir.rel, word);
       if (!base.ok) return base;
-      const matches = expandGlob(abs, raw.slice(prefix.length), maxGlobMatches);
+      const matches = expandGlob(dir.abs, raw.slice(prefix.length), maxGlobMatches);
       if (matches === 'unsupported') return fail('GLOB_UNSUPPORTED', word);
       if (matches === null || matches.length === 0) return fail('GLOB_EXPANSION', word);
       for (const match of matches) {
