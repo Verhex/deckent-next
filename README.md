@@ -1,7 +1,10 @@
 # deckent
 
-Provider-neutral, local-first AI agent orchestration runtime. One core, three surfaces: Terminal (CLI/TUI),
-MCP server, HTTP API; Dashboard and Desktop are observer/operator apps on the same services.
+Provider-neutral, local-first AI agent orchestration runtime. One core and one typed application contract,
+used today by the CLI, the interactive terminal (streamed agent turns with approvals, file edits and a host shell
+that is not a sandbox), the MCP server and the SDK (`import … from 'deckent'`) through the installed runtime
+service. There is no HTTP API yet; Dashboard and Desktop are planned observer/operator apps on the same services
+(only a versioned terminal–desktop bridge contract exists).
 
 Status: **1.0.0-alpha, clean-room port in progress.** Completed capabilities are recorded in
 [COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md). Everything else is being ported from the legacy codebase
@@ -10,7 +13,7 @@ one capability at a time, each landing with contract tests and a real-binary pro
 ## Requirements
 
 - Node.js ≥ 24
-- Docker (for exact-docker worker execution; lands with card R2)
+- Docker (exact-docker worker execution; worker image recipe in `assets/worker-image/`)
 
 ## Install and run
 

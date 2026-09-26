@@ -3,7 +3,7 @@
 > Bu dosya ve aynı dizindeki referanslar bu repo için canonical ürün/geliştirme core-memory authority'sidir.
 > Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; geçici ilerleme `follow-up-works/current-flow.md`.
 > Her satır tek hook'tur; operatif ayrıntı dosyanın kendisindedir.
-> Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu 2026-09-21; owner birleştirmesi 2026-09-23 (25 → 9 dosya, Jev f2551a1d).
+> Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu 2026-09-21; owner birleştirmesi 2026-09-23 (25 → 9 dosya, Jev f2551a1d); bugün 12 dosya (10 kanun + north star + bu indeks; manifest).
 > Tarihsel kaynak her dosya için birleştirme öncesi Git geçmişidir; eski komut ve durumlar güncel yetki değildir.
 
 Ortak ürün hedefi ve karar ölçütü: **[Product north star](project_product_north_star.md)** — Jev bağlamına SHA-256 ile gömülüdür, değiştirilmez. Milyon-ölçek, MVP yasağı ve agentic-OS hedefi orada tanımlıdır.

@@ -791,17 +791,22 @@ no new blocker in them.
 - Every configured text source file ≤ 1,500 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
 - Package line budgets and the total budget live in `arch.json` (`budgets`); growth past a budget is a
   design decision, not a lint fix.
-- Mechanism code is string-free: user-facing text comes from `kernel/core/i18n/locales/{en,tr}/*.json` through `t('key')`.
+- Mechanism code is string-free: user-facing text comes from `src/platform/core/i18n/locales/{en,tr}/*.json` through `t('key')`.
   Keys are literals (lint), catalogs have identical key sets (lint), surfaces never print literals (lint).
-- Config field values live in `kernel/core/config-fields`; `config-literal` uses source-derived
+- Config field values live in `src/platform/core/config-fields`; `config-literal` uses source-derived
 `scripts/config-vocabulary.json` with freshness checks before lint/build.
 
-Model, provider and flow identifiers appear only in `providers/core/registry/` (lint).
-- The product writes markdown only through `kernel/core/docs-authority`, and only `DECKENT.md` plus a bounded
-  section in `CLAUDE.md`/`AGENTS.md`. No README/CHANGELOG/vision/sprint-log writers exist.
+- Concrete model/provider identifiers and provider credential variable names are forbidden in `src/**`
+  (`arch.json` `literals.forbidden`, empty `allow`); they come from configuration and registry data only.
+- Target: the product writes markdown only through one docs-authority writer (`arch.json` `markdown.writerModule`),
+  and only `DECKENT.md` plus a bounded section in `CLAUDE.md`/`AGENTS.md`. That module does not exist yet
+  (PLAN "Mimari kapı artıkları", W0-9); lint-arch `md-write` enforces the rule, so today no product code writes
+  markdown, and no README/CHANGELOG/vision/sprint-log writers exist.
 - Every environment: Linux, macOS, Windows native, Windows WSL, Docker. A platform without proof reports a
   typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback.
-- State lives under the project's `.deckent/` (v2 schemas) and `.brain/memory.db` (FTS5); both gitignored.
+- Project state lives under the project's `.deckent/` (gitignored; layout from `layout-resources.json`), and the
+  transactional ledger carries its own schema version. Legacy `.brain/memory.db` is not a Next store; it stays on
+  the workspace deny list and migrates only through the memory cards.
 
 ## Testing policy
 

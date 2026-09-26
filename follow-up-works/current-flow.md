@@ -8,6 +8,18 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 - Yerelde push sonrası: `6786bc2` owner kararları (belge), `2900a8d` Astra 2106 düzeltmesi, `b92d906` cli bölünmesi (W0-7), belge paketi.
 - Canlı servis v13'te (eski build). Canlı yeniden başlatma + `grant-edit-shell.mjs` owner kararıyla **Astra PASS sonrası**.
 - DOGFOOD OFF.
+- Kota (2026-09-26 19:12Z): Codex haftalık %0 (pencere bugün 21:06+03'te sıfırlandı, sonraki 2026-10-03 21:06+03; kaynak son
+  `rate_limits`, `~/.codex/sessions/2026/09/26/rollout-…15-20-56….jsonl`); Claude `/usage` ve Cursor panosu **owner'dan bekleniyor**.
+
+## Paralel şeritler (owner 2026-09-26; lead Opus, kartlar `deckent-refactor-work/cards/lanes/`)
+- L1 2091, L2 2094, L3 cli bölünmesi, L6 belge paketi bu oturumda zaten yapıldı (Astra 2107, 2100, 2108 kuyruğunda) — şerit açılmadı.
+- L4 H34 tenant→company **açılmadı** (Jev `8215548c` defer 0,71; PLAN "Önemli açık bulgular"); yerine L4C Cursor salt-okunur dilim 4
+  tasarım notu (`proof/L4C-SLICE4-DESIGN-2026-09-27/design-note.md`, effort `F26-t-l4-slice4-design-2026-09-27`).
+- L5 I40 kök neden: Codex, `lane/l5-i40` @ `/home/alperen/deckent-next-lane-l5-i40` (taban `eb29ccc`), yalnız 5 test dosyası;
+  effort `I40-l5-root-cause-2026-09-27`; kanıt `proof/L5-I40-2026-09-27/` (lead taban koşumu 46/46, 197 s).
+- Codex sandbox reçetesi (kanıtlı): `-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir <ana>/.git
+  --add-dir <ana>/node_modules --add-dir <proof>` (vitest `.vite-temp` sembolik bağlı `node_modules`'a yazar; Docker çalışıyor).
+- L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
 - Ajan yazımı yalıtımı (2094 R2): belgelenmiş son kontrol–rename yarışı kabul; native/Landlock yazıcı yok.

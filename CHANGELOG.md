@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- DOCS (2026-09-26, remainder): README surfaces (CLI, terminal, MCP, SDK; no HTTP API; Docker worker image), ARCHITECTURE
+  "Package contract" paths and rules (i18n/config-fields locations, model literal ban in all `src`, docs-authority target
+  vs W0-9, state layout), PLAN open findings (I40, MCP idempotentHint, W0-8/W0-9, H34 rename deferral, DOGFOOD prerequisites),
+  core-memory counts.
 - DOCS (2026-09-26): stale PLAN/ARCHITECTURE claims corrected (ledger v38, protocol v14 and lifecycle window [14,13], MCP 30 tools, GPU,
   live `maxCalls: null`, T-L1/T-L2 review limits closed in `e12a253`, review channel open, C12 minimal vs general); unreleased-version
   rule recorded; M1–M5 republished as a wide band; current-flow reset to handoff + next step + evidence.
