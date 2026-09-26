@@ -1,5 +1,5 @@
 import { abortableRuntimeWait } from './wait.js';
-import { ErrorRegistry, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
 import { CancellationRuntimeLoop, type CancellationRecoveryCommand, type CancellationRecoveryPageResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { recoverConfiguredCancellations } from '#composition/core/runs/index.js';
@@ -16,10 +16,11 @@ export async function prepareConfiguredCancellationRuntime(projectRoot: string, 
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   const runtime = config.cancellationRuntime;
   if (!runtime) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellationRuntime' } });
+  const clock = new SystemTrustedClock();
   const loop = new CancellationRuntimeLoop(async command => {
     try { return (await recoverConfiguredCancellations(projectRoot, command, options)).recovery; }
     catch (error) { throw queryFailure(error); }
-  }, abortableRuntimeWait, { now: Date.now }, {
+  }, abortableRuntimeWait, { now: () => clock.sample().monotonicMs }, {
     onPage: observer.onPage,
     async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, runtime);

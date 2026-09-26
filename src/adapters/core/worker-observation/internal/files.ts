@@ -1,3 +1,4 @@
+import { SystemTrustedClock, MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity, workerEventSchema, workerActivityPhase, summarizeWorkerEvents, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
@@ -31,7 +32,7 @@ function object(bytes: Buffer): Record<string, unknown> | null {
   try { const value: unknown = JSON.parse(bytes.toString('utf8')); return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
   catch { return null; }
 }
-export async function readWorkerSidecars(directory: string, stem: string, limits: ObservationLimits, now = Date.now(), identity?: AttemptIdentity): Promise<WorkerSidecars> {
+export async function readWorkerSidecars(directory: string, stem: string, limits: ObservationLimits, now = new SystemTrustedClock().sample().wallMs, identity?: AttemptIdentity): Promise<WorkerSidecars> {
   await observationDirectory(directory);
   if (!/^[a-zA-Z0-9_.:-]+$/.test(stem) || stem === '.' || stem === '..') throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
   const root = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
@@ -60,7 +61,8 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   if (outcome && !bound(outcome)) { outcome = null; result.state = 'identity-mismatch'; }
   const phase = heartbeat?.process ?? heartbeat?.status;
   const terminal = outcome?.terminal && typeof outcome.terminal === 'object' ? outcome.terminal as Record<string, unknown> : outcome;
-  const ageMs = hb.mtime === null ? null : now - hb.mtime;
+  // A lower bound on age: an ahead reader must not mark another process stale early.
+  const ageMs = hb.mtime === null ? null : Math.max(0, now - hb.mtime - MAX_WALL_SKEW_MS);
   const text = log.bytes.toString('utf8');
   const events = text.split('\n').flatMap(line => {
     const value = object(Buffer.from(line));
@@ -71,7 +73,7 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
       exitCode: typeof terminal?.exitCode === 'number' && Number.isSafeInteger(terminal.exitCode) ? terminal.exitCode : null }];
   });
   return { provider: typeof heartbeat?.provider === 'string' && ['codex', 'claude', 'cursor', 'docker'].includes(heartbeat.provider) ? heartbeat.provider : 'unknown', heartbeat: { state: hb.state === 'available' && !heartbeat ? 'malformed' : hb.state, ageMs,
-    freshness: ageMs === null ? 'unknown' : ageMs < 0 ? 'future' : ageMs > limits.staleMs ? 'stale' : 'fresh',
+    freshness: ageMs === null ? 'unknown' : hb.mtime! > now + MAX_WALL_SKEW_MS ? 'future' : ageMs > limits.staleMs ? 'stale' : 'fresh',
     phase: typeof phase === 'string' && catalog.phases.includes(phase) ? phase : 'unknown' },
   log: { state: log.state, byteLength: log.size, truncated: log.truncated, sampledLines: text ? text.split('\n').filter(Boolean).length : 0,
     events, diagnostics: Object.entries(catalog.diagnostics).filter(([, pattern]) => new RegExp(pattern, 'i').test(text)).map(([key]) => key) },

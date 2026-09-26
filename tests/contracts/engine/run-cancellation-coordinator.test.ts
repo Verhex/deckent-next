@@ -35,7 +35,7 @@ it('bounds concurrent deliveries and reports each failure without skipping sibli
   const replayCommand = { schemaVersion: 1, action: 'cancel', commandId: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 };
   const beforeRetry = await coordinator.cancel(replayCommand);
   expect(visited).toHaveLength(4); expect(beforeRetry.outcomes[0]?.delivery).toMatchObject({ attempts: 1, state: 'queued', nextEligibleAt: 110 });
-  deniedBeforeClaim = true; now = 110;
+  deniedBeforeClaim = true; now = 5110;
   const denied = await coordinator.cancel(replayCommand); expect(denied.outcomes[0]?.status).toBe('denied'); expect(visited).toHaveLength(4);
   deniedBeforeClaim = false;
   const retried = await coordinator.cancel(replayCommand); expect(visited).toHaveLength(8); expect(retried.outcomes[0]?.delivery?.attempts).toBe(2);

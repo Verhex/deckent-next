@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, RunApplication, runCommandSchema, RunPolicyAuthorization, RunCancellationCoordinator, type RunCommand } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -23,8 +23,9 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
       const runs = new RunApplication(store, verifier, authorization);
       // No runtime dependency is touched for an attempt that has never been dispatched.
       // Each attempt has its own immutable profile; never share one mutable configuration across workers.
+      const clock = new SystemTrustedClock();
       const delivery = createRecordedCancellationDelivery(store, config, layout, principal, verifier);
-      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation, { now: Date.now, token: randomUUID });
+      const coordinator = new RunCancellationCoordinator(runs, store, delivery, config.cancellation, { now: () => clock.sample().wallMs, token: randomUUID });
       return Object.freeze({ schemaVersion: 1 as const, layout, delivery: await coordinator.cancel(command) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

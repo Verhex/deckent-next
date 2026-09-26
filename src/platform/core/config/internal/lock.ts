@@ -6,6 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { emit } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
+import { SystemTrustedClock, MAX_WALL_SKEW_MS, type ClockSample, type TrustedClock } from '#platform/core/clock/index.js';
 import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;
@@ -15,7 +16,7 @@ function pidState(pid: number): 'alive' | 'dead' | 'unknown' {
   try { process.kill(pid, 0); return 'alive'; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'dead' : (error as NodeJS.ErrnoException).code === 'EPERM' ? 'alive' : 'unknown'; }
 }
-async function observe(lock: string) {
+async function observe(lock: string, clock: TrustedClock, started: ClockSample) {
   const stat = await lstat(lock);
   if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD');
   const ownerPath = stat.isDirectory() ? join(lock, 'owner.json') : lock;
@@ -49,7 +50,9 @@ async function observe(lock: string) {
   const validPid = Number.isSafeInteger(owner.pid) && owner.pid! > 0;
   const created = typeof owner.createdAt === 'string' ? Date.parse(owner.createdAt) : NaN;
   const since = Number.isFinite(created) ? Math.min(created, stat.mtimeMs) : stat.mtimeMs;
-  const ageSeconds = Math.max(0, (Date.now() - since) / 1000);
+  // Anchor foreign wall metadata once; elapsed waiting must advance even while the wall floor stalls.
+  const now = started.wallMs + clock.sample().monotonicMs - started.monotonicMs;
+  const ageSeconds = Math.max(0, (now - since - MAX_WALL_SKEW_MS) / 1000);
   // Legacy pid-only files were local; remote and permission-denied owners are never presumed dead.
   const local = owner.hostname === undefined || owner.hostname === hostname();
   const state = local && validPid ? pidState(owner.pid!) : 'unknown';
@@ -60,8 +63,8 @@ async function observe(lock: string) {
  * New owners always use directories, so even legacy FILE tombstones fence delayed reclaimers.
  * This prevents a delayed stale reclaimer from moving a newer live owner's lock (rename has no CAS).
  */
-async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<typeof observe>>>, options: ConfigLockOptions): Promise<boolean> {
-  const current = await observe(lock);
+async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<typeof observe>>>, options: ConfigLockOptions, clock: TrustedClock, started: ClockSample): Promise<boolean> {
+  const current = await observe(lock, clock, started);
   if (!current?.stale || current.stat.dev !== observed.stat.dev || current.stat.ino !== observed.stat.ino
     || current.stat.mtimeMs !== observed.stat.mtimeMs || current.owner.nonce !== observed.owner.nonce) return false;
   const stalePath = `${lock}.stale-${current.stat.dev}-${current.stat.ino}-${current.stat.birthtimeMs}`;
@@ -84,15 +87,16 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
 /** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release. */
 export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = 2_000, options: ConfigLockOptions = {}): Promise<T> {
   await mkdir(dirname(path), { recursive: true });
-  const lock = `${path}.write-lock`, deadline = Date.now() + timeoutMs;
+  const clock = new SystemTrustedClock(), started = clock.sample();
+  const lock = `${path}.write-lock`, deadline = started.monotonicMs + timeoutMs;
   while (true) {
     try { await mkdir(lock, { mode: 0o700 }); break; }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: error });
       try {
-        const owner = await observe(lock);
-        if (owner?.stale && await reclaim(lock, owner, options)) continue;
-        if (Date.now() >= deadline) throw ErrorRegistry.createError('CONFIG_WRITE_LOCKED', { params: {
+        const owner = await observe(lock, clock, started);
+        if (owner?.stale && await reclaim(lock, owner, options, clock, started)) continue;
+        if (clock.sample().monotonicMs >= deadline) throw ErrorRegistry.createError('CONFIG_WRITE_LOCKED', { params: {
           path: lock, pid: owner?.owner.pid ?? 'unknown', ageSeconds: Math.floor(owner?.ageSeconds ?? 0),
         } });
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -105,7 +109,7 @@ export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>,
     const handle = await open(ownerPath, 'wx', 0o600);
     published = true;
     try {
-      await handle.writeFile(JSON.stringify({ pid: process.pid, nonce: randomUUID(), hostname: hostname(), createdAt: new Date().toISOString() }));
+      await handle.writeFile(JSON.stringify({ pid: process.pid, nonce: randomUUID(), hostname: hostname(), createdAt: new Date(clock.sample().wallMs).toISOString() }));
       await handle.sync();
     } finally { await handle.close(); }
     const named = await lstat(lock);

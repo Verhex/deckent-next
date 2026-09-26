@@ -1,3 +1,4 @@
+import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -45,8 +46,8 @@ it('uses retry deadlines and scans noneligible rows without skipping or hanging'
   await f.store.finishCancellationDelivery({ identity: f.identities[1]!, token: 'queued', now: 2, limits, outcome: 'unresolved' });
   const page = await f.store.discoverCancellationRecovery(query(null, 2, 4));
   expect(page).toEqual({ identities: [], nextAfterAttemptId: 'b' });
-  expect(await f.store.discoverCancellationRecovery(query(null, 2, 7))).toEqual({ identities: [f.identities[1]], nextAfterAttemptId: 'b' });
-  expect(await f.store.discoverCancellationRecovery(query(null, 2, 11))).toEqual({ identities: [f.identities[0], f.identities[1]], nextAfterAttemptId: 'b' });
+  expect(await f.store.discoverCancellationRecovery(query(null, 2, 7 + MAX_WALL_SKEW_MS))).toEqual({ identities: [f.identities[1]], nextAfterAttemptId: 'b' });
+  expect(await f.store.discoverCancellationRecovery(query(null, 2, 11 + MAX_WALL_SKEW_MS))).toEqual({ identities: [f.identities[0], f.identities[1]], nextAfterAttemptId: 'b' });
 });
 
 it('excludes terminal and prevented dispatches plus terminal, prevented and exhausted journals', async () => {
@@ -61,8 +62,8 @@ it('excludes terminal and prevented dispatches plus terminal, prevented and exha
   await fresh.store.finishCancellationDelivery({ identity: fresh.identities[0]!, token: 'prevented', now: 2, limits, outcome: 'prevented' });
   await fresh.store.claimCancellationDelivery({ identity: fresh.identities[1]!, token: 'one', now: 1, limits });
   await fresh.store.finishCancellationDelivery({ identity: fresh.identities[1]!, token: 'one', now: 2, limits, outcome: 'unresolved' });
-  await fresh.store.claimCancellationDelivery({ identity: fresh.identities[1]!, token: 'two', now: 7, limits });
-  await fresh.store.finishCancellationDelivery({ identity: fresh.identities[1]!, token: 'two', now: 8, limits, outcome: 'unresolved' });
+  await fresh.store.claimCancellationDelivery({ identity: fresh.identities[1]!, token: 'two', now: 5007, limits });
+  await fresh.store.finishCancellationDelivery({ identity: fresh.identities[1]!, token: 'two', now: 5008, limits, outcome: 'unresolved' });
   expect(await fresh.store.discoverCancellationRecovery(query(null, 3, 100))).toEqual({ identities: [fresh.identities[2]], nextAfterAttemptId: 'c' });
 });
 

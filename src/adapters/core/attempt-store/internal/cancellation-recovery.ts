@@ -1,3 +1,4 @@
+import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { cancellationDeliverySchema, cancellationRecoveryPage, cancellationRecoveryQuerySchema, CancellationDeliveryError,
@@ -39,8 +40,8 @@ export class SqliteCancellationRecoveryQuery implements CancellationRecoveryQuer
         catch { throw new CancellationDeliveryError('CANCELLATION_DELIVERY_CORRUPT'); }
         if (!bound.dispatch || !sameAttemptIdentity(bound.dispatch.request.identity, identity) || !bound.run.cancelRequested
           || !attempt.cancelRequested || !dispatch.cancellation || dispatch.terminal || dispatch.launch === 'prevented-before-launch') continue;
-        const eligible = journal === null || (journal.state === 'queued' && journal.nextEligibleAt <= query.now)
-          || (journal.state === 'claimed' && journal.claimUntil <= query.now);
+        const eligible = journal === null || (journal.state === 'queued' && journal.nextEligibleAt <= query.now - MAX_WALL_SKEW_MS)
+          || (journal.state === 'claimed' && journal.claimUntil <= query.now - MAX_WALL_SKEW_MS);
         if (eligible) identities.push(identity);
       }
       return cancellationRecoveryPage(identities, rows.length ? String(rows.at(-1)!.attempt_id) : null);

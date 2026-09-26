@@ -10,6 +10,7 @@ import { createRun, requestRunCancellation, reserveRunTasks } from '../../../src
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { identifyDockerRequest } from '#adapters/index.js';
+import { cliChildEnv } from '../support/child-env.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE; const exec = promisify(execFile);
@@ -34,7 +35,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cance
     argv: ['node', '-e', `require('node:fs').writeFileSync('/workspace/${readyName}','yes');setInterval(()=>{},1000)`] };
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
-  const env = { ...process.env, HOME: join(root, 'home') };
+  const env = cliChildEnv({ HOME: join(root, 'home') });
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 }, admission: {
     poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry }, cancellation: {
     maxConcurrentDeliveries: 1, maxAttempts: 3, retryDelayMs: 10, claimTtlMs: 100, recoveryPageSize: 2 },

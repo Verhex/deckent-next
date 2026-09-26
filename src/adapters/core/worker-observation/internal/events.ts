@@ -1,3 +1,4 @@
+import { SystemTrustedClock } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,12 +11,13 @@ import { observationDirectory } from './files.js';
  * never fails execution. The in-memory list is bounded by the gateway caps and is sealed into durable retention when the attempt ends. */
 export async function openWorkerEventSink(directory: string, openFile: EventFileOpener = open) {
   await observationDirectory(directory);
+  const clock = new SystemTrustedClock();
   const path = join(directory, 'worker.events');
   const handle = await openFile(path, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
   const events: WorkerEvent[] = [];
   let writes: Promise<void> = Promise.resolve(), healthy = true;
   return {
-    accept(batch: readonly WorkerEvent[], receivedAt = Date.now()) {
+    accept(batch: readonly WorkerEvent[], receivedAt = clock.sample().wallMs) {
       events.push(...batch);
       const bytes = Buffer.from(batch.map(event => JSON.stringify({ receivedAt, event })).join('\n') + '\n');
       writes = writes.then(async () => { if (healthy) healthy = await writeAll(handle, bytes).catch(() => false); });

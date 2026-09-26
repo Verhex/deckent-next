@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, cancellationRecoveryCommandSchema, CancellationRecoveryApplication, DispatchInventoryPolicyAuthorization,
   RunPolicyAuthorization, type CancellationRecoveryCommand } from '#engine/index.js';
@@ -23,9 +23,10 @@ export async function recoverConfiguredCancellations(projectRoot: string, input:
     if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellation' } });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
+      const clock = new SystemTrustedClock();
       const delivery = createRecordedCancellationDelivery(store, config, layout, principal, verifier);
       const application = new CancellationRecoveryApplication(store, verifier, scope, new RunPolicyAuthorization(source), delivery,
-        { ...config.cancellation, maxPageSize: config.cancellation.recoveryPageSize }, { now: Date.now, token: randomUUID });
+        { ...config.cancellation, maxPageSize: config.cancellation.recoveryPageSize }, { now: () => clock.sample().wallMs, token: randomUUID });
       return Object.freeze({ schemaVersion: 1 as const, layout, recovery: await application.drain(command) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
