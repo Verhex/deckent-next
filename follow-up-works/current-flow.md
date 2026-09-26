@@ -2,6 +2,23 @@
 
 
 
+
+## Owner dönüşü — push planı (2026-09-26)
+- Doğrulanmış sha `a4604fc` (tam verify exit 0). Sonrasında `376b7d4` (belge), `e5c4cf5` + `4c27707` (2091), `7ba6b66` (2094) — bunlar
+  hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
+  önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
+
+## T-L4 dilim 3a — salt okunur kabuk sınıflandırıcısı ve risk tablosu (başladı 2026-09-26)
+- Ne: bir kabuk komut dizesinin salt okunur olup olmadığına (sormadan çalıştırılabilir mi) ve risk basamağına (salt okunur / değiştirir /
+  yıkıcı) karar veren saf mantık. Neden şimdi: dilim 3 (host kabuğu) bunun üstüne kurulur; araç, etki ve protokol değişikliği yok.
+- Legacy kaynak (salt okunur): `deckent-dev` `src/core/shell-readonly-classifier.ts` (1.817 satır) ve `src/agent/guards/shell-risk.ts` @
+  `a8b67e2a1`; testler `a4ed4ea47^` (`tests/core/shell-readonly-classifier.test.ts`, `tests/agent/shell-risk.test.ts`; kaynak commit `f3d3e2ceb`).
+- Korunacak: allowlist, hata durumunda kapalı; argv anlamı (tırnak seçeneği düşürmez); sed/awk/git/find alt dilbilgileri; yönlendirme/tee →
+  değiştirir; bileşikte en kötü parça; yıkıcı taban her modda sorar. Değişecek: yol içerme ve korunan yollar legacy kopyası yerine mevcut
+  `WorkspaceScope` (realpath + deny); yalnız POSIX — PowerShell/Windows için tipli `unsupported-dialect` (salt okunur değil → sor);
+  legacy'nin "sembolik bağlı alt dizine inme" açığı negatif kabul durumu.
+- Kanıt: legacy testlerin Next'e çevrilmiş hali (eşdeğerlik), güvenli kapanma kenarlarına mutasyonlar. Owner checkpoint gerekmez (yeni
+  yetki/sözleşme yok); R2 yalıtım seçeneği dilim 3c'ye bağlı, önceden karar verilmedi.
 ## Astra 2094 düzeltmesi — dilim 2 dosya yazımı (2026-09-26, Opus, Jev 3d6703e5 `detect_now_native_checkpoint` 1,00)
 - R1: `writeWorkspaceFile` aşamaları günlüğe bildirir (prepared + benzersiz geçici ad → committed; rename öncesi hata → önce aborted, sonra
   geçici dosya silinir); günlük v2 atomik (geçici + rename + dizin fsync). `lookup`: committed → applied (dosya sonra değişse de), aborted/yok
