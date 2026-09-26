@@ -19,6 +19,10 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
   effort `I40-l5-root-cause-2026-09-27`; kanıt `proof/L5-I40-2026-09-27/` (lead taban koşumu 46/46, 197 s).
 - Codex sandbox reçetesi (kanıtlı): `-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir <ana>/.git
   --add-dir <ana>/node_modules --add-dir <proof>` (vitest `.vite-temp` sembolik bağlı `node_modules`'a yazar; Docker çalışıyor).
+- L5 teslim: `b0487e2` (yalnız tanı; 2 test dosyası), kök neden ürün zaman sözleşmesi (PLAN I40) → owner checkpoint. Codex 21 dk.
+- L4C teslim: tasarım notu + lead kabul notu; 7 soru Jev'e soruldu (`proof/L4C-SLICE4-DESIGN-2026-09-27/jev-decision-packet.md`); q5 owner kararı.
+- Açık Claude şeritleri (2026-09-26 ~19:40Z): H34 company tasarımı (Fable), C12 genel + A04 tasarımı (Opus), D03 MCP idempotentHint
+  (Sonnet, Agent worktree — taban 5fa0812 geldi, kartta 362047b yazıyordu; server.ts arada değişmedi). Entegrasyon dalı `integrate/2026-09-27` @ 362047b.
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
