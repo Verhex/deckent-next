@@ -15,8 +15,9 @@ export const HOST_SHELL_RESULT_MAX_BYTES = 16_384;
 export const HOST_SHELL_CHUNK_MAX_BYTES = 8_192;
 /** SIGTERM to SIGKILL grace for the command's process group. */
 const KILL_GRACE_MS = 2_000;
-/** How often the group is probed while its survivors are being ended, and how many probes follow SIGKILL before the call settles
- * anyway (a process the kernel cannot end, e.g. in uninterruptible I/O, must not hold the call forever). */
+/** How often the group is probed while its survivors are being ended, and how many probes follow SIGKILL before the call gives
+ * up on the group and settles anyway, releasing the pipes (a process the kernel cannot end, e.g. in uninterruptible I/O, must not
+ * hold the call forever). */
 const GROUP_PROBE_MS = 25;
 const GROUP_PROBES_AFTER_KILL = 80;
 
@@ -94,6 +95,8 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
   const keep = request.resultMaxBytes ?? HOST_SHELL_RESULT_MAX_BYTES;
   const headMax = Math.floor(keep / 4), tailMax = keep - headMax;
   let head: Buffer = Buffer.alloc(0), tail: Buffer = Buffer.alloc(0), total = 0;
+  // Once bytes went to the tail the head is closed, so the kept output stays in arrival order even while the head has room left.
+  let headOpen = true;
   const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null, survivorsKilled = false): HostShellResult => {
     const omitted = Math.max(0, total - head.length - tail.length);
     const output = omitted > 0 ? `${head.toString('utf8')}\n[… ${omitted} bytes of output omitted …]\n${tail.toString('utf8')}` : Buffer.concat([head, tail]).toString('utf8');
@@ -130,13 +133,15 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
     const onAbort = () => stop('cancelled');
     request.signal?.addEventListener('abort', onAbort, { once: true });
     /** After the shell exited: ends what is left of its group (SIGTERM unless already sent, SIGKILL after the grace) and waits until the
-     * group is empty, or for a bounded time after SIGKILL. Resolves whether any survivor was found. */
+     * group is empty, or for a bounded time after SIGKILL — then the pipes are released so a survivor holding them cannot keep the
+     * call open. Resolves whether any survivor was found. */
     const reapGroup = (): Promise<boolean> => new Promise(resolveReap => {
       if (!groupAlive()) { resolveReap(false); return; }
       terminateGroup();
       let probesAfterKill = 0;
       const probe = () => {
-        if (!groupAlive() || (killSent && ++probesAfterKill > GROUP_PROBES_AFTER_KILL)) { resolveReap(true); return; }
+        if (!groupAlive()) { resolveReap(true); return; }
+        if (killSent && ++probesAfterKill > GROUP_PROBES_AFTER_KILL) { child.stdout?.destroy(); child.stderr?.destroy(); resolveReap(true); return; }
         setTimeout(probe, GROUP_PROBE_MS);
       };
       setTimeout(probe, GROUP_PROBE_MS);
@@ -152,10 +157,10 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
       };
       const retain = (bytes: Buffer) => {
         if (bytes.length === 0) return;
-        if (head.length < headMax) {
+        if (headOpen && head.length < headMax) {
           const taken = utf8Head(bytes, headMax - head.length);
           head = Buffer.concat([head, taken]);
-          if (taken.length < bytes.length) tail = utf8Tail(Buffer.concat([tail, bytes.subarray(taken.length)]), tailMax);
+          if (taken.length < bytes.length) { headOpen = false; tail = utf8Tail(Buffer.concat([tail, bytes.subarray(taken.length)]), tailMax); }
         } else tail = utf8Tail(Buffer.concat([tail, bytes]), tailMax);
       };
       return {

@@ -91,6 +91,14 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(result.output.includes('\ufffd')).toBe(false);
   });
 
+  // Once a character did not fit the head and went to the tail, later output must follow it there, whatever room the head has left.
+  it('keeps the kept output in arrival order once the head spilled into the tail', async () => {
+    const cwd = await workspace();
+    const result = await runHostShell({ cwd, command: "head -c 4095 /dev/zero | tr '\\0' a; printf 'ş'; sleep 0.05; echo b" });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 4_099, omittedBytes: 0 });
+    expect(result.output).toBe(`${'a'.repeat(4095)}şb\n`);
+  });
+
   it('runs nothing when the call is already cancelled', async () => {
     const cwd = await workspace(), controller = new AbortController(); controller.abort();
     expect(await runHostShell({ command: 'touch ran', cwd, signal: controller.signal })).toMatchObject({ status: 'cancelled', totalBytes: 0 });
