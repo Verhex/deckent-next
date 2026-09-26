@@ -488,6 +488,18 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(destructive.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: destructive') });
     expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
     expect(f.rows('SELECT state FROM effect_intents')).toEqual([{ state: 'settled' }]);
+
+    // A company policy that asks for the tool asks even for a read-only command of bounded reach.
+    const asking = await runtime({ toolGrant: false, extraGrants: shellGrants('require-approval') }); await asking.start();
+    asking.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Ok.' }];
+    const askingClient = asking.client(), askingEvents: AgentTurnStreamEvent[] = [];
+    await askingClient.chatTurn(ask('turn-policy-asks'), event => {
+      askingEvents.push(event);
+      if (event.kind === 'approval.requested') void askingClient.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'deny-policy-asks', expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' });
+    });
+    expect(askingEvents.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: safe-read') });
+    expect(askingEvents.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
   }, 60_000);
 
   it('keeps the turn alive on a very large output: the display is skipped visibly when the client lags, the result stays bounded (T-L4 slice 3c)', async () => {

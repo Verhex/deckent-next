@@ -1,5 +1,20 @@
 # Anlık iş akışı — T-L4/T-L5 yerelde; 2092/2096 PASS; 2091 ve 2094 düzeltildi (yeniden inceleme bekliyor); R2 yalıtımı owner kararı; push owner dönüşünde
 
+## OWNER DÖNÜŞ PAKETİ (2026-09-26 akşam, Opus)
+- **Push:** doğrulanmış sha `a4604fc` (tam verify exit 0). Sonrası yerelde 36+ commit (2091, 2094, T-L4 3a/3b/3c-i/ii/iii, belgeler). Bu paket
+  commit'lendikten sonra HEAD'de tek tam verify başlatıldı (sonucu aşağıda / proof). Seçenek: HEAD push (verify geçerse) ya da yalnız `a4604fc`.
+- **Karar bekleyenler:** (1) Ajan yazımı ve kabuğun yalıtımı (Astra 2094 R2, PLAN "OWNER KARARI BEKLİYOR": native openat2/renameat, Landlock/ayrı
+  süreç, ya da sınırı kabul). (2) Dilim 4 izin modları — yetkiyi gevşeten tek dilim; kod yazılmadı, seçenekler tasarım notunda
+  (`deckent-refactor-work/T-L4-EDIT-SHELL-DESIGN-2026-09-26.md` "Dilim 4 — karar için").
+- **Astra:** son yanıt `2098` (13:45Z, 2092/2096 PASS). Yanıtsız istekler: `2099` (2091), `2100` (2094), `2101` (3a), `2102` (3b), `2103` (3c-i),
+  `2104` (3c-ii), `2105` (3c-iii). Hiçbiri tüketilmedi.
+- **Canlı etkinleştirme:** `! node /home/alperen/deckent-refactor-work/proof/F26-T-L4-LIVE-GRANTS-2026-09-26/grant-edit-shell.mjs` (yedekli,
+  idempotent: `edit_file`/`write_file`/`run_shell` araç izni + `workspace.file.write`/`host.shell.run` işlem izni; `approval` decide zaten var).
+  Canlı servis v13'te; yeni sürüm için build + governed yeniden başlatma (ledger v37→v38 onay tablosu göçü yedekli yapılır).
+- **Bu oturumda kaydedilen açık sınırlar:** dolaşma/git nesne okumaları `low` (sorar); servis çökerse çalışan kabuk komutu sahipsiz kalır;
+  `compacted` olayı tek çerçeveye sığmazsa tur iptal; eşiğin üstünde kalan kuyruk her turda yeniden özetlenir; işçi transkripti/hata metinleri
+  temizleyici kapsamında değil.
+
 
 
 
