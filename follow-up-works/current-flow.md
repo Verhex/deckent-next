@@ -2,7 +2,8 @@
 
 ## OWNER DÖNÜŞ PAKETİ (2026-09-26 akşam, Opus)
 - **Push:** doğrulanmış sha `a4604fc` (tam verify exit 0). Sonrası yerelde 36+ commit (2091, 2094, T-L4 3a/3b/3c-i/ii/iii, belgeler). Bu paket
-  commit'lendikten sonra HEAD'de tek tam verify başlatıldı (sonucu aşağıda / proof). Seçenek: HEAD push (verify geçerse) ya da yalnız `a4604fc`.
+  commit'lendikten sonra `f7a9631`'de tek tam verify: **exit 0** (332 dosya / 2.169 test, native 25, host 55, smoke;
+  `proof/F26-T-L4C-SHELL-3C/verify-f7a9631.log`). Öneri: `f7a9631` (+ bu belge commit'i) push. Alternatif: yalnız `a4604fc`.
 - **Karar bekleyenler:** (1) Ajan yazımı ve kabuğun yalıtımı (Astra 2094 R2, PLAN "OWNER KARARI BEKLİYOR": native openat2/renameat, Landlock/ayrı
   süreç, ya da sınırı kabul). (2) Dilim 4 izin modları — yetkiyi gevşeten tek dilim; kod yazılmadı, seçenekler tasarım notunda
   (`deckent-refactor-work/T-L4-EDIT-SHELL-DESIGN-2026-09-26.md` "Dilim 4 — karar için").
