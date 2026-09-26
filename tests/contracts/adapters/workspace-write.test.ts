@@ -107,9 +107,10 @@ describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', 
       input: { content: 'after\n' } });
     expect((await readdir(join(root, 'src'))).filter(name => name.endsWith('.tmp'))).toEqual([]);
     expect(await target.lookup(ref('src/a.ts'), '1'.repeat(64))).toEqual({ status: 'applied', version: next });
-    // Crash after the rename, before `committed`: temporary gone and the file at `next` → applied; at anything else → unknown.
+    // Crash after the rename and before `committed`, or before the temporary file ever existed: the temporary file is gone either
+    // way and the journal cannot tell the two apart; the file at `next` is not causal evidence (Astra 2100) → unknown, at any content.
     await prepared('2'.repeat(64), '.a.ts.deckent-000000000002.tmp');
-    expect(await target.lookup(ref('src/a.ts'), '2'.repeat(64))).toEqual({ status: 'applied', version: next });
+    expect(await target.lookup(ref('src/a.ts'), '2'.repeat(64))).toBeNull();
     await writeFile(join(root, 'src', 'a.ts'), before);
     expect(await target.lookup(ref('src/a.ts'), '2'.repeat(64))).toBeNull();
     // A failure before the rename journals `aborted` before the temporary file is removed → absent.
@@ -121,6 +122,46 @@ describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', 
     expect(await target.lookup(ref('src/a.ts'), '3'.repeat(64))).toEqual({ status: 'absent' });
     expect(await readFile(join(root, 'src', 'a.ts'), 'utf8')).toBe(before);
     expect((await readdir(join(root, 'src'))).filter(name => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  // Astra 2100 (inverted repro): when the `aborted` journal cannot be written, the temporary file stays as the evidence that the
+  // rename did not happen; the journal stays `prepared`, and a lookup answers from the temporary file — never from the content an
+  // external writer put in place. A resend is refused by the precondition, never written blindly.
+  it('keeps the temporary file when the aborted journal cannot be written, and never invents an applied write from content', async () => {
+    const { root, scope, journal } = await workspace(); roots.push(journal);
+    const key = '8'.repeat(64), before = 'export const a = 1;\nexport const b = 2;\n', after = 'external wrote these bytes\n';
+    const target = new WorkspaceFileTarget({ ...scope, async verify() {
+      // Concurrent external content and a failing abort-journal replacement, with real filesystem errors (EISDIR on the journal's temporary path).
+      await writeFile(join(root, 'src/a.ts'), after);
+      await mkdir(join(journal, `${key}.json.${process.pid}.tmp`));
+      return false;
+    } }, journal);
+    await expect(target.apply({ target: ref('src/a.ts'), operation: { id: 'workspace.file.write', version: 1 }, idempotencyKey: key,
+      expectedVersion: fileContentVersion(Buffer.from(before)), input: { content: after } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_UNKNOWN' });
+    const record = JSON.parse(await readFile(join(journal, `${key}.json`), 'utf8'));
+    expect(record.state).toBe('prepared');
+    expect((await readdir(join(root, 'src'))).filter(name => name.endsWith('.tmp'))).toEqual([record.temporary]);
+    expect(await target.lookup(ref('src/a.ts'), key)).toEqual({ status: 'absent' });
+    expect(await readFile(join(root, 'src', 'a.ts'), 'utf8')).toBe(after);
+    // A resend after `absent` meets the changed file at the precondition, before anything is journaled or written.
+    await expect(new WorkspaceFileTarget(scope, journal).apply({ target: ref('src/a.ts'), operation: { id: 'workspace.file.write', version: 1 }, idempotencyKey: key,
+      expectedVersion: fileContentVersion(Buffer.from(before)), input: { content: after } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
+    expect(await readFile(join(root, 'src', 'a.ts'), 'utf8')).toBe(after);
+    expect((await readdir(join(root, 'src'))).filter(name => name.endsWith('.tmp'))).toEqual([record.temporary]);
+  });
+
+  // Astra 2100: `prepared` is journaled before the temporary file exists, so a crash right there leaves no temporary file; an
+  // external writer who then puts the same bytes in place must not turn that into an applied write.
+  it('stays unknown for a prepared attempt whose temporary file never existed, even when the file holds the same bytes', async () => {
+    const { root, scope, journal } = await workspace(); roots.push(journal);
+    const target = new WorkspaceFileTarget(scope, journal), key = '9'.repeat(64), before = 'export const a = 1;\nexport const b = 2;\n';
+    await mkdir(journal, { recursive: true, mode: 0o700 });
+    await writeFile(join(journal, `${key}.json`), JSON.stringify({ schemaVersion: 2, rel: 'src/a.ts', expected: fileContentVersion(Buffer.from(before)),
+      next: fileContentVersion(Buffer.from('same bytes\n')), temporary: '.a.ts.deckent-000000000009.tmp', state: 'prepared', escapedTo: null }));
+    await writeFile(join(root, 'src', 'a.ts'), 'same bytes\n');
+    expect(await target.lookup(ref('src/a.ts'), key)).toBeNull();
+    await writeFile(join(root, 'src', 'a.ts'), before);
+    expect(await target.lookup(ref('src/a.ts'), key)).toBeNull();
   });
 
   // Astra 2094 R2 (inverted repro): Node cannot stop a same-user process from moving the parent during the write, but such a write is
