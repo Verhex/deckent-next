@@ -309,6 +309,10 @@ refresh, usage and dogfood closure remain open.
 - Version packages, wire protocols, config/data schemas and native ABI independently. Breaking public contracts
   require an explicit compatibility/migration policy; protocol handshake rejects unsupported capability versions.
   TS/Go messages derive from a shared schema; compatibility tests cover supported old/new client/daemon/worker pairs.
+- **Unreleased versions change in place (owner 2026-09-26, Jev f4c8bc32).** A protocol, schema or config version that was never pushed and
+  is run by no installed service may be amended in place; once pushed or run by an installed service, a change needs a version bump.
+  Recorded amendment: runtime protocol v14 gained the `approval.settled` outcome `unsettled` and the `tool.output` producer before v14
+  was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump.
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -434,7 +438,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
   build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
-  in the previous and the current protocol version ([11, 12] since v12) and answered in the request's version; a client retries these two only, once per
+  in the previous and the current protocol version ([14, 13] since v14; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
   from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
   shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
@@ -725,7 +729,8 @@ newline and tab is removed and carriage returns become line breaks; the live tai
 applies to model answer text, a tool call's display target and the approval card's summary and preview (slice 3c-iii): a probe showed
 Ink drops cursor and OSC sequences but passes SGR, and SGR can conceal text (ESC[8m) — e.g. hide a line of a diff on the card.
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
-corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
+corrected locally as described above; for R2 the owner accepted (2026-09-26) the documented residual race between the last check and the
+rename (no native or isolated writer for now); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
 as described above; Astra re-review of `7e0e349` (2095) confirmed both original corrections with 71 targeted tests. The subsequent
 observer-dependent startup recovery defect is corrected in `a4604fc`: recovery runs before optional notification. Astra 2097
@@ -735,10 +740,11 @@ remain open, and full verification/deployment acceptance are separate.
 Astra 2099 re-review (2026-09-26): retaining read dedupe by provider call ID is insufficient because IDs may repeat across rounds;
 a recent unrelated call can keep a compacted-away read marked visible. Also the pre-round 75% request-byte threshold does not
 ensure the completed answer plus next user input can enter the service transport; a valid configuration reproduces rejection in
-the client before runtime compaction. Both are open T-L5 continuity defects, not guarantees supplied by the existing threshold.
+the client before runtime compaction. Both were corrected in `2900a8d` (dedupe bound to result messages; request headroom and a typed
+refusal, owner decision 2026-09-26); awaiting Astra re-review (2107).
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
-live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
+live since the owner's 2026-09-25 migration, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
 still apply. The allocation contract of an id is fixed: changing its limits is `MODEL_INVOCATION_ALLOCATION_CONFLICT`, so a profile
 moves to an unbounded allocation under a new id; existing receipts keep verifying against their own allocation. Ledger v36 rebuilds
 `model_invocation_allocations` row for row with a nullable, positive-when-set `max_calls`.
@@ -749,8 +755,8 @@ tool_calls`; the legacy `function_call` is never accepted and `tool_choice: none
 pieces, contiguous indexes) and pass the same check; a streamed name that no declared name can still match stops the read and presentation at once; a cut stream is interrupted
 (uncertain) and yields no call. Arguments stay the provider's raw text: invalid JSON is the loop's typed tool error to the model.
 The loop sees the provider-neutral `AgentToolCall` (`id`, `name`, `argumentsJson`); native details stay in the native result.
-Review limit (2026-09-25): `tool_choice: none` is not yet enforced on responses, and an undeclared streamed name with a tools
-list is rejected only at finish, allowing later text deltas. These are open adapter checks before T-L2 acceptance.
+The 2026-09-25 review limits (Astra 2079: `tool_choice: none` on responses, an undeclared streamed name rejected only at finish) were
+corrected in `e12a253`; Astra 2091 found no new blocker in them.
 **Agent terminal direction (owner 2026-09-24) and tool contract (T-L1).** The terminal becomes a Claude Code-class agent
 terminal: one full-context model, an engine-owned governed tool loop, permission modes, Deckent tracking and management through
 commands, queries and MCP, no terminal budgets (automatic compaction for an endless flow), local model first and API providers
@@ -775,9 +781,9 @@ patterns are capped at 512 bytes. A descriptor verified at open is read as that 
 signal reaches every tool, and every result branch is cut to the cap with a stated marker; path/pattern arguments and limits are
 validated. The guarantee is Linux-only (WSL included); other platforms fail closed until they have an equivalent. Engine per-call
 authorization is not wired in T-L1; the read adapter is not an admitted terminal execution surface by itself (T-L3).
-Review limit (2026-09-25): walked child/file descriptors still lack the path recheck after a directory moves outside the scope;
-glob matching (including grep's glob filter) still runs on the service thread and can block cancellation. The direct-file,
-content-regex, byte-cap and incomplete-walk fixes do not close these two remaining branches.
+The 2026-09-25 review limits (Astra 2078: no path recheck of walked descriptors, backtracking glob on the service thread) were
+corrected in `e12a253` (every walked directory and file is re-verified; globs match by a bounded dynamic program); Astra 2091 found
+no new blocker in them.
 
 ## Package contract
 

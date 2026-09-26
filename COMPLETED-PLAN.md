@@ -25,7 +25,7 @@ ilk geçersiz parçada okuma durur ve bağlantı kapanır (boşaltma yok); neden
 
 Owner: `deckent` → etkileşimli terminal (TTY; pipe'ta yardım), `deckent --help` → yardım; Claude Code kalitesi altı kabul edilmez;
 kullanıcı ve Enterprise için aynı. Terminal ve yerel sunum hattı Cursor'dan Opus'a geçti; askıya alınan ana hat
-`follow-up-works/hemen-donulecek-is.md`. Jev 5e41ffaf `foundation_then_quality` 0,97; owner onayı. Owner kararları: runtime servisi
+`follow-up-works/hemen-donulecek-is.md` (izlenmeyen owner dosyası; kalıcı kopya `deckent-refactor-work/HEMEN-DONULECEK-IS-2026-09-23.md`). Jev 5e41ffaf `foundation_then_quality` 0,97; owner onayı. Owner kararları: runtime servisi
 kapalıysa terminal **otomatik başlatır** (runtime adopt/spawn yetkisi kabul edildi; aynı principal, yerel soket, mevcut policy);
 çalışan llama.cpp container'ı yeniden yapılandırılabilir; vLLM kıyası için `vllm/vllm-openai:v0.30.0` + `RedHatAI/Qwen3.8-27B-INT4`
 indirilebilir; bozuk 3,6 GB CRACK GGUF yalnız raporlanır. Sıra: T0 giriş → L1 yerel sunucu denetleyici → L2 vLLM/llama.cpp ölçümlü

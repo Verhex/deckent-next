@@ -4,6 +4,26 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- DOCS (2026-09-26): stale PLAN/ARCHITECTURE claims corrected (ledger v38, protocol v14 and lifecycle window [14,13], MCP 30 tools, GPU,
+  live `maxCalls: null`, T-L1/T-L2 review limits closed in `e12a253`, review channel open, C12 minimal vs general); unreleased-version
+  rule recorded; M1–M5 republished as a wide band; current-flow reset to handoff + next step + evidence.
+- REFACTOR (W0-7): `surfaces/core/cli` split — model, spending and inference commands to `cli-models`, shared JSON input and base
+  context to `cli-kit` (cli 1,955 → 1,383 lines); no behaviour change.
+- REVISE (Astra 2106): read dedupe bound to result messages (providers reuse call ids); compaction keeps room for the longest answer
+  and the next message; an oversized conversation is refused before sending as `RUNTIME_CHAT_TURN_TOO_LARGE`.
+- SURFACES/T-L4 slice 3: agent host shell — a POSIX read-only classifier and risk table ported from legacy; `run_shell` runs each
+  command as a governed effect (`host.shell.run`) with a scrubbed environment, process-group kill on cancel and bounded output; only
+  read-only commands of bounded reach run without asking; the terminal shows a sanitized live tail. Not a sandbox.
+- SECURITY (terminal): command output, model text, tool targets and approval card lines are stripped of escape sequences (SGR could
+  conceal text); the shared deny list adds credential carriers and the `.git` directory itself.
+- REVISE (Astra 2094): agent file writes journal their own phases (recovery never replays over an external restore), a parent moved out
+  of the workspace is detected and reported unknown, approval previews are bounded to 16 KiB with the whole diff kept owner-only.
+- REVISE (Astra 2091): the terminal sends the whole conversation (no 40-message cut); compaction also on the request byte bound;
+  bounded turn memory (answer + count + digest).
+- REVISE (Astra 2092/2096, PASS 2098): a late approval answer closes only its own card; a failed close is `unsettled`, never reported
+  closed; pending tool-call approvals are swept at service start whether or not it is observed.
+- SURFACES/T-L4 slice 2 fix (`6a53765`): policy is asked before an edit is planned, so a denied edit never depends on file content.
+
 - REVISE (Astra 2078/2079): read-tool walks re-verify every directory and file they open against its workspace path (a parent moved
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
