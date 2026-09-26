@@ -255,11 +255,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       describe: (tool, args) => tool.toolClass === 'shell' && typeof args['command'] === 'string'
         ? (args['command'].length > 200 ? `${args['command'].slice(0, 199)}…` : args['command']) : displayTarget(args),
-      async execute(tool, args, toolSignal, callId) {
+      async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
-        if (tool.toolClass === 'edit' && edits) return edits.apply(tool.name, args);
-        if (tool.toolClass === 'shell' && shell) return shell.apply(tool.name, args, toolSignal, callId);
+        if (tool.toolClass === 'edit' && edits) return edits.apply(tool.name, args, execution);
+        if (tool.toolClass === 'shell' && shell) return shell.apply(tool.name, args, toolSignal, callId, execution);
         return workspace.execute(tool.name, args, toolSignal);
       },
       now: () => Date.now(),

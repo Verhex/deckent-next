@@ -10,6 +10,13 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
 import { boundApprovalPreview } from './preview.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
+/**
+ * Effect identity of one shell call (Astra 2113): the turn, the call's position in it (model round, index in the response) and the
+ * exact arguments. A replay of the same call is the same C11 effect (never run twice); another call is another effect even with the
+ * same command and a provider call id reused across responses.
+ */
+export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
+  sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly silent: boolean }
   | { readonly ok: false; readonly text: string };
 
@@ -63,12 +70,14 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         + 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).');
     },
     approved(tool: string, args: Record<string, unknown>) { approved.add(key(tool, args)); },
-    async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string): Promise<AgentToolOutcome> {
+    async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
+      execution: { readonly round: number; readonly index: number }): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: planned.text };
-      const commandId = sha256(`agent-shell-effect:1\0${scopeId}\0${turnId}\0${callKey}\0${callId}`);
-      if (approved.has(callKey)) approvedCommands.add(commandId);
+      const commandId = agentShellEffectCommandId(scopeId, turnId, execution, callKey);
+      // An owner approval admits exactly the next run of the approved call (C12, single use).
+      if (approved.delete(callKey)) approvedCommands.add(commandId);
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: HOST_SHELL_RUN_OPERATION.operation,
         // Each run is its own record, so an uncertain run never makes the shell busy for the next one.
         target: { kind: HOST_SHELL_TARGET_KIND, id: `run-${commandId.slice(0, 32)}` }, idempotencyKey: commandId, input: { command: planned.command }, expectedVersion: null };

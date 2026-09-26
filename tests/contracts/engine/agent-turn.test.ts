@@ -302,3 +302,17 @@ it('re-reads a compacted-away result even when the provider reuses the same call
   expect(executed.filter(path => path === 'file-1')).toHaveLength(2);
   expect(events.filter(event => event.kind === 'tool.finished').at(-1)).toMatchObject({ status: 'ok' });
 });
+
+it('gives every executed call its position in the turn, distinct even when the provider reuses a call id across responses (Astra 2113)', async () => {
+  const shell: AgentToolSpec = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'Run.', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } };
+  const executions: string[] = [];
+  const value: AgentTurnPorts = { ...ports([]).value,
+    async invokeRound(input) {
+      return [answer('', [call('call_1', 'run_shell', { command: 'echo again' })]),
+        answer('', [call('call_1', 'run_shell', { command: 'echo again' }), call('call_2', 'run_shell', { command: 'echo again' })]), answer('done')][input.round - 1]!;
+    },
+    async execute(tool, _args, _signal, callId, execution) { executions.push(`${callId}@${execution.round}.${execution.index}`); return { status: 'ok', text: `${tool.name} ok` }; } };
+  const result = await runAgentTurn({ messages: user, tools: [shell], signal: new AbortController().signal, emit: () => undefined }, value);
+  expect(result).toMatchObject({ finish: 'stop', toolCalls: 3 });
+  expect(executions).toEqual(['call_1@1.0', 'call_1@2.0', 'call_2@2.1']);
+});

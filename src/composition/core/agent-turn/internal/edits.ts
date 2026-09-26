@@ -9,6 +9,14 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /**
+ * Effect identity of one file edit call (Astra 2113): the turn, the call's position in it (model round, index in the response), the
+ * exact arguments and the planned version. A replay of the same call is the same C11 effect; a later call writing the same change
+ * after the file returned to the same content is another effect, never answered with the first write's stored result.
+ */
+export const agentFileEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string,
+  beforeVersion: string) => sha256(`agent-file-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}\0${beforeVersion}`);
+
+/**
  * Agent file edits of one turn (T-L4 slice 2): the plan (version + diff) is computed before authority is asked and reused for the
  * write, so the owner approves exactly the diff that is written; the write is a C11 effect of the Core `workspace.file.write`
  * operation on the `workspace-file` target — session, operation policy, intent before effect, conditional atomic write on the
@@ -49,12 +57,13 @@ export function createAgentFileEdits(input: { readonly scope: WorkspaceScope; re
       return planned?.ok ? `(+${planned.added} −${planned.removed} lines)\n${planned.preview}` : undefined;
     },
     approved(tool: string, args: Record<string, unknown>) { approved.add(key(tool, args)); },
-    async apply(tool: string, args: Record<string, unknown>): Promise<AgentToolOutcome> {
+    async apply(tool: string, args: Record<string, unknown>, execution: { readonly round: number; readonly index: number }): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: `[deckent] ${tool}: error=${planned.error}` };
-      const commandId = sha256(`agent-file-effect:1\0${scopeId}\0${turnId}\0${callKey}\0${planned.beforeVersion}`);
-      if (approved.has(callKey)) approvedCommands.add(commandId);
+      const commandId = agentFileEffectCommandId(scopeId, turnId, execution, callKey, planned.beforeVersion);
+      // An owner approval admits exactly the next write of the approved call (C12, single use).
+      if (approved.delete(callKey)) approvedCommands.add(commandId);
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: WORKSPACE_FILE_WRITE_OPERATION.operation,
         target: { kind: WORKSPACE_FILE_TARGET_KIND, id: planned.rel }, idempotencyKey: commandId, input: { content: planned.after },
         expectedVersion: planned.beforeVersion };
