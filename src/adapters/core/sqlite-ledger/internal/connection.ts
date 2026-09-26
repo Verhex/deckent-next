@@ -9,7 +9,7 @@ import { sqliteLedgerOptionsSchema, sqliteFailure, type SqliteLedgerOptions } fr
  * This module is reached only through a selected adapter's lazy implementation import.
  */
 export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
-  migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator): DatabaseSync {
+  migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator, companyId?: string): DatabaseSync {
   if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const parsed = sqliteLedgerOptionsSchema.safeParse(options);
   if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
@@ -21,7 +21,7 @@ export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
   catch (error) { throw sqliteFailure(error); }
   try {
     db.exec('BEGIN IMMEDIATE');
-    migrateLedger(db, migration, profiles);
+    migrateLedger(db, migration, profiles, companyId);
     db.exec('COMMIT');
     const journal = { wal: 'PRAGMA journal_mode=WAL', delete: 'PRAGMA journal_mode=DELETE' };
     const durability = { full: 'PRAGMA synchronous=FULL', extra: 'PRAGMA synchronous=EXTRA' };
