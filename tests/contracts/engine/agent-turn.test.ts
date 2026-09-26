@@ -266,13 +266,13 @@ it('re-runs a read after a successful edit in the same turn, and keeps same-epoc
 // even when the model's window is unknown (no provider count, no configured window).
 it('compacts on the request byte bound when the window is unknown, and not without that bound (T-L5, Astra 2091 R1)', async () => {
   const summary = { objective: 'o', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] };
-  const run = async (requestMaxBytes?: number) => {
+  const run = async (requestMaxBytes?: number, withMeasure = true) => {
     const events: AgentTurnEvent[] = []; let summaries = 0;
     const history: AgentTurnMessage[] = Array.from({ length: 12 }, (_, index) => ({ role: index % 2 ? 'assistant' as const : 'user' as const,
       content: `turn ${index} ${'y'.repeat(2_000)}`, ...(index % 2 ? { toolCalls: [] } : {}) }) as AgentTurnMessage);
     await runAgentTurn({ messages: [...history, { role: 'user', content: 'next' }], tools, signal: new AbortController().signal, emit: event => events.push(event),
       admission: { outputReserveTokens: 0, safetyReserveTokens: 0, ...(requestMaxBytes ? { requestMaxBytes } : {}) } }, {
-      async measure() { return { promptTokens: 10, windowTokens: null, quality: 'upper-bound' }; },
+      ...(withMeasure ? { async measure() { return { promptTokens: 10, windowTokens: null, quality: 'upper-bound' as const }; } } : {}),
       async summarize() { summaries++; return summary; },
       async invokeRound() { return answer('ok'); },
       async authorize() { return 'allow'; }, describe: () => null, now: () => 0, async execute() { return { status: 'ok', text: '' }; },
@@ -283,4 +283,6 @@ it('compacts on the request byte bound when the window is unknown, and not witho
   const bounded = await run(30_000);
   expect(bounded.summaries).toBe(1);
   expect(Buffer.byteLength(JSON.stringify((bounded.compacted as { messages: unknown[] }).messages))).toBeLessThan(0.75 * 30_000);
+  // Bytes need no measurement: without a counter port the bound still compacts.
+  expect((await run(30_000, false)).summaries).toBe(1);
 });

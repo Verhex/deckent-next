@@ -19,6 +19,7 @@ export const terminalConfigSchema = z.object({
     schemaVersion: z.literal(1),
     reference: modelReferenceSchema,
     maxCompletionTokens: z.number().int().positive().safe(),
+    /** Message window of the plain line mode only; the agent conversation is measured and compacted by the runtime (T-L5). */
     historyMessages: z.number().int().min(2).max(1_000).default(40),
   }).strict().optional(),
 }).strict();

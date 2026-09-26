@@ -51,6 +51,7 @@ export interface WorklineProps {
   readonly labels: WorklineLabels;
   readonly target: string;
   readonly systemPrompt: string;
+  /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
   readonly historyMessages: number;
   readonly completeTurn: WorklineCompleteTurn;
   readonly errorText: WorklineErrorText;

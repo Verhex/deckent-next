@@ -133,45 +133,47 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   for (;;) {
     if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
     rounds++;
-    if (ports.measure) {
-      let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
+    // One measurement per round (when a counter port exists) drives the context line, compaction and admission.
+    let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null = null;
+    const measure = async () => {
+      if (!ports.measure) return;
       try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
+      if (measured && !signal.aborted) emit({ kind: 'context', round: rounds, ...measured });
+    };
+    await measure();
+    if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+    const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
+    // Compaction (T-L5b) past the high-water mark of the measured window, or of the request byte bound (exact bytes of the history
+    // the client will send next; needs no measurement): older messages become one labelled summary.
+    const current = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
+    const tokenPressure = current !== null && current.windowTokens !== null && current.promptTokens + reserve > current.windowTokens * AGENT_COMPACTION_HIGH_WATER;
+    const byteBound = input.admission?.requestMaxBytes;
+    const bytePressure = byteBound !== undefined && Buffer.byteLength(JSON.stringify(messages), 'utf8') > byteBound * AGENT_COMPACTION_HIGH_WATER;
+    const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
+    if (plan && ports.summarize) {
+      compactions++;
+      let summaryOf: AgentCompactionSummary | null;
+      try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
       if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
-      const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
-      if (measured) emit({ kind: 'context', round: rounds, ...measured });
-      // Compaction (T-L5b) on the same measurement: past the high-water mark of the window, or of the request byte bound (exact
-      // bytes of the history the client will send next), older messages become one labelled summary.
-      const tokenPressure = measured !== null && measured.windowTokens !== null && measured.promptTokens + reserve > measured.windowTokens * AGENT_COMPACTION_HIGH_WATER;
-      const byteBound = input.admission?.requestMaxBytes;
-      const bytePressure = byteBound !== undefined && Buffer.byteLength(JSON.stringify(messages), 'utf8') > byteBound * AGENT_COMPACTION_HIGH_WATER;
-      const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
-      if (plan && ports.summarize) {
-        compactions++;
-        let summaryOf: AgentCompactionSummary | null;
-        try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
-        if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
-        if (!summaryOf) {
-          const reached = tokenPressure && measured ? `${measured.promptTokens} of ${measured.windowTokens} context tokens` : `the request size bound (${byteBound} bytes)`;
-          return finish('error', `The conversation reached ${reached} and could not be`
-            + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`);
-        }
-        const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
-        messages.splice(0, messages.length, ...next);
-        const visible = new Set(plan.tail.flatMap(message => message.role === 'tool' ? [message.toolCallId] : []));
-        for (const [digest, callId] of seenReads) if (!visible.has(callId)) seenReads.delete(digest);
-        emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
-        try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
-        if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
-        if (measured) emit({ kind: 'context', round: rounds, ...measured });
+      if (!summaryOf) {
+        const reached = tokenPressure && current ? `${current.promptTokens} of ${current.windowTokens} context tokens` : `the request size bound (${byteBound} bytes)`;
+        return finish('error', `The conversation reached ${reached} and could not be`
+          + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`);
       }
-      if (measured) {
-        // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
-        if (measured.windowTokens !== null && measured.promptTokens + reserve > measured.windowTokens) {
-          return finish('error', `The conversation no longer fits the model's context window: ${measured.promptTokens} prompt tokens`
-            + `${measured.quality === 'upper-bound' ? ' (upper bound)' : ''} + ${reserve} reserved > ${measured.windowTokens}. Nothing was sent for`
-            + ` this round. ${summary()}. Start a new conversation or ask a shorter question.`);
-        }
-      }
+      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
+      messages.splice(0, messages.length, ...next);
+      const visible = new Set(plan.tail.flatMap(message => message.role === 'tool' ? [message.toolCallId] : []));
+      for (const [digest, callId] of seenReads) if (!visible.has(callId)) seenReads.delete(digest);
+      emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
+      await measure();
+      if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+    }
+    const admitted = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
+    // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
+    if (admitted && admitted.windowTokens !== null && admitted.promptTokens + reserve > admitted.windowTokens) {
+      return finish('error', `The conversation no longer fits the model's context window: ${admitted.promptTokens} prompt tokens`
+        + `${admitted.quality === 'upper-bound' ? ' (upper bound)' : ''} + ${reserve} reserved > ${admitted.windowTokens}. Nothing was sent for`
+        + ` this round. ${summary()}. Start a new conversation or ask a shorter question.`);
     }
     let outcome: AgentRoundOutcome;
     try { outcome = await ports.invokeRound({ round: rounds, messages, tools: input.tools }, delta => emit(delta), signal); }

@@ -764,7 +764,7 @@
   "terminal.value.no": "hayır",
   "terminal.value.unknown": "bilinmiyor",
   "terminal.value.none": "yok",
-  "config.field.terminal": "Operatör terminali: yönetilen sohbet modeli referansı, yanıt token sınırı ve geçmiş uzunluğu",
+  "config.field.terminal": "Operatör terminali: yönetilen sohbet modeli referansı, yanıt token sınırı ve satır modunun geçmiş uzunluğu (ajan konuşmasını runtime ölçer ve sıkıştırır)",
   "terminal.status.chat": "Sohbet modeli: {target}",
   "terminal.chat.notConfigured": "yapılandırılmamış (terminal.chat ekleyin)",
   "terminal.chat.modelNotDeclared": "sağlayıcı kataloğunda tanımlı değil",

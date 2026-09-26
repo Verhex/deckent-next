@@ -12,7 +12,10 @@
   mesaj modele eksiksiz, `directive-0` dahil; pencere bilinmeden 262.144 bayt sınırında sıkıştırma, sonraki istek eşiğin altında),
   hedefli 89 dosya / 586 test. Mutasyonlar 1–7 düştü: `deckent-refactor-work/proof/F26-T-L5-FIX-2091/`. typecheck, eslint, lint-arch 0.
 - Bulunan sınır (T-L5b'den): `compacted` olayı tek olay çerçevesine sığmazsa (büyük araç sonuçlu kuyruk ya da çok sayıda uzun kullanıcı
-  mesajı kopyalayan özet) tur iptal olur — sessiz değil, ama uzun konuşmada sıkıştırma başarısız olabilir. Ayrı düzeltme adayı.
+  mesajı kopyalayan özet) tur iptal olur — sessiz değil, ama uzun konuşmada sıkıştırma başarısız olabilir. Ayrı düzeltme adayı. Ayrıca
+  eşiğin üstünde kalan kuyruk her turda yeniden özetlenir (ücretli, ilerleme yok) — aday koruma: son sıkıştırma küçültmediyse atla.
+- Danışman düzeltmesi (`e5c4cf5` sonrası): bayt eşiği artık sayaç portuna bağlı değil (portsuz motor testi eklendi); `historyMessages`
+  açıklamaları (şema yorumu, WorklineProps, tr/en config alanı) "yalnız satır modu" olarak güncellendi. Mutasyonlar 1–7 yeni kaynakta yeniden düştü.
 - Sırada: Astra 2094 (dilim 2 R1–R3). Push owner dönüşünde (`a4604fc` verify geçti; 2091 commit'i yeni verify ister).
 ## Astra 2097 yeniden incelemesi — a4604fc, 2026-09-26
 - Yanıt `2098` gönderildi; talep `2097` tüketildi.

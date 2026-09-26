@@ -764,7 +764,7 @@
   "terminal.value.no": "no",
   "terminal.value.unknown": "unknown",
   "terminal.value.none": "none",
-  "config.field.terminal": "Operator terminal: governed chat model reference, completion token bound and history length",
+  "config.field.terminal": "Operator terminal: governed chat model reference, completion token bound and the line-mode history length (the agent conversation is measured and compacted by the runtime)",
   "terminal.status.chat": "Chat model: {target}",
   "terminal.chat.notConfigured": "not configured (add terminal.chat)",
   "terminal.chat.modelNotDeclared": "not declared in the provider catalog",
