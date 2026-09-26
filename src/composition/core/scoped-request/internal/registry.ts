@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { inspectProductFile, ManagedFileError, type ResolvedConfig } from '#platform/index.js';
 import { readScopeCompanies, registerLedgerScopes } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
-import { installationOwnScopes, resolvePolicyScopeMembership, type ScopeRegistryReader } from '#engine/index.js';
+import { installationOwnScopes, resolvePolicyScopeMembership, type ScopeAccess, type ScopeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 
 async function existingLedger(config: ResolvedConfig): Promise<string | null> {
@@ -10,19 +10,26 @@ async function existingLedger(config: ResolvedConfig): Promise<string | null> {
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null; throw error; }
 }
 
-/** Ledger-backed registry reader. Read-only; a missing ledger has no pins, and the path is inspected only when a grant exists. */
-function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistryReader {
-  return { async pinnedCompanies(scopeIds) {
-    const path = await existingLedger(config);
-    return path ? readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, scopeIds) : new Map();
-  } };
+/** Ledger-backed registry. Lookups are read-only; only a declared scope's first write admission writes (one insert-only
+ * transaction). A missing ledger has no pins and nothing is created: writers need an existing current ledger anyway. */
+function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
+  return {
+    async pinnedCompanies(scopeIds) {
+      const path = await existingLedger(config);
+      return path ? readScopeCompanies(path, config.storage.sqlite.busyTimeoutMs, scopeIds) : new Map();
+    },
+    async pinDeclared(scopeIds, companyId) {
+      const path = await existingLedger(config);
+      return path ? registerLedgerScopes(path, config.storage.sqlite, companyId, scopeIds, 'admission').pins : null;
+    },
+  };
 }
 
 /** The one fail-closed membership decision for every scoped entry point (CLI/SDK/MCP, runtime socket peer, inventory, service
- * shutdown): trusted grants, then registration to the configured company (H34 S1). */
+ * shutdown): trusted grants, then a durable pin to the configured company, written at a declared scope's first admission (H34 S1). */
 export async function resolveConfiguredScopeMembership(config: ResolvedConfig, document: unknown,
-  identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[]): Promise<readonly string[]> {
-  return resolvePolicyScopeMembership(document, identity, scopeIds, config.company.id, configuredScopeRegistry(config));
+  identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[], access: ScopeAccess = 'write'): Promise<readonly string[]> {
+  return resolvePolicyScopeMembership(document, identity, scopeIds, config.company.id, configuredScopeRegistry(config), access);
 }
 
 /**

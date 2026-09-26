@@ -11,7 +11,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function inspectConfiguredWorkers(root: string, input: WorkerObservationQuery, options: ConfigLoadOptions = {}): Promise<WorkerObservationReport> {
   try {
     const query = workerObservationQuerySchema.parse(input);
-    const c = await loadConfiguredScopeContext(root, query.scopeId, options);
+    const c = await loadConfiguredScopeContext(root, query.scopeId, options, 'read');
     await new DispatchInventoryPolicyAuthorization({ async load() { return c.document; } }).authorize(query.scopeId, c.principal);
     const limit = query.limit ?? c.config.inspection.maxPageSize;
     if (limit > c.config.inspection.maxPageSize || (query.after && !query.source)) throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
@@ -26,7 +26,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           const page = await inspectLegacyWorkers(source.path, c.config.inspection.workers, remaining, query.after);
           sources.push({ ...source, status: 'available', ...page }); remaining -= page.workers.length; continue;
         }
-        const target = await loadConfiguredScopeContext(source.path, query.scopeId, options);
+        const target = await loadConfiguredScopeContext(source.path, query.scopeId, options, 'read');
         const page = await inspectConfiguredInventory(source.path, { schemaVersion: 1, scopeId: query.scopeId, limit: Math.min(remaining, target.config.inspection.maxPageSize), after: query.after }, options);
         const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(target.layout, userInfo().uid, target.config.inspection.policyMaxBytes));
         const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });

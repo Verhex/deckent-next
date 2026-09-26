@@ -9,7 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function inspectConfiguredModelActivation(projectRoot: string, input: ModelActivationQuery, options: ConfigLoadOptions = {}) {
   try {
     const query = modelActivationQuerySchema.parse(input);
-    const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options);
+    const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const app = new ModelActivationInspectionApplication({ async verify() { return principal; } },
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       async () => openSqliteModelActivationReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }));

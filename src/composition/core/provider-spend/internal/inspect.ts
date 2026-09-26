@@ -9,12 +9,12 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 
 export async function inspectConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAccountQuery,
   options: ConfigLoadOptions = {}) {
-  return inspect(input, scopeId => loadConfiguredScopeContext(projectRoot, scopeId, options));
+  return inspect(input, scopeId => loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'));
 }
 /** The local runtime supplies kernel-verified peer evidence out of band, never from the query payload. */
 export async function inspectPeerConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAccountQuery,
   peer: LocalPeerIdentity, options: ConfigLoadOptions = {}) {
-  return inspect(input, scopeId => loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer));
+  return inspect(input, scopeId => loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer, 'read'));
 }
 async function inspect(input: ProviderSpendAccountQuery,
   loadContext: (scopeId: string) => ReturnType<typeof loadConfiguredScopeContext>) {

@@ -11,7 +11,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function inspectConfiguredWorkerTranscript(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const c = await loadConfiguredScopeContext(root, identity.scopeId, options);
+    const c = await loadConfiguredScopeContext(root, identity.scopeId, options, 'read');
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid');
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });

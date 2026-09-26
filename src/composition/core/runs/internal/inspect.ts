@@ -7,7 +7,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function inspectConfiguredRun(projectRoot: string, input: RunQuery, options: ConfigLoadOptions = {}) {
   try {
     const query = runQuerySchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = { async loadRun(scopeId: string, runId: string) {
       const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
       try { return await reader.loadRun(scopeId, runId); } finally { reader.close(); }

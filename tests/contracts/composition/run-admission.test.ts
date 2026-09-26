@@ -43,11 +43,16 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     expect(await createRun(f.project, command, f.options)).toEqual(result);
   });
   it('requires both Run creation and pool-use policy, without creating a Run on denial', async () => {
-    const f = await fixture(); const before = await readFile(f.path);
+    const f = await fixture();
+    // The first write admission of the declared scope pins it to the configured company (H34 S1, Astra 2122); nothing else is written.
+    const state = () => { const db = new DatabaseSync(f.path, { readOnly: true });
+      try { return { runs: db.prepare('SELECT count(*) AS n FROM runs').get()!.n, receipts: db.prepare('SELECT count(*) AS n FROM run_receipts').get()!.n,
+        pins: db.prepare('SELECT scope_id,company_id,origin FROM scope_registry').all() }; } finally { db.close(); } };
+    const pinned = { runs: 0, receipts: 0, pins: [{ scope_id: 's', company_id: 'default', origin: 'admission' }] };
     await f.policy(true, false); await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    expect(await readFile(f.path)).toEqual(before);
+    expect(state()).toEqual(pinned); const before = await readFile(f.path);
     await f.policy(false, true); await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    expect(await readFile(f.path)).toEqual(before);
+    expect(await readFile(f.path)).toEqual(before); expect(state()).toEqual(pinned);
   });
   it('keeps historical admission replay separate from new pool authority and reports missing configuration explicitly', async () => {
     const f = await fixture(); await f.policy(true, true); const first = await createRun(f.project, command, f.options);
