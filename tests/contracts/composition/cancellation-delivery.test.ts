@@ -76,7 +76,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp', 'cli'])(
     if (client && transport) {
       await client.connect(transport);
       const tool = (await client.listTools()).tools.find(value => value.name === 'deliver_run_cancellation')!;
-      expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+      expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false });
     }
     const running = async () => (await exec('/usr/bin/docker', ['inspect', '--format', '{{.State.Running}}', observation.handle])).stdout.trim();
     await f.policy(false, true);

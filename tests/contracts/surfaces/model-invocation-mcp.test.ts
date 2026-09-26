@@ -61,8 +61,8 @@ it('advertises injected native invocation as an explicit open-world mutator and 
   const cancel = tools.find(tool => tool.name === 'cancel_model_invocation')!;
   expect(invoke.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
   expect(inspect.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-  expect(purgeContent.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
-  expect(cancel.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+  expect(purgeContent.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  expect(cancel.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
   expect(invoke.inputSchema).toMatchObject({ type: 'object', additionalProperties: false,
     required: expect.arrayContaining(['schemaVersion', 'commandId', 'scopeId', 'reference', 'catalogRevision', 'expectedBinding', 'nativeRequest']) });
   expect(inspect.inputSchema).toMatchObject({ type: 'object', additionalProperties: false,

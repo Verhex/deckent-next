@@ -90,7 +90,7 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
     const tool = (await bounded(client.listTools(), 'MCP_LIST_TIMEOUT')).tools.find(value => value.name === name);
     expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation' || name === 'inspect_provider_spending'
       ? { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-      : { readOnlyHint: false, destructiveHint: name !== 'audit_provider_spending', idempotentHint: true, openWorldHint: name === 'invoke_model' });
+      : { readOnlyHint: false, destructiveHint: name !== 'audit_provider_spending', idempotentHint: name !== 'purge_model_invocation_content', openWorldHint: name === 'invoke_model' });
     }
     return await bounded(client.callTool({ name, arguments: args }), `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
   } finally {

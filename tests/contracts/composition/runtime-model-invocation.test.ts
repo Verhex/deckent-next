@@ -358,7 +358,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
   try {
     await within(mcpClient.connect(transport), 'MCP_MODEL_CANCELLATION_CONNECT_TIMEOUT');
     const tool = (await within(mcpClient.listTools(), 'MCP_MODEL_CANCELLATION_LIST_TIMEOUT')).tools.find(value => value.name === 'cancel_model_invocation');
-    expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
     const recorded = await within(mcpClient.callTool({ name: 'cancel_model_invocation', arguments: cancellation }), 'MCP_MODEL_CANCELLATION_TIMEOUT');
     expect(recorded.isError).not.toBe(true);
     expect(recorded.structuredContent).toMatchObject({ replayed: false, receipt: { command: cancellation, disposition: 'requested',
