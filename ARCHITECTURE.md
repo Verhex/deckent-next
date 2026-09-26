@@ -660,7 +660,10 @@ idempotent recovery and write scope unclosed. The diff's LCS cell bound also doe
 produces an approval preview above the protocol's 65,536-character limit and cancels the turn before the card arrives. Corrections
 are pending; successful ordinary-write tests do not establish these guarantees.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
-as described above (inverted repros + fault-injected close in the real service + restart sweep); awaiting Astra re-review.
+as described above; Astra re-review of `7e0e349` (2095) confirms both original corrections with 71 targeted tests. Remaining P2:
+the startup sweep is evaluated inside the optional `onToolCallApprovalsExpired?.(...)` argument, so without that observer the
+recovery itself is skipped. A real-service restart reproduces the pending record; compute recovery before optional notification.
+CLI supplies the callback and its tested path works; the exported composition contract must not depend on observability.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

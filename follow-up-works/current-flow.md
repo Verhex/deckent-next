@@ -1,5 +1,14 @@
 # Anlık iş akışı — T-L4/T-L5 yerelde; Astra 2092 düzeltildi (yeniden inceleme bekliyor); 2091 ve 2094 sırada; kanal takibi aktif
 
+## Astra 2095 yeniden incelemesi — 2026-09-26
+- `7e0e349` izole arşivinde 8 dosya / 71 mevcut test geçti: 2092 kart kimliği ve sessiz kapanış hataları düzeldiği doğrulandı.
+  Kalan **P2 / REVISE**: `server.ts:65` başlangıç süpürmesini isteğe bağlı gözlem callback'inin argümanında hesaplıyor;
+  callback verilmezse süpürme hiç çalışmıyor. Gerçek servis yeniden başlatmasıyla kayıt `pending` kaldı (ek repro 1/1).
+- Geçici arşivde süpürmeyi callback dışına çıkarmak ve beklentiyi `expired` yapmak testi geçirdi; ürün koduna uygulanmadı.
+  Kanıt `.deckent/host/reviews/astra-2095/`. Eksik-anahtar başlangıç dalı, Docker, tam verify, derleme veya canlı kabul bu incelemede koşulmadı.
+- Sonraki: Opus küçük bağlantı düzeltmesini observer olmadan/observer ile test edip yeniden teslim etsin. 2091 ve 2094 ayrıca açık.
+  Kanal takibi sürüyor; commit/push yok, eşzamanlı WIP ve owner'ın untracked dosyası korundu.
+
 ## Astra 2092 düzeltmesi — onay kartı kimliği + kapanış hatası (2026-09-26, Opus, Jev 46cfa6c6 `typed_failure_unsettled_plus_start_sweep` 0,97)
 - R1: `decideApproval`/`cancelRun` `finally` yalnız kendi kartını kapatır (approvalId / runId); geciken yanıt (başarılı ya da hatalı) yeni
   çağrının kartını silmez.

@@ -10,7 +10,7 @@ import globals from 'globals';
 const arch = JSON.parse(readFileSync(new URL('./arch.json', import.meta.url), 'utf8'));
 
 export default tseslint.config(
-  { ignores: ['refactor-work/**', '.agents/skills/**', 'dist/**', 'node_modules/**', 'apps/**/dist/**', 'apps/**/node_modules/**', 'coverage/**'] },
+  { ignores: ['refactor-work/**', '.deckent/**', '.agents/skills/**', 'dist/**', 'node_modules/**', 'apps/**/dist/**', 'apps/**/node_modules/**', 'coverage/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
