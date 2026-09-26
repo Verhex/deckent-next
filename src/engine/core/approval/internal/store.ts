@@ -4,6 +4,8 @@ export interface ApprovalReceipt { readonly operation?: 'decide' | 'renew'; read
 export interface ApprovalStore {
   load(scopeId: string, approvalId: string): ApprovalRecord | null;
   find(scopeId: string, runId: string, taskId: string, actionDigest: string): ApprovalRecord | null;
+  /** The current approval of one agent tool call (C12): its action digest binds the exact call. */
+  findToolCall(scopeId: string, actionDigest: string): ApprovalRecord | null;
   list(scopeId: string, afterId: string | null, limit: number): readonly ApprovalRecord[];
   create(record: ApprovalRecord): ApprovalRecord;
   receipt(scopeId: string, commandId: string): ApprovalReceipt | null;

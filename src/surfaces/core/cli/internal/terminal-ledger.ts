@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { approvalRecordSchema, type ApprovalRecord } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, type ApprovalRecord } from '#domain/index.js';
 import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
 import type { WorkerObservationHandler } from './workers.js';
@@ -13,8 +13,10 @@ import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/termi
 const approvalPageSchema = z.array(approvalRecordSchema);
 
 function approvalView(record: ApprovalRecord): WorklineApproval {
-  const { request } = record;
-  return Object.freeze({ approvalId: request.approvalId, runId: request.runId, taskId: request.taskId, summary: request.summary,
+  const { request } = record, subject = approvalSubject(request);
+  // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
+  return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' ? subject.runId : '-',
+    taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
     requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt });
 }
 

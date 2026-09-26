@@ -188,6 +188,9 @@ export function WorklineApp(props: WorklineProps) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);
+          if (delta.kind === 'approval') {
+            if (delta.phase === 'requested') work.askTurnApproval(delta); else work.settleTurnApproval(delta.approvalId);
+          }
           // A compaction replaces every non-system message the turn started from, including what it appended so far.
           if (delta.kind === 'compacted') { base = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')]; appended = []; }
           const step: AssistantStreamStep = renderAssistantStream(state, delta, Date.now());
@@ -216,7 +219,7 @@ export function WorklineApp(props: WorklineProps) {
       setBusy(false);
       setCancelling(false);
     }
-  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, session, systemPrompt]);
+  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, session, systemPrompt, work]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const perform = useCallback(async (line: string): Promise<boolean> => {

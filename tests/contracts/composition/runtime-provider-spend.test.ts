@@ -16,7 +16,7 @@ vi.mock('#composition/core/provider-spend/index.js', () => ({
 const command = { schemaVersion: 1 as const, commandId: 'audit', scopeId: 'scope', budgetId: 'budget', budgetRevision: 1,
   expectedCheckpointDigest: 'b'.repeat(64) };
 const peer = { schemaVersion: 1 as const, kind: 'unix-peer' as const, uid: 1000, gid: 1000, pid: 10 };
-const request = { schemaVersion: 13 as const, requestId: 'request', operation: 'auditProviderSpendAccount' as const,
+const request = { schemaVersion: 14 as const, requestId: 'request', operation: 'auditProviderSpendAccount' as const,
   input: command, delivery: { maxResultBytes: 1234 } };
 
 beforeEach(() => { calls.length = 0; failure = null; });

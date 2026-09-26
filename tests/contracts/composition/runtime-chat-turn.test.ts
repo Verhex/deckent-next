@@ -33,8 +33,8 @@ const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: Str
 const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
-async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
-  count?: (body: { messages: unknown[] }) => number } = {}) {
+async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
+  count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number } = {}) {
   const model = modelWith(options.tokenize === true), catalog = catalogWith(options.tokenize === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -92,6 +92,7 @@ async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windo
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
+    ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
       maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
@@ -102,8 +103,11 @@ async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windo
   const grants = [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'],
     principals: me, resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
   { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'scope', ids: ['scope'] } },
-  ...(options.toolGrant === false ? [] : [{ id: 'read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me,
-    resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }])];
+  ...(options.toolGrant === false ? [] : options.toolGrant === 'approval' ? [
+    { id: 'read-needs-approval', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['read_file'] } },
+    { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }]
+    : [{ id: 'read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me,
+      resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }])];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const interrupted: unknown[] = [];
@@ -113,7 +117,8 @@ async function runtime(options: { toolGrant?: boolean; tokenize?: boolean; windo
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
-  return { project, env, state, rows, ledger, start, interrupted, client: () => createConfiguredRuntimeClient(project, { env }) };
+  const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
+  return { project, env, state, rows, ledger, start, interrupted, grants, writePolicy, client: () => createConfiguredRuntimeClient(project, { env }) };
 }
 const ask = (turnId: string, content = 'what does src/a.ts export?') => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content }] });
 
@@ -224,6 +229,78 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const sent = f.state.requests[0]!;
     expect((context as { promptTokens: number }).promptTokens).toBeGreaterThanOrEqual(Buffer.byteLength(JSON.stringify({ messages: sent['messages'], tools: sent['tools'] })));
   }, 30_000);
+
+  it('waits for the owner on an approval-gated call: allow runs it once, deny never runs it, expiry and cancel close the request (T-L4, C12)', async () => {
+    const f = await runtime({ toolGrant: 'approval' }); await f.start();
+    const client = f.client();
+    const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => {
+      if (event.kind !== 'approval.requested') return;
+      await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: `${decision}-${event.approvalId}`,
+        expectedRevision: event.revision, decision, reason: 'Reviewed' });
+    };
+    const run = async (turnId: string, onApproval: (event: AgentTurnStreamEvent) => Promise<void>) => {
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = [];
+      const result = await client.chatTurn(ask(turnId), event => { events.push(event); pending.push(onApproval(event)); });
+      await Promise.all(pending); return { result, events };
+    };
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' },
+      { toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Not allowed.' }];
+    const allowed = await run('turn-allow', decide('allow'));
+    const requested = allowed.events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
+    expect(requested).toMatchObject({ callId: 'call_1', revision: 0, summary: expect.stringMatching(/^read_file · src\/a\.ts · [0-9a-f]{12}$/),
+      preview: expect.stringContaining('"path": "src/a.ts"') });
+    expect(allowed.events.find(event => event.kind === 'approval.settled')).toMatchObject({ approvalId: requested.approvalId, outcome: 'allow' });
+    expect(allowed.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1 });
+    const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
+    expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 2, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
+      tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } });
+
+    const denied = await run('turn-deny', decide('deny'));
+    expect(denied.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    const toolMessage = denied.events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0];
+    expect(toolMessage).toContain('denied-by-owner'); expect(toolMessage).not.toContain('export const a');
+    // Single use: every call opens its own request; nothing was reused across turns.
+    expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]);
+  }, 60_000);
+
+  it('re-evaluates policy after the owner allows: a call the policy denies meanwhile never runs (contract §2)', async () => {
+    const f = await runtime({ toolGrant: 'approval' }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Blocked.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-revoked'), event => {
+      events.push(event);
+      if (event.kind !== 'approval.requested') return;
+      pending.push((async () => {
+        // The tool grant is withdrawn while the call waits; approvals stay decidable.
+        await f.writePolicy(f.grants.filter(grant => grant.id !== 'read-needs-approval'));
+        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: 'allow-revoked',
+          expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
+      })());
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'deny' });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+  }, 60_000);
+
+  it('closes an approval that expires or whose turn is cancelled, and never runs the call', async () => {
+    const f = await runtime({ toolGrant: 'approval', approvalTtlMs: 400 }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Expired.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-expire'), event => events.push(event));
+    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'expired' });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'approval-expired' });
+    expect(f.rows("SELECT snapshot FROM approvals").map(row => JSON.parse((row as { snapshot: string }).snapshot).status)).toEqual(['expired']);
+
+    const g = await runtime({ toolGrant: 'approval' }); await g.start();
+    g.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }];
+    const client = g.client();
+    const running = client.chatTurn(ask('turn-cancel-approval'), event => {
+      if (event.kind === 'approval.requested') void client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel-approval' });
+    });
+    expect(await running).toMatchObject({ finish: 'cancelled' });
+    expect(g.rows("SELECT snapshot FROM approvals").map(row => JSON.parse((row as { snapshot: string }).snapshot).status)).toEqual(['expired']);
+  }, 60_000);
 
   it('answers a tool call the policy does not grant as denied, never runs it, and still finishes the turn', async () => {
     const f = await runtime({ toolGrant: false }); await f.start();

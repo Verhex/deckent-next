@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, runDurableAgentTurn,
+import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, awaitAgentToolApproval,
+  requestAgentToolApproval, runDurableAgentTurn,
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { createWorkspaceReadTools, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
+import { createWorkspaceReadTools, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -77,6 +78,11 @@ function parseCompactionSummary(text: string | null): AgentCompactionSummary | n
   catch { return null; }
 }
 
+/** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
+export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string {
+  const text = `${tool} ${JSON.stringify(args, null, 2)}`;
+  return text.length > 16_384 ? `${text.slice(0, 16_384)} …` : text;
+}
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
@@ -169,6 +175,28 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },
       authorize: tool => toolAuthority.decide(tool, command.scopeId, context.principal),
+      async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
+        // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
+        const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
+        try {
+          // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
+          const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
+          const policy = await context.policy.load() as { revision?: unknown };
+          const resource = target ?? '(no target)', now = Date.now();
+          const { id, issuer, subject } = context.principal;
+          const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject },
+            subject: { kind: 'agent-tool-call', turnId: command.turnId, round, index, tool: tool.name, toolVersion: tool.version, resource, argsDigest },
+            policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
+            summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
+          channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
+            summary: record.request.summary, preview: chatTurnApprovalPreview(tool.name, args), expiresAt: record.request.expiresAt });
+          let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
+          // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
+          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
+          channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: record.request.approvalId, outcome });
+          return outcome;
+        } finally { journal.close(); }
+      },
       async summarize({ sequence, messages: older }, summarySignal) {
         // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
         const transcript = chatTurnCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));

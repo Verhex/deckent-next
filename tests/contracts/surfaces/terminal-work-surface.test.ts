@@ -10,7 +10,7 @@ import { WORKER_LINE_EN as EN } from '../support/worker-line-labels.js';
 const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
   transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
-  approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalExpires: 'A-EXPIRES {duration}', approvalPrompt: 'A-PROMPT',
+  approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}', approvalPrompt: 'A-PROMPT',
   approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalMore: 'A-MORE {count}',
   approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
@@ -242,5 +242,51 @@ describe('work surface: /cancel', () => {
     await view.type('y');
     await until(() => view.stdout.text.includes('CANCEL-OUTCOME rendered'), 'typed outcome');
     expect(cancelled).toEqual([['run-7', 3]]);
+  });
+});
+
+describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
+  it('shows the call preview on a decision card, sends a single y as allow for exactly that approval, and continues the turn', async () => {
+    const decided: { approvalId: string; revision: number; decision: string }[] = [];
+    let release!: () => void; const answered = new Promise<void>(resolve => { release = resolve; });
+    const streamTurn = async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-1', revision: 0,
+        summary: 'edit_file · src/a.ts · 0123456789ab', preview: ['--- src/a.ts', '+++ src/a.ts', '-old line', '+new line', ...Array.from({ length: 30 }, (_, i) => `ctx ${i}`)].join('\n'),
+        expiresAt: Date.now() + 600_000 };
+      await answered;
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-1', outcome: 'allow' as const };
+      yield { kind: 'text' as const, text: 'Edited.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const ledger = { scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
+      async decideApproval(approval: { approvalId: string; revision: number }, decision: 'allow' | 'deny') {
+        decided.push({ approvalId: approval.approvalId, revision: approval.revision, decision }); release();
+        return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
+      } };
+    const view = mount({ streamTurn, ledger: ledger as never });
+    await settle(20); await view.type('edit it\r');
+    await view.card('A-TITLE', 'turn approval card');
+    expect(view.stdout.text).toContain('edit_file · src/a.ts · 0123456789ab'); expect(view.stdout.text).toContain('+new line');
+    expect(view.stdout.text).toContain('A-PREVIEW-MORE 10'); expect(view.stdout.text).not.toContain('ctx 29');
+    await view.type('y');
+    await until(() => view.frame().includes('Edited.') && !view.frame().includes('A-TITLE'), 'turn continues with the card closed');
+    expect(decided).toEqual([{ approvalId: 'appr-1', revision: 0, decision: 'allow' }]);
+  });
+
+  it('closes the card without a decision when the approval settles elsewhere (expiry, cancel)', async () => {
+    const decided: unknown[] = [];
+    const streamTurn = async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-2', revision: 0, summary: 'grep · x · 0123456789ab',
+        preview: 'grep {}', expiresAt: Date.now() + 600_000 };
+      await settle(150);
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-2', outcome: 'expired' as const };
+      yield { kind: 'text' as const, text: 'Gave up.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const ledger = { scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
+      async decideApproval(...args: unknown[]) { decided.push(args); throw new Error('must not decide'); } };
+    const view = mount({ streamTurn, ledger: ledger as never });
+    await settle(20); await view.type('go\r');
+    await view.card('A-TITLE', 'card');
+    await until(() => view.frame().includes('Gave up.') && !view.frame().includes('A-TITLE'), 'turn ends with the card closed');
+    expect(decided).toEqual([]);
   });
 });

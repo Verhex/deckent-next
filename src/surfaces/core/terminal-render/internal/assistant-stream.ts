@@ -79,7 +79,7 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
 
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
-  if (delta.kind === 'message') return step(state, []);
+  if (delta.kind === 'message' || delta.kind === 'approval' || delta.kind === 'output') return step(state, []);
   if (delta.kind === 'compacted') return step(state, [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
   if (delta.kind === 'context') {
     return step(Object.freeze({ ...state, context: Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality }) }), []);

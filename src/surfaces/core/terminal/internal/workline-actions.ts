@@ -38,6 +38,8 @@ export interface WorkSurfaceLabels {
   readonly approvalNotFound: string;
   readonly approvalTitle: string;
   readonly approvalSubject: string;
+  /** `{count}` more preview lines of a tool-call approval are not shown on the card. */
+  readonly approvalPreviewMore: string;
   readonly approvalExpires: string;
   readonly approvalPrompt: string;
   readonly approvalPending: string;

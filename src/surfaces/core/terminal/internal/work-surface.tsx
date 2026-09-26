@@ -22,8 +22,10 @@ export interface WorkSurfaceInput {
   readonly approvalPollMs?: number;
 }
 
+/** A tool call of the running turn waiting for the owner (T-L4): its preview is shown; the decision goes through `decideApproval`. */
+export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: number; summary: string; preview: string; expiresAt: number }>;
 type Modal =
-  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number }>
+  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string }>
   | Readonly<{ kind: 'cancel'; run: RunView }>
   | null;
 
@@ -102,12 +104,24 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     finally { setModal(null); }
   }, [errorText, ledger, push, work]);
 
+  /** Opens the card for a call of the running turn; the turn waits in the service until the decision (or expiry) lands. */
+  const askTurnApproval = useCallback((request: TurnApprovalRequest) => {
+    setModal({ kind: 'approval', remaining: 0, preview: request.preview, approval: { approvalId: request.approvalId, runId: '-', taskId: '-',
+      summary: request.summary, requester: '-', revision: request.revision, status: 'pending', decision: null, expiresAt: request.expiresAt } });
+  }, []);
+  /** The call's approval settled elsewhere (expiry, cancel): its card closes without a decision. */
+  const settleTurnApproval = useCallback((approvalId: string) => {
+    setModal(current => current?.kind === 'approval' && current.approval.approvalId === approvalId ? null : current);
+  }, []);
+
   let card: ReactNode = null;
   if (work && modal?.kind === 'approval') {
-    const { approval, remaining } = modal;
+    const { approval, remaining, preview } = modal;
+    const subject = preview === undefined
+      ? [fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester })] : [];
     card = <DecisionCard key={`approval:${approval.approvalId}`} title={work.approvalTitle} prompt={work.approvalPrompt} pendingText={work.approvalPending}
-      lines={[fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester }),
-        clip(approval.summary), fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })]}
+      lines={[...subject, clip(approval.summary), ...(preview === undefined ? [] : previewLines(preview, work.approvalPreviewMore)),
+        fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })]}
       onDecide={yes => void decideApproval(approval, remaining, yes)} />;
   } else if (work && modal?.kind === 'cancel') {
     const view = modal.run;
@@ -121,5 +135,11 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       {card}
     </>
   );
-  return { observeWorkers, run, modalOpen: modal !== null, region };
+  return { observeWorkers, run, askTurnApproval, settleTurnApproval, modalOpen: modal !== null, region };
+}
+
+/** A call preview is shown up to 24 lines; the rest is counted, never silently dropped. */
+function previewLines(preview: string, more: string): string[] {
+  const lines = preview.split('\n');
+  return lines.length <= 24 ? lines : [...lines.slice(0, 24), fillTemplate(more, { count: lines.length - 24 })];
 }

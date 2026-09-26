@@ -31,16 +31,22 @@ export type AgentTurnEvent =
   | { readonly kind: 'context'; readonly round: number; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
   /** The history was compacted (T-L5b): `messages` replaces every non-system message the client holds; its system prompt stays. */
   | { readonly kind: 'compacted'; readonly messages: readonly AgentTurnMessage[]; readonly replacedMessages: number }
+  /** A call waits for the owner's decision (T-L4, C12): the preview is presentation; the approval binds the exact call. */
+  | { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number; readonly summary: string;
+    readonly preview: string; readonly expiresAt: number }
+  | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: 'allow' | 'deny' | 'expired' | 'cancelled' }
+  /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
+  | { readonly kind: 'tool.output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
-export type AgentToolCallStatus = 'ok' | 'error' | 'denied' | 'approval-required' | 'invalid-arguments' | 'duplicate' | 'cancelled';
+export type AgentToolCallStatus = 'ok' | 'error' | 'denied' | 'approval-required' | 'approval-expired' | 'invalid-arguments' | 'duplicate' | 'cancelled';
 export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
 /** `provider-count`: the provider's own tokenizer on exactly the round's request; `upper-bound`: a conservative byte-based bound. */
 export type AgentContextQuality = 'provider-count' | 'upper-bound';
 
 const count = z.number().int().nonnegative().safe();
 const finishSchema = z.enum(['stop', 'length', 'cancelled', 'error']);
-const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', 'invalid-arguments', 'duplicate', 'cancelled']);
+const callStatusSchema = z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']);
 /**
  * Turn events on the wire (runtime `chatTurn`): every event but `done`, whose content is the operation's result. `message` events
  * are required data (the client's history), not presentation; the transport never drops them silently.
@@ -55,6 +61,11 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('context'), round: z.number().int().positive().safe(), promptTokens: count, windowTokens: z.number().int().positive().safe().nullable(),
     quality: z.enum(['provider-count', 'upper-bound']) }).strict(),
   z.object({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }).strict(),
+  z.object({ kind: z.literal('approval.requested'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256), revision: count,
+    summary: z.string().min(1).max(2048), preview: z.string().max(65_536), expiresAt: count }).strict(),
+  z.object({ kind: z.literal('approval.settled'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256),
+    outcome: z.enum(['allow', 'deny', 'expired', 'cancelled']) }).strict(),
+  z.object({ kind: z.literal('tool.output'), callId: z.string().min(1).max(256), stream: z.enum(['stdout', 'stderr']), text: z.string().min(1) }).strict(),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 

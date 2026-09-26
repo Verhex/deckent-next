@@ -1,4 +1,20 @@
-# Anlık iş akışı — Opus 5.5; T-L5c oturumlar teslimde; T-L5a/b (2088) ve önceki dilimler Astra incelemesinde
+# Anlık iş akışı — Opus 5.5; T-L4 dilim 1 (C12 araç onayı) teslimde; T-L3b–T-L5c Astra incelemesinde (2081–2089)
+
+## T-L4 dilim 1 — araç çağrısı onayı (C12 asgari) (2026-09-26, Jev 9266755b `c12_then_effects` 1,00)
+- Tasarım notu: `deckent-refactor-work/T-L4-EDIT-SHELL-DESIGN-2026-09-26.md` (legacy salt okunur inceleme: `'**'` izin kusuru, diff/bayat dosya/
+  atomik yazım yok, kabukta iptal süreci öldürmüyor; korunan: salt okunur sınıflandırıcı, yıkıcı tablo, iki kez yeniden yetki).
+- Onay isteği birleşimi: görev (v1, değişmedi, mühürler bayt bayt doğrulanıyor) | işlem anahtarlı (v2, `agent-tool-call` konusu). Eylem özeti
+  çağrıya özgü, tek kullanımlık, yenilenmez. Ledger v38 `approvals` yeniden kuruldu (`subject_kind`, araç çağrısı indeksi).
+- Tur: `require-approval` → onay açılır (anahtar ilk kullanımda oluşturulur), `approval.requested` olayı, bekleme (250 ms yoklama), karar/süre
+  dolumu/iptal; iptal ve süre dolumu `expired` kapatır; izin sonrası policy yeniden değerlendirilir. Terminal mevcut karar kartında önizlemeyle
+  gösterir (tek `y`), başka yerde sonuçlanınca kapanır. Protokol v14 (`approval.requested`, `approval.settled`, `tool.output`).
+- Testler: onay deposu (v37→v38 göçünde görev onayı bayt bayt + mühür, araç onayı kayıt/bulma/karar, yenilenmez, bozuk konu reddi, araç onayı
+  varken geri göç başarısız), döngü (izin/ret/süre/iptal/port hatası/port yok), e2e gerçek servis (izin bir kez çalıştırır, ret çalıştırmaz,
+  her çağrı kendi onayı, bekleme sırasında policy geri çekilirse ret, süre dolumu ve iptal `expired`), terminal kartı (önizleme, tek y, kapanma),
+  göç testleri (64). Mutasyonlar 1–6 düştü (`proof/F26-T-L4A-TOOL-APPROVAL/`).
+- Canlı: owner'ın `approval`/`decide` izni yok → betik `grant-approval-decide.mjs` hazır (owner çalıştıracak).
+- Doğrulama: hedefli testler; **tam verify bekliyor** (push öncesi grup için bir kez).
+- Sırada dilim 2: `edit_file`/`write_file` C11 etkisi (önizleme = diff, ön görüntü digest'ine koşullu atomik yazım, yazma taban kuralları).
 
 ## T-L5c — konuşma oturumları (2026-09-26, Jev 9ae569b1 `snapshot_per_session` 0,99)
 - Her turdan sonra tüm geçmiş (sistem hariç) oturum başına tek anlık görüntü: yönetilen `terminalSessions` dizini, 0600, no-follow, atomik,

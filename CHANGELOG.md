@@ -8,6 +8,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   out mid-walk is refused); globs are matched by a bounded dynamic program instead of a backtracking regex (glob patterns ≤ 512
   bytes); openai-chat refuses tool calls under `tool_choice: none` and stops a stream at the first tool name no declared name can match.
 
+- SURFACES/T-L4 slice 1 (C12 minimal): an agent tool call that policy marks `require-approval` now waits for the owner — a call-exact,
+  single-use approval (ledger v38 operation-keyed approvals) shown on the terminal's decision card with a preview; only an explicit,
+  re-authorized allow runs it; deny, expiry and cancel are typed results and never leave the request pending. Protocol v14.
+
 - SURFACES/T-L5c: `/resume`, `/new` and `/context` in the terminal — every turn saves the whole conversation as one owner-only,
   redacted snapshot per session (a compaction rewrites it, so resuming never duplicates messages). Credential redaction no longer
   slows quadratically on long text.

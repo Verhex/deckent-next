@@ -610,7 +610,21 @@ compaction simply rewrites the snapshot, so a resumed conversation can never car
 `/resume` lists this scope's recent sessions and `/resume <n|id>` continues one (its messages become the history; later turns save
 into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
-pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
+**Operation-keyed approval for agent tool calls (C12 minimal, T-L4 slice 1, Jev 9266755b, ledger v38, protocol v14).** An approval
+request is a union: task admission (schemaVersion 1, unchanged, so every sealed record verifies byte for byte) or an operation-keyed
+request (schemaVersion 2) whose `subject` is `agent-tool-call` {turnId, round, index, tool, toolVersion, resource, argsDigest}; its
+action digest (`agent-tool-call:1` over scope + subject) makes it call-exact and single use (never renewed; the next call opens its
+own). Ledger v38 rebuilds `approvals` with `subject_kind`, nullable run/task and a per-(scope, action digest) index for tool calls.
+When policy says `require-approval` for an `agent-tool` call, the turn opens the request (the agent turn is an approval producer and
+creates the integrity key on first use, like Run reservation), emits `approval.requested` (call id, approval id, revision, audit
+summary `tool · resource · digest`, presentation preview ≤ 16 KiB, expiry = `approvals.requestTtlMs`) and waits (store polled every
+250 ms) until the existing `decideApproval` (session-authenticated, `approval`/`decide` grant) decides it, it expires, or the turn is
+cancelled — expiry and cancel close the request as `expired`, never leaving it pending. An allow is followed by a fresh policy
+evaluation (a deny since the request wins). Outcomes are typed call results: `ok` after the run, `denied` (owner or policy),
+`approval-expired`, `cancelled`, or `approval-required` when no approval could be obtained; nothing but an explicit, re-authorized
+allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; a single
+`y` allows, every other key denies) and closes it when the approval settles elsewhere. v14 also carries `tool.output` for slice 3. `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

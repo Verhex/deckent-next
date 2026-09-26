@@ -114,7 +114,7 @@ export class ApprovalApplication {
 }
 /** Producer-only trusted port. No surface accepts caller-authored action bindings or request timestamps. */
 export function requestTaskApproval(store: ApprovalStore, integrity: IntegrityAuthority,
-  input: Omit<ApprovalRequest, 'schemaVersion' | 'approvalId'>) {
+  input: Omit<Extract<ApprovalRequest, { schemaVersion: 1 }>, 'schemaVersion' | 'approvalId'>) {
   const existing = store.find(input.scopeId, input.runId, input.taskId, input.actionDigest);
   if (existing) return verifyApproval(existing, integrity);
   const request = approvalRequestSchema.parse({ schemaVersion: 1, approvalId: randomUUID(), ...input });

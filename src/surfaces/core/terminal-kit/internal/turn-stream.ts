@@ -25,6 +25,13 @@ export type TurnDelta =
   | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
   /** The history was compacted (T-L5b): `messages` replaces every non-system message of the caller's history. */
   | { readonly kind: 'compacted'; readonly messages: readonly AgentChatMessage[]; readonly replacedMessages: number }
+  /** A tool call waits for the owner's decision (T-L4): the surface shows a decision card; the approval binds the exact call. */
+  | { readonly kind: 'approval'; readonly phase: 'requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
+    readonly summary: string; readonly preview: string; readonly expiresAt: number }
+  | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;
+    readonly outcome: 'allow' | 'deny' | 'expired' | 'cancelled' }
+  /** Streamed output of a running call (shell): presentation only. */
+  | { readonly kind: 'output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */
   | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
 

@@ -189,3 +189,25 @@ it('plans compaction without ever keeping a tool result apart from its call, and
   expect(rendered.content).toMatch(/1\. u{4000} …\[cut: 5000 characters, sha256 [0-9a-f]{16}\]/);
   expect(planAgentCompaction(history.slice(0, 3))).toBeNull();
 });
+
+it('runs an approval-gated call only on an explicit allow, and gives every other answer a typed result without running it (T-L4)', async () => {
+  const gated: AgentTurnPorts['authorize'] = async () => 'require-approval';
+  const statuses: string[] = [];
+  for (const owner of ['allow', 'deny', 'expired', 'cancelled', 'throws'] as const) {
+    const p = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('done')], { decision: gated });
+    const asked: unknown[] = [];
+    const { events } = await (async () => {
+      const events: AgentTurnEvent[] = [];
+      await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event) }, { ...p.value,
+        requestApproval: async input => { asked.push(input); if (owner === 'throws') throw new Error('store down'); return owner; } });
+      return { events };
+    })();
+    expect(asked).toEqual([expect.objectContaining({ round: 1, index: 0, target: 'a', argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/) })]);
+    expect(p.executed).toEqual(owner === 'allow' ? ['read_file:{"path":"a"}'] : []);
+    statuses.push((events.find(event => event.kind === 'tool.finished') as { status: string }).status);
+  }
+  expect(statuses).toEqual(['ok', 'denied', 'approval-expired', 'cancelled', 'approval-required']);
+  // Without an approval port the call stays blocked (no bypass).
+  const blocked = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('done')], { decision: gated });
+  await run(blocked); expect(blocked.executed).toEqual([]);
+});

@@ -24,11 +24,21 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 37;
+export const CURRENT_LEDGER_VERSION = 38;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   // Terminal agent turns (T-L3): one row per (scope, turn) — the durable identity a replay or reconnect meets — and one row per
   // settled tool call as an audit projection (effectful tools will reference their C11 intent from it).
+  // C12: operation-keyed approvals. Task approvals keep their columns and index; agent tool calls bind (scope, action digest).
+  38: `CREATE TABLE approvals_v38(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call')),
+    run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
+    INSERT INTO approvals_v38(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current)
+      SELECT scope_id,approval_id,'task',run_id,task_id,action_digest,revision,snapshot,current FROM approvals;
+    DROP TABLE approvals; ALTER TABLE approvals_v38 RENAME TO approvals;
+    CREATE UNIQUE INDEX approvals_current_action ON approvals(scope_id,run_id,task_id,action_digest) WHERE current=1 AND subject_kind='task';
+    CREATE UNIQUE INDEX approvals_current_tool_call ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='agent-tool-call';
+    PRAGMA user_version=38;`,
   37: `CREATE TABLE agent_turns(scope_id TEXT NOT NULL,turn_id TEXT NOT NULL,principal_key TEXT NOT NULL,request_digest TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN ('running','finished')),record TEXT NOT NULL,PRIMARY KEY(scope_id,turn_id));
     CREATE TABLE agent_turn_tool_calls(scope_id TEXT NOT NULL,turn_id TEXT NOT NULL,round INTEGER NOT NULL CHECK(round>=1),

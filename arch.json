@@ -1027,6 +1027,9 @@
     },
     "src/composition/core/agent-turn": {
       "dependencies": [
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/approval",
         "src/composition/core/query-errors",
         "src/adapters/core/contract",
         "src/adapters/core/local-runtime-socket",

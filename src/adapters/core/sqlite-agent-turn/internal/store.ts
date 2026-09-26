@@ -13,7 +13,7 @@ const turnSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: 
   .refine(turn => (turn.finishedAtMs === null) === (turn.outcome === null));
 const callSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, round: z.number().int().positive().safe(), index: count,
   callId: id, tool: z.string().min(1).max(64), toolVersion: count, argsDigest: digest.nullable(), target: z.string().max(4096).nullable(),
-  status: z.enum(['ok', 'error', 'denied', 'approval-required', 'invalid-arguments', 'duplicate', 'cancelled']), bytes: count, resultDigest: digest, atMs: count }).strict();
+  status: z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']), bytes: count, resultDigest: digest, atMs: count }).strict();
 type Turn = z.infer<typeof turnSchema>;
 
 /** SQLite agent turn store (ledger v37). Every transition is one transaction; rows are validated when read and written. */

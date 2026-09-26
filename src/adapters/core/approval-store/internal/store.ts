@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { approvalRecordSchema, ApprovalError, type ApprovalRecord } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
 import type { ApprovalStore, ApprovalReceipt } from '#engine/index.js';
 import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
@@ -25,12 +25,27 @@ export class SqliteApprovalStore implements ApprovalStore {
     return record;
   }
   find(scopeId: string, runId: string, taskId: string, actionDigest: string) {
-    const row = this.db.prepare('SELECT approval_id FROM approvals WHERE scope_id=? AND run_id=? AND task_id=? AND action_digest=? AND current=1')
+    const row = this.db.prepare("SELECT approval_id FROM approvals WHERE scope_id=? AND subject_kind='task' AND run_id=? AND task_id=? AND action_digest=? AND current=1")
       .get(scopeId, runId, taskId, actionDigest);
     if (!row) return null;
-    const record = this.load(scopeId, String(row.approval_id));
-    if (!record || record.request.runId !== runId || record.request.taskId !== taskId || record.request.actionDigest !== actionDigest) throw new ApprovalError('APPROVAL_INTEGRITY');
+    const record = this.load(scopeId, String(row.approval_id)), subject = record && approvalSubject(record.request);
+    if (!record || subject?.kind !== 'task' || subject.runId !== runId || subject.taskId !== taskId || record.request.actionDigest !== actionDigest) {
+      throw new ApprovalError('APPROVAL_INTEGRITY');
+    }
     return record;
+  }
+  findToolCall(scopeId: string, actionDigest: string) {
+    const row = this.db.prepare("SELECT approval_id FROM approvals WHERE scope_id=? AND subject_kind='agent-tool-call' AND action_digest=? AND current=1")
+      .get(scopeId, actionDigest);
+    if (!row) return null;
+    const record = this.load(scopeId, String(row.approval_id));
+    if (!record || approvalSubject(record.request).kind !== 'agent-tool-call' || record.request.actionDigest !== actionDigest) throw new ApprovalError('APPROVAL_INTEGRITY');
+    return record;
+  }
+  /** Row columns of a request: the subject kind and, for a task, its run and task. */
+  private columns(record: ApprovalRecord) {
+    const subject = approvalSubject(record.request);
+    return subject.kind === 'task' ? ['task', subject.runId, subject.taskId] as const : ['agent-tool-call', null, null] as const;
   }
   list(scopeId: string, afterId: string | null, limit: number) {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');
@@ -41,10 +56,11 @@ export class SqliteApprovalStore implements ApprovalStore {
     const record = approvalRecordSchema.parse(input);
     if (record.status !== 'pending') throw new ApprovalError('APPROVAL_INVALID');
     return this.transaction(() => {
-      const r = record.request; const existing = this.find(r.scopeId, r.runId, r.taskId, r.actionDigest);
+      const r = record.request, [kind, runId, taskId] = this.columns(record);
+      const existing = kind === 'task' ? this.find(r.scopeId, runId!, taskId!, r.actionDigest) : this.findToolCall(r.scopeId, r.actionDigest);
       if (existing) return existing;
-      this.db.prepare('INSERT INTO approvals(scope_id,approval_id,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?)')
-        .run(r.scopeId, r.approvalId, r.runId, r.taskId, r.actionDigest, record.revision, JSON.stringify(record));
+      this.db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+        .run(r.scopeId, r.approvalId, kind, runId, taskId, r.actionDigest, record.revision, JSON.stringify(record));
       this.event(record); return record;
     });
   }
@@ -57,6 +73,8 @@ export class SqliteApprovalStore implements ApprovalStore {
   }
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord {
     approvalRecordSchema.parse(next);
+    // A tool-call approval is single use for its exact call: it is never renewed; the next call opens its own.
+    if (approvalSubject(previous.request).kind !== 'task' || approvalSubject(next.request).kind !== 'task') throw new ApprovalError('APPROVAL_INVALID');
     if (next.status !== 'pending' || next.request.renewal?.previousApprovalId !== previous.request.approvalId
       || next.request.scopeId !== previous.request.scopeId || next.request.actionDigest !== previous.request.actionDigest
       || !(previous.status === 'expired' || (previous.status === 'decided' && previous.decision?.decision === 'deny'))) throw new ApprovalError('APPROVAL_CONFLICT');
@@ -70,9 +88,9 @@ export class SqliteApprovalStore implements ApprovalStore {
       const retired = this.db.prepare('UPDATE approvals SET current=0 WHERE scope_id=? AND approval_id=? AND current=1')
         .run(previous.request.scopeId, previous.request.approvalId);
       if (retired.changes !== 1) throw new ApprovalError('APPROVAL_CONFLICT');
-      const r = next.request;
-      this.db.prepare('INSERT INTO approvals(scope_id,approval_id,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?)')
-        .run(r.scopeId, r.approvalId, r.runId, r.taskId, r.actionDigest, next.revision, JSON.stringify(next));
+      const r = next.request, [kind, runId, taskId] = this.columns(next);
+      this.db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+        .run(r.scopeId, r.approvalId, kind, runId, taskId, r.actionDigest, next.revision, JSON.stringify(next));
       this.db.prepare('INSERT INTO approval_receipts(scope_id,command_id,operation,fingerprint,snapshot) VALUES(?,?,?,?,?)')
         .run(receipt.scopeId, receipt.commandId, 'renew', receipt.fingerprint, JSON.stringify(next));
       this.event(next); return next;

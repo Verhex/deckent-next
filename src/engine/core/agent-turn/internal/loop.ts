@@ -33,6 +33,13 @@ export interface AgentTurnPorts {
    * turn and `sequence`. Null when it failed; the loop then keeps the history and closes the turn with a typed note.
    */
   summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal): Promise<AgentCompactionSummary | null>;
+  /**
+   * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
+   * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call.
+   */
+  requestApproval?(input: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec;
+    readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null }, signal: AbortSignal):
+    Promise<'allow' | 'deny' | 'expired' | 'cancelled'>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
@@ -176,8 +183,17 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       }
       const decision = await ports.authorize(tool);
       if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
-      // No bypass: an approval-gated call stays blocked until the approval flow for tools exists (T-L4).
-      if (decision === 'require-approval') { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available in this terminal yet)`); continue; }
+      if (decision === 'require-approval') {
+        // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
+        if (!ports.requestApproval) { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); continue; }
+        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
+        try { answer = await ports.requestApproval({ round: rounds, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal); }
+        catch { answer = null; }
+        if (answer === null && !signal.aborted) { await result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); continue; }
+        if (signal.aborted || answer === 'cancelled') { await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
+        if (answer === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-owner`); continue; }
+        if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
+      }
       toolCalls++;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
