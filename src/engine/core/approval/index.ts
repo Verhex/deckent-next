@@ -3,4 +3,4 @@ export type { ApprovalStore, ApprovalReceipt } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand } from './internal/application.js';
 export { TaskApprovalAdmission, assertApprovalPolicyCurrent } from './internal/admission.js';
-export { agentToolCallActionDigest, awaitAgentToolApproval, requestAgentToolApproval, type AgentToolApprovalOutcome } from './internal/tool-call.js';
+export { agentToolCallActionDigest, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestAgentToolApproval, type AgentToolApprovalOutcome } from './internal/tool-call.js';

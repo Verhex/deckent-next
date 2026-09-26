@@ -45,6 +45,8 @@ export interface WorkSurfaceLabels {
   readonly approvalPending: string;
   readonly approvalAllowed: string;
   readonly approvalDenied: string;
+  /** `{id}`: the service could not confirm closing a tool-call approval request; the call did not run. */
+  readonly approvalUnsettled: string;
   readonly approvalMore: string;
   readonly approvalNotify: string;
   readonly approvalPollFailed: string;

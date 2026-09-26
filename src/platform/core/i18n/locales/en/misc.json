@@ -613,6 +613,8 @@
   "cli.graph.configuredLimit": "configured limit",
   "config.field.service": "Common local runtime service limits and graceful shutdown",
   "cli.runtime.ledgerUpgraded": "Ledger upgraded from schema {from} to {to}; the previous ledger was backed up to {backup}.",
+  "cli.runtime.toolCallApprovalsExpired": "Closed {expired} pending tool-call approvals of turns no longer running as expired; not closed: {failed}.",
+  "cli.runtime.toolCallApprovalsKeyUnavailable": "Pending tool-call approvals exist but the approval integrity key could not be opened; none was closed (none permits anything; each becomes void at its expiry).",
   "cli.runtime.ready": "Runtime service ready: {endpoint}.",
   "cli.toolchains.update": "Toolchain update: {decision}; next version {version}; image {image}; proposal {proposal}",
   "cli.runtime.toolchains": "Toolchain currency at startup: {count} stale provider(s) (report only).",

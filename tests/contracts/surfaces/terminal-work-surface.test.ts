@@ -11,7 +11,7 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
   transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
   approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}', approvalPrompt: 'A-PROMPT',
-  approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalMore: 'A-MORE {count}',
+  approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}', approvalMore: 'A-MORE {count}',
   approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
@@ -288,5 +288,62 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
     await view.card('A-TITLE', 'card');
     await until(() => view.frame().includes('Gave up.') && !view.frame().includes('A-TITLE'), 'turn ends with the card closed');
     expect(decided).toEqual([]);
+  });
+
+  // Astra 2092 R1 (inverted repro): A's decision commits, the turn settles A and asks B, then A's delayed answer (success or failure)
+  // arrives; it closes only its own card, so B's card stays open and B is still decided on its own.
+  for (const late of ['answers', 'fails'] as const) {
+    it(`keeps the newer call's card open when the earlier decision ${late} late`, async () => {
+      let decideStarted!: () => void, finishDecision!: () => void, finishTurn!: () => void;
+      const started = new Promise<void>(resolve => { decideStarted = resolve; });
+      const reply = new Promise<void>(resolve => { finishDecision = resolve; });
+      const end = new Promise<void>(resolve => { finishTurn = resolve; });
+      const decided: string[] = [];
+      const streamTurn = async function* () {
+        yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'a', approvalId: 'approval-a', revision: 0,
+          summary: 'FIRST-CARD', preview: 'read first', expiresAt: Date.now() + 600_000 };
+        await started;
+        yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'a', approvalId: 'approval-a', outcome: 'allow' as const };
+        yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'b', approvalId: 'approval-b', revision: 0,
+          summary: 'SECOND-CARD', preview: 'read second', expiresAt: Date.now() + 600_000 };
+        await end;
+        yield { kind: 'text' as const, text: 'Both done.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+      };
+      const ledger = { scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
+        async decideApproval(approval: { approvalId: string }, decision: 'allow' | 'deny') {
+          decided.push(`${approval.approvalId}:${decision}`);
+          if (approval.approvalId === 'approval-a') {
+            decideStarted(); await reply;
+            if (late === 'fails') throw new Error('late failure');
+          } else finishTurn();
+          return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
+        } };
+      const view = mount({ streamTurn, ledger: ledger as never });
+      await settle(20); await view.type('go\r');
+      await view.card('FIRST-CARD', 'first card'); await view.type('y');
+      await view.card('SECOND-CARD', 'second card'); finishDecision();
+      await until(() => view.stdout.text.includes(late === 'answers' ? 'A-ALLOWED approval-a' : 'ERR:late failure'), 'late answer shown');
+      await settle(40);
+      expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain('A-PROMPT');
+      await view.type('y');
+      await until(() => view.frame().includes('Both done.') && !view.frame().includes('A-TITLE'), 'second decided, turn ends');
+      expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
+    });
+  }
+
+  it('closes the card and says so when the service could not confirm closing the request (unsettled)', async () => {
+    const streamTurn = async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-3', revision: 0, summary: 'edit_file · x · 0123456789ab',
+        preview: 'diff', expiresAt: Date.now() + 600_000 };
+      await settle(150);
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-3', outcome: 'unsettled' as const };
+      yield { kind: 'done' as const, finish: 'cancelled' as const };
+    };
+    const ledger = { scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
+      async decideApproval() { throw new Error('must not decide'); } };
+    const view = mount({ streamTurn, ledger: ledger as never });
+    await settle(20); await view.type('go\r');
+    await view.card('A-TITLE', 'card');
+    await until(() => view.stdout.text.includes('A-UNSETTLED appr-3') && !view.frame().includes('A-TITLE'), 'card closed with the unsettled notice');
   });
 });

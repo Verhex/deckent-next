@@ -7,7 +7,7 @@ import { afterEach, expect, it } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { approvalRequestSchema, approvalSubject } from '#domain/index.js';
-import { ApprovalApplication, requestTaskApproval, sealApproval, verifyApproval } from '#engine/index.js';
+import { ApprovalApplication, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestTaskApproval, sealApproval, verifyApproval, type ApprovalStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
@@ -82,4 +82,75 @@ it('refuses a malformed tool-call subject and cannot downgrade a ledger holding 
   journal.store.create(toolCall(0)); journal.close();
   const db = new DatabaseSync(path);
   try { expect(() => db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL)).toThrow(/NOT NULL/); } finally { db.close(); }
+});
+
+/** The real store with `transition` failing: always (a lasting I/O error), or once, optionally after a racing writer's own transition. */
+function faulty(store: ApprovalStore, mode: 'always' | 'once', race?: (record: import('#domain/index.js').ApprovalRecord) => void) {
+  let failures = 0;
+  return new Proxy(store, { get(target, property) {
+    if (property === 'transition') return (...args: Parameters<ApprovalStore['transition']>) => {
+      if (mode === 'always' || failures++ === 0) { race?.(args[0]); throw new Error('SQLITE_IOERR: disk I/O error'); }
+      return target.transition(...args);
+    };
+    const value = Reflect.get(target, property); return typeof value === 'function' ? value.bind(target) : value;
+  } });
+}
+const decided = (record: import('#domain/index.js').ApprovalRecord, decision: 'allow' | 'deny') => sealApproval({ request: record.request, revision: 1, status: 'decided',
+  decision: { commandId: 'race', decision, actor: requester, sessionId: 'session', channel: 'terminal', reason: 'raced', decidedAt: 2_000,
+    requestDigest: digest('request'), commandDigest: digest('command'), idempotencyKeyHash: digest('race') } }, integrity);
+const aborted = () => { const controller = new AbortController(); controller.abort(); return controller.signal; };
+
+// Astra 2092 R2 (inverted repro): a close that did not happen is never reported as done; the record stays truthfully pending.
+for (const path of ['cancel', 'expiry'] as const) {
+  it(`reports APPROVAL_UNSETTLED when the ${path} close keeps failing, and the stored request stays pending`, async () => {
+    const journal = openSqliteApprovalStore(await ledger(), options);
+    try {
+      const record = journal.store.create(toolCall(0));
+      const wait = path === 'cancel' ? awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, () => 2_000, aborted())
+        : awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, () => 61_000, new AbortController().signal);
+      await expect(wait).rejects.toMatchObject({ code: 'APPROVAL_UNSETTLED' });
+      expect(journal.store.load('scope', record.request.approvalId)?.status).toBe('pending');
+    } finally { journal.close(); }
+  });
+}
+
+it('closes on a later attempt after a transient failure, and a racing writer\'s settled record is authoritative', async () => {
+  const journal = openSqliteApprovalStore(await ledger(), options);
+  try {
+    // Transient failure: the second attempt closes the request as expired.
+    const first = journal.store.create(toolCall(0));
+    expect(await awaitAgentToolApproval(faulty(journal.store, 'once'), integrity, first, () => 61_000, new AbortController().signal)).toBe('expired');
+    expect(journal.store.load('scope', first.request.approvalId)?.status).toBe('expired');
+    // At expiry, a decision that committed first wins: the stored allow is returned as decided.
+    const second = journal.store.create(toolCall(1));
+    const allowFirst = faulty(journal.store, 'once', record => journal.store.transition(record, decided(record, 'allow')));
+    expect(await awaitAgentToolApproval(allowFirst, integrity, second, () => 61_000, new AbortController().signal)).toBe('allow');
+    // A cancelled turn runs nothing even when a decision raced its close; the stored decision is left as recorded.
+    const third = journal.store.create(toolCall(2));
+    const allowRace = faulty(journal.store, 'once', record => journal.store.transition(record, decided(record, 'allow')));
+    expect(await awaitAgentToolApproval(allowRace, integrity, third, () => 2_000, aborted())).toBe('cancelled');
+    expect(journal.store.load('scope', third.request.approvalId)).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
+  } finally { journal.close(); }
+});
+
+it('expires every pending tool-call approval at service start, page by page and across scopes, leaving task and settled approvals alone', async () => {
+  const journal = openSqliteApprovalStore(await ledger(), options);
+  try {
+    const pending = [journal.store.create(toolCall(0)), journal.store.create(toolCall(1)), journal.store.create(toolCall(2))];
+    const other = journal.store.create(sealApproval({ request: { ...toolCall(3).request, scopeId: 'scope-b', approvalId: 'tool-b' }, revision: 0, status: 'pending', decision: null }, integrity));
+    journal.store.transition(pending[2]!, decided(pending[2]!, 'deny'));
+    const task = requestTaskApproval(journal.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
+      policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
+    expect(journal.store.pendingToolCalls(null, 10)).toEqual([{ scopeId: 'scope', approvalId: pending[0]!.request.approvalId },
+      { scopeId: 'scope', approvalId: pending[1]!.request.approvalId }, { scopeId: 'scope-b', approvalId: 'tool-b' }]);
+    expect(expireOrphanedToolCallApprovals(journal.store, integrity, 1)).toEqual({ expired: 3, failed: 0 });
+    for (const record of [pending[0]!, pending[1]!, other]) expect(journal.store.load(record.request.scopeId, record.request.approvalId)?.status).toBe('expired');
+    expect(journal.store.load('scope', pending[2]!.request.approvalId)).toMatchObject({ status: 'decided', decision: { decision: 'deny' } });
+    expect(journal.store.load('scope', task.request.approvalId)).toEqual(task);
+    expect(journal.store.pendingToolCalls(null, 10)).toEqual([]);
+    // A record whose seal does not verify is counted, never closed or guessed.
+    const forged = journal.store.create(toolCall(4));
+    expect(expireOrphanedToolCallApprovals(journal.store, createHmacIntegrity('other', randomBytes(32)), 10)).toEqual({ expired: 0, failed: 1 });
+    expect(journal.store.load('scope', forged.request.approvalId)?.status).toBe('pending');
+  } finally { journal.close(); }
 });

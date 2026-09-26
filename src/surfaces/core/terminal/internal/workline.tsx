@@ -189,7 +189,7 @@ export function WorklineApp(props: WorklineProps) {
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);
           if (delta.kind === 'approval') {
-            if (delta.phase === 'requested') work.askTurnApproval(delta); else work.settleTurnApproval(delta.approvalId);
+            if (delta.phase === 'requested') work.askTurnApproval(delta); else work.settleTurnApproval(delta.approvalId, delta.outcome);
           }
           // A compaction replaces every non-system message the turn started from, including what it appended so far.
           if (delta.kind === 'compacted') { base = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')]; appended = []; }

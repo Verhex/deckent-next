@@ -12,6 +12,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   APPROVAL_INTEGRITY: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INTEGRITY', p, l) }) },
   APPROVAL_STALE: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_STALE', p, l) }) },
   APPROVAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_REQUIRED', p, l) }) },
+  APPROVAL_UNSETTLED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_UNSETTLED', p, l) }) },
   SESSION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_REQUIRED', p, l) }) },
   SESSION_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_EXPIRED', p, l) }) },
   SESSION_INACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_INACTIVE', p, l) }) },

@@ -1,7 +1,7 @@
 import { encodeCommandProjection, evaluatePolicy, policySchema, ApprovalError, type ApprovalActor, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalActionDigest, approvalRequestDigest, verifyApproval, sealApproval } from './integrity.js';
+import { approvalActionDigest, approvalRequestDigest, expireApproval, verifyApproval } from './integrity.js';
 import { requestTaskApproval } from './application.js';
 
 /** Additional task admission restriction. Existing attempt execution authority remains mandatory.
@@ -27,8 +27,7 @@ export class TaskApprovalAdmission {
         runId: run.identity.runId, taskId: task.taskId, requester: this.actor(),
         actionDigest: approvalActionDigest(run, task.taskId, this.actor(), this.policy), policyRevision: this.policy.revision,
         summary: task.taskId, createdAt: now, expiresAt: now + this.ttlMs });
-      if (request.status === 'pending' && now >= request.request.expiresAt) this.store.transition(request,
-        sealApproval({ request: request.request, status: 'expired', revision: 1, decision: null }, this.integrity));
+      if (request.status === 'pending' && now >= request.request.expiresAt) expireApproval(this.store, this.integrity, request);
     }
     return this.excluded(run, this.actor(), now);
   }

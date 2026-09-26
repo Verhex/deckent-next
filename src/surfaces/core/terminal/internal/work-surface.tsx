@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import type { AgentToolApprovalSettlement } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
@@ -93,7 +94,8 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       push([notice('info', fillTemplate(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, { id: record.approvalId }))]);
       if (remaining > 0) push([notice('info', fillTemplate(work!.approvalMore, { count: remaining }))]);
     } catch (error) { push([notice('error', errorText(error))]); }
-    finally { setModal(null); }
+    // A late answer closes only its own card: a newer card (the turn's next call) may already be open (Astra 2092 R1).
+    finally { setModal(current => current?.kind === 'approval' && current.approval.approvalId === approval.approvalId ? null : current); }
   }, [errorText, ledger, push, work]);
 
   const cancelRun = useCallback(async (view: RunView, yes: boolean) => {
@@ -101,7 +103,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       if (!yes) { push([notice('info', fillTemplate(work!.cancelKept, { run: view.runId }))]); return; }
       push([notice('info', await ledger!.cancelRun!(view.runId, view.revision))]);
     } catch (error) { push([notice('error', errorText(error))]); }
-    finally { setModal(null); }
+    finally { setModal(current => current?.kind === 'cancel' && current.run.runId === view.runId ? null : current); }
   }, [errorText, ledger, push, work]);
 
   /** Opens the card for a call of the running turn; the turn waits in the service until the decision (or expiry) lands. */
@@ -109,10 +111,12 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     setModal({ kind: 'approval', remaining: 0, preview: request.preview, approval: { approvalId: request.approvalId, runId: '-', taskId: '-',
       summary: request.summary, requester: '-', revision: request.revision, status: 'pending', decision: null, expiresAt: request.expiresAt } });
   }, []);
-  /** The call's approval settled elsewhere (expiry, cancel): its card closes without a decision. */
-  const settleTurnApproval = useCallback((approvalId: string) => {
+  /** The call's approval settled elsewhere (expiry, cancel): its card closes without a decision. `unsettled`: the service could not
+   * confirm closing the request; the owner is told it permits nothing and closes at its expiry or the next service start. */
+  const settleTurnApproval = useCallback((approvalId: string, outcome: AgentToolApprovalSettlement) => {
     setModal(current => current?.kind === 'approval' && current.approval.approvalId === approvalId ? null : current);
-  }, []);
+    if (outcome === 'unsettled' && work) push([notice('error', fillTemplate(work.approvalUnsettled, { id: approvalId }))]);
+  }, [push, work]);
 
   let card: ReactNode = null;
   if (work && modal?.kind === 'approval') {

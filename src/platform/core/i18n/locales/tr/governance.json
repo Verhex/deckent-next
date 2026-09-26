@@ -975,6 +975,7 @@
   "error.APPROVAL_INTEGRITY": "Onay kanıtının bütünlüğü doğrulanamadı.",
   "error.APPROVAL_STALE": "Onay artık bu eylemle eşleşmiyor.",
   "error.APPROVAL_REQUIRED": "Görev onay bekliyor.",
+  "error.APPROVAL_UNSETTLED": "Onay isteği kapatılamadı; bekleyen istek hiçbir şeye izin vermez ve süresi dolunca ya da servis yeniden başlayınca kapanır.",
   "error.SESSION_REQUIRED": "Doğrulanmış canlı oturum gerekli.",
   "error.SESSION_EXPIRED": "Oturumun süresi doldu veya saat kanıtı değişti.",
   "error.SESSION_INACTIVE": "Oturum artık etkin değil.",

@@ -1,7 +1,36 @@
-# Anlık iş akışı — Opus 5.5; T-L4 dilim 2 (dosya düzenleme C11) yerelde; Astra REVISE 2090 (dilim 1) ve 2091 (T-L5) düzeltiliyor
+# Anlık iş akışı — T-L4/T-L5 yerelde; Astra 2092 düzeltildi (yeniden inceleme bekliyor); 2091 ve 2094 sırada; kanal takibi aktif
+
+## Astra 2092 düzeltmesi — onay kartı kimliği + kapanış hatası (2026-09-26, Opus, Jev 46cfa6c6 `typed_failure_unsettled_plus_start_sweep` 0,97)
+- R1: `decideApproval`/`cancelRun` `finally` yalnız kendi kartını kapatır (approvalId / runId); geciken yanıt (başarılı ya da hatalı) yeni
+  çağrının kartını silmez.
+- R2: tek sealed pending → expired geçişi (`expireApproval`, lazy expiry + admission + araç kapanışı + süpürme ortak). Kapanış hatasında
+  yeniden okuma: başka yazar sonuçlandırdıysa kayıtlı sonuç geçerli (süre dolumunda önce işlenen karar döner; iptal edilen tur yine hiçbir
+  şey çalıştırmaz); hâlâ pending/okunamaz ise 3 kısa deneme sonra `APPROVAL_UNSETTLED`. `approval.requested` gittiyse `approval.settled`
+  her zaman gider; yeni sonuç `unsettled` (v14 yayımlanmadığı için yerinde, v15 yok). Terminal kartı kapatır, dürüst not yazar.
+  Servis başında (uç sahipliği altında, turlar kesildikten sonra) bekleyen araç onayları sayfa sayfa `expired`; görev onayları dokunulmaz;
+  doğrulanamayan kayıt sayılır; anahtar yoksa oluşturulmaz, raporlanır (`tool-call-approvals-expired` olayı).
+- Testler: terminal 14 (geciken yanıt başarı/hata → yeni kart açık kalır ve ayrıca karar verilir; `unsettled` → kart kapanır + not),
+  onay deposu 7 (iptal/süre dolumu kalıcı hata → `APPROVAL_UNSETTLED` + kayıt pending; geçici hata → expired; yarışta allow/iptal;
+  süpürme: iki scope, sayfa 1, görev ve karar verilmiş kayıt korunur, sahte mühür sayılır), gerçek servis e2e (SQLite tetikleyicisiyle
+  kapanış bozulur → `unsettled`, `cancelled`, kayıt pending, model tek istek; yeniden başlatma → süpürme 1, kayıt expired). Onay içeren
+  50 test dosyası + agent-stream/protokol/engine: 378 geçti (installed-runtime-service Docker imajıyla 9/9). Mutasyonlar 1–6 düştü:
+  `deckent-refactor-work/proof/F26-T-L4A-FIX-2092/`. typecheck, eslint (değişen dosyalar), lint-arch 0 ihlal. Tam verify yok (toplu).
+- Sırada: Astra 2091 (T-L5 R1–R3), sonra 2094 (dilim 2 R1–R3; R2 dizin taşıma sınırı yeni mekanizma gerektirebilir → owner checkpoint).
+
+## Astra canlı kanal takibi ve 2093 incelemesi — 2026-09-26
+- Owner bu oturumda sürekli kanal izleme, gelen entry'leri inceleme ve yanıtlama istedi. Astra izleyicisi 2 saniyede bir doğrulanmış
+  bekleyen kayıtları okuyor; analiz/yanıt aktif oturumda yürütülür, oturum kapandıktan sonra bağımsız ajan çalışması kurulmuş değildir.
+- İncelenen ürün commit'leri `95c3a14` + `6a53765`; yalnız belge ekleyen `aca83b4` izole arşivi kullanıldı. 21 mevcut test geçti;
+  3 ek tekrar üretimi kurtarmada yanlış `absent`, doğrulama sonrası dışarı taşınan dizine yazım ve büyük diff yüzünden onaysız
+  tur iptalini doğruladı. Kanıt `.deckent/host/reviews/astra-2093/`; sonuç **REVISE**. Bunlar önceki beş bulguya ektir.
+- İlk test denemesinde arşivde native socket binary eksikti (18 hata); aynı kaynaklı mevcut binary kopyalandıktan sonra 21/21.
+  Tekrar üretiminde tanısal SQL sütunu ve beklenen hata biçimi düzeltildi; son 3/3 kusurlu davranışı doğrulayan assertions içerir.
+  Build, tam verify, canlı çağrı/izin, commit veya push yapılmadı. Jev `d703b66e`: revise 1,00, iki çekimser seçenek 0 (danışmanlık).
+- Yanıt `2094` kanala yazıldı, talep `2093` tüketildi. Daha önce 2092 ile yanıtlanan 2090 da bu oturumda tüketildi. Sonraki: Opus üç bulguya sınırlı düzeltme ve negatif kanıt getirsin;
+  Astra yeni kayıtları ve yeniden inceleme taleplerini izlesin. İzleme izni ürün kapsamını veya canlı policy yetkisini genişletmez.
 
 ## Devir — sonraki oturum (2026-09-26)
-- HEAD `6a53765`; origin/main `4eec455` (≈21 yerel commit, push yok). Astra `2093` = dilim 2 inceleme isteği (bekliyor).
+- Opus devir kaydı: HEAD `6a53765`; origin/main `4eec455` (≈21 yerel commit, push yok). Devir belgesi sonrası HEAD `aca83b4`; Astra `2093` talebi `2094` REVISE ile yanıtlandı (yukarıda).
 - Sıradaki iki düzeltme dilimi (ayrı commit, her biri tersine çevrilmiş Astra repro'su + negatif test):
   1. Onay düzeltmeleri (Astra 2092): R1 `work-surface.tsx` decideApproval finally → kartı yalnız aynı approvalId ise kapat; R2
      `engine/core/approval/internal/tool-call.ts` close(): transition hatasında kaydı yeniden oku; terminal ise yarış, pending/okunamaz
@@ -18,7 +47,7 @@
 - Adaptör `adapters/core/workspace-write`: yazılabilir yol çözümü (normalize, kök içi, deny, sembolik bağlı üst dizin reddi), dosya sürümü
   (sha256 | `absent`), koşullu atomik yazım (aynı dizinde özel geçici dosya, fsync, dizin yeniden doğrulama, sürüm yeniden kontrol, rename,
   dizin fsync, mod korunur), sınırlı birleşik diff, `workspace-file` etki hedefi (yazmadan önce günlük; çökme sonrası dosyadan kanıt).
-- Döngü: `prepare` portu yetkiden önce planlar; plan hatası çağrı sonucudur. Karar = araç kararı ile `workspace.file.write` işlem kararının
+- Döngü: `6a53765` ile policy önce değerlendirilir; `prepare` yalnız reddedilmeyen çağrıyı planlar; plan hatası çağrı sonucudur. Karar = araç kararı ile `workspace.file.write` işlem kararının
   sıkı olanı; yazma tabanı yolları her modda onay ister; onay kartı diff'i gösterir. Yazım C11 `EffectApplication` üzerinden (oturum, işlem
   policy'si, niyet önce, planlanan sürüme koşul); onay kapısı yalnız bu turda onaylanan komutu geçirir.
 - Testler: adaptör 3; e2e gerçek servis 5 (onaylı düzenleme diff + tek yazım + `effect_intents` settled; onay beklerken dosya değişti →

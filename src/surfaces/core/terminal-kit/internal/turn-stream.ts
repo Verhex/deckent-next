@@ -1,4 +1,4 @@
-import type { AgentContextQuality, AgentToolCallStatus, AgentTurnMessage } from '#domain/index.js';
+import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallStatus, AgentTurnMessage } from '#domain/index.js';
 
 /** One chat message as sent to the model for a plain (tool-less) turn. */
 export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -29,7 +29,7 @@ export type TurnDelta =
   | { readonly kind: 'approval'; readonly phase: 'requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
     readonly summary: string; readonly preview: string; readonly expiresAt: number }
   | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;
-    readonly outcome: 'allow' | 'deny' | 'expired' | 'cancelled' }
+    readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */
   | { readonly kind: 'output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */

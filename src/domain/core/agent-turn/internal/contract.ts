@@ -34,11 +34,16 @@ export type AgentTurnEvent =
   /** A call waits for the owner's decision (T-L4, C12): the preview is presentation; the approval binds the exact call. */
   | { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number; readonly summary: string;
     readonly preview: string; readonly expiresAt: number }
-  | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: 'allow' | 'deny' | 'expired' | 'cancelled' }
+  | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
   | { readonly kind: 'tool.output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
   | { readonly kind: 'done'; readonly finish: AgentTurnFinish; readonly note: string | null };
 
+/**
+ * How the turn left a call's approval: decided (`allow`/`deny`), durably closed (`expired`, `cancelled`), or `unsettled` — the
+ * durable close failed and the request stays pending until its expiry or the service-start sweep; it never permits the call.
+ */
+export type AgentToolApprovalSettlement = 'allow' | 'deny' | 'expired' | 'cancelled' | 'unsettled';
 export type AgentToolCallStatus = 'ok' | 'error' | 'denied' | 'approval-required' | 'approval-expired' | 'invalid-arguments' | 'duplicate' | 'cancelled';
 export type AgentTurnFinish = 'stop' | 'length' | 'cancelled' | 'error';
 /** `provider-count`: the provider's own tokenizer on exactly the round's request; `upper-bound`: a conservative byte-based bound. */
@@ -64,7 +69,7 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('approval.requested'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256), revision: count,
     summary: z.string().min(1).max(2048), preview: z.string().max(65_536), expiresAt: count }).strict(),
   z.object({ kind: z.literal('approval.settled'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256),
-    outcome: z.enum(['allow', 'deny', 'expired', 'cancelled']) }).strict(),
+    outcome: z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']) }).strict(),
   z.object({ kind: z.literal('tool.output'), callId: z.string().min(1).max(256), stream: z.enum(['stdout', 'stderr']), text: z.string().min(1) }).strict(),
 ]);
 export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;

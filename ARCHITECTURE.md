@@ -623,11 +623,19 @@ When policy says `require-approval` for an `agent-tool` call, the turn opens the
 creates the integrity key on first use, like Run reservation), emits `approval.requested` (call id, approval id, revision, audit
 summary `tool · resource · digest`, presentation preview ≤ 16 KiB, expiry = `approvals.requestTtlMs`) and waits (store polled every
 250 ms) until the existing `decideApproval` (session-authenticated, `approval`/`decide` grant) decides it, it expires, or the turn is
-cancelled — expiry and cancel close the request as `expired`, never leaving it pending. An allow is followed by a fresh policy
+cancelled — expiry and cancel close the request as `expired` through the one sealed pending → expired transition (shared with lazy
+expiry). A failed close is re-read: a record another writer already settled is authoritative (at expiry a decision committed first is
+returned; a cancelled turn still runs nothing); a record still pending or unreadable after 3 short attempts is `APPROVAL_UNSETTLED`,
+never reported as closed. Once `approval.requested` went out, `approval.settled` always follows; its outcome adds `unsettled` (v14
+amended before release, no v15: no v14 peer was ever shipped), and the terminal closes the card and says the pending request permits
+nothing and closes at its expiry or the next service start. At start, under endpoint custody and after interrupting turns, every
+still-pending tool-call approval is closed as expired in bounded pages (task approvals untouched; an unverifiable record is counted;
+a missing integrity key is reported, never created); the host reports `tool-call-approvals-expired`. An allow is followed by a fresh policy
 evaluation (a deny since the request wins). Outcomes are typed call results: `ok` after the run, `denied` (owner or policy),
 `approval-expired`, `cancelled`, or `approval-required` when no approval could be obtained; nothing but an explicit, re-authorized
 allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; a single
-`y` allows, every other key denies) and closes it when the approval settles elsewhere. v14 also carries `tool.output` for slice 3.
+`y` allows, every other key denies) and closes it when the approval settles elsewhere; a late answer to one decision closes only its
+own card, never a newer call's (Astra 2092 R1). v14 also carries `tool.output` for slice 3.
 **Agent file edits as C11 effects (T-L4 slice 2).** `edit_file` (exact `old_string` → `new_string`, unique unless `replace_all`; no
 `$` pattern interpretation) and `write_file` (whole content) are declared beside the read tools (tool class `edit`). Policy is
 asked first (a denied call is answered before the file is touched, so its result never depends on content); then the loop's
@@ -645,9 +653,14 @@ fsync; mode kept). The target journals `wire key → expected, next version` (06
 so crash settlement reads evidence from the file: at `next` applied, at `expected` absent (resend), otherwise unknown — never a blind
 retry. The effect's approval gate admits a `require-approval` decision only for the command the owner approved in this turn. Not
 excluded: another writer between the final version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
-Astra review of `e6085ca` (2026-09-26): cancellation/expiry closure currently swallows storage failures, so a pending record may
-remain despite a terminal outcome. A delayed response to one decision can also clear a newer call's decision card. Both failure
-paths are reproduced and await correction; successful-path approval tests do not close these limits.
+Astra review of `95c3a14` + `6a53765` (2026-09-26): current-content equality is not operation-specific recovery evidence:
+an external restore of `expected` after an applied write is reported as `absent`, allowing replay over that restore. A parent moved
+outside the workspace after directory verification is still written through its open descriptor. These reproduced races leave
+idempotent recovery and write scope unclosed. The diff's LCS cell bound also does not bound its text: a valid 35 KB replacement
+produces an approval preview above the protocol's 65,536-character limit and cancels the turn before the card arrives. Corrections
+are pending; successful ordinary-write tests do not establish these guarantees.
+Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
+as described above (inverted repros + fault-injected close in the real service + restart sweep); awaiting Astra re-review.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

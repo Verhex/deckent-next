@@ -975,6 +975,7 @@
   "error.APPROVAL_INTEGRITY": "Approval evidence could not be verified.",
   "error.APPROVAL_STALE": "Approval no longer matches the action.",
   "error.APPROVAL_REQUIRED": "The task is waiting for approval.",
+  "error.APPROVAL_UNSETTLED": "The approval request could not be closed; the pending request permits nothing and closes at its expiry or the next service start.",
   "error.SESSION_REQUIRED": "A verified live session is required.",
   "error.SESSION_EXPIRED": "The session expired or its clock evidence changed.",
   "error.SESSION_INACTIVE": "The session is no longer active.",

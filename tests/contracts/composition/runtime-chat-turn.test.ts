@@ -110,15 +110,15 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
       resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }]), ...(options.extraGrants ?? [])];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
-  const interrupted: unknown[] = [];
+  const interrupted: unknown[] = [], swept: unknown[] = [];
   const start = async () => {
     const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {},
-      onAgentTurnsInterrupted(result) { interrupted.push(result); } }, { env });
+      onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); } }, { env });
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
-  return { project, env, state, rows, ledger, start, interrupted, grants, writePolicy, client: () => createConfiguredRuntimeClient(project, { env }) };
+  return { project, env, state, rows, ledger, start, interrupted, swept, grants, writePolicy, client: () => createConfiguredRuntimeClient(project, { env }) };
 }
 const editGrants = (toolEffect: 'allow' | 'require-approval') => [
   { id: 'edit-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['edit_file', 'write_file'] } },
@@ -305,6 +305,32 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     });
     expect(await running).toMatchObject({ finish: 'cancelled' });
     expect(g.rows("SELECT snapshot FROM approvals").map(row => JSON.parse((row as { snapshot: string }).snapshot).status)).toEqual(['expired']);
+  }, 60_000);
+
+  // Astra 2092 R2 end to end: the close of a cancelled turn's approval fails in the ledger; the stream says `unsettled` (never
+  // `cancelled` over a pending record), nothing runs, and the next service start closes the orphaned request.
+  it('reports an approval whose close failed as unsettled, runs nothing, and closes it at the next service start', async () => {
+    const f = await runtime({ toolGrant: 'approval' }); const live = await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [];
+    const running = client.chatTurn(ask('turn-unsettled'), event => {
+      events.push(event);
+      if (event.kind !== 'approval.requested') return;
+      const db = new DatabaseSync(f.ledger);
+      try { db.exec("CREATE TRIGGER fail_close BEFORE UPDATE ON approvals BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END"); } finally { db.close(); }
+      void client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-unsettled' });
+    });
+    expect(await running).toMatchObject({ finish: 'cancelled' });
+    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'unsettled' });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'cancelled' });
+    const status = () => f.rows('SELECT snapshot FROM approvals').map(row => JSON.parse((row as { snapshot: string }).snapshot).status);
+    expect(status()).toEqual(['pending']);
+    const db = new DatabaseSync(f.ledger); try { db.exec('DROP TRIGGER fail_close'); } finally { db.close(); }
+    await live.stop(); await live.done.catch(() => undefined); services.splice(services.indexOf(live), 1);
+    await f.start();
+    expect(f.swept).toEqual([{ expired: 1, failed: 0, keyUnavailable: false }]);
+    expect(status()).toEqual(['expired']);
+    expect(f.state.requests).toHaveLength(1);
   }, 60_000);
 
   it('writes an approved edit as a C11 effect: the owner sees the diff, the file is written once and the effect is settled (T-L4 slice 2)', async () => {

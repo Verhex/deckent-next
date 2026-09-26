@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolSpec, type AgentTurnMessage,
+import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, awaitAgentToolApproval,
   requestAgentToolApproval, runDurableAgentTurn,
@@ -193,6 +193,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
+        // Once a card was requested it is always settled: `unsettled` when the wait failed (the request may stay pending, it permits nothing).
+        let requested: { readonly approvalId: string } | null = null, settlement: AgentToolApprovalSettlement = 'unsettled';
         try {
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
@@ -205,13 +207,17 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
             summary: record.request.summary, preview: edits?.preview(tool.name, args) ?? chatTurnApprovalPreview(tool.name, args), expiresAt: record.request.expiresAt });
+          requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
           if (outcome === 'allow') edits?.approved(tool.name, args);
-          channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: record.request.approvalId, outcome });
+          settlement = outcome;
           return outcome;
-        } finally { journal.close(); }
+        } finally {
+          journal.close();
+          if (requested) channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
+        }
       },
       async summarize({ sequence, messages: older }, summarySignal) {
         // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.

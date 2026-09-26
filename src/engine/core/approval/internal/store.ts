@@ -7,6 +7,8 @@ export interface ApprovalStore {
   /** The current approval of one agent tool call (C12): its action digest binds the exact call. */
   findToolCall(scopeId: string, actionDigest: string): ApprovalRecord | null;
   list(scopeId: string, afterId: string | null, limit: number): readonly ApprovalRecord[];
+  /** Keys of pending agent tool-call approvals across scopes, ordered by (scope, id) after `after` (service-start reconciliation). */
+  pendingToolCalls(after: { readonly scopeId: string; readonly approvalId: string } | null, limit: number): readonly { readonly scopeId: string; readonly approvalId: string }[];
   create(record: ApprovalRecord): ApprovalRecord;
   receipt(scopeId: string, commandId: string): ApprovalReceipt | null;
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord;

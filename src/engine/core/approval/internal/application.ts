@@ -6,7 +6,7 @@ import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/in
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
 import type { ApprovalStore } from './store.js';
-import { approvalRequestDigest, verifyApproval, sealApproval } from './integrity.js';
+import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
 
 export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema }).strict();
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
@@ -35,7 +35,7 @@ export class ApprovalApplication {
   }
   private expired(record: ApprovalRecord, now: number) {
     if (record.status !== 'pending' || now < record.request.expiresAt) return record;
-    return this.store.transition(record, sealApproval({ request: record.request, revision: 1, status: 'expired', decision: null }, this.integrity));
+    return expireApproval(this.store, this.integrity, record);
   }
   async inspect(input: unknown, credential?: unknown) {
     const query = approvalQuerySchema.parse(input); const principal = await authenticate(this.verifier, credential, query.scopeId);

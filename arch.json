@@ -396,6 +396,9 @@
     "src/composition/core/runtime-service": {
       "dependencies": [
         "src/engine/core/agent-turn",
+        "src/engine/core/approval",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
         "src/domain/core/agent-turn",
         "src/adapters/core/sqlite-agent-turn",
         "src/composition/core/agent-turn",
@@ -737,6 +740,7 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
+        "src/domain/core/agent-turn",
         "src/domain/core/inference-serving",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",

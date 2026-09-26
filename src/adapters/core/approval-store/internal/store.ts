@@ -52,6 +52,14 @@ export class SqliteApprovalStore implements ApprovalStore {
     return this.db.prepare('SELECT approval_id FROM approvals WHERE scope_id=? AND (? IS NULL OR approval_id>?) ORDER BY approval_id LIMIT ?')
       .all(scopeId, afterId, afterId, limit).map(row => this.load(scopeId, String(row.approval_id))!);
   }
+  pendingToolCalls(after: { readonly scopeId: string; readonly approvalId: string } | null, limit: number) {
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');
+    // Status lives in the sealed snapshot; the caller verifies each record before acting on it.
+    return this.db.prepare(`SELECT scope_id,approval_id FROM approvals WHERE subject_kind='agent-tool-call' AND current=1
+      AND json_extract(snapshot,'$.status')='pending' AND (? IS NULL OR (scope_id,approval_id)>(?,?)) ORDER BY scope_id,approval_id LIMIT ?`)
+      .all(after?.scopeId ?? null, after?.scopeId ?? null, after?.approvalId ?? null, limit)
+      .map(row => Object.freeze({ scopeId: String(row.scope_id), approvalId: String(row.approval_id) }));
+  }
   create(input: ApprovalRecord): ApprovalRecord {
     const record = approvalRecordSchema.parse(input);
     if (record.status !== 'pending') throw new ApprovalError('APPROVAL_INVALID');

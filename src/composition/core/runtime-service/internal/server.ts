@@ -1,13 +1,13 @@
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
-import { RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceErrorParams } from '#engine/index.js';
+import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, runtimeServiceErrorParams } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
-  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore } from '#adapters/index.js';
+  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority } from '#adapters/index.js';
 import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -29,6 +29,9 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
   /** Turns a stopped service left running, closed as interrupted at this start; damaged rows are reported, not closed. */
   onAgentTurnsInterrupted?(result: { readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }): void | Promise<void>;
+  /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
+   * not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */
+  onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
 }
 
 /** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
@@ -53,6 +56,15 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
+  // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.
+  const approvals = openSqliteApprovalStore(path, config.storage.sqlite);
+  try {
+    if (!approvals.store.pendingToolCalls(null, 1).length) return;
+    // The key already exists when such a request exists; a missing key is reported, never created here.
+    const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile).catch(() => null);
+    await observer.onToolCallApprovalsExpired?.(integrity ? { ...expireOrphanedToolCallApprovals(approvals.store, integrity, config.approvals.pageSize),
+      keyUnavailable: false } : { expired: 0, failed: 0, keyUnavailable: true });
+  } finally { approvals.close(); }
 }
 
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */

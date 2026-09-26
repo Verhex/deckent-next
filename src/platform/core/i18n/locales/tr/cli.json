@@ -819,6 +819,7 @@
   "terminal.approval.pending": "Karar kaydediliyor…",
   "terminal.approval.allowed": "{id} onayı verildi; karar runtime tarafından kaydedildi.",
   "terminal.approval.denied": "{id} onayı reddedildi; karar runtime tarafından kaydedildi.",
+  "terminal.approval.unsettled": "{id} onay isteği kapatılamadı; çağrı çalışmadı. Bekleyen istek hiçbir şeye izin vermez, süresi dolunca ya da servis yeniden başlayınca kapanır.",
   "terminal.approval.more": "{count} onay daha bekliyor — sıradakine karar vermek için /approvals.",
   "terminal.approval.notify": "{count} yeni bekleyen onay — incelemek için /approvals.",
   "terminal.approval.pollFailed": "Onay denetimi başarısız",

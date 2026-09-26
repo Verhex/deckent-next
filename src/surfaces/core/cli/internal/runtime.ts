@@ -18,6 +18,7 @@ export interface RuntimeServiceObserver {
   onPage(command: CancellationRecoveryCommand, result: CancellationRecoveryPageResult): void | Promise<void>;
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
+  onToolCallApprovalsExpired?(result: Readonly<{ expired: number; failed: number; keyUnavailable: boolean }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
 export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
@@ -106,6 +107,9 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
       () => t('cli.runtime.recoveryFailed', { code: error.code }, locale), 'error'); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
       () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
+    onToolCallApprovalsExpired: async result => { output({ schemaVersion: 1, event: 'tool-call-approvals-expired', ...result },
+      () => result.keyUnavailable ? t('cli.runtime.toolCallApprovalsKeyUnavailable', {}, locale)
+        : t('cli.runtime.toolCallApprovalsExpired', { expired: result.expired, failed: result.failed }, locale), result.failed || result.keyUnavailable ? 'error' : 'info'); },
   }, options);
   try {
     output({ schemaVersion: 1, event: 'ready', endpoint: host.endpoint }, () => t('cli.runtime.ready', { endpoint: host.endpoint }, locale));
