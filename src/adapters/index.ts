@@ -58,3 +58,4 @@ export { LocalOsSessionAuthority } from '#adapters/core/local-principal/index.js
 export * from '#adapters/core/workspace-read/index.js';
 export * from '#adapters/core/sqlite-agent-turn/index.js';
 export * from '#adapters/core/workspace-write/index.js';
+export * from '#adapters/core/shell-paths/index.js';

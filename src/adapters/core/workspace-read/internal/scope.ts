@@ -12,7 +12,11 @@ export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules
  */
 export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.env', '.env.*', '**/.env', '**/.env.*', '**/*.pem', '**/*.key',
   '**/*.p12', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/.credentials.json', '**/.npmrc', '**/.netrc', '.git/**', '**/.git/**',
-  '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**']);
+  '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**',
+  // Credential carriers the legacy shell classifier protected (T-L4 slice 3a): one protected set for read tools, shell and edits.
+  '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '.brain/memory.db*',
+  // The repository directory itself, not only its content: listing `.git` is refused too.
+  '.git', '**/.git']);
 
 type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
 /**

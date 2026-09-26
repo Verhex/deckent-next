@@ -8,7 +8,18 @@
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
   önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
 
-## T-L4 dilim 3a — salt okunur kabuk sınıflandırıcısı ve risk tablosu (başladı 2026-09-26)
+## T-L4 dilim 3a — salt okunur kabuk sınıflandırıcısı ve risk tablosu (2026-09-26, Jev d6909e28 `engine_pure_port_unified_deny` 0,77)
+- Uygulandı: motor birimi `engine/core/shell-classification` (tarayıcı 138, script dilbilgileri 167, program tabloları 206, seçenek/find/git
+  279, sınıflandırıcı 78, risk 293 satır), adaptör `adapters/core/shell-paths` (WorkspaceScope üzerinden yol portu + sınırlı sh-glob).
+  Ortak deny listesine legacy kimlik bilgisi taşıyıcıları ve `.git` dizininin kendisi eklendi (okuma araçları da reddeder; bulgu: `ls .git`
+  önceden geçiyordu). Legacy `.deckent/private/` bırakıldı (Next'te yok; özel durum zaten reddedilen dizinlerde). Ara bağ açığı: Jev 0,47
+  belirsiz → gerekçe: kabuk son realpath'i okur; son yol dışarıdaysa reddedilir (negatif test).
+- Testler: motor 207 (legacy eşdeğerlik: 64 salt okunur, 64 red, sed/awk, 70 risk vakası; PowerShell → UNSUPPORTED_DIALECT; yol portunun
+  her argümana sorulması), adaptör 32 gerçek dosya sistemi (legacy yol/koruma vakaları + `.env`'e sembolik bağ, dışarı dizin bağı, yok dosya,
+  eşleşmesiz/sınır aşan glob, kök içi mutlak yol). Geniş hedefli 139 dosya / 1.100 test. Mutasyonlar 1–8 düştü (4 önce hayatta kaldı: sondaki
+  sınır kontrolü fazlalık, iki kontrol birlikte kaldırılınca düşüyor): `proof/F26-T-L4C-SHELL-3A/`.
+- Sırada 3b: kabuk yürütme adaptörü (temizlenmiş ortam, süreç grubu, iptalde öldürme, sınırlı akışlı çıktı, zaman aşımı).
+- Eski ön not (başlarken):
 - Ne: bir kabuk komut dizesinin salt okunur olup olmadığına (sormadan çalıştırılabilir mi) ve risk basamağına (salt okunur / değiştirir /
   yıkıcı) karar veren saf mantık. Neden şimdi: dilim 3 (host kabuğu) bunun üstüne kurulur; araç, etki ve protokol değişikliği yok.
 - Legacy kaynak (salt okunur): `deckent-dev` `src/core/shell-readonly-classifier.ts` (1.817 satır) ve `src/agent/guards/shell-risk.ts` @

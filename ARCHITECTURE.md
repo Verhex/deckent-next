@@ -673,6 +673,19 @@ owner-only (0600, exclusive, not redacted: it must be exactly the change approve
 the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's approval gate admits a
 `require-approval` decision only for the command the owner approved in this turn. Not excluded: another writer between the final
 version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+**Read-only shell classification (T-L4 slice 3a, Jev d6909e28).** `engine/core/shell-classification` is pure: a POSIX `sh -c`
+scanner (pipelines of stages; redirection only to /dev/null or between stdout/stderr; substitutions, expansions, subshells, braces,
+heredocs and background jobs refused with typed reasons), the legacy program allowlist and option grammars (argv semantics: quoting
+never demotes an option), sed/awk script grammars, `find` and `git` read grammars, and the risk tiers (destructive table as the
+always-ask floor, worst part wins, redirection/tee → modify; `safe-read` only from the classifier). It is a port of legacy
+`shell-readonly-classifier.ts`/`shell-risk.ts` @a8b67e2a1 (POSIX only; PowerShell is `UNSUPPORTED_DIALECT`, so a Windows host asks for
+every shell command). Paths go through a port: `adapters/core/shell-paths` checks each argument over the same `WorkspaceScope` as the
+read tools and edits (lexically inside, not denied, existing, real path inside and not denied; sh globs expanded against the real
+directory, bounded at 10,000 matches, each match checked; git pathspecs lexical). The shared deny list gained the legacy credential
+carriers (`*.pfx`, `*.keystore`, `*.jks`, `.pypirc`, `credentials`, `credentials.json`, `secrets.json`, `.brain/memory.db*`) and the
+`.git` directory itself, so read tools refuse them too; legacy `.deckent/private/` is dropped (Next keeps private state under the
+already denied `.deckent/host`, `audit-key`, `approvals`). Not covered: intermediate symlink hops that leave the root and return (the
+final real path is what the shell reads), and a swap between classification and execution. No tool uses it yet (slice 3c).
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
 corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally

@@ -1276,6 +1276,13 @@
       ],
       "plan": "EXECUTION"
     },
+    "src/adapters/core/shell-paths": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/engine/core/shell-classification"
+      ],
+      "plan": "SURFACES"
+    },
     "src/adapters/core/workspace-write": {
       "dependencies": [
         "src/adapters/core/workspace-read",
@@ -1462,6 +1469,10 @@
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn"
       ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/shell-classification": {
+      "dependencies": [],
       "plan": "SURFACES"
     },
     "src/engine/core/effect": {
