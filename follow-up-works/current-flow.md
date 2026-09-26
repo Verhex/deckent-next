@@ -31,6 +31,9 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 - I40 ürün düzeltmesi (owner kararı, Jev `4dbd0c32`): Opus şeridi `lane/i40-time-contract` @ `/home/alperen/deckent-next-lane-i40-time`
   (taban d525eeb + tanı `3ea79c8`); kart `cards/lanes/I40-time-contract.md`.
 - Dilim 4 q5 owner kararı: modun gevşettiği kararlar tam denetim kaydı, zaten sessizler özet sayaç (Jev `dd82e3ed` decision yazıldı).
+- Entegrasyon `integrate/2026-09-27` @ `2d06c56` (worktree `/home/alperen/deckent-next-integrate`): D03 + I40 (+ L5 tanı) + arch + belgeler.
+  Tam verify `verify-2.log` exit 0: native 25, vitest 334 / 2.210, host 55, smoke (ilk koşu yalnız `FORCE_COLOR=3` yüzünden 2 test; PLAN bulgusu).
+  REQUEST_REVIEW **2109** gönderildi (2100–2108 ile birlikte bekliyor). Push: Astra PASS + owner izni → yalnız incelenen sha.
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
