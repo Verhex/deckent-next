@@ -267,7 +267,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: Date.now() },
       messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
       admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS,
-        requestMaxBytes: context.config.service.inputMaxBytes } }, store, ports);
+        requestMaxBytes: context.config.service.inputMaxBytes,
+        // The longest answer (a token is at most 4 UTF-8 bytes) and one user message of up to an eighth of the bound, at most 32 KiB.
+        requestReserveBytes: chat.maxCompletionTokens * 4 + Math.min(32_768, Math.floor(context.config.service.inputMaxBytes / 8)) } }, store, ports);
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');

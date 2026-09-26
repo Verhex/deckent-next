@@ -609,8 +609,11 @@ lifecycle. Compaction is also triggered when the exact serialized history exceed
 (`service.inputMaxBytes`, passed by the composition as `admission.requestMaxBytes`), so a conversation keeps fitting the client's next
 request even when the window is unknown. The loop keeps no copy of appended messages: the result carries the final answer, a count and
 the incremental digest (same value as the digest of the whole array); a replay appends nothing (count 0, recorded digest). Read dedupe
-answers only with a result the model can still see: a compaction drops entries whose result left the prompt, and a successful
-non-read call clears it. Open: a `compacted` event must fit one event frame (`service.responseMaxBytes`); a tail of very large tool
+answers only with a result the model can still see: an entry is bound to the result message itself (providers reuse call ids across
+rounds; Astra 2106 R1), a compaction drops entries whose message left the prompt, and a successful non-read call clears it. Byte
+pressure also counts headroom (owner 2026-09-26, Astra 2106 R2): the longest answer (`maxCompletionTokens` × 4 bytes) plus one user
+message (an eighth of the bound, at most 32 KiB) must still fit the next request; a request that cannot fit even so is refused by the
+client before anything is sent as `RUNTIME_CHAT_TURN_TOO_LARGE` (start `/new` or write less), never as a transport fault. Open: a `compacted` event must fit one event frame (`service.responseMaxBytes`); a tail of very large tool
 results, or a summary copying many long user messages (each ≤ 4000 characters), can exceed it and then cancels the turn (fail
 closed, not silent); and a tail that alone stays above the high-water mark is summarized again every round (billed, no progress;
 candidate guard: skip when the last compaction did not shrink the history). The byte check needs no counter port. Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →

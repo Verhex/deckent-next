@@ -59,7 +59,9 @@ export interface AgentTurnInput {
    * bound of the client's next request (the service input bound); past the high-water mark of it the history is compacted too, so a
    * long conversation keeps fitting even when the window is unknown (Astra 2091 R1).
    */
-  readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number; readonly requestMaxBytes?: number };
+  readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number; readonly requestMaxBytes?: number;
+    /** Bytes the client's next request adds after this round: the longest answer and one user message (owner 2026-09-26, Astra 2106 R2). */
+    readonly requestReserveBytes?: number };
 }
 
 export interface AgentTurnResult {
@@ -113,14 +115,16 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   const { signal, emit } = input;
   const messages: AgentTurnMessage[] = [...input.messages];
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
-  // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit.
-  const seenReads = new Map<string, string>();
+  // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
+  // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
+  const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
   let rounds = 0, toolCalls = 0, compactions = 0, appendedCount = 0, last: AgentTurnMessage | null = null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
   const push = (message: AgentTurnMessage) => {
     messages.push(message); appendedHash.update(`${appendedCount++ ? ',' : ''}${JSON.stringify(message)}`); last = message;
     emit({ kind: 'message', message });
+    return message;
   };
   const finish = (value: AgentTurnFinish, note: string | null): AgentTurnResult => {
     emit({ kind: 'done', finish: value, note });
@@ -149,7 +153,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const current = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
     const tokenPressure = current !== null && current.windowTokens !== null && current.promptTokens + reserve > current.windowTokens * AGENT_COMPACTION_HIGH_WATER;
     const byteBound = input.admission?.requestMaxBytes;
-    const bytePressure = byteBound !== undefined && Buffer.byteLength(JSON.stringify(messages), 'utf8') > byteBound * AGENT_COMPACTION_HIGH_WATER;
+    const historyBytes = byteBound === undefined ? 0 : Buffer.byteLength(JSON.stringify(messages), 'utf8');
+    // Past the high-water mark, or when this round's longest answer plus the next user message would not fit the next request.
+    const bytePressure = byteBound !== undefined && (historyBytes > byteBound * AGENT_COMPACTION_HIGH_WATER
+      || historyBytes + (input.admission?.requestReserveBytes ?? 0) > byteBound);
     const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
     if (plan && ports.summarize) {
       compactions++;
@@ -163,8 +170,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       }
       const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
       messages.splice(0, messages.length, ...next);
-      const visible = new Set(plan.tail.flatMap(message => message.role === 'tool' ? [message.toolCallId] : []));
-      for (const [digest, callId] of seenReads) if (!visible.has(callId)) seenReads.delete(digest);
+      const visible = new Set<AgentTurnMessage>(plan.tail);
+      for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
       emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
       await measure();
       if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
@@ -196,9 +203,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null;
       const result = async (status: AgentToolCallStatus, content: string) => {
-        push({ role: 'tool', toolCallId: call.id, name: call.name, content });
+        const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8') });
         await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
+        return message;
       };
       if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
       if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
@@ -208,7 +216,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (!checked.ok) { await result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }
       const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest;
       if (tool.toolClass === 'read' && seenReads.has(digest)) {
-        await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)} earlier in this turn; its result is above. Change the arguments to read something else.`);
+        await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)!.callId} earlier in this turn; its result is above. Change the arguments to read something else.`);
         continue;
       }
       // Policy first: a denied call learns nothing from the target (a plan error would reveal content).
@@ -234,10 +242,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       toolCalls++;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
-      if (tool.toolClass === 'read' && outcomeText.status === 'ok') seenReads.set(digest, call.id);
       // A successful write may change what any earlier read saw: those reads run again.
       if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();
-      await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
+      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
+      if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
   }
 }

@@ -286,3 +286,19 @@ it('compacts on the request byte bound when the window is unknown, and not witho
   // Bytes need no measurement: without a counter port the bound still compacts.
   expect((await run(30_000, false)).summaries).toBe(1);
 });
+
+// Astra 2106 R1 (inverted repro): providers may reuse a call id in every round; read dedupe is bound to the result message itself, so a
+// result compacted away is read again even when a later call reused its id.
+it('re-reads a compacted-away result even when the provider reuses the same call id every round (Astra 2106 R1)', async () => {
+  const events: AgentTurnEvent[] = [], executed: string[] = []; let summaries = 0;
+  await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event) }, {
+    async measure({ messages }) { return { promptTokens: messages.length > 14 ? 900 : 100, windowTokens: 1000, quality: 'provider-count' }; },
+    async summarize() { summaries++; return { objective: 'inspect', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] }; },
+    async invokeRound({ round }) { return round === 31 ? answer('done') : answer('', [call('call_1', 'read_file', { path: round === 30 ? 'file-1' : `file-${round}` })]); },
+    async authorize() { return 'allow'; }, describe: () => null, now: () => 0,
+    async execute(_tool, args) { executed.push(String(args['path'])); return { status: 'ok', text: `SENTINEL-${String(args['path'])}:${'x'.repeat(100)}` }; },
+  });
+  expect(summaries).toBeGreaterThan(2);
+  expect(executed.filter(path => path === 'file-1')).toHaveLength(2);
+  expect(events.filter(event => event.kind === 'tool.finished').at(-1)).toMatchObject({ status: 'ok' });
+});

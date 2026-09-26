@@ -54,6 +54,11 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         || operation === 'chatTurn' || operation === 'cancelChatTurn'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
+      // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
+      if (operation === 'chatTurn') {
+        const bytes = Buffer.byteLength(JSON.stringify(request), 'utf8');
+        if (bytes > config.service.inputMaxBytes) throw ErrorRegistry.createError('RUNTIME_CHAT_TURN_TOO_LARGE', { params: { bytes, limit: config.service.inputMaxBytes } });
+      }
       const response = onEvent
         ? await turnLocalRuntime(socketOptions(config.service, endpoint), request, events => { for (const event of events) onEvent(event); }, signal)
         : onDelta

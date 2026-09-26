@@ -26,6 +26,14 @@
 
 
 
+
+## Astra 2106 düzeltmesi — T-L5 (2026-09-26 akşam, owner kararı: serviste pay)
+- R1: `seenReads` artık sonuç mesajı nesnesine bağlı (sağlayıcı her turda `call_1` kullansa da sıkıştırmayla çıkan sonuç yeniden okunur).
+- R2: sıkıştırma, geçmiş + en uzun yanıt (maxCompletionTokens × 4 bayt) + bir kullanıcı mesajı payı (sınırın 1/8'i, ≤ 32 KiB) sınırı aşarsa da
+  tetiklenir; istemci `chatTurn` isteğini göndermeden ölçer, aşımda `RUNTIME_CHAT_TURN_TOO_LARGE` (`/new` önerisi; hiçbir şey gönderilmez).
+- Testler: motor (31 tur, her turda `call_1`, ≥3 sıkıştırma → file-1 iki kez okunur), gerçek servis (Astra'nın sınırı: 64.000 karakter yanıt +
+  8.000 karakter girdi → sonraki tur geçer, 3 istek; 300.000 karakterlik istek adıyla reddedilir, istek gitmez). Hedefli 89 dosya / 803 test.
+  Mutasyonlar 1–3 düştü: `proof/F26-T-L5-FIX-2106/`.
 ## Astra inceleme birikimi (2026-09-26 akşam)
 - Astra'nın son yanıtı `2098` (13:45Z). Sonrasında yanıtsız dört istek: `2099` (2091 T-L5), `2100` (2094 dilim 2), `2101` (3a), `2102` (3b).
   İzleyici çalışmıyor olabilir; "kanal takibi aktif" bu saatten sonrası için doğrulanmadı. Hiçbiri tüketilmedi.

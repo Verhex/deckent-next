@@ -108,6 +108,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   LOCAL_RUNTIME_ALREADY_RUNNING: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_ALREADY_RUNNING', p, l) }) },
   LOCAL_RUNTIME_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_TRANSPORT', p, l) }) },
   RUNTIME_SERVICE_TRANSPORT: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_TRANSPORT', p, l) }) },
+  RUNTIME_CHAT_TURN_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_TURN_TOO_LARGE', p, l) }) },
   RUNTIME_SERVICE_CORRELATION: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_CORRELATION', p, l) }) },
   RUNTIME_SERVICE_RESPONSE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_RESPONSE_LIMIT', p, l) }) },
   RUNTIME_SERVICE_DELIVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_DELIVERY_INVALID', p, l) }) },

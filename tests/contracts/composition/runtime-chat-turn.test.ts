@@ -282,6 +282,35 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(Buffer.byteLength(JSON.stringify(next))).toBeLessThan(0.75 * 262_144);
   }, 30_000);
 
+  // Astra 2106 R2 (inverted repro; owner 2026-09-26: headroom on the service): a history under the high-water mark is still compacted
+  // when this round's longest answer plus the next user message would not fit the next request, so the following turn goes through;
+  // a request that cannot fit even so is refused by name before anything is sent.
+  it('keeps room for the longest answer and the next message, and refuses an oversized request by name (Astra 2106 R2)', async () => {
+    const f = await runtime();
+    const cfgPath = join(f.project, '.deckent/config.json'), cfg = JSON.parse(await readFile(cfgPath, 'utf8'));
+    cfg.provider_invocation_profiles.profiles[0].adapter.definition.maxOutputTokens = 20_000;
+    cfg.terminal.chat.maxCompletionTokens = 16_384;
+    await writeFile(cfgPath, JSON.stringify(cfg)); await f.start();
+    f.state.script = [{ summary: '{"objective":"o","findings":[],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":[]}' },
+      { content: 'b'.repeat(64_000) }, { content: 'Next answer.' }];
+    const history: AgentTurnMessage[] = [{ role: 'system', content: 'SYS' }, ...Array.from({ length: 40 }, (_, i) => i % 2
+      ? { role: 'assistant' as const, content: 'a'.repeat(9_550), toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }), { role: 'user', content: 'finish' }];
+    expect(Buffer.byteLength(JSON.stringify(history))).toBeLessThan(0.75 * 262_144);
+    const events: AgentTurnStreamEvent[] = [];
+    expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'before-bound', messages: history }, event => events.push(event)))
+      .toMatchObject({ finish: 'stop' });
+    const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>;
+    expect(compacted).toBeDefined();
+    const after = events.slice(events.indexOf(compacted) + 1).flatMap(event => event.kind === 'message' ? [event.message] : []);
+    const next: AgentTurnMessage[] = [history[0]!, ...compacted.messages, ...after, { role: 'user', content: `next ${'q'.repeat(8_000)}` }];
+    expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'after-bound', messages: next }, () => undefined)).toMatchObject({ finish: 'stop', answer: 'Next answer.' });
+    expect(f.state.requests).toHaveLength(3);
+    const huge: AgentTurnMessage[] = [history[0]!, { role: 'user', content: 'x'.repeat(300_000) }];
+    await expect(f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'too-large', messages: huge }, () => undefined))
+      .rejects.toMatchObject({ code: 'RUNTIME_CHAT_TURN_TOO_LARGE' });
+    expect(f.state.requests).toHaveLength(3);
+  }, 30_000);
+
   it('uses a labelled upper bound and sends no counter request when the model has no counter', async () => {
     const f = await runtime({ windowTokens: 100_000 }); await f.start();
     f.state.script = [{ content: 'Plain answer.' }];
