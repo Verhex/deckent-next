@@ -50,7 +50,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 1_000_005 });
     expect(result.omittedBytes).toBeGreaterThan(800_000);
     expect(result.output).toMatch(/\[… \d+ bytes of output omitted …\]/u); expect(result.output.endsWith('END\n')).toBe(true);
-    expect(Buffer.byteLength(result.output)).toBeLessThan(140_000);
+    expect(Buffer.byteLength(result.output)).toBeLessThan(17_000);
     expect(chunks.every(chunk => Buffer.byteLength(chunk) <= HOST_SHELL_CHUNK_MAX_BYTES)).toBe(true);
     expect(chunks.join('').length).toBe(1_000_005);
   });

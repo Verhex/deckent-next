@@ -22,6 +22,13 @@ export const terminalConfigSchema = z.object({
     /** Message window of the plain line mode only; the agent conversation is measured and compacted by the runtime (T-L5). */
     historyMessages: z.number().int().min(2).max(1_000).default(40),
   }).strict().optional(),
+  /** The agent's host shell (T-L4 slice 3c): its per-command deadline, and variable names copied from the service environment in
+   * addition to the built-in allowlist (credentials never pass unless named here). */
+  shell: z.object({
+    schemaVersion: z.literal(1),
+    timeoutMs: z.number().int().min(1_000).max(3_600_000).default(300_000),
+    environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
+  }).strict().optional(),
 }).strict();
 
 export type TerminalConfig = z.infer<typeof terminalConfigSchema>;
@@ -31,6 +38,13 @@ export function readTerminalChatConfig(config: Record<string, unknown>): Termina
   const section = config['terminal'];
   if (section === undefined) return null;
   return terminalConfigSchema.parse(section).chat ?? null;
+}
+
+export type TerminalShellConfig = { readonly timeoutMs: number; readonly environment: readonly string[] };
+/** The shell section, or its defaults when absent. */
+export function readTerminalShellConfig(config: Record<string, unknown>): TerminalShellConfig {
+  const shell = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).shell;
+  return Object.freeze({ timeoutMs: shell?.timeoutMs ?? 300_000, environment: Object.freeze([...(shell?.environment ?? [])]) });
 }
 
 export function readTerminalConfig(config: Record<string, unknown>): TerminalConfig {

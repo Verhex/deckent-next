@@ -23,7 +23,8 @@ export interface AgentTurnPorts {
   prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true; readonly requireApproval?: boolean } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
-  execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<AgentToolOutcome>;
+  /** `callId` correlates streamed output (e.g. a shell command's) with the call; the result stays the only history. */
+  execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal, callId: string): Promise<AgentToolOutcome>;
   now(): number;
   /**
    * The prompt of a round as the provider will see it (T-L5): its own token count, or a tagged conservative upper bound, and the
@@ -232,7 +233,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       }
       toolCalls++;
       let outcomeText: AgentToolOutcome;
-      try { outcomeText = await ports.execute(tool, checked.args, signal); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
+      try { outcomeText = await ports.execute(tool, checked.args, signal, call.id); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       if (tool.toolClass === 'read' && outcomeText.status === 'ok') seenReads.set(digest, call.id);
       // A successful write may change what any earlier read saw: those reads run again.
       if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();

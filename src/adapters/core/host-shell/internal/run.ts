@@ -8,8 +8,9 @@ export const HOST_SHELL_ENV_ALLOWLIST: readonly string[] = Object.freeze(['PATH'
 const NON_INTERACTIVE: Readonly<Record<string, string>> = Object.freeze({ TERM: 'dumb', NO_COLOR: '1', PAGER: 'cat', GIT_PAGER: 'cat',
   GIT_TERMINAL_PROMPT: '0' });
 export const HOST_SHELL_DEFAULT_TIMEOUT_MS = 300_000;
-/** Output kept for the call's result: the head and the tail (errors usually end a run), with what was left out counted. */
-export const HOST_SHELL_RESULT_MAX_BYTES = 131_072;
+/** Output kept for the call's result: the head and the tail (errors usually end a run), with what was left out counted. The same
+ * 16 KiB as a read tool's result: it enters the model's context and travels as one event frame. */
+export const HOST_SHELL_RESULT_MAX_BYTES = 16_384;
 /** Largest streamed chunk (one `tool.output` event). */
 export const HOST_SHELL_CHUNK_MAX_BYTES = 8_192;
 const KILL_GRACE_MS = 2_000;

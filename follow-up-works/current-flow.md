@@ -13,6 +13,21 @@
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
   önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
 
+## T-L4 dilim 3c-i — `run_shell` aracı, C11 etkisi (2026-09-26, Jev 82858581 `ask_low_all_effects_drop_marker` 0,95)
+- Karar: policy önce (araç + `host.shell.run` işlem kararı, sıkı olanı; ret hiç sunulmaz); sınıflandırma: yalnız `none` riskli salt okunur
+  izinle sessiz; `low`, değiştiren ve yıkıcı her modda sorar. Önizleme: komut, risk + neden, "sandbox değil". Her çalıştırma `host-shell`
+  hedefinde C11 etkisi (oturum, niyet önce, çalıştırma başına kayıt → belirsiz çalıştırma kabuğu meşgul etmez); çıkış = etki, iptal/zaman
+  aşımı = unknown (tekrar yok), başlatılamayan = reddedildi. Tur iptali komutu öldürür. `tool.output` kanal yerinin yarısına kadar, sonra tek
+  görünür işaret; sonuçtan önce kanal boşaltılır; sonuç 16 KiB. `terminal.shell` {timeoutMs, environment}. Kanala `room()` eklendi, motor
+  `execute` portuna çağrı kimliği.
+- Bulunan kusur (test sırasında): 128 KiB sonuç tek olay çerçevesine sığmıyor ve bekleyen görüntüyle birleşince kanal kapanıyordu → sonuç
+  16 KiB (okuma aracıyla aynı) + sonuçtan önce boşaltma; büyük çıktı testi bunu sınıyor (mutasyon 5 atlama kaldırılınca düşüyor).
+- Testler (gerçek servis): sessiz `cat` + akış + settled etki; `touch` sorar/izinle bir kez çalışır, `grep -r` (low) ve yıkıcı `rm -rf src`
+  sorar/retle çalışmaz; izin yok → sunulmaz; yalnız araç izni (işlem izni yok) → reddedilir; çalışan `sleep 20` iptalde öldürülür, etki
+  unknown, `late.txt` yok, ardından sonraki komut çalışır; 2 MB çıktıda tur yaşar, sonuç < 17 KB. Geniş hedefli 215 dosya / 1.505 test
+  (build sonrası; tek `model-invocation` yük düşmesi tek başına geçti). Mutasyonlar 1–7 düştü: `proof/F26-T-L4C-SHELL-3C/`.
+- Canlı: owner izinleri gerekir (`agent-tool` `run_shell`, `operation` `host.shell.run` execute). Sırada 3c-ii: terminalde canlı çıktı kuyruğu.
+
 ## T-L4 dilim 3b — kabuk yürütme adaptörü (2026-09-26, Jev 52f9b6f9 `noprofile_allowlist_env` 0,98)
 - `adapters/core/host-shell` `runHostShell`: `bash --noprofile --norc -c`, stdin kapalı, cwd çalışma alanı kökü, ayrı süreç grubu; ortam izin
   listesi + operatörün izin verdiği adlar (yapılandırma alanı 3c'de, Jev 0,82) + etkileşimsiz sabitler; iptal/zaman aşımı → grup SIGTERM,

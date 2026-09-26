@@ -127,6 +127,10 @@ const editGrants = (toolEffect: 'allow' | 'require-approval') => [
   { id: 'edit-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['edit_file', 'write_file'] } },
   { id: 'file-write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['workspace.file.write'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
+const shellGrants = (toolEffect: 'allow' | 'require-approval') => [
+  { id: 'shell-tool', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+  { id: 'shell-run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } },
+  { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const toolText = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
 const ask = (turnId: string, content = 'what does src/a.ts export?') => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content }] });
 
@@ -146,7 +150,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'text').map(event => (event as { text: string }).text).join('')).toBe('It exports a.');
     // The model saw the declared tools and, in round 2, the tool result.
     expect(f.state.requests).toHaveLength(2);
-    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file']);
+    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file', 'run_shell']);
     expect(f.state.requests[1]!['messages']).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'tool', tool_call_id: 'call_1' })]));
     // Each round is one governed invocation under the command id derived from turn and round.
     expect(f.rows("SELECT command_id FROM model_invocations ORDER BY command_id").map(row => (row as { command_id: string }).command_id).sort())
@@ -444,6 +448,99 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       expect(await kept()).toEqual([]);
     }, 60_000);
   }
+
+  // T-L4 slice 3c (Jev 82858581): run_shell as a C11 effect of host.shell.run. Only a read-only command of bounded reach runs silently.
+  it('runs a read-only command of bounded reach without asking, streams its output and settles a host.shell.run effect (T-L4 slice 3c)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-shell-read'), event => events.push(event));
+    expect(events.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(events.filter(event => event.kind === 'tool.output').map(event => event.kind === 'tool.output' && event.text).join('')).toBe('export const a = 1;\n');
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok' });
+    expect(toolText(events)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(cat src\/a\.ts\)\nexport const a = 1;\n$/u);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }]);
+  }, 30_000);
+
+  it('asks before a modifying, traversing or destructive command even when policy allows, runs it once on allow, never on deny (T-L4 slice 3c)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    const client = f.client();
+    const run = async (turnId: string, commandLine: string, decision: 'allow' | 'deny') => {
+      f.state.script = [...f.state.script.slice(0, f.state.requests.length), { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: commandLine }) } }, { content: 'Ok.' }];
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+      await client.chatTurn(ask(turnId), event => {
+        events.push(event);
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed' }));
+      });
+      await Promise.all(pending);
+      return events;
+    };
+    const modify = await run('turn-touch', 'touch made.txt', 'allow');
+    expect(modify.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('$ touch made.txt\nrisk: modify') });
+    expect(modify.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('not a sandbox') });
+    expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('');
+    const traversal = await run('turn-grep', 'grep -r a .', 'deny');
+    expect(traversal.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: safe-read') });
+    expect(traversal.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    expect(traversal.some(event => event.kind === 'tool.output')).toBe(false);
+    const destructive = await run('turn-rm', 'rm -rf src', 'deny');
+    expect(destructive.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: destructive') });
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+    expect(f.rows('SELECT state FROM effect_intents')).toEqual([{ state: 'settled' }]);
+  }, 60_000);
+
+  it('keeps the turn alive on a very large output: the display is skipped visibly when the client lags, the result stays bounded (T-L4 slice 3c)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    await writeFile(join(f.project, 'big.txt'), 'x'.repeat(2_000_000));
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat big.txt"}' } }, { content: 'Read.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    // A slow reader: the client handles events only after a delay, so unread bytes pile up on the service side.
+    const result = await f.client().chatTurn(ask('turn-big'), event => { events.push(event); const until = Date.now() + 2; while (Date.now() < until) { /* lag */ } });
+    expect(result).toMatchObject({ finish: 'stop' });
+    const shown = events.filter(event => event.kind === 'tool.output').map(event => event.kind === 'tool.output' ? event.text : '').join('');
+    expect(shown.length === 2_000_000 || shown.includes('[deckent] output display skipped')).toBe(true);
+    expect(Buffer.byteLength(toolText(events))).toBeLessThan(17_000);
+    expect(toolText(events)).toMatch(/bytes of output omitted/u);
+  }, 60_000);
+
+  it('never offers a command the policy does not grant, and kills a running command when the turn is cancelled (T-L4 slice 3c)', async () => {
+    const denied = await runtime({ toolGrant: false, extraGrants: [] }); await denied.start();
+    denied.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"touch never.txt"}' } }, { content: 'No.' }];
+    const deniedEvents: AgentTurnStreamEvent[] = [];
+    await denied.client().chatTurn(ask('turn-denied'), event => deniedEvents.push(event));
+    expect(deniedEvents.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(deniedEvents.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    await expect(readFile(join(denied.project, 'never.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"sleep 20; touch late.txt"}' } }];
+    const client = f.client();
+    const running = client.chatTurn(ask('turn-cancel-shell'), event => {
+      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'allow-sleep', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
+      if (event.kind === 'approval.settled') setTimeout(() => void client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel-shell' }), 300);
+    });
+    const started = Date.now();
+    expect(await running).toMatchObject({ finish: 'cancelled' });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'unknown' }]);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await expect(readFile(join(f.project, 'late.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // Each run is its own record: the uncertain run above does not make the shell busy for the next command.
+    f.state.script = [...f.state.script.slice(0, f.state.requests.length), { toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Again.' }];
+    const next: AgentTurnStreamEvent[] = [];
+    await client.chatTurn(ask('turn-after-cancel'), event => next.push(event));
+    expect(next.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+
+    // The tool alone is not enough: without the host.shell.run operation grant the command is denied and never offered.
+    const toolOnly = await runtime({ toolGrant: false, extraGrants: [shellGrants('allow')[0]!] }); await toolOnly.start();
+    toolOnly.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'No.' }];
+    const toolOnlyEvents: AgentTurnStreamEvent[] = [];
+    await toolOnly.client().chatTurn(ask('turn-tool-only'), event => toolOnlyEvents.push(event));
+    expect(toolOnlyEvents.some(event => event.kind === 'approval.requested' || event.kind === 'tool.output')).toBe(false);
+    expect(toolOnlyEvents.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+  }, 60_000);
 
   it('writes an approved edit as a C11 effect: the owner sees the diff, the file is written once and the effect is settled (T-L4 slice 2)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: editGrants('require-approval') }); await f.start();

@@ -698,6 +698,20 @@ environment never reach the command unless their name is allowed. Cancellation a
 cancel). Output streams in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 128 KiB (a quarter head, the rest tail)
 with the omitted byte count (legacy kept everything). Results: exited (code/signal), timed-out, cancelled, spawn-failed,
 unsupported-platform (Windows). It is not a sandbox: the command has the service user's file, process and network access.
+**Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
+tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
+deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
+only a read-only command of bounded reach (risk `none`) runs without asking, and only under allow; `low` (traversal, repository
+objects), modify and the destructive table ask the owner in every mode (slice 4 may relax modify, never the destructive floor). The
+approval preview shows the exact command, its risk tier and reason, and that it is not a sandbox. Every run is a C11 effect on the
+`host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn); each run is its own
+record, so an uncertain run never makes the shell busy. A shell keeps no idempotency record: exited is the effect (any exit code), a
+cancelled or timed-out run is `unknown` (the result says what it changed is unknown) and is never re-run, a run that could not start is
+refused. Turn cancellation reaches the running command (group killed). Output streams as `tool.output` while the turn channel has
+room (a new channel `room()`); past half of it the display stops with one visible marker, and the streamed display is drained before
+the result is emitted. The result keeps 16 KiB (head + tail, omitted bytes counted), like a read tool. `terminal.shell` configures the
+per-command timeout (default 300 s) and extra environment names. Live use needs owner grants (`agent-tool` `run_shell`, `operation`
+`host.shell.run` execute); the terminal's live output display and card text are slice 3c-ii.
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
 corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally

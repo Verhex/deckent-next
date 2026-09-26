@@ -12,6 +12,9 @@ import { encodeServiceFrame } from './framing.js';
 export interface RuntimeServiceTurnChannel {
   emit(event: AgentTurnStreamEvent): void;
   drained(): Promise<void>;
+  /** Bytes of events the channel can still take before failing closed: optional presentation (streamed command output) checks it
+   * and is skipped, visibly, instead of cancelling the turn. */
+  room(): number;
   readonly signal: AbortSignal;
 }
 export interface ServerTurnChannel extends RuntimeServiceTurnChannel { finish(): void }
@@ -89,6 +92,7 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
       if (pendingBytes > pendingMaxBytes) { fail(); return; }
       if (!scheduled) { scheduled = true; setImmediate(() => write(false)); }
     },
+    room() { return controller.signal.aborted || finished ? 0 : Math.max(0, pendingMaxBytes - pendingBytes); },
     drained() {
       if (controller.signal.aborted || (idle() && !scheduled)) return Promise.resolve();
       return new Promise<void>(resolve => { waiters.push(resolve); });

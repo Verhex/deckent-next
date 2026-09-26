@@ -1041,6 +1041,9 @@
         "src/adapters/core/sqlite-agent-turn",
         "src/adapters/core/workspace-read",
         "src/adapters/core/workspace-write",
+        "src/adapters/core/host-shell",
+        "src/adapters/core/shell-paths",
+        "src/engine/core/shell-classification",
         "src/adapters/core/attempt-store",
         "src/composition/core/model-invocation",
         "src/composition/core/provider-catalog",
@@ -1277,7 +1280,10 @@
       "plan": "EXECUTION"
     },
     "src/adapters/core/host-shell": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/agent-tool",
+        "src/engine/core/effect"
+      ],
       "plan": "SURFACES"
     },
     "src/adapters/core/shell-paths": {

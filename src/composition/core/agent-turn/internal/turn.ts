@@ -6,9 +6,10 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
+import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
+import { createAgentShell } from './shell.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -119,8 +120,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolCapable = binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
     && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported'));
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot) : null;
-  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS] : [];
+  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
   const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
+  const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
+    config: readTerminalShellConfig(config) }) : null;
   const principalKey = principalKeyOf(context.principal);
   const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
@@ -178,13 +181,19 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       async authorize(tool, args) {
         const decision = await toolAuthority.decide(tool, command.scopeId, context.principal);
-        if (decision === 'deny' || tool.toolClass !== 'edit' || !edits || !args) return decision;
-        // An edit is also the `workspace.file.write` operation: the stricter of both decisions holds.
-        const operation = await edits.authority();
+        const operationOf = tool.toolClass === 'edit' ? edits : tool.toolClass === 'shell' ? shell : null;
+        if (decision === 'deny' || !operationOf || !args) return decision;
+        // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds.
+        const operation = await operationOf.authority();
         if (operation === 'deny') return 'deny';
         return decision === 'allow' && operation === 'allow' ? 'allow' : 'require-approval';
       },
       async prepare(tool, args) {
+        if (tool.toolClass === 'shell' && shell) {
+          // Classified on the command: only a read-only command of bounded reach may run without asking (Jev 82858581).
+          const planned = await shell.plan(tool.name, args);
+          return planned.ok ? { ok: true, requireApproval: shell.asks(tool.name, args) } : { ok: false, text: planned.text };
+        }
         if (tool.toolClass !== 'edit' || !edits) return { ok: true };
         const planned = await edits.plan(tool.name, args);
         // The write floor raises allow to require-approval for high-risk paths in every mode (contract §5), on the resolved path.
@@ -209,13 +218,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           const diff = edits?.preview(tool.name, args);
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
-            summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept) : chatTurnApprovalPreview(tool.name, args),
+            summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
+              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
-          if (outcome === 'allow') edits?.approved(tool.name, args);
+          if (outcome === 'allow') { edits?.approved(tool.name, args); shell?.approved(tool.name, args); }
           settlement = outcome;
           return outcome;
         } finally {
@@ -243,11 +253,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
         return { promptTokens: chatTurnPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
       },
-      describe: (_tool, args) => displayTarget(args),
-      async execute(tool, args, toolSignal) {
+      describe: (tool, args) => tool.toolClass === 'shell' && typeof args['command'] === 'string'
+        ? (args['command'].length > 200 ? `${args['command'].slice(0, 199)}…` : args['command']) : displayTarget(args),
+      async execute(tool, args, toolSignal, callId) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
         if (tool.toolClass === 'edit' && edits) return edits.apply(tool.name, args);
+        if (tool.toolClass === 'shell' && shell) return shell.apply(tool.name, args, toolSignal, callId);
         return workspace.execute(tool.name, args, toolSignal);
       },
       now: () => Date.now(),
