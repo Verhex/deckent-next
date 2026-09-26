@@ -686,6 +686,15 @@ carriers (`*.pfx`, `*.keystore`, `*.jks`, `.pypirc`, `credentials`, `credentials
 `.git` directory itself, so read tools refuse them too; legacy `.deckent/private/` is dropped (Next keeps private state under the
 already denied `.deckent/host`, `audit-key`, `approvals`). Not covered: intermediate symlink hops that leave the root and return (the
 final real path is what the shell reads), and a swap between classification and execution. No tool uses it yet (slice 3c).
+**Host shell execution (T-L4 slice 3b, Jev 52f9b6f9).** `adapters/core/host-shell` runs one command: `bash --noprofile --norc -c`
+(no rc-file side effects; legacy used `-lc`), stdin closed, cwd = workspace root, its own process group; environment = an allowlist
+copied from the service (PATH, HOME, USER, LOGNAME, LANG, LC_ALL/CTYPE/MESSAGES, TZ, TMPDIR, SHELL) plus operator-allowed names and
+fixed non-interactive settings (TERM=dumb, NO_COLOR, PAGER/GIT_PAGER=cat, GIT_TERMINAL_PROMPT=0) — credentials in the service
+environment never reach the command unless their name is allowed. Cancellation and the timeout (default 300 s) signal the whole group
+(SIGTERM, SIGKILL after 2 s, and SIGKILL again at close), so background children never outlive the call (legacy did not kill on
+cancel). Output streams in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 128 KiB (a quarter head, the rest tail)
+with the omitted byte count (legacy kept everything). Results: exited (code/signal), timed-out, cancelled, spawn-failed,
+unsupported-platform (Windows). It is not a sandbox: the command has the service user's file, process and network access.
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
 corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally

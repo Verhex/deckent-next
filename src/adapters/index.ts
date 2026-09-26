@@ -59,3 +59,4 @@ export * from '#adapters/core/workspace-read/index.js';
 export * from '#adapters/core/sqlite-agent-turn/index.js';
 export * from '#adapters/core/workspace-write/index.js';
 export * from '#adapters/core/shell-paths/index.js';
+export * from '#adapters/core/host-shell/index.js';

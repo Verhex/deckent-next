@@ -1276,6 +1276,10 @@
       ],
       "plan": "EXECUTION"
     },
+    "src/adapters/core/host-shell": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
     "src/adapters/core/shell-paths": {
       "dependencies": [
         "src/adapters/core/workspace-read",

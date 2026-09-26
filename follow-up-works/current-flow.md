@@ -8,6 +8,17 @@
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
   önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
 
+## T-L4 dilim 3b — kabuk yürütme adaptörü (2026-09-26, Jev 52f9b6f9 `noprofile_allowlist_env` 0,98)
+- `adapters/core/host-shell` `runHostShell`: `bash --noprofile --norc -c`, stdin kapalı, cwd çalışma alanı kökü, ayrı süreç grubu; ortam izin
+  listesi + operatörün izin verdiği adlar (yapılandırma alanı 3c'de, Jev 0,82) + etkileşimsiz sabitler; iptal/zaman aşımı → grup SIGTERM,
+  2 sn sonra SIGKILL (kapanışta tekrar); akış ≤ 8 KiB parça, UTF-8 bölünmez; sonuç 128 KiB baş+kuyruk + atlanan bayt sayısı. Windows → tipli
+  `unsupported-platform`. Sandbox değil (ARCHITECTURE'da açık).
+- Testler 6 gerçek süreç: temiz ortam (gizli değişken görünmez, izinli ad görünür), iptalde arka plan çocuğu dahil grup ölür, SIGTERM'i yok
+  sayan grup SIGKILL ile ~2 sn'de biter, zaman aşımı, 1 MB çıktı sınırlı (parça ≤ 8 KiB, toplam akış eksiksiz), çok baytlı bölünmez, önceden
+  iptal edilmiş çağrı hiçbir şey çalıştırmaz. Mutasyonlar 1–7 düştü: `proof/F26-T-L4C-SHELL-3B/`.
+- Sırada 3c: `run_shell` aracı (C11 etkisi: spawn öncesi niyet, çökmede unknown), sınıflandırıcı → sessiz/sor/yıkıcı taban, `tool.output`
+  akışı, terminal görünümü, `terminal.shell` yapılandırması (zaman aşımı, ek ortam adları).
+
 ## T-L4 dilim 3a — salt okunur kabuk sınıflandırıcısı ve risk tablosu (2026-09-26, Jev d6909e28 `engine_pure_port_unified_deny` 0,77)
 - Uygulandı: motor birimi `engine/core/shell-classification` (tarayıcı 138, script dilbilgileri 167, program tabloları 206, seçenek/find/git
   279, sınıflandırıcı 78, risk 293 satır), adaptör `adapters/core/shell-paths` (WorkspaceScope üzerinden yol portu + sınırlı sh-glob).
