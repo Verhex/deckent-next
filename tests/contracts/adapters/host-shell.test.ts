@@ -16,7 +16,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     const cwd = await workspace();
     const result = await runHostShell({ command: 'pwd; echo "secret=${DEMO_SECRET:-none} allowed=${DEMO_ALLOWED:-none} term=$TERM pager=$GIT_PAGER"; echo oops >&2; exit 3',
       cwd, environment: { PATH: process.env.PATH, HOME: '/home/x', DEMO_SECRET: 's3cr3t', DEMO_ALLOWED: 'yes' }, extraEnv: ['DEMO_ALLOWED'] });
-    expect(result).toMatchObject({ status: 'exited', exitCode: 3, omittedBytes: 0, survivorsKilled: false });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 3, omittedBytes: 0, cleanup: 'clean' });
     expect(result.output).toContain(`${cwd}\nsecret=none allowed=yes term=dumb pager=cat\n`);
     expect(result.output).toContain('oops');
     expect(result.output).not.toContain('s3cr3t');
@@ -72,7 +72,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
       const result = await runHostShell({ cwd, command: 'sleep 20 > /dev/null 2>&1 & echo $!', timeoutMs: 5_000 });
       pid = Number(result.output.trim());
       expect(pid).toBeGreaterThan(0);
-      expect(result).toMatchObject({ status: 'exited', exitCode: 0, survivorsKilled: true });
+      expect(result).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'group-ended' });
       expect(result.durationMs).toBeLessThan(3_000);
       expect(alive(pid)).toBe(false);
       await settle(100);
@@ -86,7 +86,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     const cwd = await workspace(), chunks: string[] = [];
     const result = await runHostShell({ cwd, command: "head -c 4095 /dev/zero | tr '\\0' a; printf '\\305'; sleep 0.05; printf '\\237'", onOutput: (_stream, text) => chunks.push(text) });
     expect(chunks.join('')).toBe(`${'a'.repeat(4095)}ş`);
-    expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 4_097, omittedBytes: 0, survivorsKilled: false });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 4_097, omittedBytes: 0, cleanup: 'clean' });
     expect(result.output).toBe(`${'a'.repeat(4095)}ş`);
     expect(result.output.includes('\ufffd')).toBe(false);
   });
@@ -107,6 +107,50 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     const clock = { sample() { return samples.length > 1 ? samples.shift()! : samples[0]!; } };
     const result = await runHostShell({ cwd, command: 'true' }, clock);
     expect(result).toMatchObject({ status: 'exited', exitCode: 0, durationMs: 150 });
+  });
+
+  // Astra 2119 (inverted repro): a descendant that left the process group (setsid) and kept the inherited pipes open cannot be seen
+  // or ended through the group; the pipes are released a short grace after the group is known empty (or at the timeout), the call
+  // ends bounded, and the result says the cleanup is unverified. Documented scope: such a descendant can outlive the call.
+  it('bounds the pipe drain after the shell exit even when a child left the process group, and reports the cleanup as unverified', async () => {
+    const cwd = await workspace(), before = performance.now();
+    const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 0.2; exit 0', timeoutMs: 500 });
+    // The timeout (500 ms) releases the pipes, well before the drain grace would (~1.2 s) and long before the child ends (5 s).
+    expect(performance.now() - before).toBeLessThan(1_000);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'unverified' });
+    expect(result.output).toContain('ready');
+  });
+
+  it('ends at once when a child that left the process group redirected its output, and does not claim to have observed it', async () => {
+    const cwd = await workspace(), before = performance.now();
+    const result = await runHostShell({ cwd, command: 'setsid sh -c "sleep 5" > /dev/null 2>&1 & sleep 0.2; exit 0' });
+    expect(performance.now() - before).toBeLessThan(1_000);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'clean' });
+  });
+
+  it('is released by a cancellation while a child outside the group still holds the pipes', async () => {
+    const cwd = await workspace(), controller = new AbortController(), before = performance.now();
+    const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 1; exit 0', signal: controller.signal,
+      onOutput: (_stream, text) => { if (text.includes('ready')) setTimeout(() => controller.abort(), 50); } });
+    expect(performance.now() - before).toBeLessThan(3_000);
+    expect(result).toMatchObject({ status: 'cancelled', cleanup: 'unverified' });
+  });
+
+  // The shell exits at ~200 ms; the abort lands at ~300 ms, inside the drain (its grace would end at ~1.2 s): the pipes are released
+  // at once and the exited status is kept.
+  it('is released by a cancellation that arrives during the drain after the shell exited', async () => {
+    const cwd = await workspace(), controller = new AbortController(), before = performance.now();
+    const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 0.2; exit 0', signal: controller.signal, timeoutMs: 20_000,
+      onOutput: (_stream, text) => { if (text.includes('ready')) setTimeout(() => controller.abort(), 300); } });
+    expect(performance.now() - before).toBeLessThan(900);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'unverified' });
+  });
+
+  it('drains ordinary output completely after the shell exit', async () => {
+    const cwd = await workspace();
+    const result = await runHostShell({ cwd, command: "head -c 60000 /dev/zero | tr '\\0' a; echo; echo END; exit 7" });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 7, totalBytes: 60_005, cleanup: 'clean' });
+    expect(result.output.endsWith('END\n')).toBe(true);
   });
 
   it('runs nothing when the call is already cancelled', async () => {
