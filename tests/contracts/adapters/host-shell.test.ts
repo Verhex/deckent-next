@@ -99,6 +99,16 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(result.output).toBe(`${'a'.repeat(4095)}şb\n`);
   });
 
+  // I40: the duration is elapsed time on the platform clock's monotonic reading; a host wall clock stepping backwards during the
+  // run (measured ~2 s on this host) never clamps it to 0.
+  it('measures the run on the monotonic clock, so a backward wall step during the run does not shorten it', async () => {
+    const cwd = await workspace();
+    const samples = [{ wallMs: 1_000, monotonicMs: 500 }, { wallMs: 1_000 - 2_100, monotonicMs: 650 }];
+    const clock = { sample() { return samples.length > 1 ? samples.shift()! : samples[0]!; } };
+    const result = await runHostShell({ cwd, command: 'true' }, clock);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, durationMs: 150 });
+  });
+
   it('runs nothing when the call is already cancelled', async () => {
     const cwd = await workspace(), controller = new AbortController(); controller.abort();
     expect(await runHostShell({ command: 'touch ran', cwd, signal: controller.signal })).toMatchObject({ status: 'cancelled', totalBytes: 0 });

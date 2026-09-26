@@ -21,6 +21,11 @@ const KILL_GRACE_MS = 2_000;
 const GROUP_PROBE_MS = 25;
 const GROUP_PROBES_AFTER_KILL = 80;
 
+/** The call's clock port (I40): a sampler whose monotonic reading measures elapsed time; the platform `TrustedClock` fits it
+ * (composition may inject it), the default reads `performance.now()`. Wall time is never used for durations. */
+export interface HostShellClock { sample(): { readonly monotonicMs: number } }
+const MONOTONIC_CLOCK: HostShellClock = Object.freeze({ sample: () => ({ monotonicMs: performance.now() }) });
+
 export interface HostShellRequest {
   readonly command: string;
   /** Absolute workspace root: the only working directory a command gets. */
@@ -44,6 +49,7 @@ export interface HostShellResult {
   readonly output: string;
   readonly totalBytes: number;
   readonly omittedBytes: number;
+  /** Elapsed time of the call on the monotonic clock (I40): a host wall clock stepping backwards during the run never shortens it. */
   readonly durationMs: number;
   /** True when members of the command's process group were still alive after the shell exited (background children) and the call
    * ended them before it settled (Astra 2112 R1): nothing the command started outlives the call. */
@@ -90,8 +96,9 @@ function utf8IncompleteTail(buffer: Buffer): number {
  * boundaries with a character split across pipe reads carried to the next read (Astra 2112 R2). Windows is not supported yet (typed
  * result, nothing runs).
  */
-export function runHostShell(request: HostShellRequest, now: () => number = Date.now): Promise<HostShellResult> {
-  const started = now();
+export function runHostShell(request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK): Promise<HostShellResult> {
+  const started = clock.sample().monotonicMs;
+  const elapsedMs = () => Math.max(0, Math.round(clock.sample().monotonicMs - started));
   const keep = request.resultMaxBytes ?? HOST_SHELL_RESULT_MAX_BYTES;
   const headMax = Math.floor(keep / 4), tailMax = keep - headMax;
   let head: Buffer = Buffer.alloc(0), tail: Buffer = Buffer.alloc(0), total = 0;
@@ -100,7 +107,7 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
   const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null, survivorsKilled = false): HostShellResult => {
     const omitted = Math.max(0, total - head.length - tail.length);
     const output = omitted > 0 ? `${head.toString('utf8')}\n[… ${omitted} bytes of output omitted …]\n${tail.toString('utf8')}` : Buffer.concat([head, tail]).toString('utf8');
-    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: Math.max(0, now() - started), survivorsKilled });
+    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: elapsedMs(), survivorsKilled });
   };
   if (process.platform === 'win32') return Promise.resolve(done('unsupported-platform', null, null));
   if (request.signal?.aborted) return Promise.resolve(done('cancelled', null, null));
