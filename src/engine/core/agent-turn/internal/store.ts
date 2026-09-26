@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AgentToolCallStatus, AgentTurnFinish, AgentTurnMessage } from '#domain/index.js';
+import type { AgentToolCallStatus, AgentTurnFinish } from '#domain/index.js';
 
 export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
 export class AgentTurnStoreError extends Error {
@@ -56,12 +56,10 @@ export interface AgentTurnStore {
 
 /** Bounded outcome of a loop result: the final answer when it fits, the appended messages by digest only. */
 export function agentTurnOutcome(result: { readonly finish: AgentTurnFinish; readonly note: string | null; readonly rounds: number; readonly toolCalls: number;
-  readonly appended: readonly AgentTurnMessage[] }): AgentTurnOutcome {
-  const last = result.appended.at(-1), text = last?.role === 'assistant' && last.toolCalls.length === 0 && last.content ? last.content : null;
-  const answerBytes = text === null ? 0 : Buffer.byteLength(text, 'utf8');
+  readonly answer: string | null; readonly appendedDigest: string | null }): AgentTurnOutcome {
+  const answerBytes = result.answer === null ? 0 : Buffer.byteLength(result.answer, 'utf8');
   return Object.freeze({ finish: result.finish, note: result.note, rounds: result.rounds, toolCalls: result.toolCalls,
-    answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? text : null, answerBytes,
-    appendedDigest: result.appended.length ? createHash('sha256').update(`agent-turn-appended:1\0${JSON.stringify(result.appended)}`).digest('hex') : null });
+    answer: answerBytes <= AGENT_TURN_ANSWER_MAX_BYTES ? result.answer : null, answerBytes, appendedDigest: result.appendedDigest });
 }
 export const agentTurnResultDigest = (text: string) => createHash('sha256').update(`agent-tool-result:1\0${text}`).digest('hex');
 export const AGENT_TURN_INTERRUPTED_NOTE = 'The turn was interrupted by a runtime service restart; the tool calls it settled are recorded. Send the request again as a new turn.';

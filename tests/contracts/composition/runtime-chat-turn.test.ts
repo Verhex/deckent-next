@@ -6,8 +6,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { openSqliteAgentTurnStore, openSqliteModelActivationStore } from '#adapters/index.js';
+import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
+import { openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore } from '#adapters/index.js';
+import { bindSessionScope } from '#surfaces/core/terminal/index.js';
+import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTurn, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
@@ -176,6 +178,40 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(units[2]).toMatchObject({ kind: 'footer', finish: 'stop', promptTokens: 20, completionTokens: 16 });
   }, 30_000);
 
+  // Astra 2091 R1 (inverted repro) at the real boundary: workline → service → model request → session snapshot → /resume. A long
+  // conversation of short exchanges is sent whole (the runtime measures and compacts it); no count cut drops the first instruction.
+  it('sends a long conversation whole from the terminal through the service, saves it and resumes it without losing the first instruction', async () => {
+    const f = await runtime(); await f.start();
+    f.state.script = [{ content: 'Answer one.' }, { content: 'Answer two.' }];
+    await mkdir(join(f.data, 'sessions'), { mode: 0o700 });
+    const sessions = bindSessionScope(openTerminalSessionStore(join(f.data, 'sessions')), 'scope');
+    const earlier: AgentTurnMessage[] = Array.from({ length: 21 }, (_, index) => [{ role: 'user' as const, content: `directive-${index}` },
+      { role: 'assistant' as const, content: `ok-${index}`, toolCalls: [] }]).flat();
+    await sessions.save({ sessionId: '11111111-2222-4333-8444-555555555555', messages: earlier });
+    const streamTurn = (messages: readonly AgentTurnMessage[], signal: AbortSignal) => streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope',
+      messages, options: { env: f.env }, signal }, { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn });
+    const sent = (index: number) => (f.state.requests[index]!['messages'] as { content: string }[]).map(message => message.content);
+    for (const [turn, question] of [[0, 'next'], [1, 'again']] as const) {
+      const view = mountWorkline({ streamTurn, sessions, historyMessages: 40 });
+      try {
+        await until(() => view.stdout.text.includes('READY'), 'ready');
+        view.stdin.write('/resume 11111111-2222-4333-8444-555555555555\r');
+        await until(() => view.stdout.text.includes(`RESUMED ${42 + 2 * turn} 11111111`), 'resumed');
+        view.stdin.write(`${question}\r`); await until(() => f.state.requests.length === turn + 1 && view.stdout.text.includes(turn ? 'Answer two.' : 'Answer one.'), 'answer');
+        // The snapshot is written after the turn: wait for it before the next mount reads it.
+        let saved: readonly AgentTurnMessage[] | null = null;
+        for (let attempt = 0; attempt < 200 && saved?.length !== 44 + 2 * turn; attempt++) {
+          saved = await sessions.load('11111111-2222-4333-8444-555555555555'); await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        expect(saved).toHaveLength(44 + 2 * turn); expect(saved![0]).toMatchObject({ content: 'directive-0' });
+      } finally { view.instance.unmount(); }
+      // system + 42 earlier (+ the previous exchange) + the question: every message reached the model, the first instruction included.
+      expect(sent(turn)).toHaveLength(44 + 2 * turn);
+      expect(sent(turn)[1]).toBe('directive-0'); expect(sent(turn).at(-1)).toBe(question);
+    }
+    expect(sent(1)).toContain('Answer one.');
+  }, 60_000);
+
   it('measures each round with the provider counter on exactly what it sends, and refuses a round that cannot fit before any send (T-L5)', async () => {
     const f = await runtime({ tokenize: true, windowTokens: 100_000 }); await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' }];
@@ -221,6 +257,25 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     expect(sent[0]).toEqual({ role: 'system', content: 'SYS' }); expect(sent).toHaveLength(10);
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
+  }, 30_000);
+
+  // Astra 2091 R1: with no provider count and no configured window, the service input bound (262144 here) is the compaction pressure,
+  // so the history the client sends next stays under it instead of growing until the frame is refused.
+  it('compacts on the service input bound when the window is unknown, so the next request keeps fitting (T-L5, Astra 2091 R1)', async () => {
+    const f = await runtime(); await f.start();
+    f.state.script = [{ summary: '{"objective":"long talk","findings":[],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":[]}' }, { content: 'Fits.' }];
+    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 40 }, (_, i) => i % 2
+      ? { role: 'assistant' as const, content: `answer ${i} ${'b'.repeat(10_600)}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
+    { role: 'user' as const, content: 'and now?' }];
+    expect(Buffer.byteLength(JSON.stringify(history))).toBeGreaterThan(0.75 * 262_144);
+    const events: AgentTurnStreamEvent[] = [];
+    const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-bytes', messages: history }, event => events.push(event));
+    expect(result).toMatchObject({ finish: 'stop', answer: 'Fits.' });
+    expect(f.state.requests).toHaveLength(2); expect(f.state.requests[0]).toMatchObject({ stream: false });
+    const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>;
+    expect(compacted.replacedMessages).toBeGreaterThan(0);
+    const next = [history[0], ...compacted.messages, ...events.flatMap(event => event.kind === 'message' ? [event.message] : [])];
+    expect(Buffer.byteLength(JSON.stringify(next))).toBeLessThan(0.75 * 262_144);
   }, 30_000);
 
   it('uses a labelled upper bound and sends no counter request when the model has no counter', async () => {

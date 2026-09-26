@@ -53,14 +53,23 @@ export interface AgentTurnInput {
   readonly tools: readonly AgentToolSpec[];
   readonly signal: AbortSignal;
   readonly emit: (event: AgentTurnEvent) => void;
-  /** Tokens a round must leave free in the window: the completion limit it asks for and a safety margin (T-L5). */
-  readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number };
+  /**
+   * Tokens a round must leave free in the window: the completion limit it asks for and a safety margin (T-L5). `requestMaxBytes`: the
+   * bound of the client's next request (the service input bound); past the high-water mark of it the history is compacted too, so a
+   * long conversation keeps fitting even when the window is unknown (Astra 2091 R1).
+   */
+  readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number; readonly requestMaxBytes?: number };
 }
 
 export interface AgentTurnResult {
   readonly finish: AgentTurnFinish;
-  /** Assistant and tool messages this turn appended, in order (the caller's history continues from them). */
-  readonly appended: readonly AgentTurnMessage[];
+  /**
+   * The appended messages are streamed as `message` events (the caller's history); the result keeps only their count, the digest of
+   * their canonical JSON array and the final answer, so a long turn holds no copy of earlier tool results (Astra 2091 R2).
+   */
+  readonly answer: string | null;
+  readonly appendedCount: number;
+  readonly appendedDigest: string | null;
   readonly rounds: number;
   readonly toolCalls: number;
   readonly note: string | null;
@@ -101,14 +110,23 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
  */
 export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts): Promise<AgentTurnResult> {
   const { signal, emit } = input;
-  const messages: AgentTurnMessage[] = [...input.messages], appended: AgentTurnMessage[] = [];
+  const messages: AgentTurnMessage[] = [...input.messages];
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
+  // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit.
   const seenReads = new Map<string, string>();
-  let rounds = 0, toolCalls = 0, compactions = 0;
-  const push = (message: AgentTurnMessage) => { messages.push(message); appended.push(message); emit({ kind: 'message', message }); };
+  let rounds = 0, toolCalls = 0, compactions = 0, appendedCount = 0, last: AgentTurnMessage | null = null;
+  // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
+  const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
+  const push = (message: AgentTurnMessage) => {
+    messages.push(message); appendedHash.update(`${appendedCount++ ? ',' : ''}${JSON.stringify(message)}`); last = message;
+    emit({ kind: 'message', message });
+  };
   const finish = (value: AgentTurnFinish, note: string | null): AgentTurnResult => {
     emit({ kind: 'done', finish: value, note });
-    return Object.freeze({ finish: value, appended: Object.freeze([...appended]), rounds, toolCalls, note });
+    const final = last as AgentTurnMessage | null;
+    const answer = final?.role === 'assistant' && final.toolCalls.length === 0 && final.content ? final.content : null;
+    return Object.freeze({ finish: value, answer, appendedCount, appendedDigest: appendedCount ? appendedHash.update(']').digest('hex') : null,
+      rounds, toolCalls, note });
   };
   const summary = () => toolCalls === 0 ? 'no tool call ran' : `${toolCalls} tool call(s) ran in ${rounds} round(s); their results are above`;
 
@@ -121,20 +139,26 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
       const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
       if (measured) emit({ kind: 'context', round: rounds, ...measured });
-      // Compaction (T-L5b) on the same measurement: past the high-water mark, older messages become one labelled summary.
-      const plan = measured && measured.windowTokens !== null && ports.summarize
-        && measured.promptTokens + reserve > measured.windowTokens * AGENT_COMPACTION_HIGH_WATER ? planAgentCompaction(messages) : null;
-      if (measured && plan && ports.summarize) {
+      // Compaction (T-L5b) on the same measurement: past the high-water mark of the window, or of the request byte bound (exact
+      // bytes of the history the client will send next), older messages become one labelled summary.
+      const tokenPressure = measured !== null && measured.windowTokens !== null && measured.promptTokens + reserve > measured.windowTokens * AGENT_COMPACTION_HIGH_WATER;
+      const byteBound = input.admission?.requestMaxBytes;
+      const bytePressure = byteBound !== undefined && Buffer.byteLength(JSON.stringify(messages), 'utf8') > byteBound * AGENT_COMPACTION_HIGH_WATER;
+      const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
+      if (plan && ports.summarize) {
         compactions++;
         let summaryOf: AgentCompactionSummary | null;
         try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
         if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
         if (!summaryOf) {
-          return finish('error', `The conversation reached ${measured.promptTokens} of ${measured.windowTokens} context tokens and could not be`
+          const reached = tokenPressure && measured ? `${measured.promptTokens} of ${measured.windowTokens} context tokens` : `the request size bound (${byteBound} bytes)`;
+          return finish('error', `The conversation reached ${reached} and could not be`
             + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`);
         }
         const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
         messages.splice(0, messages.length, ...next);
+        const visible = new Set(plan.tail.flatMap(message => message.role === 'tool' ? [message.toolCallId] : []));
+        for (const [digest, callId] of seenReads) if (!visible.has(callId)) seenReads.delete(digest);
         emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
         try { measured = await ports.measure({ round: rounds, messages, tools: input.tools }, signal); } catch { measured = null; }
         if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
@@ -208,6 +232,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       if (tool.toolClass === 'read' && outcomeText.status === 'ok') seenReads.set(digest, call.id);
+      // A successful write may change what any earlier read saw: those reads run again.
+      if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();
       await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
     }
   }

@@ -249,10 +249,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: Date.now() },
       messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS } }, store, ports);
+      admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS,
+        requestMaxBytes: context.config.service.inputMaxBytes } }, store, ports);
     await channel.drained();
-    const last = result.appended.at(-1);
-    const answer = last?.role === 'assistant' && last.toolCalls.length === 0 && last.content ? last.content : null;
+    const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
     // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery.
     const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024)) ? answer : null;

@@ -603,9 +603,17 @@ and digest) and the earlier tool calls, both copied from the history, never from
 authority. The turn emits `compacted` (surface: one line "N earlier messages were summarized"), measures again and applies
 admission. A failed or unreadable summary keeps the history unchanged and closes the turn with a note; nothing more is sent. Open:
 no deterministic model-free fallback yet, and a newest exchange larger than the window cannot be compacted (admission then refuses).
-Astra review of `a35caa4` (2026-09-26): the interactive workline still trims history by message count before measurement;
-compaction replaces active messages but retains full old results in the turn's `appended` array, and `seenReads` can refer to results
-removed from the prompt. Long-conversation continuity and bounded turn memory are not closed; targeted corrections are pending.
+**History lifecycle and bounded turn memory (Astra 2091 fix, Jev 4a702440).** The interactive workline's agent path sends the whole
+conversation (no message-count cut; `terminal.chat.historyMessages` now bounds only the plain line mode); the runtime owns its
+lifecycle. Compaction is also triggered when the exact serialized history exceeds 75% of the service input bound
+(`service.inputMaxBytes`, passed by the composition as `admission.requestMaxBytes`), so a conversation keeps fitting the client's next
+request even when the window is unknown. The loop keeps no copy of appended messages: the result carries the final answer, a count and
+the incremental digest (same value as the digest of the whole array); a replay appends nothing (count 0, recorded digest). Read dedupe
+answers only with a result the model can still see: a compaction drops entries whose result left the prompt, and a successful
+non-read call clears it. Open: a `compacted` event must fit one event frame (`service.responseMaxBytes`); a tail of very large tool
+results, or a summary copying many long user messages (each ≤ 4000 characters), can exceed it and then cancels the turn (fail
+closed, not silent). Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →
+session snapshot → `/resume` with 44/46 messages sent whole; mutations 1–7 (`proof/F26-T-L5-FIX-2091/`).
 **Conversation sessions (T-L5c, Jev 9ae569b1).** The workline saves the whole current history (system prompt excluded) after every
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A

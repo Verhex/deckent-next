@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { planAgentCompaction, renderAgentCompaction, runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
@@ -54,9 +55,11 @@ it('runs declared tool calls visibly, feeds results back, and always shows the a
     { kind: 'tool.started', callId: 'c2', name: 'grep', target: 'export' }, expect.objectContaining({ kind: 'tool.finished', callId: 'c2', status: 'ok' })]);
   // Legacy defect: the answer after a short tool round was stored but never rendered. Here it is always emitted.
   expect(events.at(-3)).toMatchObject({ kind: 'usage', round: 2 }); expect(events.filter(event => event.kind === 'text')).toEqual([{ kind: 'text', text: 'It exports a.' }]);
-  expect(result.appended.map(message => message.role)).toEqual(['assistant', 'tool', 'tool', 'assistant']);
-  // The client's history is exactly the message events, in order.
-  expect(events.flatMap(event => event.kind === 'message' ? [event.message] : [])).toEqual(result.appended);
+  // The client's history is exactly the message events, in order; the result keeps only their count, digest and the final answer.
+  const appended = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
+  expect(appended.map(message => message.role)).toEqual(['assistant', 'tool', 'tool', 'assistant']);
+  expect(result).toMatchObject({ answer: 'It exports a.', appendedCount: 4,
+    appendedDigest: createHash('sha256').update(`agent-turn-appended:1\0${JSON.stringify(appended)}`).digest('hex') });
 });
 
 it('answers malformed arguments, unknown tools, denied and approval-gated calls with typed results and never runs them', async () => {
@@ -210,4 +213,74 @@ it('runs an approval-gated call only on an explicit allow, and gives every other
   // Without an approval port the call stays blocked (no bypass).
   const blocked = ports([answer('', [call('c1', 'read_file', { path: 'a' })]), answer('done')], { decision: gated });
   await run(blocked); expect(blocked.executed).toEqual([]);
+});
+
+// Astra 2091 R2 + R3 (inverted repro): a long turn compacted several times holds no copy of earlier tool results, and a read whose
+// result left the prompt with a compaction runs again instead of pointing at a result the model can no longer see.
+it('keeps a bounded result across repeated compactions and re-runs a read whose result was compacted away (T-L5, Astra 2091)', async () => {
+  const summary = { objective: 'inspect', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] };
+  const events: AgentTurnEvent[] = [], executed: string[] = [];
+  let lastPrompt: readonly AgentTurnMessage[] = [], summaries = 0;
+  const result = await runAgentTurn({ messages: [{ role: 'user', content: 'inspect' }], tools, signal: new AbortController().signal, emit: event => events.push(event) }, {
+    async measure({ messages }) { return { promptTokens: messages.length > 14 ? 900 : 100, windowTokens: 1000, quality: 'provider-count' }; },
+    async summarize() { summaries++; return summary; },
+    async invokeRound({ round, messages }) {
+      lastPrompt = messages;
+      return round === 31 ? answer('done') : answer('', [call(`call-${round}`, 'read_file', { path: round === 30 || round === 2 ? 'file-1' : `file-${round}` })]);
+    },
+    async authorize() { return 'allow'; }, describe: () => null, now: () => 0,
+    async execute(_tool, args) { executed.push(String(args['path'])); return { status: 'ok', text: `SENTINEL-${String(args['path'])}:${'x'.repeat(16_000)}` }; },
+  });
+  expect(result).toMatchObject({ finish: 'stop', answer: 'done', rounds: 31 });
+  expect(summaries).toBeGreaterThanOrEqual(3);
+  // file-1 was read in round 1 (and round 2 answered as a same-epoch duplicate); its result was compacted away, so round 30 reads it again.
+  expect(executed.filter(path => path === 'file-1')).toHaveLength(2);
+  expect(events.find(event => event.kind === 'tool.finished' && event.callId === 'call-2')).toMatchObject({ status: 'duplicate' });
+  expect(events.find(event => event.kind === 'tool.finished' && event.callId === 'call-30')).toMatchObject({ status: 'ok' });
+  expect(lastPrompt.some(message => message.content.includes('SENTINEL-file-1:'))).toBe(true);
+  // The result is counters, a digest and the final answer: no tool content, however long the turn.
+  const appended = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
+  expect(result.appendedCount).toBe(appended.length);
+  expect(result.appendedDigest).toBe(createHash('sha256').update(`agent-turn-appended:1\0${JSON.stringify(appended)}`).digest('hex'));
+  expect(JSON.stringify(result)).not.toContain('SENTINEL');
+  expect(JSON.stringify(result).length).toBeLessThan(1_000);
+});
+
+it('re-runs a read after a successful edit in the same turn, and keeps same-epoch dedupe otherwise (Astra 2091 R3)', async () => {
+  const edit: AgentToolSpec = { name: 'write_file', version: 1, toolClass: 'edit', description: 'Write.', inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string' } } } };
+  const executed: string[] = [], events: AgentTurnEvent[] = [];
+  await runAgentTurn({ messages: user, tools: [readFile, edit], signal: new AbortController().signal, emit: event => events.push(event) }, {
+    async invokeRound({ round }) {
+      return [answer('', [call('r1', 'read_file', { path: 'a' }), call('r2', 'read_file', { path: 'a' })]), answer('', [call('w1', 'write_file', { path: 'a' })]),
+        answer('', [call('r3', 'read_file', { path: 'a' })]), answer('done')][round - 1]!;
+    },
+    async authorize() { return 'allow'; }, describe: () => null, now: () => 0,
+    async execute(tool) { executed.push(tool.name); return { status: 'ok', text: `${tool.name} ok` }; },
+  });
+  expect(executed).toEqual(['read_file', 'write_file', 'read_file']);
+  expect(events.filter(event => event.kind === 'tool.finished').map(event => event.kind === 'tool.finished' && `${event.callId}:${event.status}`))
+    .toEqual(['r1:ok', 'r2:duplicate', 'w1:ok', 'r3:ok']);
+});
+
+// Astra 2091 R1: the history's byte size is compaction pressure too, so a conversation keeps fitting the service's request bound
+// even when the model's window is unknown (no provider count, no configured window).
+it('compacts on the request byte bound when the window is unknown, and not without that bound (T-L5, Astra 2091 R1)', async () => {
+  const summary = { objective: 'o', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] };
+  const run = async (requestMaxBytes?: number) => {
+    const events: AgentTurnEvent[] = []; let summaries = 0;
+    const history: AgentTurnMessage[] = Array.from({ length: 12 }, (_, index) => ({ role: index % 2 ? 'assistant' as const : 'user' as const,
+      content: `turn ${index} ${'y'.repeat(2_000)}`, ...(index % 2 ? { toolCalls: [] } : {}) }) as AgentTurnMessage);
+    await runAgentTurn({ messages: [...history, { role: 'user', content: 'next' }], tools, signal: new AbortController().signal, emit: event => events.push(event),
+      admission: { outputReserveTokens: 0, safetyReserveTokens: 0, ...(requestMaxBytes ? { requestMaxBytes } : {}) } }, {
+      async measure() { return { promptTokens: 10, windowTokens: null, quality: 'upper-bound' }; },
+      async summarize() { summaries++; return summary; },
+      async invokeRound() { return answer('ok'); },
+      async authorize() { return 'allow'; }, describe: () => null, now: () => 0, async execute() { return { status: 'ok', text: '' }; },
+    });
+    return { summaries, compacted: events.find(event => event.kind === 'compacted') };
+  };
+  expect(await run()).toMatchObject({ summaries: 0, compacted: undefined });
+  const bounded = await run(30_000);
+  expect(bounded.summaries).toBe(1);
+  expect(Buffer.byteLength(JSON.stringify((bounded.compacted as { messages: unknown[] }).messages))).toBeLessThan(0.75 * 30_000);
 });

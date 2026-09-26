@@ -115,7 +115,7 @@ it('records every settled tool call of a durable turn and replays a finished tur
     expect(again.invoked).toEqual([]);
     expect(replay).toMatchObject({ finish: 'stop', rounds: 2, toolCalls: 1, replayed: true });
     expect(replayEvents).toEqual([{ kind: 'text', text: 'It exports a.' }, { kind: 'done', finish: 'stop', note: null }]);
-    expect(replay.appended).toEqual([{ role: 'assistant', content: 'It exports a.', toolCalls: [] }]);
+    expect(replay).toMatchObject({ answer: 'It exports a.', appendedCount: 0, appendedDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
   } finally { store.close(); }
 });
 
@@ -154,7 +154,7 @@ it('keeps an answer larger than the replay bound by size only, and a replay then
     const events: AgentTurnEvent[] = [];
     const replay = await runDurableAgentTurn({ claim: claim(), messages: [{ role: 'user', content: 'long?' }], tools: [readFile], signal: new AbortController().signal,
       emit: event => events.push(event) }, store, ports([]).value);
-    expect(replay).toMatchObject({ replayed: true, appended: [] }); expect(events).toEqual([{ kind: 'done', finish: 'stop', note: null }]);
+    expect(replay).toMatchObject({ replayed: true, answer: null, appendedCount: 0 }); expect(events).toEqual([{ kind: 'done', finish: 'stop', note: null }]);
     // A stored answer must match its recorded size; an outcome claiming a kept answer above the bound is refused.
     await store.claim(claim('other'));
     expect(await code(store.finish('scope', 'other', { ...outcome, answer: big, answerBytes: big.length }, 1))).toBe('AGENT_TURN_INVALID');

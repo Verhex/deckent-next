@@ -17,7 +17,7 @@ import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
-import { appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
+import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
 import { useWorkSurface } from './work-surface.js';
@@ -178,7 +178,10 @@ export function WorklineApp(props: WorklineProps) {
     const controller = new AbortController();
     turn.current = controller;
     setBusy(true);
-    const messages = boundAgentHistory({ role: 'system', content: systemPrompt }, [...history.current, { role: 'user', content: text }], historyMessages);
+    // The agent path sends the whole conversation: the runtime measures and compacts it (T-L5, Astra 2091 R1); a message-count cut
+    // would drop early instructions before any measurement. The plain line mode keeps its `historyMessages` window.
+    const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content: text }];
+    const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
     try {
       if (props.streamTurn) {
         // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
@@ -201,7 +204,7 @@ export function WorklineApp(props: WorklineProps) {
         }
         // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
-        history.current = next.length || base !== messages ? boundAgentHistory(base[0]!, [...base, ...next], historyMessages) : messages;
+        history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
         push(await session.save(history.current));
       } else {
         const reply = await completeTurn(plainChatHistory(messages), controller.signal);

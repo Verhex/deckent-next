@@ -53,6 +53,11 @@ export function boundAgentHistory(system: AgentChatMessage, history: readonly Ag
   return Object.freeze([system, ...recent.slice(start)]);
 }
 
+/** The whole agent history behind the system instruction: its lifecycle is the runtime's measurement and compaction, not a count. */
+export function agentHistory(system: AgentChatMessage, history: readonly AgentChatMessage[]): readonly AgentChatMessage[] {
+  return Object.freeze([system, ...history.filter(message => message.role !== 'system')]);
+}
+
 /** The plain (tool-less) form of an agent history, for the non-streaming path. */
 export function plainChatHistory(history: readonly AgentChatMessage[]): readonly ChatTurnMessage[] {
   return Object.freeze(history.flatMap(message => message.role === 'tool' ? [] : [{ role: message.role, content: message.content }]));

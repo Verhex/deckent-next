@@ -3,7 +3,7 @@ import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnR
 
 /**
  * A turn with durable identity (T-L3): claim first; a finished turn of the same request replays its stored outcome (the final
- * answer, when it was kept, is re-emitted and returned as the only appended message; no model round is started); a new turn runs the loop, records every settled tool call, and is finished
+ * answer, when it was kept, is re-emitted as text and returned; no message is appended again (count 0, the recorded digest); no model round is started); a new turn runs the loop, records every settled tool call, and is finished
  * with its outcome even when the loop fails unexpectedly. When the loop answered but its outcome could not be stored, the answer is
  * still returned with `recorded: false` (the surface already showed it; the turn stays running until the next service start closes
  * it as interrupted); a loop failure is never masked by a store failure.
@@ -16,10 +16,11 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
     const { answer, finish, note, rounds, toolCalls } = claimed.outcome;
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });
-    return Object.freeze({ finish, note, rounds, toolCalls, appended: Object.freeze(answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : []),
-      replayed: true, recorded: true });
+    return Object.freeze({ finish, note, rounds, toolCalls, answer, appendedCount: 0,
+      appendedDigest: claimed.outcome.appendedDigest, replayed: true, recorded: true });
   }
-  const failed = agentTurnOutcome({ finish: 'error', note: 'The turn failed before it could finish; nothing more ran.', rounds: 0, toolCalls: 0, appended: [] });
+  const failed = agentTurnOutcome({ finish: 'error', note: 'The turn failed before it could finish; nothing more ran.', rounds: 0, toolCalls: 0,
+    answer: null, appendedDigest: null });
   let result: AgentTurnResult;
   try {
     result = await runAgentTurn(input, { ...ports, settled: async settled => {
