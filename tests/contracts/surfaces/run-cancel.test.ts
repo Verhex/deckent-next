@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { deliverRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { cliChildEnv } from '../support/child-env.js';
 import { clearConfigCache } from '#platform/index.js';
 import { startTestRuntimeService } from '../support/runtime-service.js';
 const exec = promisify(execFile); const binary = resolve('dist/composition/core/cli/internal/entry.js'); const roots: string[] = [];
@@ -16,7 +17,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cli-cancel-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { maxConcurrentDeliveries: 2 }, execution: { docker: { executable: '/unavailable/docker', imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 }, git: { gitExecutable: '/unavailable/git', timeoutMs: 10000, outputBytes: 65536 } } }));
-  const env = { ...process.env, HOME: join(root, 'home'), NO_COLOR: '1', TERM: 'dumb' }; const options = { env };
+  const env = cliChildEnv({ HOME: join(root, 'home'), NO_COLOR: '1', TERM: 'dumb' }); const options = { env };
   const { store } = await openConfiguredAttemptStore(project, options); try { await admitRunAttempts(store, [identity]); } finally { store.close(); }
   async function policy(allowed: boolean) {
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: allowed ? [
