@@ -24,7 +24,7 @@ async function inspect(projectRoot: string, input: unknown, options: ConfigLoadO
   let document;
   try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [query.scopeId]);
+  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [query.scopeId], 'read');
   const principal = Object.freeze({ ...identity, scopeIds });
   const store: DispatchInventoryStore = {
     async listDispatches(admitted) {

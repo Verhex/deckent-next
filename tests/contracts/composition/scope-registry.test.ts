@@ -7,7 +7,10 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { createConfiguredRuntimeClient } from '../../../src/index.js';
+import { createConfiguredRuntimeClient, inspectRun, requestRunCancellation } from '../../../src/index.js';
+import { openSqliteAttemptStore } from '#adapters/index.js';
+import { admitRunAttempts } from '../support/admission.js';
+import { custodyProfiles } from '../support/custody.js';
 import { clearConfigCache } from '#platform/index.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { startTestRuntimeService } from '../support/runtime-service.js';
@@ -21,7 +24,7 @@ const spendAll = { id: 'spend-all', effect: 'allow', actions: ['inspect'], scope
 
 /** A solo project whose trusted policy grants only `scopes: 'all'`; the ledger exists (as after installation) and the local
  * runtime service is started once (CLI inventory reaches the service over the socket). */
-async function fixture(config: Record<string, unknown> = {}, grants: readonly unknown[] = [inspectAll, spendAll], prepare?: (ledger: string) => void) {
+async function fixture(config: Record<string, unknown> = {}, grants: readonly unknown[] = [inspectAll, spendAll], prepare?: (ledger: string) => void, start = true) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-scope-registry-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
   const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
@@ -29,7 +32,7 @@ async function fixture(config: Record<string, unknown> = {}, grants: readonly un
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants }), { mode: 0o600 });
   prepare?.(opened.path);
-  await startTestRuntimeService(project, env);
+  if (start) await startTestRuntimeService(project, env);
   return { project, data, env, ledger: opened.path };
 }
 async function cliFailure(f: { project: string; env: NodeJS.ProcessEnv }, args: readonly string[]) {
@@ -101,5 +104,53 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
   it('still answers POLICY_DENIED before touching the ledger when no grant covers the scope', async () => {
     const f = await fixture({}, []);
     expect(await cliFailure(f, ['inventory', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'POLICY_DENIED' });
+  });
+
+  // Astra 2122: a declared scope is pinned durably at its first admission, before any scoped record, and never re-homed.
+  const named = (scope: string) => ({ ...inspectAll, id: `named-${scope}`, scopes: [scope], resource: { kind: 'scope', ids: 'all' } });
+  const runNamed = (scope: string) => ({ id: `run-${scope}`, effect: 'allow', actions: ['inspect'], scopes: [scope], principals: [actor], resource: { kind: 'run', ids: 'all' } });
+  // A write admission (cancellation request of a Run that does not exist): membership pins before the application refuses it.
+  const cancel = (f: { project: string; env: NodeJS.ProcessEnv }, scopeId: string) => requestRunCancellation(f.project,
+    { schemaVersion: 1, scopeId, runId: 'absent', commandId: 'cancel', action: 'cancel', expectedRevision: 0 }, { env: f.env }).catch(() => undefined);
+  const pins = (ledger: string) => { const db = new DatabaseSync(ledger, { readOnly: true });
+    try { return db.prepare('SELECT scope_id,company_id,origin FROM scope_registry ORDER BY scope_id').all(); } finally { db.close(); } };
+
+  it('pins a declared scope durably at its first direct SDK write admission, before any service start; reads never write', async () => {
+    const f = await fixture({}, [named('s'), runNamed('s')], undefined, false);
+    expect(pins(f.ledger)).toEqual([]);
+    expect(await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'absent' }, { env: f.env })).toMatchObject({ run: null });
+    expect(pins(f.ledger)).toEqual([]);
+    await cancel(f, 's');
+    expect(pins(f.ledger)).toEqual([{ scope_id: 's', company_id: 'default', origin: 'admission' }]);
+  });
+
+  it('pins a scope added to the policy after the service started at its first CLI use', async () => {
+    const f = await fixture({}, [named('s')]);
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p2', restrictions: [], grants: [named('s'), named('late')] }), { mode: 0o600 });
+    expect(pins(f.ledger)).toEqual([{ scope_id: 'runtime-test', company_id: 'default', origin: 'start' }, { scope_id: 's', company_id: 'default', origin: 'start' }]);
+    const inventory = await exec(process.execPath, [binary, 'inventory', '--scope', 'late', '--json'], { cwd: f.project, env: f.env });
+    expect(JSON.parse(inventory.stdout).page).toEqual({ entries: [], nextAfter: null });
+    expect(pins(f.ledger).map(row => row.scope_id)).toEqual(['runtime-test', 's']);
+    await exec(process.execPath, [binary, 'run', 'cancel', '--scope', 'late', '--id', 'absent', '--command-id', 'c', '--expected-revision', '0', '--json'],
+      { cwd: f.project, env: f.env }).catch(() => undefined);
+    expect(pins(f.ledger)).toContainEqual({ scope_id: 'late', company_id: 'default', origin: 'admission' });
+  });
+
+  it('refuses, never re-homes, a pinned scope after company.id changes; records written before stay under the original company', async () => {
+    const f = await fixture({}, [named('s'), runNamed('s')], undefined, false);
+    await cancel(f, 's');
+    const store = await openSqliteAttemptStore(f.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+    try { await admitRunAttempts(store, [{ runId: 'r', taskId: 'a', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'layout' }]); }
+    finally { store.close(); }
+    const path = join(f.project, '.deckent/config.json');
+    await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, 'utf8')), company: { id: 'acme' } })); clearConfigCache();
+    await startTestRuntimeService(f.project, f.env);
+    expect(await cliFailure(f, ['inventory', '--scope', 's'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
+    await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, { env: f.env })).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
+    const db = new DatabaseSync(f.ledger, { readOnly: true });
+    try {
+      expect(db.prepare("SELECT company_id,origin FROM scope_registry WHERE scope_id='s'").all()).toEqual([{ company_id: 'default', origin: 'admission' }]);
+      expect(db.prepare("SELECT DISTINCT r.company_id FROM runs JOIN scope_registry r USING(scope_id) WHERE runs.scope_id='s'").all()).toEqual([{ company_id: 'default' }]);
+    } finally { db.close(); }
   });
 });

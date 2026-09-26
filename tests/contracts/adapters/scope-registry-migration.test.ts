@@ -89,10 +89,12 @@ it('refuses newer and older schemas on writer opens and on the read-only registr
 
 it('registers insert-only: the company column is written, a pin never moves to another company', async () => {
   const { path } = await ledger();
-  expect(registerLedgerScopes(path, options, 'default', ['own', 'shared', 'own'])).toEqual({ registered: ['own', 'shared'], pinnedElsewhere: [] });
-  expect(registerLedgerScopes(path, options, 'acme', ['shared', 'new'])).toEqual({ registered: ['new'], pinnedElsewhere: ['shared'] });
+  expect(registerLedgerScopes(path, options, 'default', ['own', 'shared', 'own'])).toEqual({ registered: ['own', 'shared'], pinnedElsewhere: [],
+    pins: new Map([['own', 'default'], ['shared', 'default']]) });
+  expect(registerLedgerScopes(path, options, 'acme', ['shared', 'new'], 'admission')).toEqual({ registered: ['new'], pinnedElsewhere: ['shared'],
+    pins: new Map([['new', 'acme'], ['shared', 'default']]) });
   expect(rows(path, 'SELECT scope_id,company_id,origin FROM scope_registry ORDER BY scope_id')).toEqual([
-    { scope_id: 'new', company_id: 'acme', origin: 'start' }, { scope_id: 'own', company_id: 'default', origin: 'start' },
+    { scope_id: 'new', company_id: 'acme', origin: 'admission' }, { scope_id: 'own', company_id: 'default', origin: 'start' },
     { scope_id: 'shared', company_id: 'default', origin: 'start' }]);
   expect(rows(path, 'SELECT company_id FROM companies ORDER BY company_id')).toEqual([{ company_id: 'acme' }, { company_id: 'default' }]);
   expect(() => registerLedgerScopes(path, options, 'Not Valid', ['x'])).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_OPTIONS' }));

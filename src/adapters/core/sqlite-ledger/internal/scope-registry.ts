@@ -7,7 +7,11 @@ import { CURRENT_LEDGER_VERSION } from './schema.js';
 import { sqliteFailure, type SqliteLedgerOptions } from './options.js';
 
 const COMPANY = /^[a-z0-9][a-z0-9-]{0,62}$/;
-export interface ScopeRegistration { readonly registered: readonly string[]; readonly pinnedElsewhere: readonly string[] }
+export interface ScopeRegistration {
+  readonly registered: readonly string[]; readonly pinnedElsewhere: readonly string[];
+  /** Effective pin of every requested scope after the insert-only write (a concurrent writer may have pinned it elsewhere). */
+  readonly pins: ReadonlyMap<string, string>;
+}
 
 /**
  * Read-only lookup of durable scope → company pins. It never creates, migrates or writes: a missing ledger (or one not yet
@@ -32,24 +36,27 @@ export function readScopeCompanies(path: string, busyTimeoutMs: number, scopeIds
   finally { db.close(); }
 }
 
-/** First-start registration: pins the configured company and the installation's own scopes in one transaction. Insert-only —
- * a scope already pinned to another company is reported, never re-homed. The caller holds endpoint custody. */
-export function registerLedgerScopes(path: string, options: SqliteLedgerOptions, companyId: string, scopeIds: readonly string[]): ScopeRegistration {
+/** Insert-only registration of scopes to a company in one transaction: the first-start set (`start`, under endpoint custody) or a
+ * declared scope at its first admission (`admission`). A scope already pinned to another company is reported, never re-homed. */
+export function registerLedgerScopes(path: string, options: SqliteLedgerOptions, companyId: string, scopeIds: readonly string[],
+  origin: 'start' | 'admission' = 'start'): ScopeRegistration {
   if (!COMPANY.test(companyId)) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const db = openSqliteLedger(path, options, 'forbid');
   try {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare('INSERT OR IGNORE INTO companies(company_id) VALUES(?)').run(companyId);
-      const insert = db.prepare("INSERT OR IGNORE INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,'start')");
+      const insert = db.prepare('INSERT OR IGNORE INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,?)');
       const pinned = db.prepare('SELECT company_id FROM scope_registry WHERE scope_id=?');
-      const registered: string[] = [], pinnedElsewhere: string[] = [];
+      const registered: string[] = [], pinnedElsewhere: string[] = [], pins = new Map<string, string>();
       for (const scopeId of [...new Set(scopeIds)].sort()) {
-        if (Number(insert.run(scopeId, companyId).changes) === 1) registered.push(scopeId);
-        else if (pinned.get(scopeId)?.company_id !== companyId) pinnedElsewhere.push(scopeId);
+        if (Number(insert.run(scopeId, companyId, origin).changes) === 1) registered.push(scopeId);
+        const company = String(pinned.get(scopeId)?.company_id);
+        pins.set(scopeId, company);
+        if (company !== companyId) pinnedElsewhere.push(scopeId);
       }
       db.exec('COMMIT');
-      return Object.freeze({ registered: Object.freeze(registered), pinnedElsewhere: Object.freeze(pinnedElsewhere) });
+      return Object.freeze({ registered: Object.freeze(registered), pinnedElsewhere: Object.freeze(pinnedElsewhere), pins });
     } catch (error) { try { db.exec('ROLLBACK'); } catch { /* Not started or already closed. */ } throw sqliteFailure(error); }
   } finally { db.close(); }
 }

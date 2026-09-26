@@ -6,7 +6,7 @@ import { AttemptStoreError } from '#engine/index.js';
 // these tables; a foreign same-name table with another shape fails the backfill and rolls the single migration transaction back.
 const SCOPE_REGISTRY_SQL = `CREATE TABLE IF NOT EXISTS companies(company_id TEXT PRIMARY KEY NOT NULL);
   CREATE TABLE IF NOT EXISTS scope_registry(scope_id TEXT PRIMARY KEY NOT NULL,
-    company_id TEXT NOT NULL REFERENCES companies(company_id),origin TEXT NOT NULL CHECK(origin IN('migration','start')));`;
+    company_id TEXT NOT NULL REFERENCES companies(company_id),origin TEXT NOT NULL CHECK(origin IN('migration','start','admission')));`;
 const COMPANY = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const TABLE = /^[a-z][a-z0-9_]*$/;
 

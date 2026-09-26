@@ -4,7 +4,7 @@ export { RunPolicyAuthorization } from './internal/run.js';
 export { PoolPolicyAuthorization } from './internal/pool.js';
 export type { PoolAuthorization } from './internal/pool.js';
 export { installationOwnScopes, resolvePolicyScopeMembership } from './internal/membership.js';
-export type { ScopeRegistryReader } from './internal/membership.js';
+export type { ScopeAccess, ScopeRegistry } from './internal/membership.js';
 export { getPolicyVocabulary } from '#domain/index.js';
 export { ServicePolicyAuthorization } from './internal/service.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';
