@@ -16,7 +16,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     const cwd = await workspace();
     const result = await runHostShell({ command: 'pwd; echo "secret=${DEMO_SECRET:-none} allowed=${DEMO_ALLOWED:-none} term=$TERM pager=$GIT_PAGER"; echo oops >&2; exit 3',
       cwd, environment: { PATH: process.env.PATH, HOME: '/home/x', DEMO_SECRET: 's3cr3t', DEMO_ALLOWED: 'yes' }, extraEnv: ['DEMO_ALLOWED'] });
-    expect(result).toMatchObject({ status: 'exited', exitCode: 3, omittedBytes: 0 });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 3, omittedBytes: 0, survivorsKilled: false });
     expect(result.output).toContain(`${cwd}\nsecret=none allowed=yes term=dumb pager=cat\n`);
     expect(result.output).toContain('oops');
     expect(result.output).not.toContain('s3cr3t');
@@ -62,6 +62,51 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(chunks.join('')).toBe('ş'.repeat(40_000));
     expect(chunks.some(chunk => chunk.includes('�'))).toBe(false);
     expect(result.output.includes('�')).toBe(false);
+  });
+
+  // Astra 2112 R1 (inverted repro): a background child that redirected its output lets the shell exit normally; the call still
+  // ends the whole group before it settles, and the result says that survivors were killed.
+  it('terminates a redirected background child the shell left behind at its normal exit, and says so', async () => {
+    const cwd = await workspace(); let pid = 0;
+    try {
+      const result = await runHostShell({ cwd, command: 'sleep 20 > /dev/null 2>&1 & echo $!', timeoutMs: 5_000 });
+      pid = Number(result.output.trim());
+      expect(pid).toBeGreaterThan(0);
+      expect(result).toMatchObject({ status: 'exited', exitCode: 0, survivorsKilled: true });
+      expect(result.durationMs).toBeLessThan(3_000);
+      expect(alive(pid)).toBe(false);
+      await settle(100);
+      expect(alive(pid)).toBe(false);
+    } finally { if (pid) { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } } }
+  });
+
+  // Astra 2112 R2 (inverted repro): a multi-byte character whose bytes arrive in two pipe chunks is kept whole in the result, and
+  // nothing is reported as omitted.
+  it('keeps a multi-byte character split across pipe chunks whole in the result', async () => {
+    const cwd = await workspace(), chunks: string[] = [];
+    const result = await runHostShell({ cwd, command: "head -c 4095 /dev/zero | tr '\\0' a; printf '\\305'; sleep 0.05; printf '\\237'", onOutput: (_stream, text) => chunks.push(text) });
+    expect(chunks.join('')).toBe(`${'a'.repeat(4095)}ş`);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 4_097, omittedBytes: 0, survivorsKilled: false });
+    expect(result.output).toBe(`${'a'.repeat(4095)}ş`);
+    expect(result.output.includes('\ufffd')).toBe(false);
+  });
+
+  // Once a character did not fit the head and went to the tail, later output must follow it there, whatever room the head has left.
+  it('keeps the kept output in arrival order once the head spilled into the tail', async () => {
+    const cwd = await workspace();
+    const result = await runHostShell({ cwd, command: "head -c 4095 /dev/zero | tr '\\0' a; printf 'ş'; sleep 0.05; echo b" });
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, totalBytes: 4_099, omittedBytes: 0 });
+    expect(result.output).toBe(`${'a'.repeat(4095)}şb\n`);
+  });
+
+  // I40: the duration is elapsed time on the platform clock's monotonic reading; a host wall clock stepping backwards during the
+  // run (measured ~2 s on this host) never clamps it to 0.
+  it('measures the run on the monotonic clock, so a backward wall step during the run does not shorten it', async () => {
+    const cwd = await workspace();
+    const samples = [{ wallMs: 1_000, monotonicMs: 500 }, { wallMs: 1_000 - 2_100, monotonicMs: 650 }];
+    const clock = { sample() { return samples.length > 1 ? samples.shift()! : samples[0]!; } };
+    const result = await runHostShell({ cwd, command: 'true' }, clock);
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, durationMs: 150 });
   });
 
   it('runs nothing when the call is already cancelled', async () => {

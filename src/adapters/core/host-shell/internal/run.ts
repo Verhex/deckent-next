@@ -13,7 +13,18 @@ export const HOST_SHELL_DEFAULT_TIMEOUT_MS = 300_000;
 export const HOST_SHELL_RESULT_MAX_BYTES = 16_384;
 /** Largest streamed chunk (one `tool.output` event). */
 export const HOST_SHELL_CHUNK_MAX_BYTES = 8_192;
+/** SIGTERM to SIGKILL grace for the command's process group. */
 const KILL_GRACE_MS = 2_000;
+/** How often the group is probed while its survivors are being ended, and how many probes follow SIGKILL before the call gives
+ * up on the group and settles anyway, releasing the pipes (a process the kernel cannot end, e.g. in uninterruptible I/O, must not
+ * hold the call forever). */
+const GROUP_PROBE_MS = 25;
+const GROUP_PROBES_AFTER_KILL = 80;
+
+/** The call's clock port (I40): a sampler whose monotonic reading measures elapsed time; the platform `TrustedClock` fits it
+ * (composition may inject it), the default reads `performance.now()`. Wall time is never used for durations. */
+export interface HostShellClock { sample(): { readonly monotonicMs: number } }
+const MONOTONIC_CLOCK: HostShellClock = Object.freeze({ sample: () => ({ monotonicMs: performance.now() }) });
 
 export interface HostShellRequest {
   readonly command: string;
@@ -38,7 +49,11 @@ export interface HostShellResult {
   readonly output: string;
   readonly totalBytes: number;
   readonly omittedBytes: number;
+  /** Elapsed time of the call on the monotonic clock (I40): a host wall clock stepping backwards during the run never shortens it. */
   readonly durationMs: number;
+  /** True when members of the command's process group were still alive after the shell exited (background children) and the call
+   * ended them before it settled (Astra 2112 R1): nothing the command started outlives the call. */
+  readonly survivorsKilled: boolean;
 }
 
 export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = []): Record<string, string> {
@@ -47,36 +62,52 @@ export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly 
   return { ...env, ...NON_INTERACTIVE };
 }
 
-/** UTF-8 safe head of `buffer` within `max` bytes. */
+/** UTF-8 safe head of `buffer` within `max` bytes (`buffer` holds whole sequences). */
 function utf8Head(buffer: Buffer, max: number): Buffer {
   let end = Math.min(max, buffer.length);
   while (end > 0 && end < buffer.length && (buffer[end]! & 0xc0) === 0x80) end--;
   return buffer.subarray(0, end);
 }
-/** UTF-8 safe tail of `buffer` within `max` bytes. */
+/** UTF-8 safe tail of `buffer` within `max` bytes (`buffer` holds whole sequences). */
 function utf8Tail(buffer: Buffer, max: number): Buffer {
   let start = Math.max(0, buffer.length - max);
   while (start < buffer.length && (buffer[start]! & 0xc0) === 0x80) start++;
   return buffer.subarray(start);
+}
+/** Number of trailing bytes of `buffer` that begin a UTF-8 sequence the buffer does not complete (0 when it ends on a boundary). */
+function utf8IncompleteTail(buffer: Buffer): number {
+  for (let back = 1; back <= 3 && back <= buffer.length; back++) {
+    const byte = buffer[buffer.length - back]!;
+    if ((byte & 0xc0) === 0x80) continue;
+    const length = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1;
+    return length > back ? back : 0;
+  }
+  return 0;
 }
 
 /**
  * Runs one command on the host (T-L4 slice 3b). Not a sandbox: the command runs as the service's OS user with that user's file,
  * process and network access; the workspace root is only its working directory. `bash --noprofile --norc -c` (no rc-file side
  * effects), stdin closed, a small allowlisted environment plus fixed non-interactive settings (no credentials from the service's
- * environment unless an operator allows the name), its own process group. Cancellation or the timeout signals the whole group
- * (SIGTERM, then SIGKILL after a short grace), so a pipeline's children never outlive the call. Output streams in bounded
- * chunks; the result keeps a bounded head and tail. Windows is not supported yet (typed result, nothing runs).
+ * environment unless an operator allows the name), its own process group. The group is the call's lifetime: cancellation or the
+ * timeout signals the whole group (SIGTERM, then SIGKILL after a short grace), and when the shell exits by itself, members still
+ * alive (background children, redirected or not) are ended the same way before the result settles, which reports it
+ * (`survivorsKilled`; Astra 2112 R1). Output streams in bounded chunks; the result keeps a bounded head and tail, cut on UTF-8
+ * boundaries with a character split across pipe reads carried to the next read (Astra 2112 R2). Windows is not supported yet (typed
+ * result, nothing runs).
  */
-export function runHostShell(request: HostShellRequest, now: () => number = Date.now): Promise<HostShellResult> {
-  const started = now();
+export function runHostShell(request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK): Promise<HostShellResult> {
+  const started = clock.sample().monotonicMs;
+  const elapsedMs = () => Math.max(0, Math.round(clock.sample().monotonicMs - started));
   const keep = request.resultMaxBytes ?? HOST_SHELL_RESULT_MAX_BYTES;
   const headMax = Math.floor(keep / 4), tailMax = keep - headMax;
   let head: Buffer = Buffer.alloc(0), tail: Buffer = Buffer.alloc(0), total = 0;
-  const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null): HostShellResult => {
+  // Once bytes went to the tail the head is closed, so the kept output stays in arrival order even while the head has room left.
+  let headOpen = true;
+  const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null, survivorsKilled = false): HostShellResult => {
     const omitted = Math.max(0, total - head.length - tail.length);
     const output = omitted > 0 ? `${head.toString('utf8')}\n[… ${omitted} bytes of output omitted …]\n${tail.toString('utf8')}` : Buffer.concat([head, tail]).toString('utf8');
-    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: Math.max(0, now() - started) });
+    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: elapsedMs(), survivorsKilled });
   };
   if (process.platform === 'win32') return Promise.resolve(done('unsupported-platform', null, null));
   if (request.signal?.aborted) return Promise.resolve(done('cancelled', null, null));
@@ -86,38 +117,69 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
       child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv),
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
-    let ending: 'timed-out' | 'cancelled' | null = null, settled = false, forceTimer: NodeJS.Timeout | null = null;
+    let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;
+    let termSent = false, killSent = false, forceTimer: NodeJS.Timeout | null = null;
     const signalGroup = (name: NodeJS.Signals) => {
       try { if (child.pid) process.kill(-child.pid, name); } catch { try { child.kill(name); } catch { /* already gone */ } }
     };
-    const stop = (why: 'timed-out' | 'cancelled') => {
-      if (ending || settled) return;
-      ending = why;
+    /** Whether any member of the command's process group still exists (signal 0 probes the group without touching it). */
+    const groupAlive = () => { if (!child.pid) return false; try { process.kill(-child.pid, 0); return true; } catch { return false; } };
+    const terminateGroup = () => {
+      if (termSent) return;
+      termSent = true;
       signalGroup('SIGTERM');
-      forceTimer = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
+      forceTimer = setTimeout(() => { killSent = true; signalGroup('SIGKILL'); }, KILL_GRACE_MS);
+    };
+    const stop = (why: 'timed-out' | 'cancelled') => {
+      // Once the shell has exited its result is `exited`; whatever is left of the group is being ended anyway.
+      if (ending || exited || settled) return;
+      ending = why;
+      terminateGroup();
     };
     const timer = setTimeout(() => stop('timed-out'), request.timeoutMs ?? HOST_SHELL_DEFAULT_TIMEOUT_MS);
     const onAbort = () => stop('cancelled');
     request.signal?.addEventListener('abort', onAbort, { once: true });
+    /** After the shell exited: ends what is left of its group (SIGTERM unless already sent, SIGKILL after the grace) and waits until the
+     * group is empty, or for a bounded time after SIGKILL — then the pipes are released so a survivor holding them cannot keep the
+     * call open. Resolves whether any survivor was found. */
+    const reapGroup = (): Promise<boolean> => new Promise(resolveReap => {
+      if (!groupAlive()) { resolveReap(false); return; }
+      terminateGroup();
+      let probesAfterKill = 0;
+      const probe = () => {
+        if (!groupAlive()) { resolveReap(true); return; }
+        if (killSent && ++probesAfterKill > GROUP_PROBES_AFTER_KILL) { child.stdout?.destroy(); child.stderr?.destroy(); resolveReap(true); return; }
+        setTimeout(probe, GROUP_PROBE_MS);
+      };
+      setTimeout(probe, GROUP_PROBE_MS);
+    });
     const collect = (stream: 'stdout' | 'stderr') => {
       const decoder = new StringDecoder('utf8');
+      // Trailing bytes of a UTF-8 sequence a pipe read cut in the middle, kept until the next read completes it (head/tail accounting).
+      let carry: Buffer = Buffer.alloc(0);
       const emit = (text: string) => {
         if (!text || !request.onOutput) return;
         let rest = Buffer.from(text, 'utf8');
         while (rest.length > 0) { const part = utf8Head(rest, HOST_SHELL_CHUNK_MAX_BYTES); request.onOutput(stream, part.toString('utf8')); rest = rest.subarray(part.length); }
       };
+      const retain = (bytes: Buffer) => {
+        if (bytes.length === 0) return;
+        if (headOpen && head.length < headMax) {
+          const taken = utf8Head(bytes, headMax - head.length);
+          head = Buffer.concat([head, taken]);
+          if (taken.length < bytes.length) { headOpen = false; tail = utf8Tail(Buffer.concat([tail, bytes.subarray(taken.length)]), tailMax); }
+        } else tail = utf8Tail(Buffer.concat([tail, bytes]), tailMax);
+      };
       return {
         data(chunk: Buffer) {
           total += chunk.length;
-          if (head.length < headMax) {
-            const room = headMax - head.length;
-            const taken = utf8Head(chunk, room);
-            head = Buffer.concat([head, taken]);
-            if (taken.length < chunk.length) tail = utf8Tail(Buffer.concat([tail, chunk.subarray(taken.length)]), tailMax);
-          } else tail = utf8Tail(Buffer.concat([tail, chunk]), tailMax);
+          const bytes = carry.length > 0 ? Buffer.concat([carry, chunk]) : chunk;
+          const cut = bytes.length - utf8IncompleteTail(bytes);
+          carry = Buffer.from(bytes.subarray(cut));
+          retain(bytes.subarray(0, cut));
           emit(decoder.write(chunk));
         },
-        end() { emit(decoder.end()); },
+        end() { retain(carry); carry = Buffer.alloc(0); emit(decoder.end()); },
       };
     };
     const out = collect('stdout'), err = collect('stderr');
@@ -129,10 +191,14 @@ export function runHostShell(request: HostShellRequest, now: () => number = Date
       clearTimeout(timer); if (forceTimer) clearTimeout(forceTimer);
       request.signal?.removeEventListener('abort', onAbort);
       // A group member that ignored SIGTERM must not outlive the call.
-      if (ending) signalGroup('SIGKILL');
+      if (termSent) signalGroup('SIGKILL');
       resolve(result);
     };
+    let reaping: Promise<boolean> | null = null;
     child.once('error', () => finish(done('spawn-failed', null, null)));
-    child.once('close', (code, signal) => finish(done(ending ?? 'exited', code, signal)));
+    // `exit`: the shell is gone; its status is final and the rest of the group is ended. `close` (always after `exit`): all output
+    // has arrived; the result settles once the group is empty.
+    child.once('exit', () => { exited = true; clearTimeout(timer); reaping = reapGroup(); });
+    child.once('close', (code, signal) => { void (reaping ?? Promise.resolve(false)).then(survivorsKilled => finish(done(ending ?? 'exited', code, signal, survivorsKilled))); });
   });
 }

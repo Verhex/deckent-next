@@ -89,7 +89,8 @@ export const writeAttemptTemporary = (name: string) => `.${name}.deckent-${rando
  * Conditional atomic write: the file must still be at `expectedVersion`; the attempt is journaled `prepared` (with its temporary name)
  * before the temporary file exists; the new bytes go to that exclusive file in the same directory (fsync), the directory is
  * re-verified, the version is checked once more, and a rename replaces the file (directory fsync), then `committed`. Any failure
- * before the rename journals `aborted` before the temporary file is removed. After the rename the parent is verified again: a
+ * before the rename journals `aborted`, and only once that is durable is the temporary file removed (a temporary file that could not
+ * be journaled away stays as evidence). After the rename the parent is verified again: a
  * directory moved out of the workspace meanwhile is journaled `escaped` and reported as `changed` (the write happened outside; it is
  * never reported as done, and nothing is written again to undo it). Not excluded: another writer between the last check and the
  * rename, or a same-user process moving the directory during the write (no advisory locks; Node has no openat2/renameat).
@@ -123,9 +124,12 @@ export async function writeWorkspaceFile(scope: WorkspaceScope, target: Extract<
     return fileContentVersion(content);
   } finally {
     if (pending) {
-      // Journal first: once `aborted` is durable, a missing temporary file can no longer be mistaken for a completed rename.
-      await attempt.phase({ state: 'aborted' }).catch(() => undefined);
-      await unlink(proc(dir, temporary)).catch(() => undefined);
+      // Journal first: once `aborted` is durable, a missing temporary file can no longer be mistaken for a completed rename. If
+      // `aborted` cannot be made durable, the temporary file stays as the evidence that the rename did not happen (Astra 2100);
+      // the next attempt of the same effect removes it as stale.
+      let aborted = false;
+      try { await attempt.phase({ state: 'aborted' }); aborted = true; } catch { /* the temporary file is the evidence */ }
+      if (aborted) await unlink(proc(dir, temporary)).catch(() => undefined);
     }
     await dir.close();
   }

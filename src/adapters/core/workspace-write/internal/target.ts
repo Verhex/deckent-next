@@ -36,9 +36,11 @@ type Journal = z.infer<typeof journalSchema>;
  * A write is conditional on that version and atomic. Each attempt journals its own phases under the wire key in the target's private
  * directory (atomic, 0600): `prepared` with a unique temporary name before the temporary file exists, then `committed` after the
  * rename, or `aborted` before the temporary file is removed, or `escaped` when the parent left the workspace during the write.
- * `lookup` decides from that evidence, never from content equality alone (Astra 2094 R1): committed → applied; aborted or no journal →
- * absent; prepared with its temporary file still present → absent (the rename did not happen); prepared with the temporary file gone
- * → applied only if the file holds the next version, else unknown; escaped or unreadable → unknown (never a blind retry).
+ * `lookup` decides from that evidence, never from content (Astra 2094 R1, 2100): committed → applied; aborted or no journal → absent;
+ * prepared with its temporary file still present → absent (the rename did not happen; the resend removes that file first); prepared
+ * with the temporary file gone → unknown, whatever the file holds (`prepared` is journaled before the temporary file exists, so a
+ * crash right there and a crash after the rename look the same, and an external writer may have put the same bytes in place);
+ * escaped or unreadable → unknown (never a blind retry).
  */
 export class WorkspaceFileTarget implements EffectTarget {
   readonly kind = WORKSPACE_FILE_TARGET_KIND;
@@ -106,10 +108,8 @@ export class WorkspaceFileTarget implements EffectTarget {
     if (journal.state === 'escaped') return null;
     const target = await resolveWritable(this.scope, ref.id);
     if (!target.ok || target.rel !== ref.id) return null;
-    const present = await temporaryPresent(this.scope, target, journal.temporary);
-    if (present === true) return { status: 'absent' as const };
-    if (present === false && await this.version(ref).catch(() => null) === journal.next) return { status: 'applied' as const, version: journal.next };
-    return null;
+    // The temporary file is the only causal evidence a `prepared` attempt leaves; the file's content is not (Astra 2100).
+    return await temporaryPresent(this.scope, target, journal.temporary) === true ? { status: 'absent' as const } : null;
   }
 }
 
