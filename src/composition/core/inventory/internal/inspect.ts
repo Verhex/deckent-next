@@ -3,8 +3,9 @@ import { userInfo } from 'node:os';
 import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
-import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, resolvePolicyScopeMembership, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
+import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { resolveConfiguredScopeMembership } from '#composition/core/scoped-request/index.js';
 
 /** Direct local CLI/SDK only, not remote peer authentication. Each invocation pins one config/layout
  * and fresh trusted policy snapshot. Project configuration cannot assign principal membership.
@@ -23,8 +24,7 @@ async function inspect(projectRoot: string, input: unknown, options: ConfigLoadO
   let document;
   try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-  const scopeIds = resolvePolicyScopeMembership(document, identity, [query.scopeId]);
-  if (!scopeIds.length) throw new PolicyAuthorizationError('POLICY_DENIED');
+  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [query.scopeId]);
   const principal = Object.freeze({ ...identity, scopeIds });
   const store: DispatchInventoryStore = {
     async listDispatches(admitted) {

@@ -2,10 +2,12 @@ import { userInfo } from 'node:os';
 import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
-import { PolicyAuthorizationError, resolvePolicyScopeMembership } from '#engine/index.js';
+import { PolicyAuthorizationError } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-/** One fresh local config/identity/policy snapshot per request. No ledger access or grant here:
- * the caller's application authenticates/authorizes before invoking the deferred ledger locator.
+import { resolveConfiguredScopeMembership } from './registry.js';
+/** One fresh local config/identity/policy snapshot per request. The only ledger access here is the read-only scope registry
+ * lookup, after a trusted grant exists (H34 S1: fail-closed membership); the caller's application still authenticates/authorizes
+ * before invoking the deferred ledger locator.
  */
 export async function loadConfiguredScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
   return loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity());
@@ -22,8 +24,7 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   let document;
   try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-  const scopeIds = resolvePolicyScopeMembership(document, identity, [scopeId]);
-  if (!scopeIds.length) throw new PolicyAuthorizationError('POLICY_DENIED');
+  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId]);
   const principal = Object.freeze({ ...identity, scopeIds });
   return Object.freeze({ config, layout, document, principal,
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),

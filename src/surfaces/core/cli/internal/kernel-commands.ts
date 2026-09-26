@@ -149,7 +149,8 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   if (args.toolchains && !context.inspectToolchainCurrency) throw ErrorRegistry.createError('CLI_USAGE');
   const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
   const data = { schemaVersion: 1, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
-    paths: resolveGlobalScopePaths(platform, env), principal, tenant: { tenantId: tenant.tenantId, isolationRoot: tenant.isolationRoot }, status: 'ready',
+    paths: resolveGlobalScopePaths(platform, env), principal, tenant: { tenantId: tenant.tenantId, isolationRoot: tenant.isolationRoot },
+    company: { companyId: config.company.id }, status: 'ready',
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, tenant: result.tenant.tenantId, principal: result.principal.id }, locale),
