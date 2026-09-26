@@ -711,7 +711,10 @@ refused. Turn cancellation reaches the running command (group killed). Output st
 room (a new channel `room()`); past half of it the display stops with one visible marker, and the streamed display is drained before
 the result is emitted. The result keeps 16 KiB (head + tail, omitted bytes counted), like a read tool. `terminal.shell` configures the
 per-command timeout (default 300 s) and extra environment names. Live use needs owner grants (`agent-tool` `run_shell`, `operation`
-`host.shell.run` execute); the terminal's live output display and card text are slice 3c-ii.
+`host.shell.run` execute). The terminal (slice 3c-ii) shows the last three lines of the running call's output under its live line
+and nothing of it afterwards (the finished call stays one line; the output reached the model as the result). Command output is
+untrusted: before display every escape sequence (CSI, OSC — titles, clipboard —, other ESC forms) and every control character but
+newline and tab is removed and carriage returns become line breaks; the live tail keeps 2,048 characters.
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
 corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally

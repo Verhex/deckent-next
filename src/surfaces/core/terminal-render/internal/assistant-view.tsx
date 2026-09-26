@@ -107,10 +107,19 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
   );
 }
 
-/** The one tool call running now, with a spinner and its live seconds. */
+/** Last lines of a running call's output shown under its line (already sanitized by the stream state). */
+const TOOL_OUTPUT_LINES = 3;
+
+/** The one tool call running now, with a spinner, its live seconds and the last lines of its output. */
 function ToolRunning({ tool, labels }: { readonly tool: ActiveTool; readonly labels: AssistantRenderLabels }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { frame } = useAnimation({ interval: 120 });
   const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(Date.now() - tool.startedAtMs) });
-  return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text></Box>;
+  const tail = tool.output.replace(/\n+$/u, '').split('\n').filter(line => line.length > 0).slice(-TOOL_OUTPUT_LINES);
+  return (
+    <Box flexDirection="column" paddingLeft={INDENT}>
+      <Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text>
+      {tail.map((line, index) => <Box key={index} paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{line}</Text></Box>)}
+    </Box>
+  );
 }

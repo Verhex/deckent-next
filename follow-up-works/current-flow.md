@@ -13,6 +13,14 @@
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
   önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
 
+## T-L4 dilim 3c-ii — terminalde canlı kabuk çıktısı (2026-09-26)
+- Çalışan aracın satırı altında son 3 çıktı satırı; araç bitince çıktı ekranda kalmaz (tek satır). `ActiveTool` artık `callId` ve temizlenmiş
+  2.048 karakterlik kuyruk taşır; başka çağrının çıktısı yok sayılır. `terminalSafeText`: CSI, OSC (başlık, pano), diğer ESC biçimleri ve
+  `\n`/`\t` dışı denetim karakterleri silinir, `\r` satır sonu olur. Onay kartı metni 3c-i'deki önizlemeyle geldi (komut, risk, sandbox değil).
+- Testler: temizleyici 6 vaka, durum makinesi (sınır, yabancı çağrı, bitişte temizlik), gerçek workline ekranı (son 3 satır, OSC başlığı
+  görünmez, bitince kuyruk yok). Yüzey + akış + servis 53 dosya / 308 test. Mutasyonlar 1–4 düştü (1 önce yalnız Ink testiyle koşuldu ve
+  Ink de OSC'yi düşürdüğü için geçti; durum testiyle düşüyor): `proof/F26-T-L4C-SHELL-3C-II/`.
+
 ## T-L4 dilim 3c-i — `run_shell` aracı, C11 etkisi (2026-09-26, Jev 82858581 `ask_low_all_effects_drop_marker` 0,95)
 - Karar: policy önce (araç + `host.shell.run` işlem kararı, sıkı olanı; ret hiç sunulmaz); sınıflandırma: yalnız `none` riskli salt okunur
   izinle sessiz; `low`, değiştiren ve yıkıcı her modda sorar. Önizleme: komut, risk + neden, "sandbox değil". Her çalıştırma `host-shell`

@@ -16,7 +16,29 @@ export type FooterUnit = Readonly<{ kind: 'footer'; elapsedMs: number; promptTok
 type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number }>;
-export type ActiveTool = Readonly<{ name: string; target: string | null; startedAtMs: number }>;
+/** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
+export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
+/** Characters of a running call's streamed output kept for the live region. */
+export const LIVE_OUTPUT_TAIL_CHARS = 2_048;
+
+/**
+ * Command output is untrusted: before it reaches the owner's terminal every escape sequence (CSI, OSC, other ESC forms) and every
+ * control character except newline and tab is removed, and carriage returns become line breaks — nothing a command prints can move
+ * the cursor, retitle the window, write the clipboard or hide text.
+ */
+// Matching control characters is the point of these patterns (untrusted command output).
+// eslint-disable-next-line no-control-regex
+const OSC = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/gu;
+// eslint-disable-next-line no-control-regex
+const CSI = /\u001b\[[0-?]*[ -/]*[@-~]/gu;
+/** Any other escape: ESC, optional intermediate bytes, one final byte (ECMA-48), e.g. ESC 7, ESC ( B, ESC c. */
+// eslint-disable-next-line no-control-regex
+const OTHER_ESCAPE = /\u001b[ -/]*[0-~]?/gu;
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/gu;
+export function terminalSafeText(text: string): string {
+  return text.replace(OSC, '').replace(CSI, '').replace(OTHER_ESCAPE, '').replace(/\r\n?/gu, '\n').replace(CONTROL, '');
+}
 /** The history was compacted during the turn (T-L5b): one visible line, never a silent change. */
 export type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
 export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | CompactionUnit | FooterUnit;
@@ -79,7 +101,13 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
 
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
-  if (delta.kind === 'message' || delta.kind === 'approval' || delta.kind === 'output') return step(state, []);
+  if (delta.kind === 'output') {
+    const active = state.activeTool;
+    if (!active || active.callId !== delta.callId) return step(state, []);
+    const output = `${active.output}${terminalSafeText(delta.text)}`.slice(-LIVE_OUTPUT_TAIL_CHARS);
+    return step(Object.freeze({ ...state, activeTool: Object.freeze({ ...active, output }) }), []);
+  }
+  if (delta.kind === 'message' || delta.kind === 'approval') return step(state, []);
   if (delta.kind === 'compacted') return step(state, [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
   if (delta.kind === 'context') {
     return step(Object.freeze({ ...state, context: Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality }) }), []);
@@ -97,7 +125,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const text = answerUnits(flushed.segments, state.answered);
     const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, answered: state.answered || text.length > 0 };
     if (delta.phase === 'started') {
-      return step(Object.freeze({ ...base, activeTool: Object.freeze({ name: delta.name, target: delta.target, startedAtMs: nowMs }) }), [...pending, ...text]);
+      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target: delta.target, startedAtMs: nowMs, output: '' }) }),
+        [...pending, ...text]);
     }
     const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target: delta.target, status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)) });
