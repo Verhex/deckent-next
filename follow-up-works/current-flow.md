@@ -23,6 +23,14 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 - L4C teslim: tasarım notu + lead kabul notu; 7 soru Jev'e soruldu (`proof/L4C-SLICE4-DESIGN-2026-09-27/jev-decision-packet.md`); q5 owner kararı.
 - Açık Claude şeritleri (2026-09-26 ~19:40Z): H34 company tasarımı (Fable), C12 genel + A04 tasarımı (Opus), D03 MCP idempotentHint
   (Sonnet, Agent worktree — taban 5fa0812 geldi, kartta 362047b yazıyordu; server.ts arada değişmedi). Entegrasyon dalı `integrate/2026-09-27` @ 362047b.
+- 2026-09-26 gece: H34 tasarım notu (Fable) ve C12+A04 tasarım notu (Opus) teslim, lead kabul notlarıyla (`proof/H34-COMPANY-DESIGN-2026-09-27/`,
+  `proof/C12-A04-DESIGN-2026-09-27/`); açık sorular owner checkpoint'inde. H34 notu gerçek negatif vaka buldu: `scopes: 'all'` grant'ı uydurma
+  scopeId'yi üye sayıyor (kapsam varlık kaydı yok).
+- D03 MCP: ilk teslim `b9fd7d4` kartın hatalı "yıkıcı ⇒ false" kuralını uyguladı; lead düzeltmesi (Jev `749dbd33` evidence_table 0,92) ile
+  Sonnet şeridi r2'de; 4 yıkıcı araç replay kanıtıyla true, 6 test dosyası kapsamda.
+- I40 ürün düzeltmesi (owner kararı, Jev `4dbd0c32`): Opus şeridi `lane/i40-time-contract` @ `/home/alperen/deckent-next-lane-i40-time`
+  (taban d525eeb + tanı `3ea79c8`); kart `cards/lanes/I40-time-contract.md`.
+- Dilim 4 q5 owner kararı: modun gevşettiği kararlar tam denetim kaydı, zaten sessizler özet sayaç (Jev `dd82e3ed` decision yazıldı).
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
