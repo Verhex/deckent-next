@@ -1,3 +1,4 @@
+import { MAX_WALL_SKEW_MS } from '#platform/index.js';
 import { sameAttemptIdentity, counterSchema, identitySchema, attemptIdentitySchema } from '#domain/index.js';
 import { cancellationDeliverySchema, cancellationDeliveryLimitsSchema, cancellationDeliveryOutcomeSchema,
   CancellationDeliveryError, type CancellationDelivery, type CancellationDeliveryClaim, type CancellationDeliveryOutcome } from './delivery-port.js';
@@ -12,7 +13,7 @@ export function decideCancellationDeliveryClaim(input: CancellationDeliveryClaim
   const prior = previous === null ? null : cancellationDeliverySchema.parse(previous);
   if (prior && !sameAttemptIdentity(prior.identity, identity)) throw new CancellationDeliveryError('CANCELLATION_DELIVERY_CONFLICT');
   if (prior && (['terminal', 'prevented', 'exhausted'].includes(prior.state)
-    || (prior.state === 'claimed' && prior.claimUntil > now) || prior.nextEligibleAt > now)) return Object.freeze({ acquired: false, record: prior });
+    || (prior.state === 'claimed' && prior.claimUntil > now - MAX_WALL_SKEW_MS) || prior.nextEligibleAt > now - MAX_WALL_SKEW_MS)) return Object.freeze({ acquired: false, record: prior });
   if (prior && prior.attempts >= limits.maxAttempts) {
     return Object.freeze({ acquired: false, record: cancellationDeliverySchema.parse({ ...prior, state: 'exhausted' }) });
   }

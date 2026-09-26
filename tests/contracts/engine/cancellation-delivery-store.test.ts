@@ -46,11 +46,11 @@ it('reclaims an expired lease and rejects the stale finisher', async () => {
   const f = await fixture();
   try {
     expect((await f.one.claimCancellationDelivery(claim('first', 1))).acquired).toBe(true);
-    const retry = await f.two.claimCancellationDelivery(claim('second', 11));
+    const retry = await f.two.claimCancellationDelivery(claim('second', 5011));
     expect(retry).toMatchObject({ acquired: true, record: { token: 'second', attempts: 2 } });
-    await expect(f.one.finishCancellationDelivery({ ...claim('first', 12), outcome: 'terminal' }))
+    await expect(f.one.finishCancellationDelivery({ ...claim('first', 5012), outcome: 'terminal' }))
       .rejects.toMatchObject({ code: 'CANCELLATION_DELIVERY_CONFLICT' } satisfies Partial<CancellationDeliveryError>);
-    expect(await f.two.finishCancellationDelivery({ ...claim('second', 12), outcome: 'terminal' })).toMatchObject({ state: 'terminal' });
+    expect(await f.two.finishCancellationDelivery({ ...claim('second', 5012), outcome: 'terminal' })).toMatchObject({ state: 'terminal' });
   } finally { close(f.one, f.two); }
 });
 
@@ -59,8 +59,8 @@ it('persists exhaustion at the retry cap and never requeues terminal delivery', 
   try {
     await f.one.claimCancellationDelivery(claim('first', 1));
     expect(await f.one.finishCancellationDelivery({ ...claim('first', 2), outcome: 'unresolved' })).toMatchObject({ state: 'queued' });
-    await f.one.claimCancellationDelivery(claim('second', 6));
-    expect(await f.one.finishCancellationDelivery({ ...claim('second', 7), outcome: 'unresolved' })).toMatchObject({ state: 'exhausted', attempts: 2 });
+    await f.one.claimCancellationDelivery(claim('second', 5006));
+    expect(await f.one.finishCancellationDelivery({ ...claim('second', 5007), outcome: 'unresolved' })).toMatchObject({ state: 'exhausted', attempts: 2 });
     expect(await f.two.claimCancellationDelivery(claim('third', 100))).toMatchObject({ acquired: false, record: { state: 'exhausted' } });
   } finally { close(f.one, f.two); }
 });

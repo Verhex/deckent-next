@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, DockerSupervisor, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
 import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization,
   type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
@@ -11,6 +11,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function inspectConfiguredWorkers(root: string, input: WorkerObservationQuery, options: ConfigLoadOptions = {}): Promise<WorkerObservationReport> {
   try {
     const query = workerObservationQuerySchema.parse(input);
+    const clock = new SystemTrustedClock();
     const c = await loadConfiguredScopeContext(root, query.scopeId, options);
     await new DispatchInventoryPolicyAuthorization({ async load() { return c.document; } }).authorize(query.scopeId, c.principal);
     const limit = query.limit ?? c.config.inspection.maxPageSize;
@@ -40,7 +41,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
               await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
               const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
-              const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, Date.now(), entry.identity).catch(() => null);
+              const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity).catch(() => null);
               workers.push({ ...basic, provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle,
                 patchRecorded: !!record.patch, files, diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
                   ...(files ? files.log.diagnostics : ['activity-unavailable'])] });
@@ -51,6 +52,6 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
         sources.push({ ...source, status: 'available', workers, nextAfter: page.page.nextAfter, truncated: page.page.nextAfter !== null });
       } catch (error) { sources.push({ ...source, status: queryFailure(error).code === 'POLICY_DENIED' ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }
     }
-    return Object.freeze({ schemaVersion: 1, observedAt: Date.now(), scopeId: query.scopeId, sources, control: 'observe-only' });
+    return Object.freeze({ schemaVersion: 1, observedAt: clock.sample().wallMs, scopeId: query.scopeId, sources, control: 'observe-only' });
   } catch (error) { throw queryFailure(error); }
 }

@@ -4,11 +4,11 @@ const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', genera
 const input = { identity, token: 'first', now: 10, limits: { maxAttempts: 2, retryDelayMs: 5, claimTtlMs: 20 } };
 it('persists bounded eligibility and prevents concurrent or stale delivery ownership', () => {
   const first = decideCancellationDeliveryClaim(input, null); expect(first.acquired).toBe(true);
-  expect(decideCancellationDeliveryClaim({ ...input, token: 'second', now: 29 }, first.record).acquired).toBe(false);
-  const secondInput = { ...input, token: 'second', now: 30 };
+  expect(decideCancellationDeliveryClaim({ ...input, token: 'second', now: 5029 }, first.record).acquired).toBe(false);
+  const secondInput = { ...input, token: 'second', now: 5030 };
   const second = decideCancellationDeliveryClaim(secondInput, first.record); expect(second.record.attempts).toBe(2);
-  expect(() => decideCancellationDeliveryFinish({ ...input, now: 31, outcome: 'terminal' }, second.record)).toThrow('CANCELLATION_DELIVERY_CONFLICT');
-  const exhausted = decideCancellationDeliveryFinish({ ...secondInput, now: 32, outcome: 'unresolved' }, second.record);
+  expect(() => decideCancellationDeliveryFinish({ ...input, now: 5031, outcome: 'terminal' }, second.record)).toThrow('CANCELLATION_DELIVERY_CONFLICT');
+  const exhausted = decideCancellationDeliveryFinish({ ...secondInput, now: 5032, outcome: 'unresolved' }, second.record);
   expect(exhausted.state).toBe('exhausted'); expect(decideCancellationDeliveryClaim({ ...input, now: 100 }, exhausted).acquired).toBe(false);
 });
 it('records backoff for nonterminal outcomes without pretending cancellation succeeded', () => {
@@ -16,8 +16,8 @@ it('records backoff for nonterminal outcomes without pretending cancellation suc
     const first = decideCancellationDeliveryClaim(input, null);
     const next = decideCancellationDeliveryFinish({ ...input, now: 12, outcome }, first.record);
     expect(next).toMatchObject({ state: 'queued', lastOutcome: outcome, nextEligibleAt: 17 });
-    expect(decideCancellationDeliveryClaim({ ...input, token: 'next', now: 16 }, next).acquired).toBe(false);
-    expect(decideCancellationDeliveryClaim({ ...input, token: 'next', now: 17 }, next).acquired).toBe(true);
+    expect(decideCancellationDeliveryClaim({ ...input, token: 'next', now: 5016 }, next).acquired).toBe(false);
+    expect(decideCancellationDeliveryClaim({ ...input, token: 'next', now: 5017 }, next).acquired).toBe(true);
   }
 });
 it('does not requeue settled deliveries or permit foreign identity and unsafe time arithmetic', () => {

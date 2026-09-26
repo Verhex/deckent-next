@@ -1,4 +1,4 @@
-import { loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
+import { SystemTrustedClock, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
 import { ModelCancellationRuntimeLoop, ModelInvocationStoreError,
   type ModelInvocationControllers, type ModelInvocationCancellationRecoveryCommand,
   type ModelInvocationCancellationRecoveryPage } from '#engine/index.js';
@@ -15,8 +15,9 @@ export async function prepareConfiguredModelCancellationRuntime(projectRoot: str
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   const layoutIdentity = JSON.stringify(config.productLayout);
+  const clock = new SystemTrustedClock();
   const loop = new ModelCancellationRuntimeLoop(command => recoverConfiguredModelCancellations(projectRoot, command,
-    controllers, layoutIdentity, options), abortableRuntimeWait, { now: Date.now }, {
+    controllers, layoutIdentity, options), abortableRuntimeWait, { now: () => clock.sample().monotonicMs }, {
     onPage: observer.onPage,
     async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, config.cancellationRuntime);

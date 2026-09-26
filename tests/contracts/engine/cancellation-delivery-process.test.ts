@@ -82,9 +82,9 @@ it('linearizes cancellation delivery across two OS writers, then retries a crash
 
     const reopened = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
     try {
-      const retry = await reopened.claimCancellationDelivery({ identity, token: 'retry', now: 11, limits });
+      const retry = await reopened.claimCancellationDelivery({ identity, token: 'retry', now: 5011, limits });
       expect(retry).toMatchObject({ acquired: true, record: { token: 'retry', attempts: 2 } });
-      await expect(reopened.finishCancellationDelivery({ identity, token: winner!.result!.record.token, now: 12, limits, outcome: 'terminal' }))
+      await expect(reopened.finishCancellationDelivery({ identity, token: winner!.result!.record.token, now: 5012, limits, outcome: 'terminal' }))
         .rejects.toThrow('CANCELLATION_DELIVERY_CONFLICT');
     } finally { reopened.close(); }
   } finally {

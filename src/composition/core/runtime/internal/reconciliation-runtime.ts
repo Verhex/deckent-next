@@ -1,5 +1,5 @@
 import { abortableRuntimeWait } from './wait.js';
-import { ErrorRegistry, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
+import { SystemTrustedClock, ErrorRegistry, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
 import { ReconciliationRuntimeLoop, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage } from '#engine/index.js';
 import { recoverConfiguredReconciliation } from '#composition/core/runs/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -15,9 +15,10 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
   const runtime = config.reconciliationRuntime;
   if (!runtime) throw ErrorRegistry.createError('RECONCILIATION_NOT_CONFIGURED');
   if (runtime.pageSize > config.inspection.maxPageSize) throw ErrorRegistry.createError('RECONCILIATION_RECOVERY_INVALID');
+  const clock = new SystemTrustedClock();
   const loop = new ReconciliationRuntimeLoop(async command =>
     (await recoverConfiguredReconciliation(projectRoot, command, options)).recovery,
-  abortableRuntimeWait, { now: Date.now }, {
+  abortableRuntimeWait, { now: () => clock.sample().monotonicMs }, {
     onPage: observer.onPage,
     async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, { scopeIds: runtime.scopeIds, pollIntervalMs: runtime.pollIntervalMs, failureBackoffMs: runtime.failureBackoffMs });
