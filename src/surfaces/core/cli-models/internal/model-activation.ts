@@ -2,7 +2,7 @@ import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Loc
 import { modelActivationCommandSchema, modelActivationQuerySchema, parseModelReference,
   type ModelActivationCommand, type ModelActivationQuery } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { ModelCommandContext } from './context.js';
 
 export type ModelActivationInspectionHandler = (root: string, query: ModelActivationQuery,
   options: ConfigLoadOptions) => Promise<ModelActivationInspection>;
@@ -103,7 +103,7 @@ function renderAdmission(value: ModelActivationResult, locale: Locale): string {
 }
 
 /** Exact durable activation state only; this command never infers provider reachability or execution readiness. */
-export async function modelActivationCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function modelActivationCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
   const parsed = parse(argv), locale = resolveLocale(parsed.language, context.env); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) { emit(t('cli.help.modelsActivation', {}, locale), sinks); return; }

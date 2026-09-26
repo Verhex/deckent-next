@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t } from '#platform/index.js';
-import { readJsonInput } from './json-input.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export async function approvalsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1]; let source: string | undefined; let language: string | undefined; let json = false;

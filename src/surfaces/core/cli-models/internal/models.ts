@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseModelReference } from '#domain/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { ModelCommandContext } from './context.js';
 import { modelInvocationCommand } from './model-invocation.js';
 import { modelActivationCommand } from './model-activation.js';
 import { modelSpendingCommand } from './model-spending.js';
@@ -59,7 +59,7 @@ function renderBinding(result: import('#engine/index.js').ModelBindingInspection
   t('models.availabilityNotObserved', {}, locale)].join('\n');
 }
 
-export async function modelsCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function modelsCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
   if (argv[1] === 'spending' || argv[1] === 'audit-spending') return modelSpendingCommand(argv, context);
   if (argv[1] === 'invoke' || argv[1] === 'invocation' || argv[1] === 'purge-content' || argv[1] === 'cancel') return modelInvocationCommand(argv, context);
   if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);

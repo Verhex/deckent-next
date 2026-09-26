@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { EffectCommand, EffectRecord } from '#domain/index.js';
 import type { EffectResult } from '#engine/index.js';
-import { readJsonInput } from './json-input.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type OperationEffectHandler = (root: string, command: EffectCommand, options: ConfigLoadOptions) => Promise<EffectResult>;
 export type OperationInspectHandler = (root: string, query: { readonly scopeId: string; readonly commandId: string }, options: ConfigLoadOptions)

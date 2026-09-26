@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream';
-import { readJsonInput } from './json-input.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 
 export function readGraphInput(source: string, maxBytes: number, stdin?: Readable & { isTTY?: boolean }): Promise<unknown> {
   return readJsonInput(source, maxBytes, { limit: 'CLI_GRAPH_INPUT_LIMIT', invalid: 'CLI_GRAPH_INPUT_INVALID',

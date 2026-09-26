@@ -748,6 +748,33 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/cli-kit": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/errors"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-models": {
+      "dependencies": [
+        "src/domain/core/provider-catalog",
+        "src/engine/core/provider-catalog",
+        "src/platform/core/config",
+        "src/surfaces/core/cli-kit",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/i18n",
+        "src/engine/core/inference-serving",
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend",
+        "src/domain/core/provider-spend"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/cli": {
       "dependencies": [
         "src/surfaces/core/terminal-labels",
@@ -756,8 +783,6 @@
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal",
         "src/domain/core/attempt",
-        "src/domain/core/model-activation",
-        "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
@@ -765,9 +790,6 @@
         "src/engine/core/dispatch",
         "src/engine/core/installation",
         "src/engine/core/inference-serving",
-        "src/engine/core/model-activation",
-        "src/engine/core/model-invocation",
-        "src/engine/core/provider-catalog",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/task-evaluation",
@@ -780,8 +802,6 @@
         "src/platform/core/i18n",
         "src/platform/core/identity",
         "src/platform/core/output",
-        "src/engine/core/provider-spend",
-        "src/domain/core/provider-spend",
         "src/engine/core/run-progression",
         "src/domain/core/run",
         "src/engine/core/workspace-patch",
@@ -791,7 +811,9 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/domain/core/worker-event",
-        "src/domain/core/approval"
+        "src/domain/core/approval",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/cli-kit"
       ],
       "plan": "SURFACES"
     },

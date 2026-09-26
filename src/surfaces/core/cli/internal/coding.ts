@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t } from '#platform/index.js';
 import type { ExecutionProfileDefinition } from '#domain/index.js';
-import { readJsonInput } from './json-input.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 export type CodingProfilePreparationHandler = (input: unknown) => Readonly<{

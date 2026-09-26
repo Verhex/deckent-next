@@ -7,9 +7,7 @@ import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler } from './init.js';
-import type { ModelReference } from '#domain/index.js';
-import type { ModelActivationInspectionHandler, ModelActivationAdmissionHandler } from './model-activation.js';
-import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
+import type { ToolchainCurrencyReport } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -18,13 +16,10 @@ import {
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
-import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
-import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler } from './terminal-chat.js';
 
-export type InferenceMetricsReading =
-  | { readonly ok: true; readonly url: string; readonly body: string }
-  | { readonly ok: false; readonly code: string; readonly url: string | null };
+import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
@@ -35,7 +30,8 @@ export interface RuntimeServiceReadinessView {
   readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
 }
 
-export interface CommandContext {
+/** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
+export interface CommandContext extends ModelCommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
@@ -57,24 +53,13 @@ export interface CommandContext {
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
-  readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
-  invokeModel?: ModelInvocationHandler;
   completeTerminalChat?: TerminalChatTurnHandler;
   streamTerminalChat?: TerminalChatStreamHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
-  inspectModelInvocation?: ModelInvocationInspectionHandler;
-  purgeModelInvocationContent?: ModelInvocationPurgeHandler;
-  cancelModelInvocation?: ModelInvocationCancellationHandler;
-  inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
-  auditProviderSpendAccount?: ProviderSpendAuditHandler;
-  inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
-  inspectModelBinding?: (root: string, reference: ModelReference, options: ConfigLoadOptions) => Promise<ModelBindingInspection>;
-  inspectModelActivation?: ModelActivationInspectionHandler;
-  admitModelActivation?: ModelActivationAdmissionHandler;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
   applyInstallation?: InstallationApplyHandler;

@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingError, roleContextCeiling, InferenceTokenBudget, selectInferenceProfile } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { ModelCommandContext } from './context.js';
 
 interface Parsed {
   action: 'plan' | 'budget' | 'metrics';
@@ -78,7 +78,7 @@ function renderPlan(plan: ReturnType<typeof buildInferenceServingPlan>, locale: 
   ].join('\n');
 }
 
-export async function inferenceCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
+export async function inferenceCommand(argv: readonly string[], context: ModelCommandContext = {}): Promise<void> {
   const parsed = parse(argv);
   const root = context.root ?? process.cwd();
   const env = context.env ?? process.env;

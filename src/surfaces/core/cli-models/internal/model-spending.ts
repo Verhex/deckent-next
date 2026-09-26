@@ -2,8 +2,8 @@ import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ProviderSpendAccountInspection, ProviderSpendAuditResult } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
-import { readJsonInput } from './json-input.js';
+import type { ModelCommandContext } from './context.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 
 export type ProviderSpendAccountInspectionHandler = (root: string, query: ProviderSpendAccountQuery,
   options: ConfigLoadOptions) => Promise<ProviderSpendAccountInspection>;
@@ -54,7 +54,7 @@ function renderAudit(result: ProviderSpendAuditResult, locale: Locale): string {
 }
 
 /** Account snapshots are read-only local evidence; they never claim an invoice or audited history. */
-export async function modelSpendingCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function modelSpendingCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
   const args = parse(argv), locale = resolveLocale(args.language, context.env); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'spending' ? t('cli.help.modelsSpending', {}, locale) : t('cli.help.modelsAuditSpending', {}, locale), sinks); return; }

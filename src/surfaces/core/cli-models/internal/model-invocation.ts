@@ -3,8 +3,8 @@ import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptio
 import { parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
   type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationInspection, ProviderSpendReservation } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
-import { readJsonInput } from './json-input.js';
+import type { ModelCommandContext } from './context.js';
+import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 
 export type ModelInvocationHandler = (root: string, input: ModelInvocationCommand, options: ConfigLoadOptions,
   signal?: AbortSignal) => Promise<ModelInvocationResult>;
@@ -79,7 +79,7 @@ function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed
       : purge ? t('models.invocation.noticePurged', {}, locale) : t('models.invocation.notice', {}, locale)].join('\n');
 }
 /** Native request JSON stays in a file/stdin, never a positional prompt or command-line log. */
-export async function modelInvocationCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function modelInvocationCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
   const args = parse(argv), locale = resolveLocale(args.language, context.env); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (args.help) { emit(args.action === 'purge-content' ? t('cli.help.modelsPurgeContent', {}, locale)
