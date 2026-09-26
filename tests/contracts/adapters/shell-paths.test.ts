@@ -57,6 +57,27 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     }
   });
 
+  // Astra 2111: the kernel resolves components in order, so `..` after a symlink is the parent of the link's target, not the
+  // lexical parent. The check must examine that object (or ask), never the lexically normalized path.
+  it('checks the object the kernel opens when `..` follows a symlink, and keeps `..` through a real directory read-only (Astra 2111)', async () => {
+    const { root, scope } = await workspace();
+    const outside = join(root, '..', 'outside');
+    await mkdir(join(outside, 'sub'));
+    await writeFile(join(outside, 'public.txt'), 'OUTSIDE_SYNTHETIC_SENTINEL\n');
+    await writeFile(join(root, 'public.txt'), 'inside\n');
+    await symlink(join(outside, 'sub'), join(root, 'deep'));
+    await symlink(join(root, 'src'), join(root, 'inner'));
+    for (const [command, reasonCode] of [['cat deep/../public.txt', 'PATH_OUTSIDE_ROOT'], ['ls deep/..', 'PATH_OUTSIDE_ROOT'], ['cat deep/../*.txt', 'PATH_OUTSIDE_ROOT'],
+      [`cat ${root}/deep/../public.txt`, 'PATH_OUTSIDE_ROOT'], ['wc -l < deep/../public.txt', 'PATH_OUTSIDE_ROOT'], ['cat deep/../missing.txt', 'PATH_UNRESOLVED'],
+      ['cat src/*/../a.ts', 'GLOB_UNSUPPORTED']] as const) {
+      expect(await classifyReadOnlyShellCommand(command, createShellPathContext(scope)), command).toMatchObject({ readOnly: false, reasonCode });
+    }
+    const context = createShellPathContext(scope);
+    for (const command of ['cat src/../public.txt', 'ls src/..', 'cat inner/../public.txt', 'cat src/../pub*.txt', 'cat inner/../src/a.ts']) {
+      expect(await classifyReadOnlyShellCommand(command, context), command).toMatchObject({ readOnly: true, risk: 'none' });
+    }
+  });
+
   it('bounds glob expansion, accepts an absolute path inside the root and reports the examined paths root-relative', async () => {
     const { root, scope } = await workspace();
     expect(await classifyReadOnlyShellCommand('cat src/*.ts', createShellPathContext(scope, 2))).toMatchObject({ readOnly: false, reasonCode: 'GLOB_EXPANSION' });
