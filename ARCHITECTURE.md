@@ -660,10 +660,11 @@ idempotent recovery and write scope unclosed. The diff's LCS cell bound also doe
 produces an approval preview above the protocol's 65,536-character limit and cancels the turn before the card arrives. Corrections
 are pending; successful ordinary-write tests do not establish these guarantees.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
-as described above; Astra re-review of `7e0e349` (2095) confirms both original corrections with 71 targeted tests. Remaining P2:
-the startup sweep is evaluated inside the optional `onToolCallApprovalsExpired?.(...)` argument, so without that observer the
-recovery itself is skipped. A real-service restart reproduces the pending record; compute recovery before optional notification.
-CLI supplies the callback and its tested path works; the exported composition contract must not depend on observability.
+as described above; Astra re-review of `7e0e349` (2095) confirmed both original corrections with 71 targeted tests. The subsequent
+observer-dependent startup recovery defect is corrected in `a4604fc`: recovery runs before optional notification. Astra 2097
+re-review confirms observed/unobserved starts both expire the orphan, and a missing integrity key leaves it pending, reports
+`keyUnavailable` and creates no key (3 fresh real-service tests). This scoped review closes 2092/2096; T-L5 and file-write findings
+remain open, and full verification/deployment acceptance are separate.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

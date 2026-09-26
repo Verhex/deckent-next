@@ -1,10 +1,21 @@
-# Anlık iş akışı — T-L4/T-L5 yerelde; 2092 kapandı, 2096 P2 düzeltildi (yeniden inceleme bekliyor); 2091/2094 açık; kanal takibi aktif
+# Anlık iş akışı — T-L4/T-L5 yerelde; 2092 kapandı, 2096 P2 yeniden incelemede kapandı; 2091/2094 açık; kanal takibi aktif
+
+## Astra 2097 yeniden incelemesi — a4604fc, 2026-09-26
+- Yanıt `2098` gönderildi; talep `2097` tüketildi.
+- **PASS (yalnız 2092/2096 onay düzeltme dilimi):** başlangıç süpürmesi callback dışına alınmış. İzole kesin commit'te
+  gözlemli/gözlemsiz/anahtar-eksik gerçek servis senaryoları 3/3 geçti; 18 diğer test filtreli. Build yok, mevcut native binary kullanıldı;
+  Opus'un ana ağaçta çalışan tam verify sürecine dokunulmadı. Kanıt `.deckent/host/reviews/astra-2097/targeted-tests.log`.
+- `1716508` ESLint değişikliği yalnız `.deckent/**` özel durum/kanıt alanını dışlar; buradaki tracked dosyalar core-memory Markdown'larıdır.
+  2091 ve 2094 açık; bu sınırlı PASS bütün teslim zincirine/push'a veya canlı kuruluma onay değildir. Sonraki: açık dilimlerin düzeltmeleri.
+
 
 ## Astra 2096 düzeltmesi — 2026-09-26 (Opus)
 - `server.ts`: süpürme sonucu önce hesaplanır, sonra isteğe bağlı gözlemciye bildirilir. Gerçek servis e2e üç kip: gözlemli (`{expired:1}`),
   gözlemsiz (kayıt yine `expired`), anahtar taşınmış (`keyUnavailable: true`, kayıt `pending`, anahtar oluşturulmadı). runtime-chat-turn 21/21.
   Mutasyon 7 (eski biçim) gözlemsiz testi düşürdü: `proof/F26-T-L4A-FIX-2092/mutation-7-sweep-inside-optional-observer.log`.
-- Owner 2026-09-26: commit'ler onaysız (tam otonom), push yalnız owner onayıyla; owner şimdi push istedi → tek tam verify, sonra push.
+- Owner 2026-09-26: commit'ler onaysız (tam otonom), push yalnız owner onayıyla. Tam verify `a4604fc` exit 0 (1903/327, native 25,
+  host 55, smoke; `proof/F26-T-L4A-FIX-2092/verify-a4604fc.log`). Push owner dönüşüne ertelendi (owner: "pushu ben dönünce yaparız").
+  Push edilecek sha `a4604fc` (+ yalnız belge commit'leri); 2091 ve 2094 bulguları açık, Astra PASS yalnız 2092/2096 için.
 
 ## Astra 2095 yeniden incelemesi — 2026-09-26
 - Yanıt `2096` gönderildi, `2095` tüketildi. Jev `6576bfe4`: revise 1,00; iki çekimser seçenek ayrı ayrı 0 (danışmanlık).

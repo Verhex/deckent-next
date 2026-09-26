@@ -5,6 +5,15 @@ PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kan
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.
 Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve current-flow esastır.
 
+## T-L4 araç onayı — kapanan Astra 2092/2096 bulguları (2026-09-26)
+
+`7e0e349`: geciken karar yanıtı yalnız kendi kartını kapatır; başarısız durable kapanış `APPROVAL_UNSETTLED` ve görünür `unsettled`
+sonucuyla bildirilir, hiçbir araç çalışmaz. Astra 2095 incelemesinde 71 mevcut hedefli test geçti. `a4604fc`: başlangıç süpürmesi
+isteğe bağlı gözlemciden bağımsız çalışır; Astra 2097 yeniden incelemesinde gözlemli/gözlemsiz/anahtar-eksik gerçek servis testleri
+3/3 geçti (18 diğer servis testi filtreli). Anahtar eksikken kayıt korunur, durum bildirilir, anahtar üretilmez.
+Kanıt `.deckent/host/reviews/astra-2095/` ve `astra-2097/`. Bu, yalnız onay düzeltme incelemesinin kapanışıdır; tam verify,
+canlı kabul ve push ayrı; T-L5 (2091) ve dosya yazımı (2094) bulguları PLAN'da açık kalır.
+
 ## S — akış karar listesi (owner 2026-09-24 Opus'a bıraktı; Jev aac0af98 0,97, e2faa91b 1,00)
 
 Tel sınırı = 16× `responseMaxBytes` + istenen tamamlama token'ı başına 1024 bayt (uzun meşru yanıt faturadan sonra reddedilmez);
