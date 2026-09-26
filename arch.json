@@ -80,21 +80,22 @@
         "src/adapters/core/sqlite-ledger",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
+        "src/domain/core/effect",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
         "src/engine/core/attempts",
         "src/engine/core/dispatch",
+        "src/engine/core/run-progression",
         "src/engine/core/runs",
         "src/engine/core/runtime",
         "src/engine/core/scheduling",
         "src/engine/core/supervisor",
         "src/engine/core/task-evaluation",
-        "src/engine/core/workspaces",
-        "src/engine/core/run-progression",
+        "src/engine/core/worker-observation",
         "src/engine/core/workspace-patch",
-        "src/domain/core/effect",
-        "src/engine/core/worker-observation"
+        "src/engine/core/workspaces",
+        "src/platform/core/clock"
       ],
       "plan": "STORE"
     },
@@ -389,6 +390,7 @@
         "src/engine/core/model-invocation",
         "src/engine/core/runs",
         "src/engine/core/runtime",
+        "src/platform/core/clock",
         "src/platform/core/config",
         "src/platform/core/errors"
       ],
@@ -554,7 +556,8 @@
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
         "src/engine/core/policy",
-        "src/engine/core/scheduling"
+        "src/engine/core/scheduling",
+        "src/platform/core/clock"
       ],
       "plan": "CONTRACT"
     },
@@ -620,6 +623,7 @@
     "src/platform/core/config": {
       "dependencies": [
         "src/platform/core/bootstrap-state",
+        "src/platform/core/clock",
         "src/platform/core/common",
         "src/platform/core/config-fields",
         "src/platform/core/errors",
@@ -1335,26 +1339,28 @@
     "src/adapters/core/worker-observation": {
       "dependencies": [
         "src/domain/core/attempt",
+        "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/domain/core/worker-event"
+        "src/platform/core/clock"
       ],
       "plan": "EXECUTION"
     },
     "src/composition/core/worker-observation": {
       "dependencies": [
-        "src/platform/core/config",
-        "src/platform/core/managed-files",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
+        "src/adapters/core/file-artifacts",
         "src/adapters/core/worker-observation",
+        "src/composition/core/inventory",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
+        "src/domain/core/attempt",
         "src/engine/core/policy",
         "src/engine/core/worker-observation",
-        "src/composition/core/policy",
-        "src/composition/core/scoped-request",
-        "src/composition/core/inventory",
-        "src/composition/core/query-errors",
-        "src/adapters/core/file-artifacts",
-        "src/domain/core/attempt"
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
       ],
       "plan": "EXECUTION"
     },
