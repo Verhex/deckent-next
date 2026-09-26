@@ -1,5 +1,19 @@
 # Anlık iş akışı — Opus 5.5; T-L4 dilim 2 (dosya düzenleme C11) yerelde; Astra REVISE 2090 (dilim 1) ve 2091 (T-L5) düzeltiliyor
 
+## Devir — sonraki oturum (2026-09-26)
+- HEAD `6a53765`; origin/main `4eec455` (≈21 yerel commit, push yok). Astra `2093` = dilim 2 inceleme isteği (bekliyor).
+- Sıradaki iki düzeltme dilimi (ayrı commit, her biri tersine çevrilmiş Astra repro'su + negatif test):
+  1. Onay düzeltmeleri (Astra 2092): R1 `work-surface.tsx` decideApproval finally → kartı yalnız aynı approvalId ise kapat; R2
+     `engine/core/approval/internal/tool-call.ts` close(): transition hatasında kaydı yeniden oku; terminal ise yarış, pending/okunamaz
+     ise kapanmış gibi bildirme. Görünürlük yolu (yeni settled değeri → protokol v15, ya da servis başında bekleyen agent-tool-call
+     onaylarını süpürme) karar gerektirir → önce Jev.
+  2. Geçmiş/bellek düzeltmeleri (Astra 2091): R2 loop `appended` birikimi → artımlı digest + sayaç + son yanıt (digest biçimi
+     `agent-turn-appended:1\0[...]` akışla aynı üretilebilir); R3 sıkıştırmada `seenReads` yalnız `plan.tail`'de kalan sonuçlarla sınırla
+     + edit/write başarısında da temizle; R1 `boundAgentHistory(40)` kaldırılınca sınır `service.inputMaxBytes` olur (canlı değeri kontrol et)
+     → karar gerektirir → Jev (gerekirse owner); kanıt workline → servis → kayıt/resume sınırında.
+- Sonra: toplu tek `npm run verify` (DECKENT_TEST_DOCKER_IMAGE ile), Astra PASS → push; dist yeniden derlendi (build ok), canlı servis v14
+  için governed yeniden başlatma gerekecek. Ardından T-L4 dilim 3 (host kabuğu) ve 4 (izin modları).
+
 ## T-L4 dilim 2 — `edit_file`/`write_file` C11 etkisi (2026-09-26)
 - Adaptör `adapters/core/workspace-write`: yazılabilir yol çözümü (normalize, kök içi, deny, sembolik bağlı üst dizin reddi), dosya sürümü
   (sha256 | `absent`), koşullu atomik yazım (aynı dizinde özel geçici dosya, fsync, dizin yeniden doğrulama, sürüm yeniden kontrol, rename,
