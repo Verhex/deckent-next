@@ -10,8 +10,10 @@
 - Testler: adaptör 3; e2e gerçek servis 5 (onaylı düzenleme diff + tek yazım + `effect_intents` settled; onay beklerken dosya değişti →
   reddedildi, diğer yazarın içeriği korundu; taban yolu policy izin verse de onay ister, sıradan yol sormadan yazılır; işlem onay isterse
   sorulur; işlem izni yoksa `denied`, yazım yok). Mutasyon 1–5 düştü: `deckent-refactor-work/proof/F26-T-L4B-FILE-EDITS-2026-09-26/`.
-- Açık: son sürüm kontrolü ile rename arasındaki başka yazar dışlanmaz (advisory kilit yok). `operation-effects` CLI testi eski `dist`
-  nedeniyle düşüyor (ledger v38 derlenmedi) — toplu verify'daki build ile doğrulanacak. Canlı: owner betiği gerekecek (araç + işlem izni).
+- Düzeltme (danışman bulgusu): policy reddi artık `prepare`'den önce; reddedilen çağrının sonucu dosya içeriğine bağlı değil (negatif
+  test: var/yok `old_string` iki çağrı → aynı `denied-by-policy`; M6 — sıralama geri alınınca düşüyor). Taban kuralı `prepare` sonucuyla yükseltir.
+- `operation-effects` CLI hatası eski `dist` kaynaklıydı: `npm run build` sonrası 4/4 geçti (doğrulandı).
+- Açık: son sürüm kontrolü ile rename arasındaki başka yazar dışlanmaz (advisory kilit yok). Canlı: owner betiği gerekecek (araç + işlem izni).
 
 ## Astra kanal incelemesi — 2026-09-26
 - İncelenen son commit `a35caa4`; eşzamanlı T-L4 WIP incelemeye alınmadı. Kaynak incelemesi + geçici commit arşivinde 9 dosya / 56 mevcut test geçti; iki ek tekrar üretimi üç T-L5 kusurunu doğruladı.

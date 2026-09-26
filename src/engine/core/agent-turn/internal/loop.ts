@@ -20,7 +20,7 @@ export interface AgentTurnPorts {
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`. */
   authorize(tool: AgentToolSpec, args?: Record<string, unknown>): Promise<'allow' | 'deny' | 'require-approval'>;
   /** Optional validation before authority is asked (an edit that cannot apply is an error, never an approval prompt). */
-  prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true } | { readonly ok: false; readonly text: string }>;
+  prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true; readonly requireApproval?: boolean } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
   execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<AgentToolOutcome>;
@@ -184,13 +184,15 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)} earlier in this turn; its result is above. Change the arguments to read something else.`);
         continue;
       }
+      // Policy first: a denied call learns nothing from the target (a plan error would reveal content).
+      let decision = await ports.authorize(tool, checked.args);
+      if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
       if (ports.prepare) {
-        let prepared: { readonly ok: true } | { readonly ok: false; readonly text: string };
+        let prepared: Awaited<ReturnType<NonNullable<AgentTurnPorts['prepare']>>>;
         try { prepared = await ports.prepare(tool, checked.args, signal); } catch { prepared = { ok: false, text: `[deckent] ${call.name}: error=failed` }; }
         if (!prepared.ok) { await result('error', prepared.text); continue; }
+        if (prepared.requireApproval && decision === 'allow') decision = 'require-approval';
       }
-      const decision = await ports.authorize(tool, checked.args);
-      if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
       if (decision === 'require-approval') {
         // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
         if (!ports.requestApproval) { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); continue; }

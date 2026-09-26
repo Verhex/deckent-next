@@ -629,8 +629,9 @@ evaluation (a deny since the request wins). Outcomes are typed call results: `ok
 allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; a single
 `y` allows, every other key denies) and closes it when the approval settles elsewhere. v14 also carries `tool.output` for slice 3.
 **Agent file edits as C11 effects (T-L4 slice 2).** `edit_file` (exact `old_string` → `new_string`, unique unless `replace_all`; no
-`$` pattern interpretation) and `write_file` (whole content) are declared beside the read tools (tool class `edit`). Before any
-authority is asked the loop's `prepare` port plans the call from the file as it is: resolved workspace-relative path (normalized,
+`$` pattern interpretation) and `write_file` (whole content) are declared beside the read tools (tool class `edit`). Policy is
+asked first (a denied call is answered before the file is touched, so its result never depends on content); then the loop's
+`prepare` port plans the call from the file as it is: resolved workspace-relative path (normalized,
 inside the root, not denied, parent not a symlinked directory), the file's version (sha256 of its bytes, or `absent`), the new
 content and a bounded unified diff (LCS ≤ 4M cells, else summarized); a plan error is the call's result and nothing is asked. The
 call's decision is the stricter of the `agent-tool` decision and the `operation` decision for `workspace.file.write` (`execute`), and

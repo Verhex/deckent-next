@@ -179,16 +179,16 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       async authorize(tool, args) {
         const decision = await toolAuthority.decide(tool, command.scopeId, context.principal);
         if (decision === 'deny' || tool.toolClass !== 'edit' || !edits || !args) return decision;
-        // An edit is also the `workspace.file.write` operation: the stricter of both decisions holds, and the write floor raises
-        // allow to require-approval for high-risk paths in every mode (contract §5).
+        // An edit is also the `workspace.file.write` operation: the stricter of both decisions holds.
         const operation = await edits.authority();
         if (operation === 'deny') return 'deny';
-        return decision === 'allow' && operation === 'allow' && !edits.floored(tool.name, args) ? 'allow' : 'require-approval';
+        return decision === 'allow' && operation === 'allow' ? 'allow' : 'require-approval';
       },
       async prepare(tool, args) {
         if (tool.toolClass !== 'edit' || !edits) return { ok: true };
         const planned = await edits.plan(tool.name, args);
-        return planned.ok ? { ok: true } : { ok: false, text: `[deckent] ${tool.name}: error=${planned.error}` };
+        // The write floor raises allow to require-approval for high-risk paths in every mode (contract §5), on the resolved path.
+        return planned.ok ? { ok: true, requireApproval: edits.floored(tool.name, args) } : { ok: false, text: `[deckent] ${tool.name}: error=${planned.error}` };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.

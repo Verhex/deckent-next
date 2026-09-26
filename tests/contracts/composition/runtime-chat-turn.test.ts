@@ -380,6 +380,17 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
   }, 60_000);
 
+  it('answers a policy-denied edit before planning it, so the result never depends on the file content', async () => {
+    const f = await runtime({ toolGrant: false }); await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } },
+      { toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"absent text","new_string":"a = 2"}' } }, { content: 'Denied.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-denied-oracle', 'probe'), event => events.push(event));
+    const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+    expect(results).toEqual(['[deckent] edit_file: error=denied-by-policy', '[deckent] edit_file: error=denied-by-policy']);
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+  }, 60_000);
+
   it('never writes when the operation policy does not grant workspace.file.write, even if the tool is allowed', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: editGrants('allow').filter(grant => grant.id !== 'file-write') }); await f.start();
     f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Denied.' }];
