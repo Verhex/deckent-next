@@ -28,6 +28,34 @@ describe('live shell output in the terminal (T-L4 slice 3c-ii)', () => {
     expect(finished.staticUnits).toEqual([{ kind: 'tool', name: 'run_shell', target: 'make', status: 'ok', ms: 5 }]);
   });
 
+  // T-L4 slice 3c-iii: SGR survived Ink (probe: a colour code in model text reached the screen), and SGR can conceal text (ESC[8m).
+  // With the colourless test palette any escape on screen can only come from content.
+  it('never lets model text, a tool target or an approval preview style, hide or move text on the owner\'s screen', async () => {
+    let decide!: () => void; const decided = new Promise<void>(resolve => { decide = resolve; });
+    const streamTurn = async function* () {
+      yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'run_shell', target: 'echo \u001b[8mhidden-target\u001b[0m', status: null, ms: null };
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-x', revision: 0, summary: 'run_shell · \u001b[31msummary',
+        preview: '$ cat notes\n\u001b[8mhidden-preview-line\u001b[0m\n\u001b]0;title\u0007shown', expiresAt: Date.now() + 600_000 };
+      await decided;
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-x', outcome: 'deny' as const };
+      yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c1', name: 'run_shell', target: 'echo \u001b[8mhidden-target\u001b[0m', status: 'denied' as const, ms: 1 };
+      yield { kind: 'text' as const, text: 'answer \u001b[8mconcealed\u001b[0m and \u001b[31mred\u001b[0m done' };
+      yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const ledger = { scopeId: 'scope', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope', sources: [] } as never; }, async inspectRun() { return null; },
+      async decideApproval(approval: { approvalId: string }, decision: 'allow' | 'deny') { decide();
+        return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 }; } };
+    const view = mountWorkline({ streamTurn, ledger: ledger as never }); mounted.push(view.instance);
+    await until(() => view.stdout.text.includes('READY'), 'ready');
+    view.stdin.write('go\r');
+    await until(() => view.stdout.text.includes('hidden-preview-line'), 'approval card');
+    await settle(60); view.stdin.write('n');
+    await until(() => view.stdout.text.includes('done'), 'answer');
+    const screen = view.stdout.text;
+    for (const shown of ['hidden-target', 'hidden-preview-line', 'shown', 'concealed', 'red']) expect(screen).toContain(shown);
+    expect(screen.includes('\u001b[8m') || screen.includes('\u001b[31m') || screen.includes('\u001b]0;')).toBe(false);
+  });
+
   it('shows the last lines of a running command under its line, never an escape sequence, and nothing of it after it ends', async () => {
     let finish!: () => void; const gate = new Promise<void>(resolve => { finish = resolve; });
     const streamTurn = async function* () {

@@ -13,6 +13,13 @@
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
   önce düzeltme. Alternatif: yalnız `a4604fc` push (2091/2094 yerelde kalır).
 
+## T-L4 dilim 3c-iii — güvenilmeyen metnin temizlenmesi (2026-09-26)
+- Deneme: model metnindeki ekran temizleme/imleç/OSC dizileri Ink'te düşüyor, ama SGR (renk) geçiyor; SGR `ESC[8m` metni gizleyebilir (ör. onay
+  kartındaki diff'ten bir satır). `terminalSafeText` artık model yanıt metnine, araç hedefine (tek satır) ve onay kartının özetine ve önizlemesine
+  de uygulanıyor. Test: renksiz palette ekranda içerikten gelen hiçbir kaçış dizisi yok, metinler görünür. Mutasyonlar 1–3 (her yol ayrı) düştü:
+  `proof/F26-T-L4C-SHELL-3C-III/`. Yüzey testleri 52 dosya / 280.
+- Kapsam dışı kalan: işçi transkripti, hata bildirimleri gibi diğer metin yolları (ayrı gözden geçirme adayı).
+
 ## T-L4 dilim 3c-ii — terminalde canlı kabuk çıktısı (2026-09-26)
 - Çalışan aracın satırı altında son 3 çıktı satırı; araç bitince çıktı ekranda kalmaz (tek satır). `ActiveTool` artık `callId` ve temizlenmiş
   2.048 karakterlik kuyruk taşır; başka çağrının çıktısı yok sayılır. `terminalSafeText`: CSI, OSC (başlık, pano), diğer ESC biçimleri ve

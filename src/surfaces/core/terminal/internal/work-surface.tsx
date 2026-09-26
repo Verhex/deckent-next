@@ -8,6 +8,7 @@ import { APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanP
 import { fillTemplate, formatDuration } from './worker-line.js';
 import { WorkerPanel } from './worker-panel.js';
 import { DecisionCard } from './decision-card.js';
+import { terminalSafeText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from './use-poll.js';
 
 export interface WorkSurfaceInput {
@@ -31,7 +32,7 @@ type Modal =
   | null;
 
 const SUMMARY_MAX = 160;
-const clip = (text: string) => { const flat = text.replace(/\s+/g, ' ').trim(); return flat.length > SUMMARY_MAX ? `${flat.slice(0, SUMMARY_MAX - 1)}…` : flat; };
+const clip = (text: string) => { const flat = terminalSafeText(text).replace(/\s+/g, ' ').trim(); return flat.length > SUMMARY_MAX ? `${flat.slice(0, SUMMARY_MAX - 1)}…` : flat; };
 
 function phaseCounts(run: RunView): string {
   const counts = new Map<string, number>();
@@ -144,6 +145,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
 
 /** A call preview is shown up to 24 lines; the rest is counted, never silently dropped. */
 function previewLines(preview: string, more: string): string[] {
-  const lines = preview.split('\n');
+  // The preview carries file content and model-chosen text: nothing in it may style, hide or move text on the owner's card.
+  const lines = terminalSafeText(preview).split('\n');
   return lines.length <= 24 ? lines : [...lines.slice(0, 24), fillTemplate(more, { count: lines.length - 24 })];
 }

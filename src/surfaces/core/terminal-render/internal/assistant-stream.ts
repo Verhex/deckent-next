@@ -99,6 +99,9 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
     activeTool: state.activeTool });
 }
 
+/** A tool call's display target comes from the model's arguments (a path, pattern or command line): shown sanitized, on one line. */
+const safeTarget = (target: string | null) => target === null ? null : terminalSafeText(target).replace(/\s*\n\s*/gu, ' ');
+
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
   if (delta.kind === 'output') {
@@ -125,10 +128,10 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const text = answerUnits(flushed.segments, state.answered);
     const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, answered: state.answered || text.length > 0 };
     if (delta.phase === 'started') {
-      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target: delta.target, startedAtMs: nowMs, output: '' }) }),
+      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target: safeTarget(delta.target), startedAtMs: nowMs, output: '' }) }),
         [...pending, ...text]);
     }
-    const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target: delta.target, status: delta.status ?? 'error',
+    const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target: safeTarget(delta.target), status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)) });
     return step(Object.freeze({ ...base, activeTool: null }), [...pending, ...text, unit]);
   }
@@ -138,7 +141,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   }
   const summary = state.phase === 'reasoning' ? [reasoningSummary(state, nowMs)] : [];
   if (delta.kind === 'text') {
-    const fed = feedSegmenter(state.segmenter, delta.text);
+    // Model text is untrusted too (it may quote files or command output): it is sanitized before it reaches the renderer.
+    const fed = feedSegmenter(state.segmenter, terminalSafeText(delta.text));
     const units = answerUnits(fed.segments, state.answered);
     return step(Object.freeze({ ...state, phase: 'answering', segmenter: fed.state, answered: state.answered || units.length > 0 }), [...summary, ...units]);
   }

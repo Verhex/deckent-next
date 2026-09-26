@@ -714,7 +714,9 @@ per-command timeout (default 300 s) and extra environment names. Live use needs 
 `host.shell.run` execute). The terminal (slice 3c-ii) shows the last three lines of the running call's output under its live line
 and nothing of it afterwards (the finished call stays one line; the output reached the model as the result). Command output is
 untrusted: before display every escape sequence (CSI, OSC — titles, clipboard —, other ESC forms) and every control character but
-newline and tab is removed and carriage returns become line breaks; the live tail keeps 2,048 characters.
+newline and tab is removed and carriage returns become line breaks; the live tail keeps 2,048 characters. The same sanitizer
+applies to model answer text, a tool call's display target and the approval card's summary and preview (slice 3c-iii): a probe showed
+Ink drops cursor and OSC sequences but passes SGR, and SGR can conceal text (ESC[8m) — e.g. hide a line of a diff on the card.
 Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
 corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
