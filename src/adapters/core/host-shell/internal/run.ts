@@ -20,6 +20,9 @@ const KILL_GRACE_MS = 2_000;
  * hold the call forever). */
 const GROUP_PROBE_MS = 25;
 const GROUP_PROBES_AFTER_KILL = 80;
+/** After the shell exited and its group is settled, how long inherited pipes still open are drained before they are released:
+ * a holder that is not in the group (setsid, a daemon) cannot be seen or ended, and must not hold the call. */
+const PIPE_DRAIN_GRACE_MS = 1_000;
 
 /** The call's clock port (I40): a sampler whose monotonic reading measures elapsed time; the platform `TrustedClock` fits it
  * (composition may inject it), the default reads `performance.now()`. Wall time is never used for durations. */
@@ -51,9 +54,13 @@ export interface HostShellResult {
   readonly omittedBytes: number;
   /** Elapsed time of the call on the monotonic clock (I40): a host wall clock stepping backwards during the run never shortens it. */
   readonly durationMs: number;
-  /** True when members of the command's process group were still alive after the shell exited (background children) and the call
-   * ended them before it settled (Astra 2112 R1): nothing the command started outlives the call. */
-  readonly survivorsKilled: boolean;
+  /** What the call could verify about processes the command left behind, within its process group (Astra 2112 R1, 2119):
+   * `clean` — the group was empty when the shell exited and the pipes closed by themselves; `group-ended` — members of the group
+   * still alive after the shell exited were ended and the group was observed empty; `unverified` — the group could not be observed
+   * empty after SIGKILL, or the pipes had to be released (drain deadline, timeout or cancellation) while something still held them:
+   * a process the command started may be running, possibly outside its group. A descendant that left the group (setsid, a daemon)
+   * is never observed and can outlive the call: this is a process-group contract, not a sandbox. */
+  readonly cleanup: 'clean' | 'group-ended' | 'unverified';
 }
 
 export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = []): Record<string, string> {
@@ -91,8 +98,10 @@ function utf8IncompleteTail(buffer: Buffer): number {
  * effects), stdin closed, a small allowlisted environment plus fixed non-interactive settings (no credentials from the service's
  * environment unless an operator allows the name), its own process group. The group is the call's lifetime: cancellation or the
  * timeout signals the whole group (SIGTERM, then SIGKILL after a short grace), and when the shell exits by itself, members still
- * alive (background children, redirected or not) are ended the same way before the result settles, which reports it
- * (`survivorsKilled`; Astra 2112 R1). Output streams in bounded chunks; the result keeps a bounded head and tail, cut on UTF-8
+ * alive (background children, redirected or not) are ended the same way before the result settles, which reports what could be
+ * verified (`cleanup`; Astra 2112 R1). Inherited pipes still open after the group is settled are drained for a bounded grace and
+ * then released, so a descendant that left the group (setsid, a daemon) cannot hold the call — nor can it be seen or ended: it may
+ * outlive the call (Astra 2119; a process-group contract, not a sandbox). Output streams in bounded chunks; the result keeps a bounded head and tail, cut on UTF-8
  * boundaries with a character split across pipe reads carried to the next read (Astra 2112 R2). Windows is not supported yet (typed
  * result, nothing runs).
  */
@@ -104,10 +113,10 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   let head: Buffer = Buffer.alloc(0), tail: Buffer = Buffer.alloc(0), total = 0;
   // Once bytes went to the tail the head is closed, so the kept output stays in arrival order even while the head has room left.
   let headOpen = true;
-  const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null, survivorsKilled = false): HostShellResult => {
+  const done = (status: HostShellResult['status'], exitCode: number | null, signal: string | null, cleanup: HostShellResult['cleanup'] = 'clean'): HostShellResult => {
     const omitted = Math.max(0, total - head.length - tail.length);
     const output = omitted > 0 ? `${head.toString('utf8')}\n[… ${omitted} bytes of output omitted …]\n${tail.toString('utf8')}` : Buffer.concat([head, tail]).toString('utf8');
-    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: elapsedMs(), survivorsKilled });
+    return Object.freeze({ status, exitCode, signal, output, totalBytes: total, omittedBytes: omitted, durationMs: elapsedMs(), cleanup });
   };
   if (process.platform === 'win32') return Promise.resolve(done('unsupported-platform', null, null));
   if (request.signal?.aborted) return Promise.resolve(done('cancelled', null, null));
@@ -119,6 +128,14 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;
     let termSent = false, killSent = false, forceTimer: NodeJS.Timeout | null = null;
+    // Pipes still open after the shell exited are drained for a bounded grace once the group is settled, then released; a
+    // timeout or cancellation during that drain releases them at once. Released pipes mean the cleanup is unverified.
+    let openPipes = 2, pipesReleased = false, drainTimer: NodeJS.Timeout | null = null;
+    const releasePipes = () => {
+      if (pipesReleased || openPipes === 0) return;
+      pipesReleased = true;
+      child.stdout?.destroy(); child.stderr?.destroy();
+    };
     const signalGroup = (name: NodeJS.Signals) => {
       try { if (child.pid) process.kill(-child.pid, name); } catch { try { child.kill(name); } catch { /* already gone */ } }
     };
@@ -131,8 +148,11 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
       forceTimer = setTimeout(() => { killSent = true; signalGroup('SIGKILL'); }, KILL_GRACE_MS);
     };
     const stop = (why: 'timed-out' | 'cancelled') => {
-      // Once the shell has exited its result is `exited`; whatever is left of the group is being ended anyway.
-      if (ending || exited || settled) return;
+      if (settled) return;
+      // Once the shell has exited its result is `exited` and what is left of the group is being ended anyway; the timeout or
+      // cancellation then only stops the drain.
+      if (exited) { releasePipes(); return; }
+      if (ending) return;
       ending = why;
       terminateGroup();
     };
@@ -140,15 +160,14 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
     const onAbort = () => stop('cancelled');
     request.signal?.addEventListener('abort', onAbort, { once: true });
     /** After the shell exited: ends what is left of its group (SIGTERM unless already sent, SIGKILL after the grace) and waits until the
-     * group is empty, or for a bounded time after SIGKILL — then the pipes are released so a survivor holding them cannot keep the
-     * call open. Resolves whether any survivor was found. */
-    const reapGroup = (): Promise<boolean> => new Promise(resolveReap => {
-      if (!groupAlive()) { resolveReap(false); return; }
+     * group is observed empty, or for a bounded time after SIGKILL. Resolves what could be verified. */
+    const reapGroup = (): Promise<'clean' | 'group-ended' | 'unverified'> => new Promise(resolveReap => {
+      if (!groupAlive()) { resolveReap('clean'); return; }
       terminateGroup();
       let probesAfterKill = 0;
       const probe = () => {
-        if (!groupAlive()) { resolveReap(true); return; }
-        if (killSent && ++probesAfterKill > GROUP_PROBES_AFTER_KILL) { child.stdout?.destroy(); child.stderr?.destroy(); resolveReap(true); return; }
+        if (!groupAlive()) { resolveReap('group-ended'); return; }
+        if (killSent && ++probesAfterKill > GROUP_PROBES_AFTER_KILL) { resolveReap('unverified'); return; }
         setTimeout(probe, GROUP_PROBE_MS);
       };
       setTimeout(probe, GROUP_PROBE_MS);
@@ -170,6 +189,7 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
           if (taken.length < bytes.length) { headOpen = false; tail = utf8Tail(Buffer.concat([tail, bytes.subarray(taken.length)]), tailMax); }
         } else tail = utf8Tail(Buffer.concat([tail, bytes]), tailMax);
       };
+      let ended = false;
       return {
         data(chunk: Buffer) {
           total += chunk.length;
@@ -179,26 +199,34 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
           retain(bytes.subarray(0, cut));
           emit(decoder.write(chunk));
         },
-        end() { retain(carry); carry = Buffer.alloc(0); emit(decoder.end()); },
+        /** Flushes what is held back (once): at the stream's end, or at its close when it was released before ending. */
+        end() { if (ended) return; ended = true; retain(carry); carry = Buffer.alloc(0); emit(decoder.end()); },
       };
     };
     const out = collect('stdout'), err = collect('stderr');
     child.stdout!.on('data', out.data); child.stderr!.on('data', err.data);
     child.stdout!.on('end', out.end); child.stderr!.on('end', err.end);
+    child.stdout!.on('close', () => { openPipes--; out.end(); }); child.stderr!.on('close', () => { openPipes--; err.end(); });
     const finish = (result: HostShellResult) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer); if (forceTimer) clearTimeout(forceTimer);
+      clearTimeout(timer); if (forceTimer) clearTimeout(forceTimer); if (drainTimer) clearTimeout(drainTimer);
       request.signal?.removeEventListener('abort', onAbort);
       // A group member that ignored SIGTERM must not outlive the call.
       if (termSent) signalGroup('SIGKILL');
       resolve(result);
     };
-    let reaping: Promise<boolean> | null = null;
+    let reaping: Promise<HostShellResult['cleanup']> | null = null;
     child.once('error', () => finish(done('spawn-failed', null, null)));
-    // `exit`: the shell is gone; its status is final and the rest of the group is ended. `close` (always after `exit`): all output
-    // has arrived; the result settles once the group is empty.
-    child.once('exit', () => { exited = true; clearTimeout(timer); reaping = reapGroup(); });
-    child.once('close', (code, signal) => { void (reaping ?? Promise.resolve(false)).then(survivorsKilled => finish(done(ending ?? 'exited', code, signal, survivorsKilled))); });
+    // `exit`: the shell is gone; its status is final and the rest of the group is ended; pipes still open once the group is settled
+    // are drained for a bounded grace, then released (the timeout keeps running and, like a cancellation, releases them at once).
+    // `close` (always after `exit`): the pipes are closed or released; the result settles once the group is settled too.
+    child.once('exit', () => {
+      exited = true;
+      reaping = reapGroup().then(cleanup => { if (openPipes > 0 && !settled) drainTimer = setTimeout(releasePipes, PIPE_DRAIN_GRACE_MS); return cleanup; });
+    });
+    child.once('close', (code, signal) => {
+      void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(done(ending ?? 'exited', code, signal, pipesReleased ? 'unverified' : cleanup)));
+    });
   });
 }
