@@ -1,4 +1,5 @@
 import { admitRunAttempts } from '../support/admission.js';
+import { cliChildEnv } from '../support/child-env.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
@@ -17,7 +18,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-inventory-surface-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = { ...process.env, HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }; delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 1, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
