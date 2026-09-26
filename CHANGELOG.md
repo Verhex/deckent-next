@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (D-3): MCP `tools/list` declares `idempotentHint` per tool from product replay evidence (25 true / 5 false) instead of
+  `true` for every tool; destructive tools with commandId/identity-keyed replay stay idempotent.
 - DOCS (2026-09-26, remainder): README surfaces (CLI, terminal, MCP, SDK; no HTTP API; Docker worker image), ARCHITECTURE
   "Package contract" paths and rules (i18n/config-fields locations, model literal ban in all `src`, docs-authority target
   vs W0-9, state layout), PLAN open findings (I40, MCP idempotentHint, W0-8/W0-9, H34 rename deferral, DOGFOOD prerequisites),
