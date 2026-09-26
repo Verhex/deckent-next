@@ -181,27 +181,33 @@ it.each(['throws', 'wrong-request', 'malformed-amount'] as const)('keeps a valid
 });
 
 it('atomically persists exact native charges, aggregates before rounding, and retains only financial evidence across content purge', async () => {
-  const failures: { stage: string; code: string; clock?: readonly number[] }[] = [];
+  // Keep the actual acquisition and native clock samples together: STALE_TARIFF also means
+  // now < fetchedAtMs after a host clock step. This observes the real clock without replacing it.
+  let metadataClock: number[] = [];
+  const failures: { stage: string; code: string; clock?: readonly number[]; metadataClock: readonly number[] }[] = [];
   const record = (stage: string, error: unknown, clock?: readonly number[]) => {
     const code = error instanceof Error && 'code' in error && typeof error.code === 'string'
       && /^[A-Z0-9_]{1,80}$/.test(error.code) ? error.code : 'UNCLASSIFIED';
-    failures.push({ stage, code, ...(clock ? { clock } : {}) });
+    failures.push({ stage, code, metadataClock: [...metadataClock], ...(clock ? { clock: [...clock] } : {}) });
   };
   const fetchMetadata = adapters.fetchOpenRouterTariff;
   vi.spyOn(adapters, 'fetchOpenRouterTariff').mockImplementation(async (options, now, signal) => {
-    const clock: number[] = [];
+    const clock: number[] = []; metadataClock = clock;
     try { return await fetchMetadata(options, () => { const value = now(); clock.push(value); return value; }, signal); }
     catch (error) { record('metadata', error, clock); throw error; }
   });
   const createNative = adapters.createOpenRouterPricedNative;
   vi.spyOn(adapters, 'createOpenRouterPricedNative').mockImplementation(options => {
-    const priced = createNative(options);
+    const clock: number[] = [];
+    const priced = createNative({ ...options, now: () => {
+      const value = options.now(); if (clock.length === 16) clock.shift(); clock.push(value); return value;
+    } });
     return { ...priced, quote(input) {
-      try { return priced.quote(input); } catch (error) { record('quote', error); throw error; }
+      try { return priced.quote(input); } catch (error) { record('quote', error, clock); throw error; }
     }, native: { ...priced.native, async prepare(...args) {
-      try { return await priced.native.prepare(...args); } catch (error) { record('prepare', error); throw error; }
+      try { return await priced.native.prepare(...args); } catch (error) { record('prepare', error, clock); throw error; }
     }, async send(...args) {
-      try { return await priced.native.send(...args); } catch (error) { record('send', error); throw error; }
+      try { return await priced.native.send(...args); } catch (error) { record('send', error, clock); throw error; }
     } } };
   });
   const f = await fixture(), policy = f.policy(true);

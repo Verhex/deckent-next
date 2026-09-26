@@ -51,8 +51,18 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-priced-ledger-')), path = join(root, 'ledger.db');
   const origin = `https://127.0.0.1:${address.port}`, metadataEndpoint = `${origin}/api/v1/models/vendor/model/endpoints`;
+  // Preserve the real clock: I40 also fails when the host steps backwards, not only on expiry.
+  // Report the exact samples supplied to pricing; never clamp them or turn unknown into success.
+  let previousClock: { wallMs: number; elapsedMs: number } | undefined;
+  const pricingNow = () => {
+    const sample = { wallMs: Date.now(), elapsedMs: performance.now() };
+    if (previousClock && sample.wallMs < previousClock.wallMs) {
+      console.warn('I40_PRICING_CLOCK_BACKWARD', JSON.stringify({ previous: previousClock, current: sample }));
+    }
+    previousClock = sample; return sample.wallMs;
+  };
   const fetchObservation = () => fetchOpenRouterTariff({ endpoint: metadataEndpoint, modelId: 'vendor/model', endpointTag: 'provider/region',
-    maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000, caPem: certificate }, Date.now);
+    maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000, caPem: certificate }, pricingNow);
   let observation = await fetchObservation();
   const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
@@ -67,7 +77,7 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); activations.close();
   const budget = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 };
   let sequence = 0;
-  const priced = createOpenRouterPricedNative({ currentObservation: () => observation, now: Date.now });
+  const priced = createOpenRouterPricedNative({ currentObservation: () => observation, now: pricingNow });
   const application = (authorize = async (input: Parameters<typeof priced.quote>[0]) => ({ budget, quote: priced.quote(input) })) =>
     new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'policy', ruleId: 'invoke' }; } },
       { async inspect() { return { schemaVersion: 1, reference, status: 'declared' as const, catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
