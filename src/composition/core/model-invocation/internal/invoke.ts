@@ -3,7 +3,7 @@ import { ModelInvocationError, modelInvocationCommandInputSchema, modelInvocatio
   type ModelInvocationDeltaSink } from '#domain/index.js';
 import { ModelInvocationApplication, ModelInvocationPolicyAuthorization, ModelBindingApplication, type ModelInvocationControllers, type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationReader, type LocalPeerIdentity } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 import { createConfiguredModelInvocationNative } from './native.js';
@@ -49,7 +49,8 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
 }
 
 function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost) {
-  const configuredNative = createConfiguredModelInvocationNative(context, options);
+  // One trusted clock for pricing and durable invocation records (I40).
+  const clock = new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock);
   return new ModelInvocationApplication({ async verify() { return context.principal; } },
     new ModelInvocationPolicyAuthorization(context.policy),
     new ModelBindingApplication({ async read() { return (await context.freshConfig())['provider_catalog']; } }),
@@ -62,6 +63,6 @@ function application(context: Awaited<ReturnType<typeof loadInvocationContext>>,
     } },
     configuredNative.natives,
     async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
-    { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: Date.now,
+    { invocationId: randomUUID, ownerId: () => host?.ownerId ?? randomUUID(), now: () => clock.sample().wallMs,
       ...(host ? { register: host.controllers.register.bind(host.controllers) } : {}) }, configuredNative.spending);
 }

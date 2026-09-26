@@ -13,6 +13,7 @@ import * as adapters from '#adapters/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore,
   openSqliteProviderSpendIntegrityReader, openSqliteProviderSpendAuditStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ProviderSpendAuditApplication, ModelActivationApplication, ModelBindingApplication, ModelInvocationPurgeApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
+import * as platform from '#platform/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 
 const roots: string[] = [], servers: Server[] = [];
@@ -181,27 +182,33 @@ it.each(['throws', 'wrong-request', 'malformed-amount'] as const)('keeps a valid
 });
 
 it('atomically persists exact native charges, aggregates before rounding, and retains only financial evidence across content purge', async () => {
-  const failures: { stage: string; code: string; clock?: readonly number[] }[] = [];
+  // Keep the actual acquisition and native clock samples together: STALE_TARIFF also means
+  // now < fetchedAtMs after a host clock step. This observes the real clock without replacing it.
+  let metadataClock: number[] = [];
+  const failures: { stage: string; code: string; clock?: readonly number[]; metadataClock: readonly number[] }[] = [];
   const record = (stage: string, error: unknown, clock?: readonly number[]) => {
     const code = error instanceof Error && 'code' in error && typeof error.code === 'string'
       && /^[A-Z0-9_]{1,80}$/.test(error.code) ? error.code : 'UNCLASSIFIED';
-    failures.push({ stage, code, ...(clock ? { clock } : {}) });
+    failures.push({ stage, code, metadataClock: [...metadataClock], ...(clock ? { clock: [...clock] } : {}) });
   };
   const fetchMetadata = adapters.fetchOpenRouterTariff;
   vi.spyOn(adapters, 'fetchOpenRouterTariff').mockImplementation(async (options, now, signal) => {
-    const clock: number[] = [];
+    const clock: number[] = []; metadataClock = clock;
     try { return await fetchMetadata(options, () => { const value = now(); clock.push(value); return value; }, signal); }
     catch (error) { record('metadata', error, clock); throw error; }
   });
   const createNative = adapters.createOpenRouterPricedNative;
   vi.spyOn(adapters, 'createOpenRouterPricedNative').mockImplementation(options => {
-    const priced = createNative(options);
+    const clock: number[] = [];
+    const priced = createNative({ ...options, now: () => {
+      const value = options.now(); if (clock.length === 16) clock.shift(); clock.push(value); return value;
+    } });
     return { ...priced, quote(input) {
-      try { return priced.quote(input); } catch (error) { record('quote', error); throw error; }
+      try { return priced.quote(input); } catch (error) { record('quote', error, clock); throw error; }
     }, native: { ...priced.native, async prepare(...args) {
-      try { return await priced.native.prepare(...args); } catch (error) { record('prepare', error); throw error; }
+      try { return await priced.native.prepare(...args); } catch (error) { record('prepare', error, clock); throw error; }
     }, async send(...args) {
-      try { return await priced.native.send(...args); } catch (error) { record('send', error); throw error; }
+      try { return await priced.native.send(...args); } catch (error) { record('send', error, clock); throw error; }
     } } };
   });
   const f = await fixture(), policy = f.policy(true);
@@ -340,4 +347,63 @@ it('uses configured work bounds and distinct live policy to audit native spend, 
   await writeAccountPolicy(false);
   await expect(auditConfiguredProviderSpendAccount(f.project, command, 64_000, options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   expect(f.posts).toBe(2);
+});
+
+/** I40: replace only the platform clock port for this test with the real floored clock over an explicit raw wall source,
+ * then move that raw source at exact pricing stages. Date.now is never pinned; composition must read only this port. */
+function steppedWall(start: number, steps: { fetch?: readonly number[]; prepare?: number; quote?: number; send?: number }) {
+  const wall = { raw: start, samples: [] as number[], errors: [] as string[] };
+  const RealClock = platform.SystemTrustedClock, clock = new RealClock(() => { wall.samples.push(wall.raw); return wall.raw; });
+  vi.spyOn(platform, 'SystemTrustedClock').mockImplementation(function () { return clock; } as never);
+  const fetchSteps = [...(steps.fetch ?? [])], fetchMetadata = adapters.fetchOpenRouterTariff, createNative = adapters.createOpenRouterPricedNative;
+  vi.spyOn(adapters, 'fetchOpenRouterTariff').mockImplementation((options, now, signal) =>
+    fetchMetadata(options, () => { wall.raw = fetchSteps.shift() ?? wall.raw; return now(); }, signal));
+  const at = <T>(value: number | undefined, run: () => T): T => {
+    if (value !== undefined) wall.raw = value;
+    try { return run(); } catch (error) { wall.errors.push((error as { code?: string }).code ?? 'UNCLASSIFIED'); throw error; }
+  };
+  vi.spyOn(adapters, 'createOpenRouterPricedNative').mockImplementation(options => {
+    const priced = createNative(options);
+    return { ...priced, quote: input => at(steps.quote, () => priced.quote(input)), native: { ...priced.native,
+      prepare: (...args) => at(steps.prepare, () => priced.native.prepare(...args))
+        .catch((error: { code?: string }) => { wall.errors.push(error.code ?? 'UNCLASSIFIED'); throw error; }),
+      send: (...args) => at(steps.send, () => priced.native.send(...args))
+        .catch((error: { code?: string }) => { wall.errors.push(error.code ?? 'UNCLASSIFIED'); throw error; }) } };
+  });
+  return wall;
+}
+const tariffBase = 1_000_000_000;
+
+it('I40: a backward host wall step between acquisition, preparation, quote and send cannot stale a fresh tariff', async () => {
+  const f = await fixture(), b = tariffBase;
+  const wall = steppedWall(b, { fetch: [b, b - 2_055], prepare: b - 2_100, quote: b - 1_000, send: b - 2_200 });
+  const result = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  expect(result.receipt.outcome?.state).toBe('responded'); expect([f.metadataGets, f.posts]).toEqual([1, 1]);
+  expect(wall.errors).toEqual([]); expect(wall.samples).toEqual(expect.arrayContaining([b - 2_055, b - 2_100, b - 1_000, b - 2_200]));
+  const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+  try {
+    const persisted = await reader.loadInspection('scope', result.receipt.claim.invocationId);
+    // The floored trusted time, not the stepped raw time, reaches the tariff window and the durable quote evidence.
+    expect(persisted?.spending?.descriptor.quote).toMatchObject({ pricing: { definition: { selection: { fetchedAtMs: b, expiresAtMs: b + 60_000 } } },
+      meter: { evidence: { observedAtMs: b } } });
+  } finally { reader.close(); }
+});
+
+it('I40: a tariff reached by the advancing floor at its expiry is still rejected before claim and POST', async () => {
+  const f = await fixture(), b = tariffBase;
+  const wall = steppedWall(b, { fetch: [b, b], prepare: b + 60_000 });
+  await expect(invokeConfiguredModel(f.project, f.command, { env: f.env })).rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE' });
+  expect(wall.errors).toEqual(['STALE_TARIFF']); expect([f.metadataGets, f.posts]).toEqual([1, 0]);
+  const store = await openSqliteModelInvocationStore(f.ledger, sqlite, 'forbid');
+  try { await expect(store.loadReceipt('scope', f.command.commandId)).resolves.toBeNull(); }
+  finally { store.close(); }
+});
+
+it('I40: expiry reached at send stays a durable unknown with zero POST, never success', async () => {
+  const f = await fixture(), b = tariffBase;
+  const wall = steppedWall(b, { fetch: [b, b + 1], send: b + 60_000 });
+  const result = await invokeConfiguredModel(f.project, f.command, { env: f.env });
+  expect(result.receipt.outcome?.state).toBe('unknown'); expect(wall.errors).toEqual(['STALE_TARIFF']);
+  expect((await invokeConfiguredModel(f.project, f.command, { env: f.env })).receipt.outcome?.state).toBe('unknown');
+  expect([f.metadataGets, f.posts]).toEqual([1, 0]);
 });

@@ -8,7 +8,7 @@ import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HT
   OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition,
   type OpenRouterPricedNative, fetchOpenRouterTariff, type OpenRouterMetadataObservation,
   providerSpendingSchema, quoteOpenAiChatOperatorTariff } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
@@ -25,8 +25,11 @@ function budgetFrom(config: Record<string, unknown>, scopeId: string) {
 
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition
  * is unauthenticated and completes before pure preparation; credential resolution remains send-only.
+ * Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards
+ * between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process.
  */
-export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions) {
+export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock) {
+  const now = () => clock.sample().wallMs;
   let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative;
     cell: { observation?: OpenRouterMetadataObservation } } | undefined;
   const natives = Object.freeze({
@@ -44,7 +47,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
           if (!cell.observation) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
           return cell.observation;
         },
-        now: Date.now,
+        now,
         resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.transport.authentication, options),
       });
       selected = { profile, priced, cell };
@@ -62,7 +65,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       const definition = parseOpenRouterChatDefinition(input.profile.adapter.definition);
       current.cell.observation = await fetchOpenRouterTariff({ endpoint: definition.metadataEndpoint,
         modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
-        ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) }, Date.now, signal);
+        ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) }, now, signal);
     },
   });
   const spending: ModelInvocationSpendingAuthority = Object.freeze({

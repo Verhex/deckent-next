@@ -11,6 +11,7 @@ import { fetchOpenRouterTariff } from '#adapters/core/provider-openrouter-pricin
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/index.js';
 import { ModelInvocationApplication, parseProviderSpendReservation } from '#engine/index.js';
+import { SystemTrustedClock } from '#platform/index.js';
 
 const sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
 let directory = '', certificate = '', privateKey = '', server: Server | undefined;
@@ -51,8 +52,17 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-priced-ledger-')), path = join(root, 'ledger.db');
   const origin = `https://127.0.0.1:${address.port}`, metadataEndpoint = `${origin}/api/v1/models/vendor/model/endpoints`;
+  // Wire pricing as composition does (I40): the platform trusted clock floor, never raw Date.now. A raw host step the
+  // floor absorbed is reported as evidence; it is never clamped here or turned into success.
+  const clock = new SystemTrustedClock();
+  let previousRaw: number | undefined;
+  const pricingNow = () => {
+    const raw = Date.now(), wallMs = clock.sample().wallMs;
+    if (previousRaw !== undefined && raw < previousRaw) console.warn('I40_HOST_WALL_STEP_ABSORBED', JSON.stringify({ previousRaw, raw, wallMs }));
+    previousRaw = raw; return wallMs;
+  };
   const fetchObservation = () => fetchOpenRouterTariff({ endpoint: metadataEndpoint, modelId: 'vendor/model', endpointTag: 'provider/region',
-    maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000, caPem: certificate }, Date.now);
+    maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000, caPem: certificate }, pricingNow);
   let observation = await fetchObservation();
   const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
@@ -67,13 +77,13 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); activations.close();
   const budget = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 };
   let sequence = 0;
-  const priced = createOpenRouterPricedNative({ currentObservation: () => observation, now: Date.now });
+  const priced = createOpenRouterPricedNative({ currentObservation: () => observation, now: pricingNow });
   const application = (authorize = async (input: Parameters<typeof priced.quote>[0]) => ({ budget, quote: priced.quote(input) })) =>
     new ModelInvocationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'policy', ruleId: 'invoke' }; } },
       { async inspect() { return { schemaVersion: 1, reference, status: 'declared' as const, catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
       async () => ({ async loadRecord() { return activation.receipt.record; }, close() {} }), { async resolve() { return profile; } },
       { resolve() { return priced.native; } }, async () => openSqliteModelInvocationStore(path, sqlite, 'forbid'),
-      { invocationId: () => `invocation-${++sequence}`, ownerId: () => 'runtime', now: Date.now }, { authorize });
+      { invocationId: () => `invocation-${++sequence}`, ownerId: () => 'runtime', now: pricingNow }, { authorize });
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } });

@@ -1,5 +1,5 @@
 import { encodeCommandProjection, evaluatePolicy, policySchema, ApprovalError, type ApprovalActor, type VerifiedPrincipal, type RunSnapshot } from '#domain/index.js';
-import type { IntegrityAuthority } from '#platform/index.js';
+import { MAX_WALL_SKEW_MS, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
 import { approvalActionDigest, approvalRequestDigest, expireApproval, verifyApproval } from './integrity.js';
 import { requestTaskApproval } from './application.js';
@@ -43,7 +43,9 @@ export class TaskApprovalAdmission {
       const stored = this.store.find(run.identity.scopeId, run.identity.runId, task.taskId, digest);
       if (!stored) return true;
       const record = verifyApproval(stored, this.integrity);
-      return record.status !== 'decided' || record.decision?.decision !== 'allow' || record.decision.decidedAt > now
+      // The decision may come from another process whose wall clock leads this one (independent backward steps, I40).
+      // Only that bounded ordering skew is tolerated; request expiry and integrity checks stay exact.
+      return record.status !== 'decided' || record.decision?.decision !== 'allow' || record.decision.decidedAt > now + MAX_WALL_SKEW_MS
         || record.decision.requestDigest !== approvalRequestDigest(record.request);
     }).map(task => task.taskId);
   }
