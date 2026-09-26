@@ -4,7 +4,7 @@ import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<unknown> }
 export class PolicyAuthorizationError extends Error {
-  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED') { super(code); this.name = 'PolicyAuthorizationError'; }
+  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN') { super(code); this.name = 'PolicyAuthorizationError'; }
 }
 export class DispatchPolicyAuthorization implements DispatchAuthorization, DispatchIdentityAuthorization {
   constructor(private readonly source: PolicySource) {}

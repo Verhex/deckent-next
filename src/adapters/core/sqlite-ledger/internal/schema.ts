@@ -11,6 +11,8 @@ import { migrateModelInvocationControl } from './migration-v18.js';
 import { migrateModelAllocationCheckpoints } from './migration-v19.js';
 import { migrateProviderSpend } from './migration-v20.js';
 import { migrateProviderReportedSpend } from './migration-v21.js';
+import { migrateScopeRegistry } from './migration-v39.js';
+import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
 // Minimum readable Run shape; earlier ledgers need the explicit writer migration.
@@ -24,7 +26,8 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 38;
+export const CURRENT_LEDGER_VERSION = 39;
+export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   // Terminal agent turns (T-L3): one row per (scope, turn) — the durable identity a replay or reconnect meets — and one row per
@@ -153,8 +156,11 @@ export function requireLedgerVersion(db: DatabaseSync, minimum: number) {
   if (typeof version !== 'number' || !Number.isInteger(version) || version < minimum || version > CURRENT_LEDGER_VERSION) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
   return version;
 }
-/** Caller owns BEGIN IMMEDIATE / rollback. Never migrate from read-only surface composition. */
-export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profiles?: SupervisorProfileValidator): void {
+/** Caller owns BEGIN IMMEDIATE / rollback. Never migrate from read-only surface composition. `companyId` owns the v39 backfill:
+ * the upgrading service passes its configured company; other callers get the config default, the value an unconfigured
+ * installation resolves. */
+export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profiles?: SupervisorProfileValidator,
+  companyId: string = getConfigFieldDefault('company').id): void {
   const version = requireLedgerVersion(db, 0);
   if (mode === 'forbid' && version !== CURRENT_LEDGER_VERSION) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
@@ -209,6 +215,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 21) {
       migrateProviderReportedSpend(db);
       db.exec('PRAGMA user_version=21;');
+      continue;
+    }
+    if (next === SCOPE_REGISTRY_LEDGER_VERSION) {
+      migrateScopeRegistry(db, companyId);
+      db.exec(`PRAGMA user_version=${SCOPE_REGISTRY_LEDGER_VERSION};`);
       continue;
     }
     const sql = migrations[next];

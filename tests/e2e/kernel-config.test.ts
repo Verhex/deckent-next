@@ -55,6 +55,22 @@ describe('K1 real binary journeys', () => {
     expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' })).stdout).toContain('Önerilen worker');
     expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Bellek:');
   });
+  it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
+    const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
+    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout)).toMatchObject({ schemaVersion: 1, company: { companyId: 'default' }, status: 'ready' });
+    expect(JSON.parse((await f.run(['config', 'get', 'company.id', '--json'])).stdout)).toBe('default');
+    await writeFile(path, '{"company":{"id":"acme-tr"}}');
+    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout).company).toEqual({ companyId: 'acme-tr' });
+    for (const invalid of ['{"company":{"id":"../outside"}}', '{"company":{"id":"Acme"}}', '{"company":{"id":"acme","site":"x"}}']) {
+      await writeFile(path, invalid);
+      try { await f.run(['doctor', '--json']); expect.fail('must reject'); }
+      catch (error) {
+        expect(error).toMatchObject({ code: 78, stdout: '' });
+        expect(JSON.parse((error as { stderr: string }).stderr).code).toBe('CONFIG_VALIDATION');
+      }
+      expect(await readFile(path, 'utf8')).toBe(invalid);
+    }
+  });
   it('returns usage=2/config=78 and keeps structured diagnostics on stderr', async () => {
     const f = await fixture('project-override');
     await expect(f.run(['config', 'get', 'missing', '--json'])).rejects.toMatchObject({ code: 2, stdout: '' });

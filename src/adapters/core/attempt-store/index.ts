@@ -24,8 +24,8 @@ export async function openSqliteInventoryReader(path: string, options: import('.
 }
 /** Service-start upgrade of an existing older ledger with a versioned backup; loads the native driver lazily. */
 export async function upgradeExistingProductLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
-  profiles?: import('#engine/index.js').SupervisorProfileValidator) {
+  profiles?: import('#engine/index.js').SupervisorProfileValidator, companyId?: string) {
   const { upgradeExistingLedger } = await import('#adapters/core/sqlite-ledger/index.js');
-  return upgradeExistingLedger(path, options, backupDirectory, now, profiles);
+  return upgradeExistingLedger(path, options, backupDirectory, now, profiles, companyId);
 }
 export type { LedgerUpgrade } from '#adapters/core/sqlite-ledger/index.js';

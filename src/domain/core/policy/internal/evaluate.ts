@@ -22,7 +22,7 @@ export type Policy = z.infer<typeof policySchema>;
 export type PolicyRequest = z.infer<typeof policyRequestSchema>;
 export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED'; ruleId?: string }>;
 export class PolicyError extends Error { constructor() { super('POLICY_INVALID'); this.name = 'PolicyError'; } }
-function includes(values: 'all' | readonly string[], value: string) { return values === 'all' || values.includes(value); }
+export function includes(values: 'all' | readonly string[], value: string) { return values === 'all' || values.includes(value); }
 function matches(rule: z.infer<typeof restriction>, request: PolicyRequest) {
   return includes(rule.actions, request.action) && includes(rule.scopes, request.scopeId) && rule.resource.kind === request.resource.kind
     && includes(rule.resource.ids, request.resource.id) && (rule.principals === 'all' || rule.principals.some(principal =>
@@ -40,14 +40,4 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
   const allowed = policy.grants.find(rule => rule.effect === 'allow' && matches(rule, request));
   return allowed ? Object.freeze({ decision: 'allow', revision: policy.revision, reason: 'GRANTED', ruleId: allowed.id })
     : Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'NO_GRANT' });
-}
-
-/** Membership candidates originate only from trusted allow grants. This is not action authorization:
- * evaluatePolicy must still enforce resource/action matching, explicit denies and restrictions.
- */
-export function policyScopeMembership(input: unknown, actor: { issuer: string; subject: string }, candidates: readonly string[]): readonly string[] {
-  const policy = policySchema.parse(input); const issuer = identitySchema.parse(actor.issuer); const subject = identitySchema.parse(actor.subject);
-  const scopes = [...new Set(candidates.map(candidate => identitySchema.parse(candidate)))];
-  return Object.freeze(scopes.filter(scope => policy.grants.some(rule => rule.effect === 'allow' && includes(rule.scopes, scope)
-    && (rule.principals === 'all' || rule.principals.some(principal => principal.issuer === issuer && principal.subject === subject)))));
 }

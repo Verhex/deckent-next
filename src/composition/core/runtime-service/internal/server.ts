@@ -13,6 +13,7 @@ import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeSer
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
@@ -41,7 +42,7 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
   const upgrade = await upgradeExistingProductLedger(path, config.storage.sqlite, await prepareProductDirectory(config.productLayout, 'ledgerBackups'),
-    new Date(), { validate: validateDockerSupervisorProfile });
+    new Date(), { validate: validateDockerSupervisorProfile }, config.company.id);
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
 }
 
@@ -88,6 +89,8 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
   config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard) {
   await upgradeLedgerAtStart(config, observer);
+  // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
+  await registerConfiguredScopesAtStart(config);
   await interruptAgentTurnsAtStart(config, observer);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {

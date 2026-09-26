@@ -9,7 +9,7 @@ import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-
 import { approvalRequestSchema, approvalSubject } from '#domain/index.js';
 import { ApprovalApplication, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestTaskApproval, sealApproval, verifyApproval, type ApprovalStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V37_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -29,7 +29,7 @@ it('keeps every existing task approval byte for byte across the v38 rebuild, sti
   const task = requestTaskApproval(first.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
     policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
   first.close();
-  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V37_LEDGER_SQL);
   const before = db.prepare('SELECT * FROM approvals').all(); db.close();
   const upgraded = openSqliteApprovalStore(path, options, 'allow');
   try {
@@ -81,7 +81,7 @@ it('refuses a malformed tool-call subject and cannot downgrade a ledger holding 
   const path = await ledger(), journal = openSqliteApprovalStore(path, options);
   journal.store.create(toolCall(0)); journal.close();
   const db = new DatabaseSync(path);
-  try { expect(() => db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL)).toThrow(/NOT NULL/); } finally { db.close(); }
+  try { expect(() => db.exec(DOWNGRADE_TO_V37_LEDGER_SQL)).toThrow(/NOT NULL/); } finally { db.close(); }
 });
 
 /** The real store with `transition` failing: always (a lasting I/O error), or once, optionally after a racing writer's own transition. */

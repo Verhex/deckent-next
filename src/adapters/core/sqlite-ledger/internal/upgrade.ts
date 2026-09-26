@@ -11,11 +11,12 @@ export interface LedgerUpgrade { readonly from: number; readonly to: number; rea
 /**
  * Service-start upgrade of an existing, older product ledger (owner 2026-09-23, Jev 8bb2a0c7): a consistent
  * versioned copy is written first (`VACUUM INTO`, 0600, never over an existing file), then the ledger is migrated in the
- * normal single transaction. A missing ledger or one already at the current version is left untouched (null).
+ * normal single transaction (v39 pins existing scopes to `companyId`, the configured company). A missing ledger or one
+ * already at the current version is left untouched (null).
  * The caller runs this once, before the service accepts connections; clients and read paths never migrate.
  */
 export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
-  profiles?: SupervisorProfileValidator): LedgerUpgrade | null {
+  profiles?: SupervisorProfileValidator, companyId?: string): LedgerUpgrade | null {
   try { if (!lstatSync(path).isFile()) return null; } catch { return null; }
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let from: number, backupPath: string;
@@ -29,6 +30,6 @@ export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions
     chmodSync(backupPath, constants.S_IRUSR | constants.S_IWUSR);
   } catch (error) { throw sqliteFailure(error); }
   finally { db.close(); }
-  openSqliteLedger(path, options, 'allow', profiles).close();
+  openSqliteLedger(path, options, 'allow', profiles, companyId).close();
   return Object.freeze({ from, to: CURRENT_LEDGER_VERSION, backupPath });
 }

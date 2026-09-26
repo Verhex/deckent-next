@@ -193,6 +193,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   AUTHENTICATION_SCOPE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_SCOPE_DENIED', p, l) }) },
   POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
   POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
+  // H34 S1: typed now; its own text (`error.SCOPE_UNKNOWN`, en/tr) arrives with the lead's locale delta.
+  SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SCOPE_UNKNOWN' }, l) }) },
   MANAGED_FILE_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_MISSING', p, l) }) },
   MANAGED_FILE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSAFE', p, l) }) },
   MANAGED_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSUPPORTED', p, l) }) },
