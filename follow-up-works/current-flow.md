@@ -25,7 +25,8 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 2. Astra PASS'leri (2100–2107) → REVISE gelirse önce düzeltme → owner push izni → yalnız incelenen sha.
 3. Canlı: build + governed yeniden başlatma (ledger v37→v38 yedekli) + `! node /home/alperen/deckent-refactor-work/proof/F26-T-L4-LIVE-GRANTS-2026-09-26/grant-edit-shell.mjs`;
    owner senaryosu (hata bul → diff onayı → testi kabukta koştur → sonucu oku).
-4. Cursor devir prompt'u: dilim 4 (policy katmanında izin modları) + T-L5 kalanı (`@dosya`, `/compact`, proje belgeleri bağlamda); yapma listesi.
+4. Cursor devir prompt'u hazır: `deckent-refactor-work/CURSOR-TERMINAL-SLICE4-T-L5-PROMPT-2026-09-26.md` (dilim 4 policy katmanında izin modları
+   + T-L5 kalanı; başlama koşulu: Astra PASS + push edilmiş taban; `/compact` sürüm artışı ister → sözleşme kararı).
 5. Opus ana hatta: M1 Hat B (C12 genel, A04, H34, IFS tasarımı, FOUNDATION registry) — owner ile ayrı checkpoint.
 
 ## Açık sınırlar (bu oturumda kaydedilen, ARCHITECTURE'da)
@@ -41,4 +42,5 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 
 ## Jev kayıtları
 Bu oturum: 46cfa6c6 (2092), 4a702440 (2091), 3d6703e5 (2094), d6909e28 (3a), 52f9b6f9 (3b), 82858581 (3c-i) — karar + sonuç yazıldı.
-Fable analizi (q1–q10 + bileşik c331f6af): sonuçlar aşağıdaki belge dilimiyle birlikte yazıldı.
+Fable analizi: q1, q2, q4, q7, q10 verified; q3, q5, c331f6af inconclusive (owner push sırası / sıra değişti); q6 (Cursor devri),
+q8 (2094, Astra 2100), q9 (2091, Astra 2107) doğrulama bitince yazılacak.
