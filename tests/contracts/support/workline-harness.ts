@@ -1,7 +1,16 @@
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
-import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
+import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps, type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
+import { WORKER_LINE_EN } from './worker-line-labels.js';
+
+const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
+  transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
+  approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
+  approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}',
+  approvalPrompt: 'A-PROMPT', approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}',
+  approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
+  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 
 /** Placeholder labels: tests assert on these tokens, never on catalog text. */
 export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
@@ -16,7 +25,7 @@ export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: 
   sessions: { entry: 'SESSION {index} {session} {count} {preview}', none: 'NO-SESSIONS', notFound: 'SESSION-NOT-FOUND', unavailable: 'NO-SESSION-PORT',
     saveFailed: 'SAVE-FAILED', resumed: 'RESUMED {count} {session}', started: 'NEW-SESSION', context: 'CTX {approx}{prompt}/{window} {percent}% {count}',
     contextNone: 'CTX-NONE {count}' },
-  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: {} } };
+  composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: {} }, work };
 
 class Screen extends Writable {
   text = '';

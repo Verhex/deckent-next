@@ -8,6 +8,7 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
+import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -81,8 +82,7 @@ function parseCompactionSummary(text: string | null): AgentCompactionSummary | n
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
 export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string {
-  const text = `${tool} ${JSON.stringify(args, null, 2)}`;
-  return text.length > 16_384 ? `${text.slice(0, 16_384)} …` : text;
+  return boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`);
 }
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
@@ -194,7 +194,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
         // Once a card was requested it is always settled: `unsettled` when the wait failed (the request may stay pending, it permits nothing).
-        let requested: { readonly approvalId: string } | null = null, settlement: AgentToolApprovalSettlement = 'unsettled';
+        let requested: { readonly approvalId: string } | null = null, settlement: AgentToolApprovalSettlement = 'unsettled', kept: string | null = null;
         try {
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
@@ -205,8 +205,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             subject: { kind: 'agent-tool-call', turnId: command.turnId, round, index, tool: tool.name, toolVersion: tool.version, resource, argsDigest },
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
+          // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
+          const diff = edits?.preview(tool.name, args);
+          if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
-            summary: record.request.summary, preview: edits?.preview(tool.name, args) ?? chatTurnApprovalPreview(tool.name, args), expiresAt: record.request.expiresAt });
+            summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept) : chatTurnApprovalPreview(tool.name, args),
+            expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
@@ -216,6 +220,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           return outcome;
         } finally {
           journal.close();
+          if (kept) await dropFullPreview(kept);
           if (requested) channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
         }
       },

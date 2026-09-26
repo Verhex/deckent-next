@@ -23,7 +23,8 @@
     "ledgerBackups": "state/backups",
     "terminalHistory": "state/terminal-history.jsonl",
     "terminalSessions": "state/terminal-sessions",
-    "fileEffects": "state/file-effects"
+    "fileEffects": "state/file-effects",
+    "approvalPreviews": "state/approval-previews"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

@@ -1,6 +1,29 @@
-# Anlık iş akışı — T-L4/T-L5 yerelde; 2092 kapandı, 2096 P2 yeniden incelemede kapandı; 2091/2094 açık; kanal takibi aktif
+# Anlık iş akışı — T-L4/T-L5 yerelde; 2092/2096 PASS; 2091 ve 2094 düzeltildi (yeniden inceleme bekliyor); R2 yalıtımı owner kararı; push owner dönüşünde
 
 
+
+## Astra 2094 düzeltmesi — dilim 2 dosya yazımı (2026-09-26, Opus, Jev 3d6703e5 `detect_now_native_checkpoint` 1,00)
+- R1: `writeWorkspaceFile` aşamaları günlüğe bildirir (prepared + benzersiz geçici ad → committed; rename öncesi hata → önce aborted, sonra
+  geçici dosya silinir); günlük v2 atomik (geçici + rename + dizin fsync). `lookup`: committed → applied (dosya sonra değişse de), aborted/yok
+  → absent, prepared + geçici var → absent, prepared + geçici yok → yalnız `next`'te applied, aksi/escaped/v1 → unknown. Yeniden gönderim
+  eski geçici dosyayı önce siler; committed anahtarla ikinci `apply` → unknown (dış geri almanın üstüne yazmaz).
+- R2 (algılama): rename + dizin fsync sonrası `scope.verify` tekrar; dizin taşınmışsa `escaped` (nereye gittiği) + `EFFECT_TARGET_UNKNOWN`,
+  geri almak için yeniden yazım yok. Önleme owner kararı (PLAN "OWNER KARARI BEKLİYOR"): (1) native openat2+renameat — kazanç: Linux'ta
+  kaçışı gerçekten engeller; kayıp: yeni native bileşen, platform matrisi, kabuk yalıtımsızken tek başına sandbox değil. (2) Landlock/ayrı
+  süreç yazıcı — kazanç: dilim 3 kabuk yalıtımıyla ortak altyapı, kabuğa da sınır; kayıp: en büyük iş, çekirdek sürümüne bağlı. (3) sınırı
+  kabul — kazanç: iş yok; kayıp: aynı kullanıcı süreçlerine karşı yalnız algılama. Opus önerisi: (2)'yi dilim 3 ile birlikte tasarlamak,
+  o gelene kadar (3); Jev bu seçimi ayrıca değerlendirmedi.
+- R3: önizleme 16 KiB UTF-8 bayt (bütün satır, karakter bölünmez), işaret ilk satırda (kart ilk 24 satırı gösterir) + tüm metnin sha256'sı;
+  kesilen düzenleme diff'i onay beklerken `state/approval-previews/<sha256(approvalId)>.txt` (0600, O_EXCL, maskesiz — onaylanan değişikliğin
+  birebir kendisi), onay sonuçlanınca silinir, servis başında süpürülür. Genel araç önizlemesi de artık bayt sınırlı (önce 16.384 karakter).
+  Düzenleme önizlemesinde satır sayıları en üstte. Yeni yerleşim kaynağı `approvalPreviews` (dilim 2'deki `fileEffects` deseni).
+- Testler: adaptör 6 (dış geri alma → applied + tekrar yazım yok; prepared/geçici var → absent, yeniden gönderim eski geçiciyi siler;
+  prepared/geçici yok → next'te applied, değilse null; aborted → absent; taşınan dizin → escaped + unknown + lookup null), önizleme birimi 2
+  (satır/bayt/karakter sınırı, işaret ilk satır, "not kept", süpürme), gerçek WorklineApp → servis → kart → `y` → yazım: 35.000 `a→b` ve
+  20.000 `ç→ş` (önizleme ≤ 16 KiB, işaret + sha256 + dosya yolu ekranda, tam diff dosyada, onay sonrası dosya yok, dosya yazıldı).
+  Geniş hedefli koşu 199 dosya / 1164 test (build sonrası; dist eskiyken derlenmiş CLI testleri kurulum özeti farkıyla düşmüştü).
+  Mutasyonlar 1–7 düştü (3 önce hayatta kaldı → karakter < sınır < bayt testi eklendi): `proof/F26-T-L4B-FIX-2094/`.
+- Çok baytlı e2e 20.000 karakter: 35.000 × 2 bayt araç argümanı test sağlayıcısının 65.536 baytlık model yanıt sınırını aşıyor (tur unknown).
 ## Astra 2091 düzeltmesi — T-L5 geçmiş/bellek (2026-09-26, Opus, Jev 4a702440 `remove_cut_add_byte_high_water` 0,99)
 - R1: workline ajan yolu tüm konuşmayı gönderir (`agentHistory`); `historyMessages` yalnız düz satır modunu sınırlar. Motor, geçmişin tam
   bayt boyu `service.inputMaxBytes`'ın %75'ini aşınca da sıkıştırır (pencere bilinmese de). Canlı: `inputMaxBytes` ayarsız → 1 MiB,

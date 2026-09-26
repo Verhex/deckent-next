@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, open, rename, unlink, type FileHandle } from 'node:fs/promises';
+import { lstat, open, readlink, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { posix } from 'node:path';
 import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -73,32 +73,69 @@ export async function readWritableFile(scope: WorkspaceScope, target: Extract<Wr
   try { return await currentUnder(dir, target.name); } finally { await dir.close(); }
 }
 
+/** Phases of one write attempt, reported to its effect journal in order (T-L4, Astra 2094 R1/R2). `escaped`: the rename happened but
+ * the parent was no longer under the workspace root afterwards (moved by another process); `where` is its path then. */
+export type WritePhase = { readonly state: 'prepared' | 'committed' | 'aborted' } | { readonly state: 'escaped'; readonly where: string | null };
+export interface WriteAttempt {
+  /** Unique temporary file name of this attempt (its presence is evidence that the rename did not happen). */
+  readonly temporary: string;
+  /** A temporary file an earlier attempt of the same effect may have left; removed before this attempt starts. */
+  readonly stale?: string | null;
+  readonly phase: (phase: WritePhase) => Promise<void>;
+}
+export const writeAttemptTemporary = (name: string) => `.${name}.deckent-${randomBytes(6).toString('hex')}.tmp`;
+
 /**
- * Conditional atomic write: the file must still be at `expectedVersion`; the new bytes go to an exclusive temporary file in the same
- * directory (fsync), the directory is re-verified, the version is checked once more, and a rename replaces the file (directory fsync).
- * Another writer between that last check and the rename is not excluded (no advisory locks); every other change is detected.
+ * Conditional atomic write: the file must still be at `expectedVersion`; the attempt is journaled `prepared` (with its temporary name)
+ * before the temporary file exists; the new bytes go to that exclusive file in the same directory (fsync), the directory is
+ * re-verified, the version is checked once more, and a rename replaces the file (directory fsync), then `committed`. Any failure
+ * before the rename journals `aborted` before the temporary file is removed. After the rename the parent is verified again: a
+ * directory moved out of the workspace meanwhile is journaled `escaped` and reported as `changed` (the write happened outside; it is
+ * never reported as done, and nothing is written again to undo it). Not excluded: another writer between the last check and the
+ * rename, or a same-user process moving the directory during the write (no advisory locks; Node has no openat2/renameat).
  */
-export async function writeWorkspaceFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, expectedVersion: string, content: Buffer): Promise<string> {
+export async function writeWorkspaceFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, expectedVersion: string, content: Buffer,
+  attempt: WriteAttempt = { temporary: writeAttemptTemporary(target.name), phase: async () => undefined }): Promise<string> {
   if (content.length > WORKSPACE_WRITE_MAX_FILE_BYTES) throw new WorkspaceWriteError('rejected', 'too-large');
   const dir = await openParent(scope, target);
-  const temporary = `.${target.name}.deckent-${randomBytes(6).toString('hex')}.tmp`;
-  let written = false;
+  const temporary = attempt.temporary;
+  let pending = false;
   try {
+    if (attempt.stale) await unlink(proc(dir, attempt.stale)).catch(() => undefined);
     const current = await currentUnder(dir, target.name);
     if (!current.ok) throw new WorkspaceWriteError('rejected', current.error);
     if (current.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed since it was read');
+    await attempt.phase({ state: 'prepared' });
+    pending = true;
     const out = await open(proc(dir, temporary), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, current.mode);
-    written = true;
     try { await out.writeFile(content); await out.sync(); } finally { await out.close(); }
     if (!(await scope.verify(dir, target.parentRel))) throw new WorkspaceWriteError('changed', 'directory moved during the write');
     const again = await currentUnder(dir, target.name);
     if (!again.ok || again.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed during the write');
     await rename(proc(dir, temporary), proc(dir, target.name));
-    written = false;
+    pending = false;
     await dir.sync();
+    if (!(await scope.verify(dir, target.parentRel))) {
+      await attempt.phase({ state: 'escaped', where: await readlink(`/proc/self/fd/${dir.fd}`).catch(() => null) });
+      throw new WorkspaceWriteError('changed', 'directory moved out of the workspace during the write; the file was written there');
+    }
+    await attempt.phase({ state: 'committed' });
     return fileContentVersion(content);
   } finally {
-    if (written) await unlink(proc(dir, temporary)).catch(() => undefined);
+    if (pending) {
+      // Journal first: once `aborted` is durable, a missing temporary file can no longer be mistaken for a completed rename.
+      await attempt.phase({ state: 'aborted' }).catch(() => undefined);
+      await unlink(proc(dir, temporary)).catch(() => undefined);
+    }
     await dir.close();
   }
+}
+
+/** Whether an attempt's temporary file is still in the target's parent: true, false, or null when the parent cannot be opened. */
+export async function temporaryPresent(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, temporary: string): Promise<boolean | null> {
+  const opened = await scope.open(target.parentRel, 'dir');
+  if (!opened.ok) return null;
+  try { await lstat(proc(opened.handle, temporary)); return true; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? false : null; }
+  finally { await opened.handle.close(); }
 }

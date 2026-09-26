@@ -658,16 +658,23 @@ C11 effect of the Core `workspace.file.write` operation on the `workspace-file` 
 resolved only through the workspace scope): live peer session, operation policy re-evaluated right before the effect, intent
 before effect, precondition = the planned version (a file changed since it was planned or shown is refused, nothing written),
 atomic write (exclusive temporary file in the same directory, fsync, directory re-verified, version re-checked, rename, directory
-fsync; mode kept). The target journals `wire key → expected, next version` (0600, managed `fileEffects` directory) before writing,
-so crash settlement reads evidence from the file: at `next` applied, at `expected` absent (resend), otherwise unknown — never a blind
-retry. The effect's approval gate admits a `require-approval` decision only for the command the owner approved in this turn. Not
-excluded: another writer between the final version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
-Astra review of `95c3a14` + `6a53765` (2026-09-26): current-content equality is not operation-specific recovery evidence:
-an external restore of `expected` after an applied write is reported as `absent`, allowing replay over that restore. A parent moved
-outside the workspace after directory verification is still written through its open descriptor. These reproduced races leave
-idempotent recovery and write scope unclosed. The diff's LCS cell bound also does not bound its text: a valid 35 KB replacement
-produces an approval preview above the protocol's 65,536-character limit and cancels the turn before the card arrives. Corrections
-are pending; successful ordinary-write tests do not establish these guarantees.
+fsync; mode kept). Each attempt journals its own phases under the wire key (journal v2, atomic, 0600, managed `fileEffects`
+directory; Astra 2094 R1): `prepared` with a unique temporary name before that file exists, `committed` after the rename, `aborted`
+before the temporary file is removed, `escaped` when the parent left the workspace during the write. Crash settlement decides from
+that evidence, never from content equality alone: committed → applied (even if the file changed later); aborted or no journal →
+absent (resend; a stale temporary file of the earlier attempt is removed first); prepared with its temporary file present → absent;
+prepared with it gone → applied only at `next`, else unknown; escaped, unreadable or a retired v1 journal → unknown — never a blind
+retry. After the rename the parent is verified again: a directory moved out of the workspace meanwhile is journaled `escaped` (with
+where it went) and the effect is unknown, never reported as done, and nothing is written again to undo it (Astra 2094 R2: detection,
+not prevention — Node has no openat2/renameat; a same-user process, including the planned unsandboxed host shell, can move directories;
+the confining mechanism is an owner decision, see PLAN). Approval previews are bounded to 16 KiB UTF-8 bytes (whole lines first, never
+a split character) under a first-line marker naming what is not shown and the sha256 of the whole text; a cut edit diff is kept whole,
+owner-only (0600, exclusive, not redacted: it must be exactly the change approved), in the managed `approvalPreviews` directory while
+the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's approval gate admits a
+`require-approval` decision only for the command the owner approved in this turn. Not excluded: another writer between the final
+version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+Astra review of `95c3a14` + `6a53765` (2026-09-26, 2094): content-equality recovery, the moved-parent write and the unbounded preview —
+corrected locally as described above (R2 as detection pending the owner's isolation decision); awaiting Astra re-review.
 Astra review of `e6085ca` (2026-09-26, 2092): swallowed close failures and a late answer clearing a newer card — corrected locally
 as described above; Astra re-review of `7e0e349` (2095) confirmed both original corrections with 71 targeted tests. The subsequent
 observer-dependent startup recovery defect is corrected in `a4604fc`: recovery runs before optional notification. Astra 2097

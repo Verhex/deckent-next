@@ -43,10 +43,10 @@ export function createAgentFileEdits(input: { readonly scope: WorkspaceScope; re
       catch { return 'deny'; }
     },
     plan,
-    /** The approval card's preview: the planned diff with its line counts. */
+    /** The approval card's preview: the line counts first (always visible on the card), then the planned diff. */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
-      return planned?.ok ? `${planned.preview}\n(+${planned.added} −${planned.removed} lines)` : undefined;
+      return planned?.ok ? `(+${planned.added} −${planned.removed} lines)\n${planned.preview}` : undefined;
     },
     approved(tool: string, args: Record<string, unknown>) { approved.add(key(tool, args)); },
     async apply(tool: string, args: Record<string, unknown>): Promise<AgentToolOutcome> {

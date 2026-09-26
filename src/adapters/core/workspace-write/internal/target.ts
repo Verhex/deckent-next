@@ -1,12 +1,12 @@
 import { constants } from 'node:fs';
-import { mkdir, open, readFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { AgentToolSpec, EffectTargetRef } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { createGlobMatcher, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, fileContentVersion, readWritableFile, resolveWritable,
-  writeWorkspaceFile } from './files.js';
+  temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
 
 export const WORKSPACE_FILE_TARGET_KIND = 'workspace-file';
@@ -25,14 +25,20 @@ const floorMatchers = WORKSPACE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
 /** True when a resolved workspace-relative path is on the approval floor. */
 export const isWriteApprovalFloored = (rel: string) => floorMatchers.some(match => match(rel));
 const inputSchema = z.object({ content: z.string() }).strict();
-const journalSchema = z.object({ schemaVersion: z.literal(1), rel: z.string(), expected: z.string(), next: z.string() }).strict();
+/** Journal v2 (Astra 2094 R1): the attempt's own evidence. v1 files (content-equality recovery) were never live and read as unknown. */
+const journalSchema = z.object({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: z.string().min(1),
+  state: z.enum(['prepared', 'committed', 'aborted', 'escaped']), escapedTo: z.string().nullable() }).strict();
+type Journal = z.infer<typeof journalSchema>;
 
 /**
  * The project's files as a C11 effect target (T-L4 slice 2). A record is a workspace-relative path resolved only through the
  * workspace scope (never absolute, never outside, never a denied path); its version is the sha256 of the file's bytes, or `absent`.
- * A write is conditional on that version and atomic. Before writing, the target journals (wire key → expected and next version)
- * in its private directory, so `lookup` after a crash reads evidence from the file itself: at `next` → applied, at `expected` →
- * absent (the idempotent write may be sent again), anything else → unknown (never a blind retry).
+ * A write is conditional on that version and atomic. Each attempt journals its own phases under the wire key in the target's private
+ * directory (atomic, 0600): `prepared` with a unique temporary name before the temporary file exists, then `committed` after the
+ * rename, or `aborted` before the temporary file is removed, or `escaped` when the parent left the workspace during the write.
+ * `lookup` decides from that evidence, never from content equality alone (Astra 2094 R1): committed → applied; aborted or no journal →
+ * absent; prepared with its temporary file still present → absent (the rename did not happen); prepared with the temporary file gone
+ * → applied only if the file holds the next version, else unknown; escaped or unreadable → unknown (never a blind retry).
  */
 export class WorkspaceFileTarget implements EffectTarget {
   readonly kind = WORKSPACE_FILE_TARGET_KIND;
@@ -49,6 +55,19 @@ export class WorkspaceFileTarget implements EffectTarget {
     return current.version;
   }
   private journal = (key: string) => join(this.journalDirectory, `${z.string().regex(/^[0-9a-f]{64}$/).parse(key)}.json`);
+  private async readJournal(key: string): Promise<Journal | 'missing' | null> {
+    try { return journalSchema.parse(JSON.parse(await readFile(this.journal(key), 'utf8'))); }
+    catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : null; }
+  }
+  /** Atomic journal replacement (temporary file, fsync, rename, directory fsync): a crash leaves the old or the new record, never a torn one. */
+  private async writeJournal(key: string, record: Journal) {
+    const path = this.journal(key), temporary = `${path}.${process.pid}.tmp`;
+    const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+    try { await handle.writeFile(JSON.stringify(record)); await handle.sync(); } finally { await handle.close(); }
+    await rename(temporary, path);
+    const directory = await open(this.journalDirectory, constants.O_RDONLY | constants.O_DIRECTORY);
+    try { await directory.sync(); } finally { await directory.close(); }
+  }
   async observe(ref: EffectTargetRef) { return { version: await this.version(ref) }; }
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
@@ -59,13 +78,19 @@ export class WorkspaceFileTarget implements EffectTarget {
     // A stale precondition is refused before anything is journaled, so it leaves no trace a later lookup could misread.
     if (await this.version(request.target) !== request.expectedVersion) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
     await mkdir(this.journalDirectory, { recursive: true, mode: 0o700 });
-    const handle = await open(this.journal(request.idempotencyKey), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+    const earlier = await this.readJournal(request.idempotencyKey);
+    // Only a resend after `absent` reaches here with a journal; anything else about this key is not a fresh attempt.
+    if (earlier === null || (typeof earlier === 'object' && earlier.state !== 'prepared' && earlier.state !== 'aborted')) {
+      throw new EffectTargetError('EFFECT_TARGET_UNKNOWN');
+    }
+    const record = { schemaVersion: 2 as const, rel: target.rel, expected: request.expectedVersion, next: fileContentVersion(bytes),
+      temporary: writeAttemptTemporary(target.name), escapedTo: null };
+    const phase = (next: WritePhase) => this.writeJournal(request.idempotencyKey, { ...record, state: next.state,
+      escapedTo: next.state === 'escaped' ? next.where : null });
     try {
-      await handle.writeFile(JSON.stringify({ schemaVersion: 1, rel: target.rel, expected: request.expectedVersion, next: fileContentVersion(bytes) }));
-      await handle.sync();
-    } finally { await handle.close(); }
-    try { return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes) }; }
-    catch (error) {
+      return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes,
+        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase }) };
+    } catch (error) {
       if (error instanceof WorkspaceWriteError) {
         throw new EffectTargetError(error.code === 'precondition' ? 'EFFECT_TARGET_PRECONDITION' : error.code === 'rejected' ? 'EFFECT_TARGET_REJECTED' : 'EFFECT_TARGET_UNKNOWN', { cause: error });
       }
@@ -73,13 +98,17 @@ export class WorkspaceFileTarget implements EffectTarget {
     }
   }
   async lookup(ref: EffectTargetRef, idempotencyKey: string) {
-    let journal;
-    try { journal = journalSchema.parse(JSON.parse(await readFile(this.journal(idempotencyKey), 'utf8'))); }
-    catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { status: 'absent' as const } : null; }
-    if (journal.rel !== ref.id) return null;
-    const current = await this.version(ref).catch(() => null);
-    if (current === journal.next) return { status: 'applied' as const, version: current };
-    if (current === journal.expected) return { status: 'absent' as const };
+    const journal = await this.readJournal(idempotencyKey);
+    if (journal === 'missing') return { status: 'absent' as const };
+    if (journal === null || journal.rel !== ref.id) return null;
+    if (journal.state === 'committed') return { status: 'applied' as const, version: journal.next };
+    if (journal.state === 'aborted') return { status: 'absent' as const };
+    if (journal.state === 'escaped') return null;
+    const target = await resolveWritable(this.scope, ref.id);
+    if (!target.ok || target.rel !== ref.id) return null;
+    const present = await temporaryPresent(this.scope, target, journal.temporary);
+    if (present === true) return { status: 'absent' as const };
+    if (present === false && await this.version(ref).catch(() => null) === journal.next) return { status: 'applied' as const, version: journal.next };
     return null;
   }
 }

@@ -17,7 +17,7 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createRuntimeChatTurnHost } from '#composition/core/agent-turn/index.js';
+import { createRuntimeChatTurnHost, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
@@ -56,6 +56,8 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
+  // Previews kept for approvals that were pending when the service stopped (none survives a restart).
+  await sweepFullPreviews(config.productLayout);
   // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.
   const approvals = openSqliteApprovalStore(path, config.storage.sqlite);
   try {

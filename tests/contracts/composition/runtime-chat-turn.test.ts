@@ -401,6 +401,50 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     }, 60_000);
   }
 
+  // Astra 2094 R3 (inverted repro): a large change (35,000 characters, single- and multi-byte) reaches the owner as a bounded preview
+  // with a first-line marker and the whole diff kept owner-only while pending; the real terminal shows the card, `y` writes the file.
+  // Multi-byte uses 20,000 characters: its tool call must fit the fixture model's 65,536-byte response; the diff (~80 KB) still exceeds a frame.
+  for (const [before, after, count] of [['a', 'b', 35_000], ['ç', 'ş', 20_000]] as const) {
+    it(`shows a bounded preview of a large ${before === 'a' ? 'single-byte' : 'multi-byte'} change and keeps the whole diff until it settles (Astra 2094 R3)`, async () => {
+      const f = await runtime({ toolGrant: false, extraGrants: editGrants('require-approval') }); await f.start();
+      await writeFile(join(f.project, 'src', 'a.ts'), before.repeat(count));
+      f.state.script = [{ toolCall: { name: 'write_file', arguments: JSON.stringify({ path: 'src/a.ts', content: after.repeat(count) }) } }, { content: 'Written.' }];
+      const client = f.client(), previews: string[] = [];
+      const kept = async () => (await readdir(f.data, { recursive: true })).filter(path => path.includes('approval-previews/') && path.endsWith('.txt'));
+      const streamTurn = async function* (messages: readonly AgentTurnMessage[], signal: AbortSignal) {
+        for await (const delta of streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages, options: { env: f.env }, signal },
+          { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn })) {
+          if (delta.kind === 'approval' && delta.phase === 'requested') previews.push(delta.preview);
+          yield delta;
+        }
+      };
+      const ledger = { scopeId: 'scope', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope', sources: [] } as never; }, async inspectRun() { return null; },
+        async decideApproval(approval: { approvalId: string; revision: number }, decision: 'allow' | 'deny') {
+          const record = await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: approval.approvalId, commandId: `decide-${approval.approvalId}`,
+            expectedRevision: approval.revision, decision, reason: 'Reviewed' }) as { revision: number; status: 'decided' };
+          return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: record.revision, status: record.status, decision, expiresAt: 0 };
+        } };
+      const view = mountWorkline({ streamTurn, ledger: ledger as never });
+      try {
+        await until(() => view.stdout.text.includes('READY'), 'ready');
+        view.stdin.write('rewrite it\r');
+        await until(() => view.stdout.text.includes('A-PROMPT'), 'approval card')
+        const preview = previews[0]!;
+        expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(16_384);
+        expect(preview.split('\n')[0]).toMatch(/^\[Deckent: preview cut to \d+ of \d+ lines \(\d+ of \d+ bytes\); whole text sha256 [0-9a-f]{64}; complete at .*approval-previews\/[0-9a-f]{64}\.txt\]$/);
+        expect(view.stdout.text).toContain('[Deckent: preview cut to');
+        const files = await kept(); expect(files).toHaveLength(1);
+        const whole = await readFile(join(f.data, files[0]!), 'utf8');
+        expect(whole).toContain(`-${before.repeat(count)}`); expect(whole).toContain(`+${after.repeat(count)}`);
+        expect(preview.split('\n')[0]).toContain(createHash('sha256').update(whole).digest('hex'));
+        await new Promise(resolve => setTimeout(resolve, 60)); view.stdin.write('y');
+        await until(() => view.stdout.text.includes('Written.'), 'turn finished');
+      } finally { view.instance.unmount(); }
+      expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe(after.repeat(count));
+      expect(await kept()).toEqual([]);
+    }, 60_000);
+  }
+
   it('writes an approved edit as a C11 effect: the owner sees the diff, the file is written once and the effect is settled (T-L4 slice 2)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: editGrants('require-approval') }); await f.start();
     f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' }];
