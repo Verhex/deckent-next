@@ -4,10 +4,14 @@ import { expect, it } from 'vitest';
 import { createMcpServer, type McpApplications } from '#surfaces/index.js';
 
 /** D03-mcp-idempotent (D-3): each tool's idempotentHint must follow real replay/effect evidence
- * (engine/adapters commandId-keyed receipts, or an identity-keyed dispatch guard), never a blanket
- * true. This table is the exact per-tool contract; file:line evidence for each row lives in
- * proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. A tool present in the real server but missing here,
- * or vice versa, must fail this test (name-set assertion below). */
+ * (engine/adapters commandId-keyed receipts, or an identity-keyed dispatch guard). destructiveHint and
+ * idempotentHint are independent MCP annotations: a destructive tool can still be idempotent when a
+ * durable commandId (or identity) replay returns the prior result without a second effect — four
+ * destructive tools here (`request_run_cancellation`, `execute_task`, `admit_model_activation`,
+ * `invoke_model`) have exactly that evidence, cited file:line at their definitions in server.ts and in
+ * proof/D03-MCP-IDEMPOTENT-2026-09-27/review.md. This table is the exact per-tool contract: every row's
+ * full annotation set is asserted below, so a tool whose hint diverges from its row, or a tool missing
+ * from (or extra to) this table, fails the test. */
 type Annotations = Readonly<{ readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean; openWorldHint: boolean }>;
 const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   inspect_run: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -23,19 +27,19 @@ const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   update_toolchains: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   create_run: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   reserve_run_tasks: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  request_run_cancellation: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  request_run_cancellation: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   deliver_run_cancellation: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   reconcile_attempt: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  execute_task: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  execute_task: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   evaluate_task: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   runtime_service_descriptor: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   shutdown_runtime_service: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   inspect_model_activation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  admit_model_activation: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  admit_model_activation: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   inspect_model_invocation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_provider_spending: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   audit_provider_spending: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  invoke_model: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  invoke_model: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   purge_model_invocation_content: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   cancel_model_invocation: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   inference_plan: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -71,9 +75,4 @@ it.each(Object.entries(EXPECTED))('reports the evidenced annotations for %s', as
   const tools = await listAnnotatedTools();
   const tool = tools.find(value => value.name === name);
   expect(tool?.annotations).toEqual(expected);
-});
-it('never advertises idempotentHint true for a destructive (irreversible-effect) tool', async () => {
-  const tools = await listAnnotatedTools();
-  const offenders = tools.filter(tool => tool.annotations?.destructiveHint === true && tool.annotations?.idempotentHint === true).map(tool => tool.name);
-  expect(offenders).toEqual([]);
 });

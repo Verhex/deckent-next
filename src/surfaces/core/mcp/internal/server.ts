@@ -101,9 +101,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (reserveRunTasks) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'reserve_run_tasks', description: t('mcp.tool.reserveRunTasks', {}, locale),
     schema: runReservationCommandSchema, invoke: (input: unknown) => reserveRunTasks.call(applications, runReservationCommandSchema.parse(input)) });
   const requestCancellation = applications.requestRunCancellation;
-  // Destructive intent; treated as not-idempotent-by-default (see review.md open question: the store-level
-  // commandId receipt at adapters/core/attempt-store/internal/runs.ts:123 is real replay evidence).
-  if (requestCancellation) definitions.push({ readOnly: false, destructive: true, idempotent: false, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
+  // Destructive but idempotent: adapters/core/attempt-store/internal/runs.ts:123 returns the commandId-keyed receipt on replay before any new mutation.
+  if (requestCancellation) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'request_run_cancellation', description: t('mcp.tool.requestRunCancellation', {}, locale),
     schema: runCommandSchema, invoke: (input: unknown) => requestCancellation.call(applications, runCommandSchema.parse(input)) });
   const deliverCancellation = applications.deliverRunCancellation;
   // Per-attempt delivery re-dispatches while queued and nextEligibleAt<=now (engine/core/runs/internal/delivery-transition.ts:14-19): an identical call can still reach dispatch.cancel again.
@@ -113,8 +112,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (reconcile) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'reconcile_attempt', description: t('mcp.tool.reconcileAttempt', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => reconcile.call(applications, attemptIdentitySchema.parse(input)) });
   const executeTask = applications.executeTask;
-  // Destructive intent; treated as not-idempotent-by-default (see review.md open question: composition/core/execution/internal/task.ts:24-27 returns the existing dispatch instead of relaunching).
-  if (executeTask) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: true, name: 'execute_task', description: t('mcp.tool.executeTask', {}, locale),
+  // Destructive but idempotent: composition/core/execution/internal/task.ts:24-27 returns the existing bound dispatch for the identity instead of relaunching a second container/process.
+  if (executeTask) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: true, name: 'execute_task', description: t('mcp.tool.executeTask', {}, locale),
     schema: attemptIdentitySchema, invoke: (input: unknown) => executeTask.call(applications, attemptIdentitySchema.parse(input)) });
   const evaluateTask = applications.evaluateTask;
   if (evaluateTask) definitions.push({ readOnly: false, destructive: false, idempotent: true, name: 'evaluate_task', description: t('mcp.tool.evaluateTask', {}, locale),
@@ -133,8 +132,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     description: t('mcp.tool.inspectModelActivation', {}, locale), schema: modelActivationQuerySchema,
     invoke: input => inspectActivation.call(applications, modelActivationQuerySchema.parse(input)) });
   const admitActivation = applications.admitModelActivation;
-  // Destructive intent; treated as not-idempotent-by-default (see review.md open question: model-activation/internal/application.ts:28-32 has a pre-effect commandId receipt check).
-  if (admitActivation) definitions.push({ readOnly: false, destructive: true, idempotent: false, name: 'admit_model_activation',
+  // Destructive but idempotent: engine/core/model-activation/internal/application.ts:28-32 returns the commandId-keyed receipt before the catalog/binding admission effect runs again.
+  if (admitActivation) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'admit_model_activation',
     description: t('mcp.tool.admitModelActivation', {}, locale), schema: modelActivationCommandSchema,
     invoke: input => admitActivation.call(applications, modelActivationCommandSchema.parse(input)) });
   const inspectInvocation = applications.inspectModelInvocation;
@@ -150,8 +149,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     description: t('mcp.tool.auditProviderSpending', {}, locale), schema: providerSpendAuditCommandSchema, boundedDelivery: true,
     invoke: (input, delivery) => auditProviderSpendAccount.call(applications, providerSpendAuditCommandInputSchema.parse(input), delivery) });
   const invokeModel = applications.invokeModel;
-  // Destructive intent; treated as not-idempotent-by-default (see review.md open question: model-invocation/internal/application.ts loadReceipt-before-provider-call + "a replayed command never reaches the provider again").
-  if (invokeModel) definitions.push({ readOnly: false, destructive: true, idempotent: false, openWorld: true, name: 'invoke_model',
+  // Destructive but idempotent: engine/core/model-invocation/internal/application.ts (invoke) returns store.loadReceipt(scopeId, commandId) before any provider call — "a replayed command never reaches the provider again".
+  if (invokeModel) definitions.push({ readOnly: false, destructive: true, idempotent: true, openWorld: true, name: 'invoke_model',
     description: t('mcp.tool.invokeModel', {}, locale), schema: modelInvocationCommandSchema, modelDelivery: true,
     invoke: (input, delivery) => invokeModel.call(applications, modelInvocationCommandSchema.parse(input), delivery) });
   const purgeContent = applications.purgeModelInvocationContent;

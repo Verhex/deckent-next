@@ -65,14 +65,14 @@ it.skipIf(process.platform === 'win32')('serves explicit-project inspection and 
     expect(tools.find(t => t.name === 'inspect_toolchain_currency')!.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: true });
     expect(tools.find(t => t.name === 'cancel_model_invocation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
     expect(tools.find(t => t.name === 'purge_model_invocation_content')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
-    expect(tools.find(t => t.name === 'invoke_model')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
+    expect(tools.find(t => t.name === 'invoke_model')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
     expect(tools.find(t => t.name === 'inspect_model_invocation')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    expect(tools.find(t => t.name === 'admit_model_activation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    expect(tools.find(t => t.name === 'admit_model_activation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'admit_model_activation')!.inputSchema.type).toBe('object');
     expect(tools.find(t => t.name === 'inspect_model_activation')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(tools.find(t => t.name === 'runtime_service_descriptor')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(tools.find(t => t.name === 'shutdown_runtime_service')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
-    expect(tools.find(t => t.name === 'request_run_cancellation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false });
+    expect(tools.find(t => t.name === 'request_run_cancellation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(tools.find(t => t.name === 'audit_provider_spending')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   } finally { await client.close(); await transport.close(); await stopTestRuntimeService(runtime); await rm(root, { recursive: true, force: true }); }
 }, 15000);
