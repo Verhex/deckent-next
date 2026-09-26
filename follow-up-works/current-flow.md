@@ -34,6 +34,14 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
 - Entegrasyon `integrate/2026-09-27` @ `2d06c56` (worktree `/home/alperen/deckent-next-integrate`): D03 + I40 (+ L5 tanı) + arch + belgeler.
   Tam verify `verify-2.log` exit 0: native 25, vitest 334 / 2.210, host 55, smoke (ilk koşu yalnız `FORCE_COLOR=3` yüzünden 2 test; PLAN bulgusu).
   REQUEST_REVIEW **2109** gönderildi (2100–2108 ile birlikte bekliyor). Push: Astra PASS + owner izni → yalnız incelenen sha.
+- 2026-09-27: Astra 2110–2113 **REVISE** (2100 dosya yazımı abort kaydı P2; 2101 kabuk yolu symlink+`..` onaysız dış okuma **P1**;
+  2102 host-shell normal çıkışta arka plan çocuğu + baş/kuyruk UTF-8 P2×2; 2103 `run_shell` etki kimliği turlar arası P2) — gövdeler
+  `.deckent/host/reviews/astra-2110-2113/`, tüketildi. Düzeltme şeritleri: FIX-RA (Opus, 2111+2113) `lane/fix-ra`, FIX-RB (Fable, 2112+2100)
+  `lane/fix-rb`. 2104/2105/2107/2108/2109 bekliyor. Canlı etkinleştirme ve push bu düzeltmeler + PASS sonrası.
+- Owner M1 Hat B kararları (PLAN); Jev r2 (kararlar + gerekçe): 15/15 owner seçimi birinci, 11'inde p ≥ 0,90, ama yeterlilik 0,47–0,71 < 0,85 →
+  owner kuralına göre ağırlıksız (`proof/OWNER-DECISIONS-2026-09-27/jev-r2-results.md`).
+- Açık şeritler: H34 S1 (Opus, `lane/h34-s1`, ledger v39), I40-b (Codex, `lane/i40b`), A04-1 (Fable, `lane/a04-1`), FIX-RA, FIX-RB.
+  C12 Q8 tipli ret S1 sonrası (`src/engine/core/policy/**` çakışması). Ledger sırası H34 v39, C12 v40.
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
