@@ -81,6 +81,7 @@
   "config.field.spawn_backend": "Yürütme altyapısı tercihi.",
   "config.field.strict_tenant_isolation": "Açık müşteri kapsamı beyanını zorunlu tut.",
   "config.field.tenant_id": "Varsayılan müşteri kapsamı kimliği.",
+  "config.field.company": "Bu kurulumun hizmet verdiği şirket: kimliği scope kaydının ve her scope kararının sahibidir (varsayılan: default).",
   "config.section": "Kayıtlı uzantı yapılandırması.",
   "config_nervous.active_marker": " ◀ aktif",
   "config_nervous.active_overrides": "Aktif Override'lar:",

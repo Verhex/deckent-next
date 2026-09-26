@@ -81,6 +81,7 @@
   "config.field.spawn_backend": "Execution backend preference.",
   "config.field.strict_tenant_isolation": "Require explicit customer scope claims.",
   "config.field.tenant_id": "Default customer scope identifier.",
+  "config.field.company": "Company this installation serves: its id owns scope registration and every scoped decision (default: default).",
   "config.section": "Registered extension configuration.",
   "config_nervous.active_marker": " ◀ active",
   "config_nervous.active_overrides": "Active Overrides:",

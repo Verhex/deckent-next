@@ -787,6 +787,7 @@
   "error.LOCAL_RUNTIME_ALREADY_RUNNING": "A runtime service already owns this project endpoint.",
   "error.LOCAL_RUNTIME_TRANSPORT": "The runtime service could not be reached or the connection failed. Start the configured service and retry the same command.",
   "error.RUNTIME_SERVICE_TRANSPORT": "The runtime response could not be delivered safely. Inspect recorded state before retrying.",
+  "error.SCOPE_UNKNOWN": "This scope is not registered to your company. Name it in the installation policy or ask an administrator to register it.",
   "error.RUNTIME_CHAT_TURN_TOO_LARGE": "This conversation is larger than one runtime request ({bytes} > {limit} bytes); nothing was sent. Start a new conversation with /new or write a shorter message.",
   "error.RUNTIME_SERVICE_CORRELATION": "The runtime response does not match the request.",
   "error.RUNTIME_SERVICE_RESPONSE_LIMIT": "The configured runtime response capacity cannot carry this result envelope.",
