@@ -48,6 +48,15 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     expect(await classifyReadOnlyShellCommand(command, createShellPathContext(scope)), command).toMatchObject({ readOnly: false, reasonCode });
   });
 
+  // Known limit (legacy-inherited): traversal and git object reads are read-only with risk `low`, yet the shell itself will walk into
+  // denied files or print repository objects no path check sees. Slice 3c must not run `low` silently on the strength of this verdict.
+  it('classifies traversal and git object reads as read-only with risk low, although no path check covers what they reach', async () => {
+    const { scope } = await workspace();
+    for (const command of ['grep -r x .', 'rg x .', 'find . -type f', 'git show HEAD:.env', 'git log -p', 'git cat-file -p HEAD']) {
+      expect(await classifyReadOnlyShellCommand(command, createShellPathContext(scope)), command).toMatchObject({ readOnly: true, risk: 'low' });
+    }
+  });
+
   it('bounds glob expansion, accepts an absolute path inside the root and reports the examined paths root-relative', async () => {
     const { root, scope } = await workspace();
     expect(await classifyReadOnlyShellCommand('cat src/*.ts', createShellPathContext(scope, 2))).toMatchObject({ readOnly: false, reasonCode: 'GLOB_EXPANSION' });

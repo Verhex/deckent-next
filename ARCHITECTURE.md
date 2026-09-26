@@ -685,7 +685,10 @@ directory, bounded at 10,000 matches, each match checked; git pathspecs lexical)
 carriers (`*.pfx`, `*.keystore`, `*.jks`, `.pypirc`, `credentials`, `credentials.json`, `secrets.json`, `.brain/memory.db*`) and the
 `.git` directory itself, so read tools refuse them too; legacy `.deckent/private/` is dropped (Next keeps private state under the
 already denied `.deckent/host`, `audit-key`, `approvals`). Not covered: intermediate symlink hops that leave the root and return (the
-final real path is what the shell reads), and a swap between classification and execution. No tool uses it yet (slice 3c).
+final real path is what the shell reads), a swap between classification and execution, and — legacy-inherited, verified —
+traversal (`grep -r x .`, `rg x .`, `find . -type f`) and git object reads (`git show HEAD:.env`, `git log -p`, `git cat-file -p`)
+classify read-only with risk `low` although the shell then walks into denied files or prints objects no path check sees; slice 3c
+must not run `low` silently on this verdict alone. No tool uses it yet (slice 3c).
 **Host shell execution (T-L4 slice 3b, Jev 52f9b6f9).** `adapters/core/host-shell` runs one command: `bash --noprofile --norc -c`
 (no rc-file side effects; legacy used `-lc`), stdin closed, cwd = workspace root, its own process group; environment = an allowlist
 copied from the service (PATH, HOME, USER, LOGNAME, LANG, LC_ALL/CTYPE/MESSAGES, TZ, TMPDIR, SHELL) plus operator-allowed names and

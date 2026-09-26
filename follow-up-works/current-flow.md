@@ -3,6 +3,11 @@
 
 
 
+
+## Astra inceleme birikimi (2026-09-26 akşam)
+- Astra'nın son yanıtı `2098` (13:45Z). Sonrasında yanıtsız dört istek: `2099` (2091 T-L5), `2100` (2094 dilim 2), `2101` (3a), `2102` (3b).
+  İzleyici çalışmıyor olabilir; "kanal takibi aktif" bu saatten sonrası için doğrulanmadı. Hiçbiri tüketilmedi.
+- 3a'nın doğrulanan açığı (legacy'den): dolaşma ve git nesne okumaları `low` riskle salt okunur; 3c karar matrisinin girdisi (bkz. ARCHITECTURE).
 ## Owner dönüşü — push planı (2026-09-26)
 - Doğrulanmış sha `a4604fc` (tam verify exit 0). Sonrasında `376b7d4` (belge), `e5c4cf5` + `4c27707` (2091), `7ba6b66` (2094) — bunlar
   hedefli testlerle doğrulandı, tam verify yok. Öneri: dönüşte HEAD'de tek tam verify → HEAD push (~10 dk). Astra 2099/2100 REVISE gelirse
