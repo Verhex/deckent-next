@@ -13,6 +13,7 @@ export * from '#domain/core/session/index.js';
 export * from '#domain/core/command/index.js';
 export * from '#domain/core/approval/index.js';
 export * from '#domain/core/effect/index.js';
+export * from '#domain/core/adapter-registry/index.js';
 export * from '#domain/core/worker-event/index.js';
 export * from '#domain/core/inference-serving/index.js';
 export * from '#domain/core/agent-tool/index.js';
