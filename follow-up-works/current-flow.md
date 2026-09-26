@@ -1,6 +1,27 @@
-# Anlık iş akışı — Opus 5.5; T-L4 dilim 1 (C12 araç onayı) teslimde; T-L3b–T-L5c Astra incelemesinde (2081–2089)
+# Anlık iş akışı — Opus 5.5; T-L4 dilim 2 (dosya düzenleme C11) yerelde; Astra REVISE 2090 (dilim 1) ve 2091 (T-L5) düzeltiliyor
+
+## T-L4 dilim 2 — `edit_file`/`write_file` C11 etkisi (2026-09-26)
+- Adaptör `adapters/core/workspace-write`: yazılabilir yol çözümü (normalize, kök içi, deny, sembolik bağlı üst dizin reddi), dosya sürümü
+  (sha256 | `absent`), koşullu atomik yazım (aynı dizinde özel geçici dosya, fsync, dizin yeniden doğrulama, sürüm yeniden kontrol, rename,
+  dizin fsync, mod korunur), sınırlı birleşik diff, `workspace-file` etki hedefi (yazmadan önce günlük; çökme sonrası dosyadan kanıt).
+- Döngü: `prepare` portu yetkiden önce planlar; plan hatası çağrı sonucudur. Karar = araç kararı ile `workspace.file.write` işlem kararının
+  sıkı olanı; yazma tabanı yolları her modda onay ister; onay kartı diff'i gösterir. Yazım C11 `EffectApplication` üzerinden (oturum, işlem
+  policy'si, niyet önce, planlanan sürüme koşul); onay kapısı yalnız bu turda onaylanan komutu geçirir.
+- Testler: adaptör 3; e2e gerçek servis 5 (onaylı düzenleme diff + tek yazım + `effect_intents` settled; onay beklerken dosya değişti →
+  reddedildi, diğer yazarın içeriği korundu; taban yolu policy izin verse de onay ister, sıradan yol sormadan yazılır; işlem onay isterse
+  sorulur; işlem izni yoksa `denied`, yazım yok). Mutasyon 1–5 düştü: `deckent-refactor-work/proof/F26-T-L4B-FILE-EDITS-2026-09-26/`.
+- Açık: son sürüm kontrolü ile rename arasındaki başka yazar dışlanmaz (advisory kilit yok). `operation-effects` CLI testi eski `dist`
+  nedeniyle düşüyor (ledger v38 derlenmedi) — toplu verify'daki build ile doğrulanacak. Canlı: owner betiği gerekecek (araç + işlem izni).
+
+## Astra kanal incelemesi — 2026-09-26
+- İncelenen son commit `a35caa4`; eşzamanlı T-L4 WIP incelemeye alınmadı. Kaynak incelemesi + geçici commit arşivinde 9 dosya / 56 mevcut test geçti; iki ek tekrar üretimi üç T-L5 kusurunu doğruladı.
+- Açık: 40 mesajlık yüzey kesimi eski talimatı ölçümden önce düşürüyor; sıkıştırma `appended` tam sonuç birikimini bırakıyor; `seenReads` artık bağlamda bulunmayan sonuç için yeniden okumayı engelliyor. Ayrıntı ve tekrar üretimi: `.deckent/host/reviews/astra-2081-2089/`.
+- Test ortamı: ilk sandbox denemeleri kesildi; arşivde eksik native socket binary nedeniyle 12 test başarısız oldu. Kaynağı değişmemiş mevcut native build kopyalandıktan sonra izinli yerel soket testleri 56/56 geçti. Build, tam verify, canlı çağrı, commit/push yapılmadı.
+- Jev `08f67d3b`: revise 0,99; none_of_the_above 0; insufficient_information 0,01 (danışmanlık, kanıt değil). Sonraki adım: Opus üç bulguyu düzeltip yüzeyden başlayan uzun konuşma ve birden çok sıkıştırma kanıtıyla yeniden inceleme istesin.
+- Yanıt kanal entry `2091`. `consume` 2081–2089 gövdelerini kanaldan kaldırdı, fakat ardından `.agents/refactor/state/consumed.jsonl` yazımı sandbox `EROFS` ile başarısız oldu; metadata günlüğü tamamlanmış sayılmıyor. İşlem sırası `channel.mjs:99–101`; yeniden okuma dokuz entry'nin yokluğunu doğruladı. İnceleme sırasında gelen T-L4 `2090` bekliyor, bu paketin kapsamı dışında.
 
 ## T-L4 dilim 1 — araç çağrısı onayı (C12 asgari) (2026-09-26, Jev 9266755b `c12_then_effects` 1,00)
+- Astra `2090` incelemesi: **REVISE**, `e6085ca` izole arşivinde 46 mevcut test + iki kusur tekrar üretimi geçti. Geciken karar A yanıtı yeni B kartını kapatıyor; iptal kapanışında `SQLITE_IOERR` yutulup kayıt pending kalıyor. Kanıt `.deckent/host/reviews/astra-2090/`. Sonraki: kimliğe koşullu kart kapatma; yarış ile depo arızasını ayırıp gerçek kapanış durumunu görünür taşıma; iki negatif testle yeniden inceleme. Yeni edit/write WIP kapsam dışı; build/tam verify/canlı policy/commit/push yok.
 - Tasarım notu: `deckent-refactor-work/T-L4-EDIT-SHELL-DESIGN-2026-09-26.md` (legacy salt okunur inceleme: `'**'` izin kusuru, diff/bayat dosya/
   atomik yazım yok, kabukta iptal süreci öldürmüyor; korunan: salt okunur sınıflandırıcı, yıkıcı tablo, iki kez yeniden yetki).
 - Onay isteği birleşimi: görev (v1, değişmedi, mühürler bayt bayt doğrulanıyor) | işlem anahtarlı (v2, `agent-tool-call` konusu). Eylem özeti

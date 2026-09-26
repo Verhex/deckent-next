@@ -17,7 +17,10 @@ export type AgentRoundOutcome =
 export interface AgentTurnPorts {
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
-  authorize(tool: AgentToolSpec): Promise<'allow' | 'deny' | 'require-approval'>;
+  /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`. */
+  authorize(tool: AgentToolSpec, args?: Record<string, unknown>): Promise<'allow' | 'deny' | 'require-approval'>;
+  /** Optional validation before authority is asked (an edit that cannot apply is an error, never an approval prompt). */
+  prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
   describe(tool: AgentToolSpec, args: Record<string, unknown>): string | null;
   execute(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<AgentToolOutcome>;
@@ -181,7 +184,12 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)} earlier in this turn; its result is above. Change the arguments to read something else.`);
         continue;
       }
-      const decision = await ports.authorize(tool);
+      if (ports.prepare) {
+        let prepared: { readonly ok: true } | { readonly ok: false; readonly text: string };
+        try { prepared = await ports.prepare(tool, checked.args, signal); } catch { prepared = { ok: false, text: `[deckent] ${call.name}: error=failed` }; }
+        if (!prepared.ok) { await result('error', prepared.text); continue; }
+      }
+      const decision = await ports.authorize(tool, checked.args);
       if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
       if (decision === 'require-approval') {
         // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.

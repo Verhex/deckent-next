@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -34,7 +34,7 @@ const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
 async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
-  count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number } = {}) {
+  count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[] } = {}) {
   const model = modelWith(options.tokenize === true), catalog = catalogWith(options.tokenize === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -107,7 +107,7 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
     { id: 'read-needs-approval', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['read_file'] } },
     { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }]
     : [{ id: 'read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me,
-      resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }])];
+      resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }]), ...(options.extraGrants ?? [])];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const interrupted: unknown[] = [];
@@ -120,6 +120,11 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
   const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
   return { project, env, state, rows, ledger, start, interrupted, grants, writePolicy, client: () => createConfiguredRuntimeClient(project, { env }) };
 }
+const editGrants = (toolEffect: 'allow' | 'require-approval') => [
+  { id: 'edit-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['edit_file', 'write_file'] } },
+  { id: 'file-write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['workspace.file.write'] } },
+  { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
+const toolText = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
 const ask = (turnId: string, content = 'what does src/a.ts export?') => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content }] });
 
 describe.skipIf(process.platform !== 'linux')('agent chat turn through the runtime service', () => {
@@ -138,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'text').map(event => (event as { text: string }).text).join('')).toBe('It exports a.');
     // The model saw the declared tools and, in round 2, the tool result.
     expect(f.state.requests).toHaveLength(2);
-    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob']);
+    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file']);
     expect(f.state.requests[1]!['messages']).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'tool', tool_call_id: 'call_1' })]));
     // Each round is one governed invocation under the command id derived from turn and round.
     expect(f.rows("SELECT command_id FROM model_invocations ORDER BY command_id").map(row => (row as { command_id: string }).command_id).sort())
@@ -300,6 +305,90 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     });
     expect(await running).toMatchObject({ finish: 'cancelled' });
     expect(g.rows("SELECT snapshot FROM approvals").map(row => JSON.parse((row as { snapshot: string }).snapshot).status)).toEqual(['expired']);
+  }, 60_000);
+
+  it('writes an approved edit as a C11 effect: the owner sees the diff, the file is written once and the effect is settled (T-L4 slice 2)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('require-approval') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-edit', 'set a to 2'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'allow-edit', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ summary: expect.stringMatching(/^edit_file · src\/a\.ts · /),
+      preview: expect.stringContaining('-export const a = 1;\n+export const a = 2;') });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    expect(toolText(events)).toMatch(/^\[deckent\] edit_file: wrote src\/a\.ts \(\+1 −1 lines/);
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(f.rows('SELECT target_kind, target_id, state FROM effect_intents')).toEqual([{ target_kind: 'workspace-file', target_id: 'src/a.ts', state: 'settled' }]);
+  }, 60_000);
+
+  it('refuses an approved edit whose file changed while the owner was reading the diff, and keeps what the other writer wrote (T-L4 slice 2)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('require-approval') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Stale.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-stale', 'set a to 2'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push((async () => {
+        await writeFile(join(f.project, 'src', 'a.ts'), 'export const a = 7;\n');
+        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: 'allow-stale',
+          expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
+      })());
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'error' });
+    expect(toolText(events)).toContain('changed since it was read');
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 7;\n');
+    expect(f.rows('SELECT count(*) AS count FROM effect_intents')).toEqual([{ count: 0 }]);
+  }, 60_000);
+
+  it('asks the owner for a floor path even when policy allows the write, and writes an ordinary path without asking (contract §5)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('allow') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'write_file', arguments: '{"path":"package.json","content":"{}\\n"}' } }, { content: 'Refused.' },
+      { toolCall: { name: 'write_file', arguments: '{"path":"src/new.ts","content":"export {};\\n"}' } }, { content: 'Created.' }];
+    const client = f.client(), floored: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-floor', 'write package.json'), event => {
+      floored.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'deny-floor', expectedRevision: event.revision, decision: 'deny', reason: 'No' }));
+    });
+    await Promise.all(pending);
+    expect(floored.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('+++ b/package.json') });
+    expect(floored.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    await expect(readFile(join(f.project, 'package.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    const plain: AgentTurnStreamEvent[] = [];
+    await client.chatTurn(ask('turn-plain', 'create src/new.ts'), event => plain.push(event));
+    expect(plain.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(plain.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    expect(await readFile(join(f.project, 'src', 'new.ts'), 'utf8')).toBe('export {};\n');
+  }, 60_000);
+
+  it('asks the owner when the operation policy requires approval although the tool is allowed, and never offers a write the operation policy denies', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('allow').map(grant => grant.id === 'file-write' ? { ...grant, effect: 'require-approval' } : grant) });
+    await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-op-approval', 'set a to 2'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'allow-op', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+  }, 60_000);
+
+  it('never writes when the operation policy does not grant workspace.file.write, even if the tool is allowed', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: editGrants('allow').filter(grant => grant.id !== 'file-write') }); await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Denied.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-no-op-grant', 'set a to 2'), event => events.push(event));
+    expect(events.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    expect(toolText(events)).toContain('denied-by-policy');
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
   }, 60_000);
 
   it('answers a tool call the policy does not grant as denied, never runs it, and still finishes the turn', async () => {

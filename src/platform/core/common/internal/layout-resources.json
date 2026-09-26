@@ -22,7 +22,8 @@
     "runtimeLog": "state/runtime-service.log",
     "ledgerBackups": "state/backups",
     "terminalHistory": "state/terminal-history.jsonl",
-    "terminalSessions": "state/terminal-sessions"
+    "terminalSessions": "state/terminal-sessions",
+    "fileEffects": "state/file-effects"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

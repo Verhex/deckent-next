@@ -79,8 +79,8 @@ erken kesilmiyor. 2078/2079 düzeltmeleri 2026-09-25'te uygulandı (gezinti doğ
 ve kalıcı turn kaydı (T-L3b2, ledger v37) hazır; T-L3c runtime `chatTurn` (protokol v12) servis içinde çalışıyor; T-L3d etkileşimli terminal agent turn'lerini kullanıyor
 (araç satırları, kapanış notu, araçlı geçmiş). Owner 2026-09-25 onayıyla canlı kurulumda araçlı terminal etkin (qwen38 v3 `tool-calls`,
 sınırsız `local-qwen-terminal` kotası, `live-read-tools` izni; gerçek terminalde 3 tur doğrulandı). T-L5a (bağlam ölçümü ve kabul,
-protokol v13), T-L5b (otomatik sıkıştırma) ve T-L5c (`/resume`, `/new`, `/context`) hazır. Sırada T-L4 (diff onaylı düzenleme,
-izin modlarıyla host kabuğu); `/compact` (elle sıkıştırma) protokol eki gerektirir.
+protokol v13), T-L5b (otomatik sıkıştırma) ve T-L5c (`/resume`, `/new`, `/context`) hazır. T-L4 dilim 1 (C12 araç onayı) ve dilim 2
+(`edit_file`/`write_file` C11 etkisi, diff onayı, yazma tabanı) yerelde; sırada Astra 2090/2091 düzeltmeleri, sonra dilim 3–4 (host kabuğu, izin modları); `/compact` (elle sıkıştırma) protokol eki gerektirir.
 **Owner 2026-09-25: GPU izni ve vLLM container'ının yeniden oluşturulması onaylandı.** Terminal sunum profili: `--max-model-len 131072
 --max-num-seqs 4 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3` (KV 260.687 token; 131k'da ~2 eşzamanlı);
 betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`, önceki yapılandırma yedekli. Canlı kanıt: T-L2 adapter'ı gerçek
@@ -261,6 +261,8 @@ Uygulanan Acil satırı (ambient keşif kapalı, sürümlü profil istisnası) v
 
 ## Önemli açık bulgular
 
+- **TERMINAL T-L4 araç onayı — Astra 2090 REVISE (`e6085ca`, 2026-09-26):** ilk onayın geciken yanıtı sonraki çağrının açık karar kartını kapatabiliyor; iptal/süre dolumu kapanışındaki bütün depo hataları yarış kabul edilip yutuluyor, kayıt `pending` kalabiliyor. İki tekrar üretimi doğrulandı; kimliğe koşullu kart kapatma ve kalıcı kapanış hatasının görünür uzlaştırılması bekleniyor.
+- **TERMINAL T-L5 — Astra 2081–2089 incelemesi, REVISE (2026-09-26, `a35caa4`):** etkileşimli yüzeyin 40 mesajlık varsayılan kesimi, token ölçümü/sıkıştırmadan önce eski kullanıcı talimatlarını kaybediyor. Sıkıştırma turun `appended` tam içerik birikimini temizlemiyor; `seenReads` ise artık bağlamda olmayan sonuçlara tekrar okumayı engelleyen referans döndürüyor. İki bağımsız tekrar üretimi üç kusuru doğruladı; düzeltme ve uzun konuşma/çoklu sıkıştırma negatif kanıtı bekleniyor. 56 hedefli mevcut test geçti; bu sonuç bulguları kapatmıyor.
 - **PROVIDERS — aralıklı `unknown`: AÇIK.** Teşhis owner kararıyla sınırlandırıldı; hata çözülmüş sayılmaz. 800 tekrarda özgün unknown yakalanmadı; bir çağrı öncesi fiyat yetkisi reddi görüldü. Güvenlik/bütçe denetimi ve belirsiz etki koruması değiştirilmedi. Gerçek tekrar veya yeni kanıtta yeniden açılır. [Kanıt](../deckent-refactor-work/proof/UNKNOWN-BOUNDED-DIAGNOSIS/verification.json).
 - **EXECUTION — koşullu akış kısmi:** kabul anında tek dal seçimi kalıcıdır; Run ortası koşul, timer/signal, kaynak kilidi henüz tamam değildir; otomatik yerel ilerleme bağlı, Run içi tamamlanmaya göre slot doldurma bağlı; Run'lar arası sınırlı rezervasyon turuyla sıra devri bağlı; uzun worker’ı kesmeden zaman bazlı adalet, dağıtık paylaşım ve genel BPM hâlâ açıktır.
 - **ISOLATION — canlı teslim açık:** Git/ERP başlangıç kanıtı ile t1 hedef koşulu ayrılmalı; kaynak kilidi dış insan/ERP yazıcısının değişikliğini engellemez.

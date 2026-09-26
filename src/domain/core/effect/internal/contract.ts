@@ -20,7 +20,8 @@ export const operationDescriptorSchema = z.object({
   if (value.effectClass === 'read' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_READ_NOT_COMPENSABLE' });
 }).readonly();
 export type OperationDescriptor = z.infer<typeof operationDescriptorSchema>;
-/** Opaque, adapter-interpreted record address (ERP entity key, Git ref, ...). Never a path, URL or credential. */
+/** Opaque, adapter-interpreted record address (ERP entity key, Git ref, ...). Never a URL or credential, and never a host path: the one
+ * path-shaped address is the Core `workspace-file` target's workspace-relative path, resolved only through its workspace scope. */
 export const effectTargetRefSchema = z.object({ kind: identitySchema, id: z.string().min(1).max(512)
   .refine(value => ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) }).strict().readonly();
 export type EffectTargetRef = z.infer<typeof effectTargetRefSchema>;

@@ -1036,10 +1036,16 @@
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/sqlite-agent-turn",
         "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/attempt-store",
         "src/composition/core/model-invocation",
         "src/composition/core/provider-catalog",
         "src/composition/core/terminal-chat",
         "src/domain/core/agent-tool",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/platform/core/clock",
+        "src/platform/core/managed-files",
         "src/domain/core/agent-turn",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
@@ -1265,6 +1271,15 @@
         "src/domain/core/principal"
       ],
       "plan": "EXECUTION"
+    },
+    "src/adapters/core/workspace-write": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/domain/core/agent-tool",
+        "src/domain/core/effect",
+        "src/engine/core/effect"
+      ],
+      "plan": "SURFACES"
     },
     "src/adapters/core/workspace-read": {
       "dependencies": [

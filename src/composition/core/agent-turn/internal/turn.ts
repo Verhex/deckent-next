@@ -6,11 +6,12 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { createWorkspaceReadTools, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
+import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { createAgentFileEdits } from './edits.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, and service stop. */
@@ -118,7 +119,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolCapable = binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
     && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported'));
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot) : null;
-  const tools: readonly AgentToolSpec[] = workspace?.specs ?? [];
+  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS] : [];
+  const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
   const principalKey = principalKeyOf(context.principal);
   const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
@@ -174,7 +176,20 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },
-      authorize: tool => toolAuthority.decide(tool, command.scopeId, context.principal),
+      async authorize(tool, args) {
+        const decision = await toolAuthority.decide(tool, command.scopeId, context.principal);
+        if (decision === 'deny' || tool.toolClass !== 'edit' || !edits || !args) return decision;
+        // An edit is also the `workspace.file.write` operation: the stricter of both decisions holds, and the write floor raises
+        // allow to require-approval for high-risk paths in every mode (contract §5).
+        const operation = await edits.authority();
+        if (operation === 'deny') return 'deny';
+        return decision === 'allow' && operation === 'allow' && !edits.floored(tool.name, args) ? 'allow' : 'require-approval';
+      },
+      async prepare(tool, args) {
+        if (tool.toolClass !== 'edit' || !edits) return { ok: true };
+        const planned = await edits.plan(tool.name, args);
+        return planned.ok ? { ok: true } : { ok: false, text: `[deckent] ${tool.name}: error=${planned.error}` };
+      },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
@@ -189,10 +204,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
-            summary: record.request.summary, preview: chatTurnApprovalPreview(tool.name, args), expiresAt: record.request.expiresAt });
+            summary: record.request.summary, preview: edits?.preview(tool.name, args) ?? chatTurnApprovalPreview(tool.name, args), expiresAt: record.request.expiresAt });
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
+          if (outcome === 'allow') edits?.approved(tool.name, args);
           channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: record.request.approvalId, outcome });
           return outcome;
         } finally { journal.close(); }
@@ -220,6 +236,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       async execute(tool, args, toolSignal) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
+        if (tool.toolClass === 'edit' && edits) return edits.apply(tool.name, args);
         return workspace.execute(tool.name, args, toolSignal);
       },
       now: () => Date.now(),
