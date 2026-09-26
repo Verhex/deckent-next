@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore } from '#adapters/index.js';
 import { assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, PoolPolicyAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -28,7 +28,10 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
         admission = new TaskApprovalAdmission(document, principal, approvalJournal.store, integrity, config.approvals.requestTtlMs);
         store.setRunAdmissionFilter(admission);
       }
-      const application = new RunReservationApplication(store, verifier, authorization, poolAuthorization, { now: Date.now, attemptId: randomUUID }, admission);
+      // Approval records carry trusted-clock times; reservation reads the same floored clock (I40).
+      const clock = new SystemTrustedClock();
+      const application = new RunReservationApplication(store, verifier, authorization, poolAuthorization,
+        { now: () => clock.sample().wallMs, attemptId: randomUUID }, admission);
       return Object.freeze({ schemaVersion: 1 as const, layout, reservation: await application.reserve(command) });
     } finally { approvalJournal?.close(); store.close(); }
   } catch (error) { throw queryFailure(error); }

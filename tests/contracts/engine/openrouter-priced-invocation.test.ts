@@ -11,6 +11,7 @@ import { fetchOpenRouterTariff } from '#adapters/core/provider-openrouter-pricin
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { encodeModelBindingDefinition, resolveModelBindingDefinition } from '#domain/index.js';
 import { ModelInvocationApplication, parseProviderSpendReservation } from '#engine/index.js';
+import { SystemTrustedClock } from '#platform/index.js';
 
 const sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
 let directory = '', certificate = '', privateKey = '', server: Server | undefined;
@@ -51,15 +52,14 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-priced-ledger-')), path = join(root, 'ledger.db');
   const origin = `https://127.0.0.1:${address.port}`, metadataEndpoint = `${origin}/api/v1/models/vendor/model/endpoints`;
-  // Preserve the real clock: I40 also fails when the host steps backwards, not only on expiry.
-  // Report the exact samples supplied to pricing; never clamp them or turn unknown into success.
-  let previousClock: { wallMs: number; elapsedMs: number } | undefined;
+  // Wire pricing as composition does (I40): the platform trusted clock floor, never raw Date.now. A raw host step the
+  // floor absorbed is reported as evidence; it is never clamped here or turned into success.
+  const clock = new SystemTrustedClock();
+  let previousRaw: number | undefined;
   const pricingNow = () => {
-    const sample = { wallMs: Date.now(), elapsedMs: performance.now() };
-    if (previousClock && sample.wallMs < previousClock.wallMs) {
-      console.warn('I40_PRICING_CLOCK_BACKWARD', JSON.stringify({ previous: previousClock, current: sample }));
-    }
-    previousClock = sample; return sample.wallMs;
+    const raw = Date.now(), wallMs = clock.sample().wallMs;
+    if (previousRaw !== undefined && raw < previousRaw) console.warn('I40_HOST_WALL_STEP_ABSORBED', JSON.stringify({ previousRaw, raw, wallMs }));
+    previousRaw = raw; return wallMs;
   };
   const fetchObservation = () => fetchOpenRouterTariff({ endpoint: metadataEndpoint, modelId: 'vendor/model', endpointTag: 'provider/region',
     maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000, caPem: certificate }, pricingNow);
@@ -83,7 +83,7 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
       { async inspect() { return { schemaVersion: 1, reference, status: 'declared' as const, catalogRevision: 'catalog', definition, binding, availability: 'not-observed' as const }; } },
       async () => ({ async loadRecord() { return activation.receipt.record; }, close() {} }), { async resolve() { return profile; } },
       { resolve() { return priced.native; } }, async () => openSqliteModelInvocationStore(path, sqlite, 'forbid'),
-      { invocationId: () => `invocation-${++sequence}`, ownerId: () => 'runtime', now: Date.now }, { authorize });
+      { invocationId: () => `invocation-${++sequence}`, ownerId: () => 'runtime', now: pricingNow }, { authorize });
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } });

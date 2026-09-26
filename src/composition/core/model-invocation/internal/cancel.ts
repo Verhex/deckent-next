@@ -2,7 +2,7 @@ import { ModelInvocationError, modelInvocationCancellationCommandInputSchema, ty
 import { ModelInvocationCancellationApplication, ModelInvocationPolicyAuthorization, type ModelInvocationControllers,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { openSqliteModelInvocationStore, type LocalPeerIdentity } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadPeerInvocationContext } from './context.js';
 
@@ -13,10 +13,10 @@ export async function cancelPeerConfiguredModelInvocation(projectRoot: string, i
     const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data;
-    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer);
+    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer), clock = new SystemTrustedClock();
     return await new ModelInvocationCancellationApplication({ async verify() { return context.principal; } },
       new ModelInvocationPolicyAuthorization(context.policy),
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),
-      { now: Date.now }, controllers).cancel(command, undefined, delivery);
+      { now: () => clock.sample().wallMs }, controllers).cancel(command, undefined, delivery);
   } catch (error) { throw queryFailure(error); }
 }
