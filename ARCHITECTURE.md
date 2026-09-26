@@ -729,6 +729,10 @@ observer-dependent startup recovery defect is corrected in `a4604fc`: recovery r
 re-review confirms observed/unobserved starts both expire the orphan, and a missing integrity key leaves it pending, reports
 `keyUnavailable` and creates no key (3 fresh real-service tests). This scoped review closes 2092/2096; T-L5 and file-write findings
 remain open, and full verification/deployment acceptance are separate.
+Astra 2099 re-review (2026-09-26): retaining read dedupe by provider call ID is insufficient because IDs may repeat across rounds;
+a recent unrelated call can keep a compacted-away read marked visible. Also the pre-round 75% request-byte threshold does not
+ensure the completed answer plus next user input can enter the service transport; a valid configuration reproduces rejection in
+the client before runtime compaction. Both are open T-L5 continuity defects, not guarantees supplied by the existing threshold.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live activation is pending, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority

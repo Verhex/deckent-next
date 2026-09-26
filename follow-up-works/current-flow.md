@@ -1,5 +1,11 @@
 # Anlık iş akışı — T-L4/T-L5 yerelde; 2092/2096 PASS; 2091 ve 2094 düzeltildi (yeniden inceleme bekliyor); R2 yalıtımı owner kararı; push owner dönüşünde
 
+## Astra kanal takibi yeniden aktif (2026-09-26)
+- Owner devam talimatıyla kanal okundu: 2099–2105 yedi bekleyen istek. 2099 incelemesi REVISE: 72 mevcut test + iki kusur repro; çağrı kimliği çakışması ve sonraki isteğin servis boyut sınırını aşması (ayrıntı PLAN ve `.deckent/host/reviews/astra-2099/`).
+- Sıradaki: 2100 dosya yazımı, ardından 2101–2105 shell/yüzey zinciri; güncel `5fa0812` izole arşivinde hedefli testler. Canlı servis/izinler ve owner dosyası değişmedi. Aşağıdaki akşam paketinin “son yanıt2098 / izleyici çalışmıyor olabilir” bilgisi bu kayıtla aşılmıştır.
+- Süre kaydı: 2099 önceki çalışma ile devam arasındaki kesinti aktif emek ölçümü değildir; açık effort aralığından aktif süre sonucu çıkarılmamalı.
+
+
 ## OWNER DÖNÜŞ PAKETİ (2026-09-26 akşam, Opus)
 - **Push:** doğrulanmış sha `a4604fc` (tam verify exit 0). Sonrası yerelde 36+ commit (2091, 2094, T-L4 3a/3b/3c-i/ii/iii, belgeler). Bu paket
   commit'lendikten sonra `f7a9631`'de tek tam verify: **exit 0** (332 dosya / 2.169 test, native 25, host 55, smoke;
