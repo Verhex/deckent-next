@@ -107,3 +107,13 @@ test('CLI: reads stdin JSON, always exits 0, garbage input is fail-open', () => 
   assert.deepEqual(JSON.parse(run('pre-tool', '')), {});
   assert.deepEqual(JSON.parse(run('pre-tool', JSON.stringify(bash('ls -la')))), {});
 });
+
+test('vitest detection counts real vitest processes only', async () => {
+  const { isVitestProcess } = await import('./host-guard.mjs');
+  assert.equal(isVitestProcess('node /repo/node_modules/.bin/vitest run tests/a.test.ts'), true);
+  assert.equal(isVitestProcess('/usr/bin/node --experimental-import-meta-resolve --require /repo/node_modules/vitest/suppress-warnings.cjs --conditions node /repo/node_modules/vitest/dist/workers/forks.js'), true);
+  assert.equal(isVitestProcess('vitest run'), true);
+  assert.equal(isVitestProcess('node /home/u/.nvm/bin/codex exec -C /w "run npx vitest run tests/x.test.ts"'), false);
+  assert.equal(isVitestProcess('timeout 7800 codex exec "VITEST_MAX_FORKS=2 npx vitest run"'), false);
+  assert.equal(isVitestProcess('/bin/bash -c pgrep -f vitest'), false);
+});

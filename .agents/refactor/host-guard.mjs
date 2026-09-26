@@ -115,9 +115,26 @@ export function guard(event, input, ctx) {
   return pass();
 }
 
+const OPTION_WITH_VALUE = new Set(['-r', '--require', '--import', '--loader', '--conditions', '-C']);
+/** A real vitest process: node whose script (first non-option argument) is vitest's CLI or one of its workers. A bare
+ *  `pgrep -f vitest` also matched any process whose argv merely mentioned the word (e.g. an agent prompt), blocking builds. */
+export function isVitestProcess(args) {
+  const tokens = args.trim().split(/\s+/u);
+  if (!/(^|\/)(node|vitest)$/u.test(tokens[0] ?? '')) return false;
+  if (/(^|\/)vitest$/u.test(tokens[0])) return true;
+  for (let i = 1; i < tokens.length; i++) {
+    if (OPTION_WITH_VALUE.has(tokens[i])) { i++; continue; }
+    if (tokens[i].startsWith('-')) continue;
+    return /(\/\.bin\/vitest|\/vitest\/[^\s]*\.m?js|\/vitest\.mjs)$/u.test(tokens[i]);
+  }
+  return false;
+}
+
 export function defaultContext(root, legacy) {
   const vitestRunning = () => {
-    try { return execFileSync('pgrep', ['-f', 'vitest'], { encoding: 'utf8' }).trim().length > 0; } catch { return false; }
+    try {
+      return execFileSync('ps', ['-eo', 'args='], { encoding: 'utf8' }).split('\n').some(isVitestProcess);
+    } catch { return false; }
   };
   return {
     root,
