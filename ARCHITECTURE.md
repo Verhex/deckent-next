@@ -1125,6 +1125,17 @@ Wall and monotonic deadlines plus revocation are checked before mutation. The tr
 one process (a floor over observed time; WSL2 was measured stepping back ~2.1 s every ~30 s) and a decision is never
 earlier than its approval's creation; this orders local records only — it does not synchronize processes or keep expiry
 advancing during a backward step, so elapsed-time limits use monotonic deadlines and cross-process skew stays explicit.
+**Time contract (I40).** Core components that compare wall times read the platform `SystemTrustedClock`, never raw
+`Date.now`: composition wires it once per operation into tariff acquisition, preparation, quote and send, invocation
+records (claim/permit/outcome, cancel, purge) and Run reservation; adapters keep their `now: () => number` port.
+Tariff observations are process-bound (WeakSet provenance), so the floor alone orders them; tariff expiry
+(`now >= expiresAtMs`) stays exact and the floor only moves forward (during a backward step expiry is noticed up to
+one step late, as before). Records written by another local process may lead this one by an independent step:
+task-approval admission tolerates a decision time at most `MAX_WALL_SKEW_MS` (5000 ms, a versioned platform invariant,
+not configuration) ahead of the reservation time. The allowance orders records only: it never extends request or
+tariff expiry and never bypasses MAC integrity or `requestDigest` checks. Remaining raw-`Date.now` comparisons across
+processes (cancellation recovery leases, agent tool-approval request time and expiry, config write-lock age, worker
+sidecar age) are listed in the I40 review and are not yet on this contract.
 This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
 

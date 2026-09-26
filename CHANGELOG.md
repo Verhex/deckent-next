@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (I40): a host wall clock stepping backwards (e.g. WSL2 time sync) no longer rejects a fresh provider tariff
+  (`STALE_TARIFF` → `PROVIDER_SPEND_UNAVAILABLE` or a durable `unknown`) or excludes an approved task from reservation
+  (`RUN_CAPACITY_OR_ORDER`); cross-process approval skew bounded at 5 s; tariff and approval expiry remain exact.
 - FIX (D-3): MCP `tools/list` declares `idempotentHint` per tool from product replay evidence (25 true / 5 false) instead of
   `true` for every tool; destructive tools with commandId/identity-keyed replay stay idempotent.
 - DOCS (2026-09-26, remainder): README surfaces (CLI, terminal, MCP, SDK; no HTTP API; Docker worker image), ARCHITECTURE
