@@ -313,7 +313,8 @@ refresh, usage and dogfood closure remain open.
 - **Unreleased versions change in place (owner 2026-09-26, Jev f4c8bc32).** A protocol, schema or config version that was never pushed and
   is run by no installed service may be amended in place; once pushed or run by an installed service, a change needs a version bump.
   Recorded amendment: runtime protocol v14 gained the `approval.settled` outcome `unsettled` and the `tool.output` producer before v14
-  was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump.
+  was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump. v15 was introduced 2026-09-27 (T-L5 `@file`) as the single v15 package
+  (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump.
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -409,13 +410,17 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   run, worker and notice rows), single input owner, hints. **Events:** `slash`, `submit`, `cancel`, `exit`;
   the slash catalog is data (`slash-registry`). **Composer (P2):** the single input owner is a pure reducer plus a
   small Ink view (unit `surfaces/core/terminal-composer`): grapheme/cell-aware caret, readline editing and kill/yank, multiline
-  (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, Tab
-  slash completion with argument hints, `?` shortcuts; it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
+  (Shift/Alt+Enter, Ctrl+J, trailing `\`), in-session history and Ctrl+R, atomic paste chips expanded on submit, a
+  slash palette (typing filters by prefix, then subsequence; Up/Down select; Enter runs the highlighted command — a command
+  that takes an argument completes to `/name ` and waits, a fully typed name runs as typed; Tab completes; Esc closes until
+  the text changes; Enter without suggestions sends the text), `?` shortcuts, and an `@file` picker (T-L5, protocol v15: typing
+  inside an `@token` opens candidates from the runtime service, debounced 60 ms with earlier lookups aborted; a single candidate is
+  offered, never typed for the user; Esc closes it for that text and a late answer never reopens it; Enter/Tab insert `@path `); it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
   clears a draft or arms exit (second press within 2 s exits); Ctrl+D exits on an empty idle line; while busy
-  Esc/Ctrl+C cancel the turn. History and `@` mention candidates are ports; the surface reads no files. History persistence is the
+  Esc/Ctrl+C cancel the turn. History and `@` candidates/attachments are ports; the surface reads no files. History persistence is the
   `terminal-history` adapter: private per-project `state/terminal-history.jsonl` (0600, no-follow, append-only, last 500
   entries, compacted when doubled), visible line only — entries that carried pasted content are never stored and secret
-  shapes are redacted; `terminal.persistHistory: false` disables it. `@` candidates still need a scoped read port.
+  shapes are redacted; `terminal.persistHistory: false` disables it.
 - **Entry (owner 2026-09-23, T0):** `deckent` with no arguments on a real terminal (TTY stdin and stdout, `TERM` not
   `dumb`) opens the interactive terminal, as does bare `deckent terminal`; piped or dumb terminals print help, and
   `deckent --help` is always help. The scope comes from `--scope` or `terminal.scopeId`; without either the typed
@@ -439,7 +444,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
   build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
-  in the previous and the current protocol version ([14, 13] since v14; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
+  in the previous and the current protocol version ([15, 14] since v15; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
   from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
   shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
@@ -631,6 +636,22 @@ compaction simply rewrites the snapshot, so a resumed conversation can never car
 into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
+**Composer `@file` over the runtime (T-L5, protocol v15, owner 2026-09-27).** Two bounded control operations, current version only:
+`findWorkspaceFiles {scopeId, query ≤ 256, limit 1..50}` → `{paths, truncated, incomplete}` and `attachWorkspaceFile {scopeId, path,
+maxBytes ≤ 32768}` → `{path, status: 'attached', content, bytes, totalBytes, truncated}` | `{path, status: 'refused', reason}` (reason: the
+read boundary's typed path errors, `binary`, `read-error`, `cancelled`; a refusal is a result, not a failure). Both require `delivery`;
+the answer always fits it. The caller is the connection's verified peer and must be a member of the scope under current policy (read
+access); files come only from the project workspace through `workspace-read` (Core deny floor, ignored/generated directories, no
+symlink followed, regular single-link files, UTF-8-boundary prefix, NUL = binary, a file changed while read is refused). Candidates
+come from a per-project index walked at most every 10 s (single flight, ≤ 50 000 files; a measured walk took 170–460 ms on 1.3k–2.6k
+files, so a per-key walk was rejected); ranking: file name before path, exact (with or without extension) > prefix > substring >
+subsequence, then fewer segments, shorter path. The attach path always resolves fresh, so a stale candidate that disappeared or became
+denied is refused. On submit the draft's `@path` tokens outside paste chips (at most 8, no repeats) are attached: the user message is
+the typed text plus one labelled block per file (`--- attached file <path> (…) ---` … `--- end of <path> ---`, model-facing protocol
+text), ≤ 32 KiB per file and ≤ 128 KiB per message; the ledger shows the typed text and one notice per file. Content is part of the
+user message, so the chatTurn request digest, session snapshots and compaction cover it; no ledger change. The client rejects an
+attachment larger than it asked for. A v15 terminal on a v14 service shows no candidates. Authorization is scope membership only (no
+separate policy resource); whether `@file` needs its own grant is an open owner question.
 **Operation-keyed approval for agent tool calls (C12 minimal, T-L4 slice 1, Jev 9266755b, ledger v38, protocol v14).** An approval
 request is a union: task admission (schemaVersion 1, unchanged, so every sealed record verifies byte for byte) or an operation-keyed
 request (schemaVersion 2) whose `subject` is `agent-tool-call` {turnId, round, index, tool, toolVersion, resource, argsDigest}; its
@@ -1169,11 +1190,12 @@ intent carries `approval {approvalId, actionDigest}` and consumes it; another co
 usable only within `admitWithinMs` (descriptor data, default `approvals.requestTtlMs`; owner Q3) and a decision time beyond
 `now + MAX_WALL_SKEW_MS` is refused. The core never blocks; SDK `awaitApproval` / CLI `deckent operation … --wait <ms>` poll and
 resubmit once (owner Q2). Ledger v40 adds `operation` to the approvals subject CHECK (backed-up migration; a v39 build refuses
-v40). Released runtime protocol v14 is kept: requests below v15 never receive operation-subject approvals (list omits them,
-inspect answers `APPROVAL_MISSING`); they are listed and decided through SDK `configuredApproval` or CLI `approval decide` until
-G4 (v15). Authorization points outside the catalog answer `require-approval` with typed `POLICY_APPROVAL_UNSUPPORTED` (still a
+v40). Since protocol v15 (2026-09-27) runtime clients receive operation-subject
+approvals: the terminal `/approvals` lists them (run/task `-`, request summary) and decides them on the y/N card; a v14 client cannot
+reach approval operations at all (current version only). The hidden-subject view for versions below 15 remains the engine contract
+(excluded in page selection before LIMIT, Astra 2128), tested in process. MCP operation tools (C12 G4) are not yet added. Authorization points outside the catalog answer `require-approval` with typed `POLICY_APPROVAL_UNSUPPORTED` (still a
 refusal; owner Q8), and cancellation recovery and its classifiers treat it and `SCOPE_UNKNOWN` as denials, never as a crashed page. Installation's two require-approval points (pool grant, shutdown grant) use their own `INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED` (config, exit 78; owner 2026-09-27), like their `INSTALLATION_PROFILE_*` siblings; `init preview` is proven with the compiled CLI, `init apply` shares the same preparation call (inspection only).
-C12 G3: agent edit/shell effects verify their `agent-tool-call` record at the effect (same pin-in-intent consumption); the terminal flow, protocol v14 and ledger v40 are unchanged by G3. Refusals are typed tool results (`APPROVAL_REQUIRED`, `_DENIED`, `_EXPIRED`, `_CONFLICT`, `_MISSING`, `_INTEGRITY`), nothing written or run.
+C12 G3: agent edit/shell effects verify their `agent-tool-call` record at the effect (same pin-in-intent consumption); the terminal flow, protocol and ledger are unchanged by G3. Refusals are typed tool results (`APPROVAL_REQUIRED`, `_DENIED`, `_EXPIRED`, `_CONFLICT`, `_MISSING`, `_INTEGRITY`), nothing written or run.
 
 **General Core audit port, first slice (AUDIT-PORT, ledger v41; owner 2026-09-27 q4/q5).** Silent decisions Core makes get a durable, sealed audit record through one port: `domain/core/audit` (event v1: `eventId`, `scopeId`, principal issuer/subject, policy revision, caller-supplied `atMs`, typed `subject` — first kind `permission-mode`: mode, cell, tool, turn/round/index/call, derived company and person grant ids, `require-approval → allow`, and a bounded summary: workspace-relative path or the first 200 characters of the shell head plus `argsDigest`; never the raw command or file content), `engine/core/audit` (`AuditStore` port, `sealAuditRecord`/`verifyAuditRecord` on the approval MAC line — `audit-record:1` over event + scope-local sequence + keyId — and `AuditApplication`: `record` returns only after the store wrote the sealed record, committed by the store or inside the caller's open transaction; any failure is typed `AUDIT_UNAVAILABLE`/`AUDIT_INVALID`/`AUDIT_CONFLICT` and the caller applies no effect — "no audit, no effect"; `list` verifies every seal, row identity and sequence continuity within one scope; `count`/`counters` are q5 summary totals) and `adapters/core/audit-store` on the shared ledger. Ledger v41 adds `audit_events` (PK scope+sequence, UNIQUE scope+event id; `BEFORE UPDATE`/`BEFORE DELETE` triggers abort with `AUDIT_APPEND_ONLY`, so append-only is a database guarantee) and `audit_counters` (mutable summaries, no seal). The service-start upgrade backs up v40 (0600) and migrates in one transaction; a v40 build refuses a v41 ledger (`ATTEMPT_STORE_VERSION`). Not yet: a SIEM/export adapter reading the port, sealed counters, retention.
 

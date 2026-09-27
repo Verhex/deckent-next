@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (terminal): Enter runs the highlighted slash command (a command that takes an argument completes and waits); the slash
+  palette filters by prefix, then subsequence.
+- ADDED (terminal, protocol v15): an `@file` picker and attachments through the runtime service (`findWorkspaceFiles`,
+  `attachWorkspaceFile`; lifecycle window [15, 14]). Runtime clients now receive operation approvals; `/approvals` decides them.
 - BREAKING (H34 S4): the retired tenant fields are removed; config schema 3, layout registry 3, doctor JSON 2. Config 2 is
   refused with `CONFIG_VERSION_UNSUPPORTED` and an older layout snapshot with `LAYOUT_VERSION_UNSUPPORTED`; no conversion.
 - ADDED (audit): general Core audit port with a sealed, append-only `audit_events` table and `audit_counters`; ledger v41 with a
