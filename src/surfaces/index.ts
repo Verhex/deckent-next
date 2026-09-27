@@ -2,4 +2,3 @@ export { dispatch, main } from '#surfaces/core/cli/index.js';
 export type { ExitCode } from '#surfaces/core/cli/index.js';
 export { createMcpServer } from '#surfaces/core/mcp/index.js';
 export type { ToolResultSummary, TurnDelta, WorklineStreamTurn } from '#surfaces/core/terminal/index.js';
-export { describeAgentToolCallTarget, summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';

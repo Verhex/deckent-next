@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
 import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#composition/core/terminal-chat/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
+import { renderAssistantStream, startAssistantStream, type ToolUnit } from '#surfaces/core/terminal-render/index.js';
 
 const input = { projectRoot: '/project', scopeId: 'scope', messages: [{ role: 'user' as const, content: 'what?' }], options: {} };
 const result = (over: Partial<ChatTurnResult> = {}): ChatTurnResult => ({ schemaVersion: 1, turnId: 't', finish: 'stop', note: null, rounds: 2, toolCalls: 1,
@@ -15,6 +16,17 @@ function ports(run: (command: ChatTurnCommand, onEvent: (event: AgentTurnStreamE
   return { value, commands, cancelled };
 }
 const collect = async (stream: AsyncIterable<TurnDelta>) => { const out: TurnDelta[] = []; for await (const delta of stream) out.push(delta); return out; };
+/** What the terminal shows for each tool delta (TL-B D2 is derived by the renderer): the running call's target, then the printed line. */
+function toolLines(deltas: readonly TurnDelta[]) {
+  let state = startAssistantStream(0); const lines: { callId: string; target: string | null; unit?: ToolUnit }[] = [];
+  for (const delta of deltas) {
+    const step = renderAssistantStream(state, delta, 1); state = step.state;
+    if (delta.kind !== 'tool') continue;
+    const unit = step.staticUnits.find((candidate): candidate is ToolUnit => candidate.kind === 'tool');
+    lines.push({ callId: delta.callId, target: delta.phase === 'started' ? step.activeTool!.target : unit!.target, ...(unit ? { unit } : {}) });
+  }
+  return lines;
+}
 
 describe('terminal agent turn stream', () => {
   it('maps service events to deltas, carries the tool target to its finished line, and ends with one done and the note', async () => {
@@ -56,9 +68,10 @@ describe('terminal agent turn stream', () => {
   });
 
   // D2 (TL-B, analysis §2/§4): the engine's `target` (path-first for grep/glob, `call-approvals.ts` displayTarget bug)
-  // is what the C12 approval resource must stay bound to; the tool LINE shows the pattern instead, derived here from
-  // the assistant message's own recorded tool-call arguments (already on the wire before `tool.started`), never from
-  // a protocol addition. Path-bearing tools (read_file/list_dir/shell) are unaffected: their engine target is shown as is.
+  // is what the C12 approval resource must stay bound to; the tool LINE shows the pattern instead, derived by the terminal
+  // renderer from the assistant message's own recorded tool-call arguments (a `message` delta before `tool.started`), never
+  // from a protocol addition. The stream itself carries the engine's target (composition loads no surface code at runtime).
+  // Path-bearing tools (read_file/list_dir/shell) are unaffected: their engine target is shown as is.
   it('shows the pattern first for grep/glob tool lines, derived client-side from the call arguments, leaving read_file/shell targets as the engine sent them', async () => {
     const p = ports(async (command, onEvent) => {
       onEvent({ kind: 'message', message: { role: 'assistant', content: '', toolCalls: [
@@ -75,14 +88,16 @@ describe('terminal agent turn stream', () => {
       return result({ turnId: command.turnId, answer: null });
     });
     const deltas = await collect(streamTerminalAgentTurn(input, p.value));
-    const targetsOf = (callId: string) => deltas.filter(delta => delta.kind === 'tool' && delta.callId === callId).map(delta => delta.kind === 'tool' ? delta.target : null);
+    expect(deltas.filter(delta => delta.kind === 'tool' && delta.callId === 'c1').map(delta => delta.kind === 'tool' && delta.target)).toEqual(['src', 'src']);
+    const lines = toolLines(deltas);
+    const targetsOf = (callId: string) => lines.filter(line => line.callId === callId).map(line => line.target);
     expect(targetsOf('c1')).toEqual(['"needle" src', '"needle" src']);
     expect(targetsOf('c2')).toEqual(['"**/*.ts"', '"**/*.ts"']);
     expect(targetsOf('c3')).toEqual(['src/a.ts', 'src/a.ts']);
   });
 
-  // D2: the finished tool line carries a short result summary derived from the call's own recorded result text (the
-  // `message` event of role 'tool' that always precedes `tool.finished` for the same call) — never a new wire field.
+  // D2: the finished tool line carries a short result summary derived by the renderer from the call's own recorded result text
+  // (the `message` delta of role 'tool' that always precedes `tool.finished` for the same call) — never a new wire field.
   it('derives a result summary for finished read-class tool calls from their own result text, and omits it when the text does not match a known shape', async () => {
     const run = async (name: string, content: string, status: 'ok' | 'error' = 'ok') => {
       const p = ports(async (command, onEvent) => {
@@ -92,7 +107,8 @@ describe('terminal agent turn stream', () => {
         return result({ turnId: command.turnId, answer: null });
       });
       const deltas = await collect(streamTerminalAgentTurn(input, p.value));
-      return deltas.find(delta => delta.kind === 'tool' && delta.phase === 'finished');
+      expect(deltas.find(delta => delta.kind === 'tool' && delta.phase === 'finished')).not.toHaveProperty('summary');
+      return toolLines(deltas).find(line => line.unit)!.unit;
     };
     expect(await run('read_file', '[deckent] read_file: mode=range totalLines=269 range=1-243 returned=243 hasMore=true nextStartLine=244'
       + ' maxBytesPerLine=2048 elidedLines=0\n001\tfirst line')).toMatchObject({ summary: { kind: 'lines', shown: 243, total: 269, more: true } });

@@ -1,4 +1,4 @@
-import type { ToolResultSummary, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import { describeAgentToolCallTarget, summarizeAgentToolResult, type AgentChatMessage, type ToolResultSummary, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './stream-segmenter.js';
 
 /**
@@ -19,7 +19,7 @@ export type FooterUnit = Readonly<{ kind: 'footer'; elapsedMs: number; promptTok
 type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). `cleanup` (Astra 2124) only ever
  * arrives on a host shell call; the row shows a suffix for `group-ended`/`unverified` and nothing for `clean` or absent.
- * `summary` (TL-B D2) only ever arrives on a finished read-class call whose own result text matched a known shape. */
+ * `summary` (TL-B D2) is set only for a finished read-class call whose own result text matched a known shape. */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number;
   cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
@@ -75,6 +75,10 @@ export type AssistantStreamState = Readonly<{
   waitingSinceMs: number;
   /** The current round's reasoning tail, unsanitized and bounded (TL-A D6). */
   reasoningTail: string;
+  /** Tool-line display derived from the turn's `message` deltas (TL-B D2), by call id until the call's line is printed: a grep/glob
+   * call's pattern-first target, a call's result summary (null when its text matched no known shape). Only these small values are kept. */
+  toolLineTargets: ReadonlyMap<string, string>;
+  toolLineSummaries: ReadonlyMap<string, ToolResultSummary | null>;
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -96,7 +100,8 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 
 export function startAssistantStream(nowMs: number): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
-    earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '' });
+    earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '', toolLineTargets: new Map(),
+    toolLineSummaries: new Map() });
 }
 
 /** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
@@ -144,6 +149,21 @@ function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[]
 /** A tool call's display target comes from the model's arguments (a path, pattern or command line): shown sanitized, on one line. */
 const safeTarget = (target: string | null) => target === null ? null : terminalSafeText(target).replace(/\s*\n\s*/gu, ' ');
 
+/**
+ * TL-B D2 from what the turn already streams (never a wire field, never the C12 approval resource, which stays the engine's target):
+ * the assistant message's own call arguments give grep/glob their pattern-first target, the call's result message (always right before
+ * `tool.finished`) its summary.
+ */
+function noteToolLine(state: AssistantStreamState, message: AgentChatMessage): AssistantStreamState {
+  if (message.role === 'tool') {
+    return Object.freeze({ ...state, toolLineSummaries: new Map(state.toolLineSummaries).set(message.toolCallId, summarizeAgentToolResult(message.name, message.content)) });
+  }
+  if (message.role !== 'assistant' || message.toolCalls.length === 0) return state;
+  const targets = new Map(state.toolLineTargets);
+  for (const call of message.toolCalls) { const target = describeAgentToolCallTarget(call.name, call.argumentsJson); if (target !== null) targets.set(call.id, target); }
+  return Object.freeze({ ...state, toolLineTargets: targets });
+}
+
 export function renderAssistantStream(state: AssistantStreamState, delta: TurnDelta, nowMs: number): AssistantStreamStep {
   if (state.phase === 'done') return step(state, []);
   if (delta.kind === 'output') {
@@ -152,7 +172,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const output = `${active.output}${terminalSafeText(delta.text)}`.slice(-LIVE_OUTPUT_TAIL_CHARS);
     return step(Object.freeze({ ...state, activeTool: Object.freeze({ ...active, output }) }), []);
   }
-  if (delta.kind === 'message' || delta.kind === 'approval') return step(state, []);
+  if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
+  if (delta.kind === 'approval') return step(state, []);
   // The summary landed: the round is prepared again, counted from now.
   if (delta.kind === 'compacted') {
     return step(Object.freeze({ ...state, waitingFor: 'model' as const, waitingSinceMs: nowMs }), [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
@@ -175,14 +196,19 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const text = answerUnits(flushed.segments, state.answered);
     const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, reasoningTail: '',
       answered: state.answered || text.length > 0, waitingFor: 'model' as const, waitingSinceMs: nowMs };
+    const target = safeTarget(state.toolLineTargets.get(delta.callId) ?? delta.target);
     if (delta.phase === 'started') {
-      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target: safeTarget(delta.target), startedAtMs: nowMs, output: '' }) }),
+      return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target, startedAtMs: nowMs, output: '' }) }),
         [...pending, ...text]);
     }
-    const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target: safeTarget(delta.target), status: delta.status ?? 'error',
+    // The engine sends every call's result message before `tool.finished`; without one there is nothing to summarize.
+    const summary = state.toolLineSummaries.get(delta.callId) ?? null;
+    const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target, status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)),
-      ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(delta.summary !== undefined ? { summary: delta.summary } : {}) });
-    return step(Object.freeze({ ...base, activeTool: null }), [...pending, ...text, unit]);
+      ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}) });
+    const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries);
+    targets.delete(delta.callId); summaries.delete(delta.callId);
+    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries }), [...pending, ...text, unit]);
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };
