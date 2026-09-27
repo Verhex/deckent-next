@@ -639,11 +639,13 @@ runs the real service). Live lines: "model is preparing a response · Ns", "summ
 stopped part from the client's stream state (`compaction` | `model` | `tool`); a summary stopped halfway is not kept and the screen says
 so; a completed summary is kept. Reasoning streams as a dim, sanitized (`terminalSafeText`) 2-line preview, never printed to the
 scrollback nor added to history; `/reasoning [on|off]` toggles the preview for the session (default on). Limits: against a service of
-another build or configuration the mark can be wrong until `compacted` or the first model delta; the admission formula is mirrored on
-the client (guarded by the parity test; a shared domain function is the follow-up).
+another build or configuration the mark can be wrong until `compacted` or the first model delta; the chat-turn admission is one pure engine function (`agentTurnAdmission`: output reserve, 2048 safety reserve, request bytes and
+next-request reserve) used by both the service and the terminal; it sits in the engine next to the compaction rule because composition
+may not call domain decision functions. The compaction predicate itself is still expressed twice (engine loop and terminal), guarded by
+the parity test.
 **Tool lines and read limits (TL-B, 2026-09-28).** The terminal derives a display target (grep/glob pattern first) and a finished-call
-result summary ("12 matches", "243/269 lines, more available") client-side from `message` events already on the wire; the engine's
-`describeAgentCall` — the C12 approval `resource` — is unchanged byte for byte. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
+result summary ("12 matches", "243/269 lines, more available") client-side from `message` events already on the wire; the engine's `describeAgentCall` — the C12 approval `resource` — is unchanged byte for byte; the derivation is owned by
+`surfaces/core/terminal-kit` (`describeAgentToolCallTarget`, `summarizeAgentToolResult`), composition only wires it into the stream. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
 1 KiB–1 MiB, chat schema 1 unchanged); `grep` accepts `context` (0–5) and `maxHits` (≤ 200), `context=0` byte-identical to before.
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
