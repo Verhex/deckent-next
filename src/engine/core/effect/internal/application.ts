@@ -145,7 +145,7 @@ export class EffectApplication {
       if (admission && 'pending' in admission) throw new PendingSignal(this.pending(command, admission.pending));
       return admission?.approval;
     };
-    const approval = await gate(decision, previous);
+    await gate(decision, previous);
     const settle = async (record: EffectRecord) => { await gate(await policy(), record); await assertSessionActive(verified.session, this.sessions, this.clock); };
     if (previous) return this.resume(previous, target, settle, current);
     if (action === 'compensate') {
@@ -160,7 +160,10 @@ export class EffectApplication {
       try { observed = await target.observe(command.target); } catch (error) { throw new EffectError('EFFECT_TARGET_UNAVAILABLE', { cause: error }); }
       if (observed.version !== command.expectedVersion) throw new EffectError('EFFECT_PRECONDITION_CHANGED');
     }
-    // Approval → intent → effect (owner Q1): the claim carries the approval it consumed; the gate then verifies that record, not a window.
+    // Approval → intent → effect (owner Q1). The gate is asked again right before the first claim (Astra 2128): the admission window is
+    // measured at the claim, after the target observation, so an allow that expired meanwhile claims nothing and sends nothing. The
+    // claim carries the approval it consumed; every later pass of this command verifies that record, not a window.
+    const approval = await gate(await policy(), null);
     const intent = effectIntentSchema.parse({ schemaVersion: 1, command, descriptor, actor: verified.session.principalRef,
       idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest, wireKey: wireKey(command), targetBinding: current,
       ...(approval ? { approval } : {}) });

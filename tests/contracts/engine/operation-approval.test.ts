@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { effectRecordSchema, type EffectCommand, type EffectRecord, type OperationDescriptor } from '#domain/index.js';
-import { ApprovalApplication, OperationApprovalBroker, awaitOperationApproval, operationApprovalActionDigest, type EffectApprovalContext } from '#engine/index.js';
+import { ApprovalApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, operationApprovalActionDigest, type EffectApprovalContext } from '#engine/index.js';
 import { MAX_WALL_SKEW_MS, createHmacIntegrity } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -36,7 +36,7 @@ async function fixture(admitWithinMs = 30_000) {
     intent: { schemaVersion: 1, command: cmd, descriptor, actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: digest('k'),
       inputDigest: digest('input'), wireKey: digest('w'), targetBinding: digest('binding'), ...(approval ? { approval } : {}) },
     sequence: 1, state, evidence: state === 'settled' ? { kind: 'idempotency-record', version: '"v2"', observedAt: 1 } : null, refusal: state === 'refused' ? 'EFFECT_REJECTED' : null });
-  return { journal, time, principal, broker, decide, record, close: () => journal.close() };
+  return { journal, time, sessions, principal, broker, decide, record, close: () => journal.close() };
 }
 
 it('opens one pending request per exact command, admits the same command once its stored allow is verified within the window, and pins the consumed record afterwards', async () => {
@@ -145,5 +145,42 @@ it('waits for a decision without closing the request: timeout and cancel leave i
     expect(await awaitOperationApproval(f.journal.store, integrity, { scopeId: 'scope', approvalId: late.pending.approvalId }, now, late.pending.expiresAt + 50_000, undefined, 5)).toBe('expired');
     // The waiter never closed anything: the request expires through the broker's own lazy close, not the wait.
     expect(f.journal.store.load('scope', late.pending.approvalId)?.status).toBe('pending');
+  } finally { f.close(); }
+});
+
+it('re-checks the admission window right before the first intent claim: an allow that expired while the target was observed claims nothing and sends nothing; a consumed intent still recovers (Astra 2128)', async () => {
+  const f = await fixture(1_000);
+  const gated = { ...policy, grants: [{ id: 'effect', effect: 'require-approval', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'operation', ids: 'all' } }, ...policy.grants] };
+  let saved: EffectRecord | null = null, applied = 0, claims = 0, observeAt = 10_000;
+  const target = { kind: 'records', identity: () => 'test-target',
+    observe: async () => { f.time.wallMs = observeAt; return { version: '"v1"' }; },
+    apply: async () => { applied++; return { version: '"v2"' }; },
+    lookup: async () => ({ status: 'absent' as const }) };
+  const store = {
+    loadEffect: async () => saved,
+    claimEffect: async (intent: EffectRecord['intent']) => { claims++; saved = effectRecordSchema.parse({ intent, sequence: 1, state: 'claimed', evidence: null, refusal: null }); return saved; },
+    saveEffect: async (_previous: EffectRecord, next: EffectRecord) => { saved = next; return next; },
+  };
+  const app = new EffectApplication({ resolve: async () => descriptor }, { resolve: () => target }, store, f.broker, f.sessions,
+    new OperationPolicyAuthorization({ load: async () => gated }), { sample: () => ({ wallMs: f.time.wallMs, monotonicMs: f.time.wallMs }) });
+  try {
+    const first = await app.submit('execute', command());
+    if (first.status !== 'approval-pending') throw new Error('expected pending');
+    f.time.wallMs = 2_000;
+    await f.decide(first.approval.approvalId, 'allow');
+    // The window (decidedAt 2000 + 1000) passes while the target is observed: no claim, no effect, typed refusal.
+    await expect(app.submit('execute', command())).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+    expect(claims).toBe(0); expect(applied).toBe(0); expect(saved).toBeNull();
+    // Within the window the same command claims once and settles; the claimed intent pins the approval.
+    const second = await app.submit('execute', command('cmd-2'));
+    if (second.status !== 'approval-pending') throw new Error('expected pending');
+    f.time.wallMs = 20_000; observeAt = 20_500;
+    await f.decide(second.approval.approvalId, 'allow');
+    expect(await app.submit('execute', command('cmd-2'))).toMatchObject({ status: 'settled', version: '"v2"' });
+    expect(claims).toBe(1); expect(applied).toBe(1); expect(saved?.intent.approval?.approvalId).toBe(second.approval.approvalId);
+    // Recovery of a consumed intent is separate from the window: long after it (inside the session), the settled record replays without any approval read.
+    f.time.wallMs = 500_000;
+    expect(await app.submit('execute', command('cmd-2'))).toMatchObject({ status: 'settled' });
+    expect(claims).toBe(1); expect(applied).toBe(1);
   } finally { f.close(); }
 });
