@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, type ApprovalActor, type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
-import { sha256, type IntegrityAuthority } from '#platform/index.js';
+import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { ApprovalStore } from './store.js';
 import { expireApproval, sealApproval, verifyApproval } from './integrity.js';
 
@@ -55,22 +55,25 @@ async function closeExpired(store: ApprovalStore, integrity: IntegrityAuthority,
  * except a stored `allow`.
  */
 export async function awaitAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord,
-  now: () => number, signal: AbortSignal, pollMs = 250): Promise<AgentToolApprovalOutcome> {
-  const { scopeId, approvalId } = record.request;
+  clock: TrustedClock, signal: AbortSignal, pollMs = 250, started: ClockSample = clock.sample()): Promise<AgentToolApprovalOutcome> {
+  const { scopeId, approvalId, expiresAt } = record.request;
+  // The producer passes its creation sample so preview/persistence time also spends the original TTL.
+  const deadline = started.monotonicMs + Math.max(0, expiresAt - started.wallMs);
+  const remaining = () => { const now = clock.sample(); return Math.min(expiresAt - now.wallMs, deadline - now.monotonicMs); };
   const settled = (current: ApprovalRecord): AgentToolApprovalOutcome | null =>
     current.status === 'expired' ? 'expired' : current.status === 'decided' ? current.decision?.decision === 'allow' ? 'allow' : 'deny' : null;
   for (;;) {
     const loaded = store.load(scopeId, approvalId);
     const current = loaded ? verifyApproval(loaded, integrity) : null;
     if (!current) return 'expired';
+    // A terminal decision is durable history, not permission to consume an allow after expiry or cancellation.
+    if (signal.aborted) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'cancelled'; }
+    const left = remaining();
+    if (left <= 0) { if (current.status === 'pending') await closeExpired(store, integrity, current); return 'expired'; }
     const stored = settled(current);
     if (stored) return stored;
-    // A cancelled turn runs nothing, whatever a racing decision recorded; the close only keeps the request from staying decidable.
-    if (signal.aborted) { await closeExpired(store, integrity, current); return 'cancelled'; }
-    // At expiry the stored record wins: a decision committed just before the close is returned as decided.
-    if (now() >= current.request.expiresAt) return settled(await closeExpired(store, integrity, current)) ?? 'expired';
     await new Promise<void>(resolve => {
-      const timer = setTimeout(done, Math.max(1, Math.min(pollMs, current.request.expiresAt - now())));
+      const timer = setTimeout(done, Math.max(1, Math.min(pollMs, left)));
       function done() { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); }
       signal.addEventListener('abort', done, { once: true });
     });
