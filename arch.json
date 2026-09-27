@@ -678,9 +678,7 @@
     },
     "src/platform/core/identity": {
       "dependencies": [
-        "src/platform/core/errors",
-        "src/platform/core/host",
-        "src/platform/core/validate"
+        "src/platform/core/errors"
       ],
       "plan": "FOUNDATION"
     },
@@ -1606,7 +1604,8 @@
       "Operation"
     ],
     "forbidden": [
-      "\\b[sS]print\\w*"
+      "\\b[sS]print\\w*",
+      "[tT][eE][nN][aA][nN][tT]"
     ],
     "scope": [
       "src",
@@ -1614,7 +1613,7 @@
       "scripts"
     ],
     "enforce": true,
-    "note": "Canonical run terminology is enforced across product source, tests and scripts; no legacy aliases."
+    "note": "Canonical run terminology is enforced across product source, tests and scripts; no legacy aliases. 'tenant' is retired (owner 2026-09-27, H34 S4); only tests/contracts/HARVEST.json (historical inventory) is exempt."
   },
   "budgets": {
     "maxLinesPerFile": 1500,

@@ -20,7 +20,7 @@
   "tui.approval_card.fact_policy": "policy",
   "tui.approval_card.fact_requester": "requester",
   "tui.approval_card.fact_rollback": "rollback limit",
-  "tui.approval_card.fact_tenant": "tenant · user",
+  "tui.approval_card.fact_company": "company · user",
   "tui.approval_card.hint_authenticated": "(y = approve · n = deny · a = approve similar individually · d = details)",
   "tui.approval_card.just_now": "just now",
   "tui.approval_card.not_declared": "not declared by the requester",

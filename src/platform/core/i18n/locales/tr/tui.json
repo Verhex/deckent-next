@@ -20,7 +20,7 @@
   "tui.approval_card.fact_policy": "politika",
   "tui.approval_card.fact_requester": "talep eden",
   "tui.approval_card.fact_rollback": "geri alma sınırı",
-  "tui.approval_card.fact_tenant": "kiracı · kullanıcı",
+  "tui.approval_card.fact_company": "şirket · kullanıcı",
   "tui.approval_card.hint_authenticated": "(y = onayla · n = reddet · a = benzerlerini ayrı ayrı onayla · d = detay)",
   "tui.approval_card.just_now": "az önce",
   "tui.approval_card.not_declared": "talep eden bildirmedi",

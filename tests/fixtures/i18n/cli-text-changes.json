@@ -176,20 +176,12 @@
       "before": "Ratio gate mode: enforce (default) or observe_only; absolute floors and unknown evidence still fail closed",
       "after": null
     },
-    "provider_authority.limits.opt_tenant": {
-      "before": "Tenant id the policy is authored for (solo hosts use `local`)",
-      "after": null
-    },
     "provider_authority.limits.opt_transport": {
       "before": "Exact transport: cli | api | http | local-runtime",
       "after": null
     },
     "provider_authority.limits.opt_warn_at_ratio": {
       "before": "Consumption ratio (0..1) at which a run is warned",
-      "after": null
-    },
-    "provider_authority.limits.preview": {
-      "before": "Derived from live provider truth:\n  provider={provider} authMode={authMode} transport={transport} backend={executionBackend}\n  tenant={tenantId} accountRefHash={accountRefHash} quotaScopeRefHash={quotaScopeRefHash}\n  windows={windows}\n  ratioEnforcement={ratioEnforcement} warnAtRatio={warnAtRatio} blockAtRatio={blockAtRatio}\n  action={action} expectedAuthorityRef={expectedAuthorityRef}\n  authorityRef={authorityRef} policyRef={policyRef}",
       "after": null
     },
     "provider_authority.limits.refused": {
@@ -538,20 +530,12 @@
       "before": "Ratio gate modu: enforce (varsayılan) veya observe_only; absolute floor ve unknown evidence yine fail-closed kalır",
       "after": null
     },
-    "provider_authority.limits.opt_tenant": {
-      "before": "Politikanın yazılacağı tenant id (tek kullanıcılı host `local` kullanır)",
-      "after": null
-    },
     "provider_authority.limits.opt_transport": {
       "before": "Kesin transport: cli | api | http | local-runtime",
       "after": null
     },
     "provider_authority.limits.opt_warn_at_ratio": {
       "before": "Run'ın uyarılacağı tüketim oranı (0..1)",
-      "after": null
-    },
-    "provider_authority.limits.preview": {
-      "before": "Canlı provider gerçeğinden türetildi:\n  provider={provider} authMode={authMode} transport={transport} backend={executionBackend}\n  tenant={tenantId} accountRefHash={accountRefHash} quotaScopeRefHash={quotaScopeRefHash}\n  pencereler={windows}\n  ratioEnforcement={ratioEnforcement} warnAtRatio={warnAtRatio} blockAtRatio={blockAtRatio}\n  eylem={action} expectedAuthorityRef={expectedAuthorityRef}\n  authorityRef={authorityRef} policyRef={policyRef}",
       "after": null
     },
     "provider_authority.limits.refused": {

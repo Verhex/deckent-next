@@ -502,7 +502,7 @@ for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', fi
 const vocab = arch.vocabulary;
 if (vocab?.enforce) {
   const vocabRes = vocab.forbidden.map(p => new RegExp(p, 'g'));
-  const vocabFiles = vocab.scope.flatMap(dir => walk(join(ROOT, dir), p => /\.(ts|tsx|mts|js|mjs|json|sh|yml|yaml)$/.test(p) && !p.endsWith('HARVEST.json')));
+  const vocabFiles = vocab.scope.flatMap(dir => walk(join(ROOT, dir), p => /\.(ts|tsx|mts|js|mjs|json|sh|yml|yaml)$/.test(p) && rel(p) !== 'tests/contracts/HARVEST.json'));
   for (const file of vocabFiles) {
     const text = readFileSync(file, 'utf8');
     for (const re of vocabRes) for (const m of text.matchAll(re)) fail('vocabulary', `${rel(file)}:${text.slice(0, m.index).split('\n').length}`, `forbidden vocabulary "${m[0]}" (canonical chain: ${vocab.canonicalChain.join(' → ')})`);
