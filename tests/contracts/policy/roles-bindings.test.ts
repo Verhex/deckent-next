@@ -50,11 +50,15 @@ describe('policy v2 evaluation (domain)', () => {
   it('a binding naming an unknown role is a typed refusal of the whole authority, never a partial one', () => {
     expect(() => effective(policyV2(), bindings(binding('devs', ['viewer']), binding('ops', ['admin'])))).toThrow(expect.objectContaining({ code: 'POLICY_ROLE_UNKNOWN' }));
   });
-  it('role is never a call parameter; bindings carry no wildcard principal; role/task permissions are refused until reserve sees them', () => {
+  it('role is never a call parameter; bindings carry no wildcard principal; a role may carry a task rule (H34 S2 follow-up)', () => {
     expect(() => evaluatePolicy(effective(), { ...inspectRun(), role: 'viewer' })).toThrow('POLICY_INVALID');
     expect(() => evaluatePolicy(effective(), { ...inspectRun(), principal: { ...principal(alice), role: 'viewer' } })).toThrow('POLICY_INVALID');
     expect(() => effective(policyV2(), bindings({ ...binding('devs', ['viewer']), principals: 'all' }))).toThrow();
-    expect(() => effective(policyV2({ roles: [role('runner', permission('t', 'require-approval', ['execute'], 'task'))] }))).toThrow('POLICY_INVALID');
+    const gatekeeper = effective(policyV2({ roles: [role('runner', permission('t', 'require-approval', ['execute'], 'task'))] }),
+      bindings(binding('devs', ['runner'])));
+    const runTask = { principal: principal(alice), scopeId: 'proj', action: 'execute', resource: { kind: 'task', id: 'task-1' } };
+    expect(evaluatePolicy(gatekeeper, runTask)).toMatchObject({ decision: 'require-approval', ruleId: 'devs/runner/t' });
+    expect(policyHasResourceRules(gatekeeper, 'task')).toBe(true);
     expect(() => effective({ ...policyV2(), bindings: bindings() })).toThrow();
   });
   it('v1 documents are untouched; an effective document binds both revisions; v2 declares scopes only from explicit grants', () => {

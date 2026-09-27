@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { counterSchema, identitySchema, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { counterSchema, identitySchema, policyHasResourceRules, type RunSnapshot, type VerifiedPrincipal, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { PoolAuthorization } from '#engine/core/policy/index.js';
 import { diagnoseReservationWave, planSchedulingWave } from '#engine/core/scheduling/index.js';
@@ -18,6 +18,11 @@ export interface RunAdmissionFilter {
   excluded(run: RunSnapshot, actor: RunReservation['actor'], now: number): readonly string[];
 }
 export interface ReservationRuntime { now(): number; attemptId(): string }
+/** Whether the effective policy document gates any task — through an explicit rule or one only a bound role carries
+ * (H34 S2 follow-up) — so a caller must supply a {@link RunAdmissionFilter}. Composition stays behind this
+ * application-service function; it never calls the domain decision directly.
+ */
+export function policyGatesTaskAdmission(policy: unknown): boolean { return policyHasResourceRules(policy, 'task'); }
 const recordedReservation = runReservationSchema.extend({ action: z.literal('reserve-run-tasks') }).strict();
 function checkedSnapshot(input: unknown) {
   try { const run = runSnapshotSchema.parse(input); assertRunExecution(run.graph, run.execution); return run; }
