@@ -4,6 +4,20 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (Astra 2111, P1): the agent shell no longer runs `cat link/../file` silently when the link leaves the workspace.
+- FIX (Astra 2113): a repeated shell command or file write in the same turn runs/writes again instead of replaying the first effect;
+  a write after the file returned to the same content no longer reports success without writing; owner approvals are single-use.
+- FIX (Astra 2112, 2119, 2124): the host shell ends its process group when the shell exits, bounds post-exit pipe draining (1 s),
+  keeps split UTF-8 characters whole, measures duration monotonically, and reports `cleanup` (clean / group-ended / unverified) to the
+  model and the owner.
+- FIX (Astra 2100): file-write recovery keeps the temporary file when `aborted` cannot be journaled and never infers "applied" from
+  file content.
+- FIX (I40-b): cancellation leases, config write-lock waits and worker heartbeat ages follow the time contract (5 s cross-process
+  allowance on lease takeover).
+- ADDED (H34 S1): company scope registry (ledger v39), config `company.id`, `doctor --json` `company.companyId`; scope membership is
+  fail-closed (`SCOPE_UNKNOWN`), a declared scope is pinned at its first write and never re-homed.
+- ADDED (A04-1): operation target adapters resolve through a manifest v1 registry (`http-conditional` is the Core entry; configs
+  unchanged).
 - FIX (I40): a host wall clock stepping backwards (e.g. WSL2 time sync) no longer rejects a fresh provider tariff
   (`STALE_TARIFF` → `PROVIDER_SPEND_UNAVAILABLE` or a durable `unknown`) or excludes an approved task from reservation
   (`RUN_CAPACITY_OR_ORDER`); cross-process approval skew bounded at 5 s; tariff and approval expiry remain exact.

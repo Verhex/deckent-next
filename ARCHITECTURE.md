@@ -357,7 +357,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   adapter `http-conditional-effect` (ETag/If-Match, Idempotency-Key, idempotency lookup; loopback http or https, no
   credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. Required approval stops
   before any effect with `EFFECT_APPROVAL_REQUIRED` until C12. Not claimed: any ERP adapter, credentials, MCP tool, registry
-  resolution of targets (A04), migration of the five existing flows.
+  resolution of targets (A04-1 done, see below; unified catalog A04-2), migration of the five existing flows.
 - **C11-1 REVISE (Astra 2041, Jev 2bfd2ee9, 2026-09-24).** The target never sees the caller's key: the intent stores a wire
   key derived from scope, target kind+id, operation id@version and caller key, so two scopes or operations reusing a key
   cannot settle each other's records. The intent also pins a target binding (descriptor digest + the adapter's endpoint
@@ -667,18 +667,21 @@ before effect, precondition = the planned version (a file changed since it was p
 atomic write (exclusive temporary file in the same directory, fsync, directory re-verified, version re-checked, rename, directory
 fsync; mode kept). Each attempt journals its own phases under the wire key (journal v2, atomic, 0600, managed `fileEffects`
 directory; Astra 2094 R1): `prepared` with a unique temporary name before that file exists, `committed` after the rename, `aborted`
-before the temporary file is removed, `escaped` when the parent left the workspace during the write. Crash settlement decides from
-that evidence, never from content equality alone: committed → applied (even if the file changed later); aborted or no journal →
+before the temporary file is removed — and the temporary file is removed only once `aborted` is durable; if that journal write
+fails the temporary file stays as evidence that the rename did not happen (Astra 2100) — `escaped` when the parent left the workspace during the write. Crash settlement decides from
+that evidence, never from content: committed → applied (even if the file changed later); aborted or no journal →
 absent (resend; a stale temporary file of the earlier attempt is removed first); prepared with its temporary file present → absent;
-prepared with it gone → applied only at `next`, else unknown; escaped, unreadable or a retired v1 journal → unknown — never a blind
+prepared with it gone → unknown whatever the file holds (`prepared` precedes the temporary file, so a crash before it existed and
+a crash after the rename look the same, and content equality is not causal evidence; Astra 2100); escaped, unreadable or a retired v1 journal → unknown — never a blind
 retry. After the rename the parent is verified again: a directory moved out of the workspace meanwhile is journaled `escaped` (with
 where it went) and the effect is unknown, never reported as done, and nothing is written again to undo it (Astra 2094 R2: detection,
 not prevention — Node has no openat2/renameat; a same-user process, including the planned unsandboxed host shell, can move directories;
 the confining mechanism is an owner decision, see PLAN). Approval previews are bounded to 16 KiB UTF-8 bytes (whole lines first, never
 a split character) under a first-line marker naming what is not shown and the sha256 of the whole text; a cut edit diff is kept whole,
 owner-only (0600, exclusive, not redacted: it must be exactly the change approved), in the managed `approvalPreviews` directory while
-the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's approval gate admits a
-`require-approval` decision only for the command the owner approved in this turn. Not excluded: another writer between the final
+the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's identity is the turn, the call's position (round,
+index), the arguments and the planned version (Astra 2113: the version alone collided after writes B, A, B and reported a write that
+did not happen); the approval gate admits a `require-approval` decision only for that command, once (consumed by the run it admits). Not excluded: another writer between the final
 version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Read-only shell classification (T-L4 slice 3a, Jev d6909e28).** `engine/core/shell-classification` is pure: a POSIX `sh -c`
 scanner (pipelines of stages; redirection only to /dev/null or between stdout/stderr; substitutions, expansions, subshells, braces,
@@ -687,7 +690,9 @@ never demotes an option), sed/awk script grammars, `find` and `git` read grammar
 always-ask floor, worst part wins, redirection/tee → modify; `safe-read` only from the classifier). It is a port of legacy
 `shell-readonly-classifier.ts`/`shell-risk.ts` @a8b67e2a1 (POSIX only; PowerShell is `UNSUPPORTED_DIALECT`, so a Windows host asks for
 every shell command). Paths go through a port: `adapters/core/shell-paths` checks each argument over the same `WorkspaceScope` as the
-read tools and edits (lexically inside, not denied, existing, real path inside and not denied; sh globs expanded against the real
+read tools and edits (lexically inside, not denied, existing, real path inside and not denied; a path or glob prefix with a `..`
+component is checked as the kernel opens it — native realpath of the unnormalized text, so `link/..` is the parent of the link's
+target — and must exist inside and not denied (Astra 2111); a `..` after a glob segment is GLOB_UNSUPPORTED; sh globs expanded against the real
 directory, bounded at 10,000 matches, each match checked; git pathspecs lexical). The shared deny list gained the legacy credential
 carriers (`*.pfx`, `*.keystore`, `*.jks`, `.pypirc`, `credentials`, `credentials.json`, `secrets.json`, `.brain/memory.db*`) and the
 `.git` directory itself, so read tools refuse them too; legacy `.deckent/private/` is dropped (Next keeps private state under the
@@ -700,10 +705,16 @@ must not run `low` silently on this verdict alone. No tool uses it yet (slice 3c
 (no rc-file side effects; legacy used `-lc`), stdin closed, cwd = workspace root, its own process group; environment = an allowlist
 copied from the service (PATH, HOME, USER, LOGNAME, LANG, LC_ALL/CTYPE/MESSAGES, TZ, TMPDIR, SHELL) plus operator-allowed names and
 fixed non-interactive settings (TERM=dumb, NO_COLOR, PAGER/GIT_PAGER=cat, GIT_TERMINAL_PROMPT=0) — credentials in the service
-environment never reach the command unless their name is allowed. Cancellation and the timeout (default 300 s) signal the whole group
-(SIGTERM, SIGKILL after 2 s, and SIGKILL again at close), so background children never outlive the call (legacy did not kill on
-cancel). Output streams in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 128 KiB (a quarter head, the rest tail)
-with the omitted byte count (legacy kept everything). Results: exited (code/signal), timed-out, cancelled, spawn-failed,
+environment never reach the command unless their name is allowed. The process group is the call's lifetime (Astra 2112 R1,
+2119): cancellation and the timeout (default 300 s) signal the whole group (SIGTERM, SIGKILL after 2 s); when the shell exits by
+itself, surviving group members get the same SIGTERM → 2 s → SIGKILL; inherited pipes still open afterwards are drained for a 1 s
+grace and then released, and the timeout or a cancellation releases them at once (the status stays `exited`). The result reports
+`cleanup`: `clean`, `group-ended`, or `unverified` (the group could not be observed empty after SIGKILL, or pipes were released while
+held); the agent shell tool puts that note in the model's result and the owner's stream (Astra 2124). This is a process-group
+contract, not a sandbox: a descendant that left the group (setsid, a daemon) is not observed and can outlive the call. Output streams
+in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 16 KiB (`HOST_SHELL_RESULT_MAX_BYTES`; a quarter head, the
+rest tail), cut on UTF-8 boundaries — a character split across two pipe reads is carried to the next read, never replaced by U+FFFD
+(Astra 2112 R2) — with the omitted byte count (legacy kept everything). `durationMs` is monotonic elapsed time (I40). Results: exited (code/signal), timed-out, cancelled, spawn-failed,
 unsupported-platform (Windows). It is not a sandbox: the command has the service user's file, process and network access. Open:
 the command runs in its own process group so it can be killed, which also means a service crash leaves a running command orphaned
 (the turn is closed as interrupted at the next start, but nothing signals the group; legacy had the same property; Node has no
@@ -716,7 +727,9 @@ objects), modify and the destructive table ask the owner in every mode (slice 4 
 approval preview shows the exact command, its risk tier and reason, and that it is not a sandbox. Every run is a C11 effect on the
 `host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn; the approval subject's
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
-record, so an uncertain run never makes the shell busy. A shell keeps no idempotency record: exited is the effect (any exit code), a
+record, so an uncertain run never makes the shell busy; its effect identity is the turn, the call's position (model round, index in
+the response) and the arguments digest — a replay of the same call is the same effect, a later identical command is another; the
+provider's call id is not identity (providers reuse it; Astra 2113); an owner approval is consumed by the run it admits. A shell keeps no idempotency record: exited is the effect (any exit code), a
 cancelled or timed-out run is `unknown` (the result says what it changed is unknown) and is never re-run, a run that could not start is
 refused. Turn cancellation reaches the running command (group killed). Output streams as `tool.output` while the turn channel has
 room (a new channel `room()`); past half of it the display stops with one visible marker, and the streamed display is drained before
@@ -1133,11 +1146,38 @@ Tariff observations are process-bound (WeakSet provenance), so the floor alone o
 one step late, as before). Records written by another local process may lead this one by an independent step:
 task-approval admission tolerates a decision time at most `MAX_WALL_SKEW_MS` (5000 ms, a versioned platform invariant,
 not configuration) ahead of the reservation time. The allowance orders records only: it never extends request or
-tariff expiry and never bypasses MAC integrity or `requestDigest` checks. Remaining raw-`Date.now` comparisons across
-processes (cancellation recovery leases, agent tool-approval request time and expiry, config write-lock age, worker
-sidecar age) are listed in the I40 review and are not yet on this contract.
+tariff expiry and never bypasses MAC integrity or `requestDigest` checks. Cancellation delivery and recovery read the trusted clock; a persisted `claimUntil` / `nextEligibleAt` of another process is
+taken over only when it is at most `now − MAX_WALL_SKEW_MS`, in the atomic claim decision for every entry point (I40-b; cost: every
+retry waits retryDelayMs + 5 s, including a process's own). Config write-lock waits and in-process failure backoff are monotonic;
+lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
+Remaining raw-`Date.now` comparisons across
+processes (agent tool-approval request time and expiry; record-only timestamps) are listed in the I40 review and are not yet on
+this contract.
 This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
+
+**Company scope registry (H34 S1, ledger v39).** Every request scope resolves to a company or is refused with typed `SCOPE_UNKNOWN`;
+no flag relaxes this. Ledger v39 adds `companies(company_id)` and `scope_registry(scope_id PK, company_id FK, origin
+'migration'|'start'|'admission')`: one company per scope, insert-only pins, so the company of every scope-partitioned record is the
+join through its `scope_id` (no per-table company column). A scope named explicitly in an allow grant of the trusted company policy
+is pinned to the configured `company.id` at its first write admission, before any scoped record is admitted; reads never write (an
+unpinned declared scope resolves for that read only and holds no records); `scopes: 'all'` reaches pinned scopes only and never
+declares one. Once pinned a scope never moves: another `company.id` answers `SCOPE_UNKNOWN` (no disclosure; Astra 2122/2123). No
+trusted grant → `POLICY_DENIED` before any ledger access. One composition function (`scoped-request`) serves CLI/SDK/MCP, the runtime
+socket peer path, inventory and governed shutdown. Config `company.id` (default `default`, `^[a-z0-9][a-z0-9-]{0,62}$`) is shown by
+`doctor --json` as `company.companyId`. `runtime serve` pins the configured company and the installation's own scopes at start; the
+v38 → v39 upgrade (0600 backup first, one transaction) pins scopes already in the ledger; a v38 build refuses a v39 ledger. Not yet:
+company-aware authorization at every port and role bindings (S2/S3), tenant removal (S4).
+
+**Operation target adapter registry (A04-1).** Operation targets resolve through a registry, not a literal: `domain/core/adapter-registry`
+(manifest v1: `module {id, version, tier, namespace|null}`, `requires.coreApi {min,max}` against `CORE_API_VERSION` 1,
+`provides.targetAdapters`, `provides.operations`, `signature|null`) and `engine/core/adapter-registry` (`AdapterRegistry`: Core
+entries at construction own the root namespace, overlays register under their own dotted namespace, sealed after config
+registration). Tier and namespace claims grant nothing; a namespace may not equal, nest under or over another or a root id; duplicate
+`id@version` and adapter ids are refused; a manifest may add operations but never redefine one (owner Q5, adds-only); a non-null
+signature is refused until verification exists (A04-3, owner Q7). Config shape is unchanged (`operations.targets[].adapter` is a
+registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: unified catalog (A04-2), module
+loading, signature verification and a separately distributed Enterprise package (A04-3), public SDK export of module registration.
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
 it never adopts the old directory or declares its writer dead. Git delivery has its own policy action
