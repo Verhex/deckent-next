@@ -1,4 +1,8 @@
-import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallStatus, AgentToolCleanup, AgentTurnMessage } from '#domain/index.js';
+import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
+
+/** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
+ * module directly (`terminal-kit`'s declared dependency is `agent-turn`; `AgentToolCleanup` itself is declared in `agent-tool`). */
+type FinishedToolCleanup = Extract<AgentTurnStreamEvent, { readonly kind: 'tool.finished' }>['cleanup'];
 
 /** One chat message as sent to the model for a plain (tool-less) turn. */
 export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -19,7 +23,7 @@ export type TurnDelta =
   /** An agent tool call: `started` with its display target, then `finished` with its typed status and duration (T-L3). `cleanup`
    * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined. */
   | { readonly kind: 'tool'; readonly phase: 'started' | 'finished'; readonly callId: string; readonly name: string; readonly target: string | null;
-    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: AgentToolCleanup }
+    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup }
   /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
   | { readonly kind: 'message'; readonly message: AgentChatMessage }
   /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. */
