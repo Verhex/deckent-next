@@ -87,8 +87,18 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
   });
 
   it('refuses a scope pinned to another company at the run, approval, model-activation, operation and worker ports (CLI and SDK)', async () => {
-    const f = await project({}, v1('s'), { s: 'other' });
+    // `s` is not one of the installation's own scopes at start: the trusted policy declares nothing yet, so the clean start below
+    // is unaffected by decision 6 (H34 S3 Q1, owner 2026-09-27 evening: a foreign-pinned OWN scope now refuses the start itself,
+    // see the dedicated start-refusal test). `s` is declared and pinned to another company only afterward — the ordinary "grew a
+    // scope while running" path every port below already covers per request; the policy file is read fresh on every request.
+    const f = await project({}, { schemaVersion: 1, revision: 'p0', restrictions: [], grants: [] });
     await startTestRuntimeService(f.project, f.env);
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify(v1('s')), { mode: 0o600 });
+    const db = new DatabaseSync(f.ledger);
+    try {
+      db.exec("INSERT OR IGNORE INTO companies(company_id) VALUES('other')");
+      db.prepare("INSERT INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,'admission')").run('s', 'other');
+    } finally { db.close(); }
     const env = { env: f.env };
     const calls = () => Promise.all([
       codeOf(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'absent' }, env)),
@@ -113,29 +123,51 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
   it('never lets a role binding reach a scope pinned to another company', async () => {
     const policy = { schemaVersion: 2, revision: 'p2', grants: [], restrictions: [], separationOfDuties: [],
       roles: [{ id: 'viewer', permissions: [{ id: 'inspect-scope', effect: 'allow', actions: ['inspect'], resource: { kind: 'scope', ids: 'all' } }] }] };
+    const bindings = (principals: typeof actor[]) => JSON.stringify({ schemaVersion: 1, revision: 'b1',
+      bindings: [{ id: 'viewers', principals, roles: ['viewer'], scopes: ['s'] }] });
     const f = await project({}, policy, { s: 'other' });
-    await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 1, revision: 'b1',
-      bindings: [{ id: 'viewers', principals: [actor], roles: ['viewer'], scopes: ['s'] }] }), { mode: 0o600 });
+    await writeFile(join(f.data, 'bindings.json'), bindings([actor]), { mode: 0o600 });
     const service = await startTestRuntimeService(f.project, f.env);
-    expect(await cli(f, ['inventory', '--scope', 's'])).toMatchObject({ exit: 1, code: 'SCOPE_UNKNOWN' });
-    // The pinning company's installation: the same binding reaches the scope (service restarted with the new configuration).
-    await stopTestRuntimeService(service); await setCompany(f, 'other'); await startTestRuntimeService(f.project, f.env);
-    expect(await cli(f, ['inventory', '--scope', 's'])).toMatchObject({ exit: 0, value: { page: { entries: [], nextAfter: null } } });
+    try {
+      expect(await cli(f, ['inventory', '--scope', 's'])).toMatchObject({ exit: 1, code: 'SCOPE_UNKNOWN' });
+    } finally { await stopTestRuntimeService(service); }
+    // The pinning company's installation: its OWN fresh installation, configured for `other` from its own first start — not the
+    // same installation with `company.id` changed after a start (decision 6 refuses exactly that: this installation's own loop
+    // scope would already be pinned to the old company). The same binding, on `other`'s own policy/bindings, reaches the scope.
+    const g = await project({ company: { id: 'other' } }, policy, { s: 'other' });
+    await writeFile(join(g.data, 'bindings.json'), bindings([actor]), { mode: 0o600 });
+    const otherService = await startTestRuntimeService(g.project, g.env);
+    try {
+      expect(await cli(g, ['inventory', '--scope', 's'])).toMatchObject({ exit: 0, value: { page: { entries: [], nextAfter: null } } });
+    } finally { await stopTestRuntimeService(otherService); }
   });
 
-  it('refuses the runtime peer path and governed shutdown for a service scope pinned to another company; the service keeps running', async () => {
+  it('refuses to start when the service identity scope is pinned to another company (H34 S3 Q1, owner 2026-09-27 evening decision 6); the pin never moves and the same company starts normally', async () => {
     const shutdown = { id: 'shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['svc-scope'], principals: [actor], resource: { kind: 'service', ids: ['svc'] } };
     const f = await project({ service: { identity: { scopeId: 'svc-scope', serviceId: 'svc' } } },
       { schemaVersion: 1, revision: 'p', restrictions: [], grants: [...grants('svc-scope'), shutdown] }, { 'svc-scope': 'other' });
-    await startTestRuntimeService(f.project, f.env);
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
-    const descriptor = await client.describeService();
-    await expect(client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'svc-scope', budgetId: 'b', budgetRevision: 1 }))
-      .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
-    await expect(client.shutdownService({ schemaVersion: 1, commandId: 'shutdown-1', serviceId: 'svc', instanceId: descriptor.instanceId, reason: 'company test' }))
-      .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
-    await expect(client.describeService()).resolves.toMatchObject({ instanceId: descriptor.instanceId });
-    // Start never re-homes the pinned service scope.
+    const seeded = pinsOf(f.ledger);
+    // In-process: the read-only precheck refuses before any write, so the ledger stays byte-identical to what the fixture seeded.
+    await expect(startTestRuntimeService(f.project, f.env)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' });
+    expect(pinsOf(f.ledger)).toEqual(seeded);
+    // Real process surface: `runtime serve` exits non-zero immediately (no `ready` event ever printed), the reason names this
+    // installation's own scope, and the other company's identity never appears (Astra 2122/2123 non-disclosure extends to start).
+    const refused = await cli(f, ['runtime', 'serve']);
+    expect(refused.exit).toBe(78); // category 'config' (§1.1: config/ledger mismatch, operator fixes company.id or the ledger)
+    expect(refused.code).toBe('RUNTIME_SERVICE_SCOPE_FOREIGN');
+    expect(refused.stderr).not.toContain('other');
+    expect(pinsOf(f.ledger)).toEqual(seeded);
+    // What H34-S3 proved here — governed shutdown and the runtime peer path stay `SCOPE_UNKNOWN` while the service "keeps running"
+    // — is now unreachable: the start itself refuses first, so that scenario can no longer be produced. `shutdown.ts`'s own
+    // membership check is unchanged code and remains defense-in-depth; its dedicated mutation evidence (M3) stays historical,
+    // recorded before this decision, under `proof/H34-S3-2026-09-27/` (not reproduced here — see review.md §1.2).
+    await setCompany(f, 'other');
+    const service = await startTestRuntimeService(f.project, f.env);
+    try {
+      const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+      await expect(client.describeService()).resolves.toMatchObject({ shutdownAvailable: true });
+    } finally { await stopTestRuntimeService(service); }
+    // Start never re-homes the pinned service scope even once a same-company installation exists.
     expect(pinsOf(f.ledger)).toContainEqual({ scope_id: 'svc-scope', company_id: 'other' });
   });
 });

@@ -16,7 +16,7 @@ import { TaskEvaluationError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
 import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } from '#platform/index.js';
-import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError } from '#engine/index.js';
+import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof ApprovalError || error instanceof SessionAuthenticationError) return ErrorRegistry.createError(error.code);
@@ -45,6 +45,7 @@ export function queryFailure(error: unknown): DeckentError {
     return ErrorRegistry.createError(error.code, { params: { resource: d.resource, companion: d.companion,
       stage: d.stage, reason: d.reason, mode: d.mode, links: d.links } });
   }
+  if (error instanceof ScopeRegistrationError) return ErrorRegistry.createError(error.code, { params: { scopeIds: error.scopeIds.join(',') } });
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {

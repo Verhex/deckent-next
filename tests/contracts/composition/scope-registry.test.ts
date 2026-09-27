@@ -83,21 +83,23 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(await cliFailure(f, ['inventory', '--scope', 'other'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
   });
 
-  it('refuses a scope pinned to another company even when the trusted policy names it, and grants on it have no effect', async () => {
+  it('refuses to start when the trusted policy names a scope already pinned to another company; grants on it have no effect, and a fresh installation for that company reaches it normally', async () => {
     const named = { ...inspectAll, id: 'named', scopes: ['s'], resource: { kind: 'scope', ids: ['s'] } };
-    // Pinned before the first start (as by an earlier start configured for company `other`); the start never re-homes it.
-    const f = await fixture({}, [named], ledger => {
-      const db = new DatabaseSync(ledger);
+    // Pinned before the first start (as by an earlier start configured for company `other`). `s` is one of THIS installation's own
+    // declared scopes (the trusted policy names it), so decision 6 (H34 S3 Q1, owner 2026-09-27 evening) now refuses the start
+    // itself — a stronger guarantee than the old "starts, then fails closed per request" (grants on it still have no effect either
+    // way; the start never re-homes the pin).
+    const pinOther = (ledger: string) => { const db = new DatabaseSync(ledger);
       try { db.exec("INSERT INTO companies(company_id) VALUES('other'); INSERT INTO scope_registry(scope_id,company_id,origin) VALUES('s','other','start');"); }
-      finally { db.close(); }
-    });
+      finally { db.close(); } };
+    const f = await fixture({}, [named], pinOther, false);
     const pins = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(pins.prepare("SELECT company_id FROM scope_registry WHERE scope_id='s'").all()).toEqual([{ company_id: 'other' }]); } finally { pins.close(); }
-    expect(await cliFailure(f, ['inventory', '--scope', 's'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
-    // The same pin is the configured company's own scope once the installation is configured for that company.
-    const path = join(f.project, '.deckent/config.json');
-    await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, 'utf8')), company: { id: 'other' } })); clearConfigCache();
-    const inventory = await exec(process.execPath, [binary, 'inventory', '--scope', 's', '--json'], { cwd: f.project, env: f.env });
+    await expect(startTestRuntimeService(f.project, f.env)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' });
+    // The same pin is a fresh installation's own scope when it is configured for that company from its own first start (not the
+    // same installation with `company.id` changed afterward — decision 6 refuses exactly that above).
+    const g = await fixture({ company: { id: 'other' } }, [named], pinOther);
+    const inventory = await exec(process.execPath, [binary, 'inventory', '--scope', 's', '--json'], { cwd: g.project, env: g.env });
     expect(JSON.parse(inventory.stdout).page).toEqual({ entries: [], nextAfter: null });
   });
 
@@ -136,7 +138,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(pins(f.ledger)).toContainEqual({ scope_id: 'late', company_id: 'default', origin: 'admission' });
   });
 
-  it('refuses, never re-homes, a pinned scope after company.id changes; records written before stay under the original company', async () => {
+  it('refuses to start, never re-homes, when company.id changes to a company foreign to an already-pinned own scope; records written before stay under the original company', async () => {
     const f = await fixture({}, [named('s'), runNamed('s')], undefined, false);
     await cancel(f, 's');
     const store = await openSqliteAttemptStore(f.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
@@ -144,8 +146,9 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     finally { store.close(); }
     const path = join(f.project, '.deckent/config.json');
     await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, 'utf8')), company: { id: 'acme' } })); clearConfigCache();
-    await startTestRuntimeService(f.project, f.env);
-    expect(await cliFailure(f, ['inventory', '--scope', 's'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
+    // `s` is one of this installation's own declared scopes and is already pinned to `default`: decision 6 (H34 S3 Q1, owner
+    // 2026-09-27 evening) now refuses the start itself instead of starting and failing closed on every later request.
+    await expect(startTestRuntimeService(f.project, f.env)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' });
     await expect(inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, { env: f.env })).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
