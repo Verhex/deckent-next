@@ -184,6 +184,20 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(units[2]).toMatchObject({ kind: 'footer', finish: 'stop', promptTokens: 20, completionTokens: 16 });
   }, 30_000);
 
+  // D2 (TL-B, owner): the same real-service round trip for grep — the tool line shows the pattern (not the engine's
+  // path-first wire target, analysis §2/§4 "grep src") and a result summary, entirely through the surface stream.
+  it('reaches the terminal renderer for grep: the tool line shows the pattern and a match summary, from the real service', async () => {
+    const f = await runtime(); await f.start();
+    f.state.script = [{ toolCall: { name: 'grep', arguments: '{"pattern":"export const a","path":"src"}' } }, { content: 'Found it.' }];
+    const deltas: TurnDelta[] = [];
+    for await (const delta of streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages: ask('grep it').messages, options: { env: f.env } },
+      { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn })) deltas.push(delta);
+    let state = startAssistantStream(0); const units: AssistantUnit[] = [];
+    for (const delta of deltas) { const step = renderAssistantStream(state, delta, 10); state = step.state; units.push(...step.staticUnits, ...(step.footer ? [step.footer] : [])); }
+    expect(units[0]).toMatchObject({ kind: 'tool', name: 'grep', target: '"export const a" src', status: 'ok',
+      summary: { kind: 'matches', count: 1, more: false } });
+  }, 30_000);
+
   // Astra 2091 R1 (inverted repro) at the real boundary: workline → service → model request → session snapshot → /resume. A long
   // conversation of short exchanges is sent whole (the runtime measures and compacts it); no count cut drops the first instruction.
   it('sends a long conversation whole from the terminal through the service, saves it and resumes it without losing the first instruction', async () => {
@@ -359,6 +373,53 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     // Single use: every call opens its own request; nothing was reused across turns.
     expect(f.rows("SELECT count(*) AS count FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ count: 2 }]);
   }, 60_000);
+
+  // D2 checkpoint (TL-B, owner): the tool line may show grep's pattern first (call-approvals.ts's displayTarget shows
+  // `path` before `pattern` today); the C12 approval subject/resource must stay byte-identical regardless — it is built
+  // once from `describeAgentCall` at the request and again at the effect gate, and this PR never touches that function.
+  it('keeps the C12 approval resource path-first for grep even though the tool line may show the pattern first (owner)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: [
+      { id: 'grep-approval', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['grep'] } },
+      { id: 'other-read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'glob'] } },
+      { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }] });
+    await f.start();
+    const client = f.client();
+    f.state.script = [{ toolCall: { name: 'grep', arguments: '{"pattern":"needle","path":"src"}' } }, { content: 'Found it.' }];
+    const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-grep-approval'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: `allow-${event.approvalId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    const requested = events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
+    expect(requested).toMatchObject({ summary: expect.stringMatching(/^grep · src · [0-9a-f]{12}$/) });
+    const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
+    expect(record).toMatchObject({ request: { subject: { kind: 'agent-tool-call', tool: 'grep', resource: 'src' } } });
+    // The wire event the engine sent is the same value the resource above is built from — unaffected by the surface's display fix.
+    expect(events.find(event => event.kind === 'tool.started')).toMatchObject({ target: 'src' });
+  }, 30_000);
+
+  // D3 (TL-B, owner): `terminal.chat.readResultMaxBytes` reaches the workspace-read adapter through `turn.ts`; a
+  // narrower configured limit measurably changes tool behavior (a second round) versus the (new, larger) default.
+  it('passes terminal.chat.readResultMaxBytes to the workspace-read adapter (T-L5c)', async () => {
+    const f = await runtime(); await f.start();
+    const body = Array.from({ length: 900 }, (_, i) => `line ${i} of the fixture file with enough padding to add up`).join('\n') + '\n';
+    await writeFile(join(f.project, 'src', 'big.ts'), body);
+    // The fixture indexes `script` by the cumulative request count across every turn of this service, not per turn
+    // (the C12 test above sets its whole 4-entry script the same way): both turns' rounds are listed up front.
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/big.ts"}' } }, { content: 'Read it.' },
+      { toolCall: { name: 'read_file', arguments: '{"path":"src/big.ts"}' } }, { content: 'Read it again.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-default-limit'), event => events.push(event));
+    expect(toolText(events)).toMatch(/hasMore=false/);
+    const cfg = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')) as { terminal: { chat: Record<string, unknown> } };
+    cfg.terminal.chat['readResultMaxBytes'] = 4096;
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify(cfg), { mode: 0o600 });
+    const narrowed: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-narrow-limit'), event => narrowed.push(event));
+    expect(toolText(narrowed)).toMatch(/hasMore=true/);
+  }, 30_000);
 
   it('re-evaluates policy after the owner allows: a call the policy denies meanwhile never runs (contract §2)', async () => {
     const f = await runtime({ toolGrant: 'approval' }); await f.start();

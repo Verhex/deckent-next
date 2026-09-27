@@ -55,6 +55,64 @@ describe('terminal agent turn stream', () => {
       { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 12, cleanup: 'group-ended' });
   });
 
+  // D2 (TL-B, analysis §2/§4): the engine's `target` (path-first for grep/glob, `call-approvals.ts` displayTarget bug)
+  // is what the C12 approval resource must stay bound to; the tool LINE shows the pattern instead, derived here from
+  // the assistant message's own recorded tool-call arguments (already on the wire before `tool.started`), never from
+  // a protocol addition. Path-bearing tools (read_file/list_dir/shell) are unaffected: their engine target is shown as is.
+  it('shows the pattern first for grep/glob tool lines, derived client-side from the call arguments, leaving read_file/shell targets as the engine sent them', async () => {
+    const p = ports(async (command, onEvent) => {
+      onEvent({ kind: 'message', message: { role: 'assistant', content: '', toolCalls: [
+        { id: 'c1', name: 'grep', argumentsJson: '{"pattern":"needle","path":"src"}' },
+        { id: 'c2', name: 'glob', argumentsJson: '{"pattern":"**/*.ts"}' },
+        { id: 'c3', name: 'read_file', argumentsJson: '{"path":"src/a.ts"}' }] } });
+      // The engine still computes the old (buggy) path-first target for grep; the client must not trust it for display.
+      onEvent({ kind: 'tool.started', callId: 'c1', name: 'grep', target: 'src' });
+      onEvent({ kind: 'tool.finished', callId: 'c1', name: 'grep', status: 'ok', ms: 5, bytes: 10 });
+      onEvent({ kind: 'tool.started', callId: 'c2', name: 'glob', target: null });
+      onEvent({ kind: 'tool.finished', callId: 'c2', name: 'glob', status: 'ok', ms: 3, bytes: 5 });
+      onEvent({ kind: 'tool.started', callId: 'c3', name: 'read_file', target: 'src/a.ts' });
+      onEvent({ kind: 'tool.finished', callId: 'c3', name: 'read_file', status: 'ok', ms: 2, bytes: 5 });
+      return result({ turnId: command.turnId, answer: null });
+    });
+    const deltas = await collect(streamTerminalAgentTurn(input, p.value));
+    const targetsOf = (callId: string) => deltas.filter(delta => delta.kind === 'tool' && delta.callId === callId).map(delta => delta.kind === 'tool' ? delta.target : null);
+    expect(targetsOf('c1')).toEqual(['"needle" src', '"needle" src']);
+    expect(targetsOf('c2')).toEqual(['"**/*.ts"', '"**/*.ts"']);
+    expect(targetsOf('c3')).toEqual(['src/a.ts', 'src/a.ts']);
+  });
+
+  // D2: the finished tool line carries a short result summary derived from the call's own recorded result text (the
+  // `message` event of role 'tool' that always precedes `tool.finished` for the same call) — never a new wire field.
+  it('derives a result summary for finished read-class tool calls from their own result text, and omits it when the text does not match a known shape', async () => {
+    const run = async (name: string, content: string, status: 'ok' | 'error' = 'ok') => {
+      const p = ports(async (command, onEvent) => {
+        onEvent({ kind: 'tool.started', callId: 'c1', name, target: 't' });
+        onEvent({ kind: 'message', message: { role: 'tool', toolCallId: 'c1', name, content } });
+        onEvent({ kind: 'tool.finished', callId: 'c1', name, status, ms: 1, bytes: Buffer.byteLength(content, 'utf8') });
+        return result({ turnId: command.turnId, answer: null });
+      });
+      const deltas = await collect(streamTerminalAgentTurn(input, p.value));
+      return deltas.find(delta => delta.kind === 'tool' && delta.phase === 'finished');
+    };
+    expect(await run('read_file', '[deckent] read_file: mode=range totalLines=269 range=1-243 returned=243 hasMore=true nextStartLine=244'
+      + ' maxBytesPerLine=2048 elidedLines=0\n001\tfirst line')).toMatchObject({ summary: { kind: 'lines', shown: 243, total: 269, more: true } });
+    expect(await run('read_file', '[deckent] read_file: mode=range totalLines=3 range=1-3 returned=3 hasMore=false maxBytesPerLine=2048 elidedLines=0'
+      + '\n001\ta\n002\tb\n003\tc')).toMatchObject({ summary: { kind: 'lines', shown: 3, total: 3, more: false } });
+    expect(await run('read_file', '[deckent] read_file: mode=search pattern="x" totalLines=100 matches=12 shown=12 context=0 hasMore=false maxBytesPerLine=2048'))
+      .toMatchObject({ summary: { kind: 'matches', count: 12, more: false } });
+    expect(await run('read_file', '[deckent] read_file: mode=outline bytes=500 totalLines=50 longestLine=L3:80B linesOver=0(>2048B) headings=5 shown=1-5 hasMore=false'))
+      .toMatchObject({ summary: { kind: 'headings', shown: 5, total: 5, more: false } });
+    expect(await run('grep', 'src/a.ts:1:const needle = 1;\nsrc/b.ts:4:needle again')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
+    expect(await run('grep', '[deckent] grep: no matches in 3 scanned file(s)')).toMatchObject({ summary: { kind: 'matches', count: 0, more: false } });
+    expect(await run('grep', 'src/a.ts:1:needle\n[deckent] grep: truncated (200 hits cap); narrow with path or glob'))
+      .toMatchObject({ summary: { kind: 'matches', count: 1, more: true } });
+    expect(await run('glob', 'src/one.ts\nsrc/two.ts')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
+    expect(await run('list_dir', 'src/\nREADME.md')).toMatchObject({ summary: { kind: 'entries', count: 2 } });
+    const errored = await run('read_file', '[deckent] read_file: error=not-found path="missing.ts"', 'error');
+    expect(errored).toMatchObject({ status: 'error' });
+    expect((errored as { summary?: unknown }).summary).toBeUndefined();
+  });
+
   it('shows a replayed answer, and never merges an answer that differs from what was shown', async () => {
     expect(await collect(streamTerminalAgentTurn(input, ports(async command => result({ turnId: command.turnId, replayed: true })).value)))
       .toEqual([{ kind: 'text', text: 'It exports a.' }, { kind: 'done', finish: 'stop', note: null }]);

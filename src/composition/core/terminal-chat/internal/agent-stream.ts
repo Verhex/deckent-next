@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
+import { describeAgentToolCallTarget, summarizeAgentToolResult } from './tool-line.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */
 export interface TerminalAgentTurnPorts {
@@ -31,13 +32,23 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   const cancel = () => ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;
-  const queue: TurnDelta[] = [], targets = new Map<string, string | null>();
+  // TL-B D2: the display target (grep/glob pattern-first) and the finished-call result summary are both derived here,
+  // client-side, from data the engine already puts on the wire — never from the engine's own `target` (the C12 approval
+  // resource's source, `call-approvals.ts`, is untouched) and never from a new protocol field.
+  const queue: TurnDelta[] = [], targets = new Map<string, string | null>(), callArguments = new Map<string, string>(), callResults = new Map<string, string>();
   let outcome: Outcome | null = null, wake: (() => void) | null = null, roundText = '';
   const notify = () => { const resume = wake; wake = null; resume?.(); };
   const onEvent = (event: AgentTurnStreamEvent) => {
     if (event.kind === 'text') roundText += event.text;
-    if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); }
-    queue.push(toDelta(event, targets)); notify();
+    if (event.kind === 'message' && event.message.role === 'assistant') {
+      for (const call of event.message.toolCalls) callArguments.set(call.id, call.argumentsJson);
+    }
+    if (event.kind === 'message' && event.message.role === 'tool') callResults.set(event.message.toolCallId, event.message.content);
+    if (event.kind === 'tool.started') {
+      roundText = '';
+      targets.set(event.callId, describeAgentToolCallTarget(event.name, callArguments.get(event.callId)) ?? event.target);
+    }
+    queue.push(toDelta(event, targets, callResults)); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
@@ -69,7 +80,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>): TurnDelta {
+function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, results: ReadonlyMap<string, string>): TurnDelta {
   switch (event.kind) {
     case 'text': case 'reasoning': return { kind: event.kind, text: event.text };
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
@@ -80,8 +91,11 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
       summary: event.summary, preview: event.preview, expiresAt: event.expiresAt };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
-    case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };
-    case 'tool.finished': return { kind: 'tool', phase: 'finished', callId: event.callId, name: event.name, target: targets.get(event.callId) ?? null,
-      status: event.status, ms: event.ms, ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}) };
+    case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: targets.get(event.callId) ?? event.target, status: null, ms: null };
+    case 'tool.finished': {
+      const summary = summarizeAgentToolResult(event.name, results.get(event.callId) ?? '');
+      return { kind: 'tool', phase: 'finished', callId: event.callId, name: event.name, target: targets.get(event.callId) ?? null,
+        status: event.status, ms: event.ms, ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}), ...(summary !== null ? { summary } : {}) };
+    }
   }
 }

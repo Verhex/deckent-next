@@ -21,6 +21,9 @@ export const terminalConfigSchema = z.object({
     maxCompletionTokens: z.number().int().positive().safe(),
     /** Message window of the plain line mode only; the agent conversation is measured and compacted by the runtime (T-L5). */
     historyMessages: z.number().int().min(2).max(1_000).default(40),
+    /** Byte ceiling of one agent tool result (T-L5c, owner 2026-09-28): the workspace-read adapter's own default (64 KiB)
+     * applies when absent; an additive field, `chat.schemaVersion` stays 1 (same pattern as `historyMessages`). */
+    readResultMaxBytes: z.number().int().min(1_024).max(1_048_576).default(65_536),
   }).strict().optional(),
   /** The agent's host shell (T-L4 slice 3c): its per-command deadline, and variable names copied from the service environment in
    * addition to the built-in allowlist (credentials never pass unless named here). */

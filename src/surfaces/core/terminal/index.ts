@@ -25,7 +25,7 @@ export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, decisionKey, EMPTY_APPROVAL
 export { resolveWorkerRef, type WorkSurfaceLabels } from './internal/workline-actions.js';
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';
-export { collectTurnText, type TurnDelta, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+export { collectTurnText, type ToolResultSummary, type TurnDelta, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 export { EMPTY_SEGMENTER, FENCE_CHUNK_LINES, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from '#surfaces/core/terminal-render/index.js';
 export { narrationOf, renderAssistantStream, renderCompleteReply, startAssistantStream, type AssistantStreamState, type AssistantStreamStep, type AssistantUnit,
   type FooterUnit, type Narration } from '#surfaces/core/terminal-render/index.js';

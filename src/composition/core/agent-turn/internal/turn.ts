@@ -121,7 +121,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const toolCapable = binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
     && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported'));
-  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot) : null;
+  // T-L5c (TL-B D3, owner 2026-09-28): `terminal.chat.readResultMaxBytes` reaches the adapter; the field's own default
+  // (65_536) already matches the adapter's, so an absent section still behaves as it did before this config field existed.
+  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
   const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
   const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
