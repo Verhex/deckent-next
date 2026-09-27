@@ -751,6 +751,13 @@
   "terminal.render.toolStatus.cancelled": "cancelled",
   "terminal.render.toolCleanup.groupEnded": "processes it left running were ended",
   "terminal.render.toolCleanup.unverified": "cleanup unverified",
+  "terminal.render.waiting.model": "model is preparing a response · {seconds}s",
+  "terminal.render.waiting.compaction": "summarizing earlier messages · {seconds}s",
+  "terminal.render.cancelledDuring.compaction": "cancelled (summarizing)",
+  "terminal.render.cancelledDuring.model": "cancelled (model response)",
+  "terminal.render.cancelledDuring.tool": "cancelled (tool call)",
+  "terminal.render.compactionCancelled": "Summarizing was cancelled before it finished: the history is unchanged and the next turn summarizes it again.",
+  "terminal.render.cancelHint": "Esc cancels",
   "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /exit.",
   "terminal.service.started": "Runtime service started in the background (pid {pid}, log {log}); it keeps running after the terminal closes. {stop}",
   "terminal.service.connected": "Runtime service connected ({instance}). {stop}",
@@ -844,6 +851,7 @@
   "terminal.slash.cancelArgument": "<runId>",
   "terminal.slash.mode": "Show or set your permission mode",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
+  "terminal.slash.reasoning": "Show or hide the reasoning preview",
   "terminal.mode.current": "Permission mode: {mode}",
   "terminal.mode.changed": "Permission mode: {previous} → {mode}",
   "terminal.mode.inert": " (no rule is mode-eligible in this scope, so the mode changes nothing here)",
@@ -851,5 +859,8 @@
   "terminal.mode.usage": "Usage: /mode [ask|auto-edit|full-auto]",
   "terminal.mention.attached": "Attached @{path} ({bytes} bytes)",
   "terminal.mention.truncated": "Attached @{path}: first {bytes} of {total} bytes",
-  "terminal.mention.refused": "Not attached @{path}: {reason}"
+  "terminal.mention.refused": "Not attached @{path}: {reason}",
+  "terminal.reasoning.on": "Reasoning preview on",
+  "terminal.reasoning.off": "Reasoning preview off",
+  "terminal.reasoning.usage": "Usage: /reasoning [on|off]"
 }

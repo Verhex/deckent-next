@@ -8,6 +8,10 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
   return {
     assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
     toolCleanup: { 'group-ended': t('terminal.render.toolCleanup.groupEnded', {}, locale), unverified: t('terminal.render.toolCleanup.unverified', {}, locale) },
+    waiting: { model: t('terminal.render.waiting.model', {}, locale), compaction: t('terminal.render.waiting.compaction', {}, locale) },
+    cancelledDuring: { compaction: t('terminal.render.cancelledDuring.compaction', {}, locale), model: t('terminal.render.cancelledDuring.model', {}, locale),
+      tool: t('terminal.render.cancelledDuring.tool', {}, locale) },
+    compactionCancelled: t('terminal.render.compactionCancelled', {}, locale), cancelHint: t('terminal.render.cancelHint', {}, locale),
     thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
     tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),
     truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),
@@ -38,7 +42,8 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
       'terminal.slash.resumeArgument': t('terminal.slash.resumeArgument', {}, locale), 'terminal.slash.new': t('terminal.slash.new', {}, locale),
       'terminal.slash.transcriptArgument': t('terminal.slash.transcriptArgument', {}, locale),
       'terminal.slash.cancelArgument': t('terminal.slash.cancelArgument', {}, locale),
-      'terminal.slash.mode': t('terminal.slash.mode', {}, locale), 'terminal.slash.modeArgument': t('terminal.slash.modeArgument', {}, locale) } };
+      'terminal.slash.mode': t('terminal.slash.mode', {}, locale), 'terminal.slash.modeArgument': t('terminal.slash.modeArgument', {}, locale),
+      'terminal.slash.reasoning': t('terminal.slash.reasoning', {}, locale) } };
 }
 
 /** Catalog strings of `/resume`, `/context` and `/new` (terminal.session.*). */

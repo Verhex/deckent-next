@@ -355,7 +355,8 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/model-invocation",
         "src/platform/core/config",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/agent-turn"
       ],
       "plan": "SURFACES"
     },

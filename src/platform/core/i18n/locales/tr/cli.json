@@ -751,6 +751,13 @@
   "terminal.render.toolStatus.cancelled": "iptal edildi",
   "terminal.render.toolCleanup.groupEnded": "arkada bıraktığı süreçler sonlandırıldı",
   "terminal.render.toolCleanup.unverified": "temizlik doğrulanamadı",
+  "terminal.render.waiting.model": "model yanıt hazırlıyor · {seconds} sn",
+  "terminal.render.waiting.compaction": "geçmiş özetleniyor · {seconds} sn",
+  "terminal.render.cancelledDuring.compaction": "iptal (özetleme)",
+  "terminal.render.cancelledDuring.model": "iptal (model yanıtı)",
+  "terminal.render.cancelledDuring.tool": "iptal (araç çağrısı)",
+  "terminal.render.compactionCancelled": "Özetleme bitmeden iptal edildi: geçmiş değişmedi, sonraki tur yeniden özetler.",
+  "terminal.render.cancelHint": "Esc iptal",
   "terminal.session.banner": "Deckent terminal oturumu (satır modu). Komutlar: /status, /exit.",
   "terminal.service.started": "Runtime servisi arka planda başlatıldı (pid {pid}, günlük {log}); terminal kapansa da çalışmaya devam eder. {stop}",
   "terminal.service.connected": "Runtime servisine bağlanıldı ({instance}). {stop}",
@@ -844,6 +851,7 @@
   "terminal.slash.cancelArgument": "<run-kimliği>",
   "terminal.slash.mode": "İzin modunu göster ya da ayarla",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
+  "terminal.slash.reasoning": "Düşünme ön izlemesini göster ya da gizle",
   "terminal.mode.current": "İzin modu: {mode}",
   "terminal.mode.changed": "İzin modu: {previous} → {mode}",
   "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
@@ -851,5 +859,8 @@
   "terminal.mode.usage": "Kullanım: /mode [ask|auto-edit|full-auto]",
   "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
   "terminal.mention.truncated": "@{path} eklendi: {total} baytın ilk {bytes} baytı",
-  "terminal.mention.refused": "@{path} eklenmedi: {reason}"
+  "terminal.mention.refused": "@{path} eklenmedi: {reason}",
+  "terminal.reasoning.on": "Düşünme ön izlemesi açık",
+  "terminal.reasoning.off": "Düşünme ön izlemesi kapalı",
+  "terminal.reasoning.usage": "Kullanım: /reasoning [on|off]"
 }

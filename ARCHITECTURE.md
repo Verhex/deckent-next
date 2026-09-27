@@ -631,6 +631,16 @@ results, or a summary copying many long user messages (each ≤ 4000 characters)
 closed, not silent); and a tail that alone stays above the high-water mark is summarized again every round (billed, no progress;
 candidate guard: skip when the last compaction did not shrink the history). The byte check needs no counter port. Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →
 session snapshot → `/resume` with 44/46 messages sent whole; mutations 1–7 (`proof/F26-T-L5-FIX-2091/`).
+**Terminal turn phases (TL-A, 2026-09-28).** Protocol v15 is unchanged. The runtime service emits no phase event; the terminal derives
+"the service is summarizing" from the `context` event it already receives, the history it holds, the engine's compaction rule and the
+service's admission values from the same configuration; the engine alone decides and compacts, the mark is presentation (a parity test
+runs the real service). Live lines: "model is preparing a response · Ns", "summarizing earlier messages · Ns"; the status row shows
+"Esc cancels" while a turn runs. On Esc the engine's closure note never reaches the surface (the socket closes), so the footer names the
+stopped part from the client's stream state (`compaction` | `model` | `tool`); a summary stopped halfway is not kept and the screen says
+so; a completed summary is kept. Reasoning streams as a dim, sanitized (`terminalSafeText`) 2-line preview, never printed to the
+scrollback nor added to history; `/reasoning [on|off]` toggles the preview for the session (default on). Limits: against a service of
+another build or configuration the mark can be wrong until `compacted` or the first model delta; the admission formula is mirrored on
+the client (guarded by the parity test; a shared domain function is the follow-up).
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable) with the ledger and terminal-session paths,

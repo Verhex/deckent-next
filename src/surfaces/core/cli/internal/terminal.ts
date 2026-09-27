@@ -132,6 +132,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       refused: t('terminal.mention.refused', {}, locale) },
     mode: { current: t('terminal.mode.current', {}, locale), changed: t('terminal.mode.changed', {}, locale), inert: t('terminal.mode.inert', {}, locale),
       unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale) },
+    reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
   };
 }
 
