@@ -77,6 +77,8 @@ it('settles a conditional write once, replays it, refuses stale and raced precon
   expect(f.server.operations).toHaveLength(1); expect(f.state('pay')).toBeUndefined(); expect(f.state('gated')).toBeUndefined();
   await f.policy('allow', ['inspect']);
   await expect(f.execute(f.command('denied'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  // No grant is refused before any ledger access: a recorded command id with another body is not a conflict probe for the unauthorized.
+  await expect(f.execute(f.command('post', { input: { amount: 11 } }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
 
 it('brokers a required operation approval: pending, decided allow, the same command settles once, the approval is consumed and bound to its command and input (C12 G1/G2)', async () => {

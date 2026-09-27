@@ -122,25 +122,31 @@ export class EffectApplication {
     const target = descriptor ? this.targets.resolve(descriptor.targetKind) : null;
     if (!descriptor || !target || descriptor.targetKind !== command.target.kind || target.kind !== descriptor.targetKind) throw new EffectError('EFFECT_OPERATION_UNKNOWN');
     const current = binding(descriptor, target);
+    // Policy before any ledger access (no grant → POLICY_DENIED, never a conflict probe); the gate follows once the record is known.
+    const policy = () => this.authorization.authorize(action, command.scopeId, command.operation, verified.principal);
+    const decision = await policy();
     const previous = await this.store.loadEffect(command.scopeId, command.commandId);
     if (previous && (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef))) {
       throw new EffectError('EFFECT_CONFLICT');
     }
-    // The canonical input is fixed before any authority is asked: the approval subject and the intent bind the same digest, and an
-    // input the catalog would refuse never opens a request.
-    let encoded: string;
-    try { encoded = encodeCommandProjection('effect-input', command.input ?? null); } catch { throw new EffectError('EFFECT_INVALID'); }
-    if (Buffer.byteLength(encoded) > descriptor.inputMaxBytes) throw new EffectError('EFFECT_INVALID');
-    const inputDigest = previous ? previous.intent.inputDigest : digest(encoded);
-    // Policy, then the approval gate: a pending approval ends the submission here (or before the effect, see `settle`), nothing is sent.
-    const authorize = async (record: EffectRecord | null) => {
-      const decision = await this.authorization.authorize(action, command.scopeId, command.operation, verified.principal);
-      const admission = await this.approvals.admit(descriptor, decision, command, verified.principal, { record, targetBinding: current, inputDigest });
+    // A new command fixes its canonical input before any approval is asked: the subject and the intent bind the same digest, and an input
+    // the catalog refuses never opens a request. A recorded command keeps the digest its intent pinned (a terminal record replays as is).
+    let inputDigest: string;
+    if (previous) inputDigest = previous.intent.inputDigest;
+    else {
+      let encoded: string;
+      try { encoded = encodeCommandProjection('effect-input', command.input ?? null); } catch { throw new EffectError('EFFECT_INVALID'); }
+      if (Buffer.byteLength(encoded) > descriptor.inputMaxBytes) throw new EffectError('EFFECT_INVALID');
+      inputDigest = digest(encoded);
+    }
+    // The approval gate: a pending approval ends the submission here (or before the effect, see `settle`); nothing is sent.
+    const gate = async (decided: Decision, record: EffectRecord | null) => {
+      const admission = await this.approvals.admit(descriptor, decided, command, verified.principal, { record, targetBinding: current, inputDigest });
       if (admission && 'pending' in admission) throw new PendingSignal(this.pending(command, admission.pending));
       return admission?.approval;
     };
-    const approval = await authorize(previous);
-    const settle = async (record: EffectRecord) => { await authorize(record); await assertSessionActive(verified.session, this.sessions, this.clock); };
+    const approval = await gate(decision, previous);
+    const settle = async (record: EffectRecord) => { await gate(await policy(), record); await assertSessionActive(verified.session, this.sessions, this.clock); };
     if (previous) return this.resume(previous, target, settle, current);
     if (action === 'compensate') {
       const original = await this.store.loadEffect(command.scopeId, command.compensates!);
