@@ -1,27 +1,27 @@
 import { userInfo } from 'node:os';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { HttpConditionalEffectTarget, LocalOsSessionAuthority, findOperation, openSqliteAttemptStore, readOperationsConfig, registerProviderConfig } from '#adapters/index.js';
-import { EffectApplication, OperationPolicyAuthorization, refuseRequiredApproval, type EffectTarget } from '#engine/index.js';
+import { LocalOsSessionAuthority, findOperation, openSqliteAttemptStore, readOperationsConfig, registerProviderConfig, resolveOperationTargets } from '#adapters/index.js';
+import { EffectApplication, OperationPolicyAuthorization, refuseRequiredApproval } from '#engine/index.js';
 import { effectCommandSchema, type EffectCommand } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 
-/** Local SDK/CLI producer for catalog operations. Catalog, targets, principal and session come from configuration and the local
- * OS session, never from the wire. Operation approval is not yet a workflow: any required approval stops before the effect (C12). */
+/** Local SDK/CLI producer for catalog operations. Catalog, principal and session come from configuration and the local OS session,
+ * never from the wire; targets are resolved from configuration through the adapter registry (Core entries and registered modules). Operation approval is not yet a workflow: any required approval stops before the effect (C12). */
 async function withEffects<T>(root: string, scopeId: string, options: ConfigLoadOptions, use: (application: EffectApplication) => Promise<T>): Promise<T> {
   try {
     registerProviderConfig();
     const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options);
     const operations = readOperationsConfig(config as unknown as Record<string, unknown>);
-    const targets = new Map<string, EffectTarget>(operations.targets.map(entry => [entry.options.kind, new HttpConditionalEffectTarget(entry.options)]));
+    const targets = resolveOperationTargets(operations);
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
     const policy = new OperationPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
       return await use(new EffectApplication({ async resolve(ref) { return findOperation(operations, ref.id, ref.version); } },
-        { resolve: kind => targets.get(kind) ?? null }, store, refuseRequiredApproval, sessions, policy, clock));
+        targets, store, refuseRequiredApproval, sessions, policy, clock));
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
