@@ -45,14 +45,8 @@ type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: S
 export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer: LocalPeerIdentity; readonly config: TerminalShellConfig;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel }) {
   const { scope, context, scopeId, turnId, channel } = input;
-  const plans = new Map<string, ShellPlan>(), approved = new Set<string>(), approvedCommands = new Set<string>();
+  const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
-  const gate: EffectApprovalGate = {
-    async admit(descriptor, decision, command) {
-      if (descriptor.approval !== 'required' && decision === 'allow') return;
-      if (!approvedCommands.has(command.commandId)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
-    },
-  };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
@@ -85,15 +79,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n`
         + 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).');
     },
-    approved(tool: string, args: Record<string, unknown>) { approved.add(key(tool, args)); },
+    /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
-      execution: { readonly round: number; readonly index: number }): Promise<AgentToolOutcome> {
+      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: planned.text };
       const commandId = agentShellEffectCommandId(scopeId, turnId, execution, callKey);
-      // An owner approval admits exactly the next run of the approved call (C12, single use).
-      if (approved.delete(callKey)) approvedCommands.add(commandId);
       const command: EffectCommand = { schemaVersion: 1, commandId, scopeId, operation: HOST_SHELL_RUN_OPERATION.operation,
         // Each run is its own record, so an uncertain run never makes the shell busy for the next one.
         target: { kind: HOST_SHELL_TARGET_KIND, id: `run-${commandId.slice(0, 32)}` }, idempotencyKey: commandId, input: { command: planned.command }, expectedVersion: null };
@@ -141,7 +133,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
-          : code === 'EFFECT_REJECTED' ? 'the command could not start' : typeof code === 'string' ? code : 'failed';
+          : code === 'EFFECT_REJECTED' ? 'the command could not start'
+          : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
+          : typeof code === 'string' ? code : 'failed';
         return { status: 'error', text: `[deckent] run_shell: error=${why}` };
       } finally { store.close(); }
     },

@@ -4,13 +4,14 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } fro
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore } from '#adapters/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
+import * as engine from '#engine/index.js';
 import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTurn, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
@@ -708,6 +709,98 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(toolText(events)).toMatch(/^\[deckent\] edit_file: wrote src\/a\.ts \(\+1 −1 lines/);
     expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
     expect(f.rows('SELECT target_kind, target_id, state FROM effect_intents')).toEqual([{ target_kind: 'workspace-file', target_id: 'src/a.ts', state: 'settled' }]);
+  }, 60_000);
+
+  // C12 G3 red evidence: before G3 the in-turn gates admitted from their own turn state, so a turn that believed "allow" wrote and ran.
+  it('never writes or runs a call whose stored approval is still pending, although the turn was told allow (C12 G3)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: [...editGrants('require-approval'), ...shellGrants('require-approval').filter(grant => grant.id !== 'decide')] });
+    await f.start();
+    // The wait reports allow, but nobody decided: the durable record stays pending.
+    const wait = vi.spyOn(engine, 'awaitAgentToolApproval').mockResolvedValue('allow');
+    try {
+      f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' },
+        { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'touch made.txt' }) } }, { content: 'Ok.' }];
+      const client = f.client(), edit: AgentTurnStreamEvent[] = [], shell: AgentTurnStreamEvent[] = [];
+      await client.chatTurn(ask('turn-unrecorded-edit', 'set a to 2'), event => edit.push(event));
+      await client.chatTurn(ask('turn-unrecorded-shell', 'touch it'), event => shell.push(event));
+      expect(wait).toHaveBeenCalledTimes(2);
+      for (const events of [edit, shell]) {
+        expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'allow' });
+        expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'error' });
+        expect(toolText(events)).toContain('approval for this call could not be verified (APPROVAL_REQUIRED)');
+      }
+      expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+      await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(f.rows('SELECT count(*) AS count FROM effect_intents')).toEqual([{ count: 0 }]);
+      expect(f.rows("SELECT json_extract(snapshot, '$.status') AS status FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ status: 'pending' }, { status: 'pending' }]);
+    } finally { wait.mockRestore(); }
+  }, 60_000);
+
+  it('never writes or runs a call whose owner-allowed record approves another call (digest bound to the executed arguments) (C12 G3)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: [...editGrants('require-approval'), ...shellGrants('require-approval').filter(grant => grant.id !== 'decide')] });
+    await f.start();
+    // The stored request names other arguments than the call that is executed; the owner really allows it.
+    const original = engine.requestAgentToolApproval;
+    const request = vi.spyOn(engine, 'requestAgentToolApproval').mockImplementation((store, integrity, input) =>
+      original(store, integrity, { ...input, subject: { ...input.subject, argsDigest: 'f'.repeat(64) } }));
+    try {
+      f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' },
+        { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'touch made.txt' }) } }, { content: 'Ok.' }];
+      const client = f.client();
+      const run = async (turnId: string) => {
+        const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+        await client.chatTurn(ask(turnId), event => {
+          events.push(event);
+          if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+            commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+        });
+        await Promise.all(pending); return events;
+      };
+      for (const events of [await run('turn-other-edit'), await run('turn-other-shell')]) {
+        expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'allow' });
+        expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'error' });
+        expect(toolText(events)).toContain('approval for this call could not be verified (APPROVAL_CONFLICT)');
+      }
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+      await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(f.rows('SELECT count(*) AS count FROM effect_intents')).toEqual([{ count: 0 }]);
+      expect(f.rows("SELECT json_extract(snapshot, '$.decision.decision') AS decision FROM approvals WHERE subject_kind='agent-tool-call'")).toEqual([{ decision: 'allow' }, { decision: 'allow' }]);
+    } finally { request.mockRestore(); }
+  }, 60_000);
+
+  it('pins the consumed approval in the intent of an approved edit and shell run, and a replayed turn is still one effect (C12 G3)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: [...editGrants('require-approval'), ...shellGrants('require-approval').filter(grant => grant.id !== 'decide')] });
+    await f.start();
+    f.state.script = [{ toolCall: { name: 'edit_file', arguments: '{"path":"src/a.ts","old_string":"a = 1","new_string":"a = 2"}' } }, { content: 'Done.' },
+      { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: 'echo made >> made.txt' }) } }, { content: 'Ok.' }];
+    const client = f.client();
+    const run = async (turnId: string) => {
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+      const result = await client.chatTurn(ask(turnId), event => {
+        events.push(event);
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+      });
+      await Promise.all(pending); return { events, result };
+    };
+    const edit = await run('turn-pinned-edit'), shell = await run('turn-pinned-shell');
+    for (const { events } of [edit, shell]) expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    const pins = f.rows("SELECT e.target_kind AS kind, json_extract(e.record, '$.intent.approval.approvalId') AS approvalId, json_extract(e.record, '$.intent.approval.actionDigest') AS digest, "
+      + "a.action_digest AS stored, json_extract(a.snapshot, '$.request.subject.turnId') AS turn FROM effect_intents e JOIN approvals a ON a.approval_id = json_extract(e.record, '$.intent.approval.approvalId') ORDER BY kind");
+    expect(pins).toEqual([{ kind: 'host-shell', approvalId: expect.any(String), digest: expect.stringMatching(/^[0-9a-f]{64}$/), stored: expect.any(String), turn: 'turn-pinned-shell' },
+      { kind: 'workspace-file', approvalId: expect.any(String), digest: expect.stringMatching(/^[0-9a-f]{64}$/), stored: expect.any(String), turn: 'turn-pinned-edit' }]);
+    for (const pin of pins as { digest: string; stored: string }[]) expect(pin.digest).toBe(pin.stored);
+    // Replaying either finished turn asks nothing, runs nothing and adds no effect.
+    const replayedEdit = await run('turn-pinned-edit'), replayedShell = await run('turn-pinned-shell');
+    for (const { events, result } of [replayedEdit, replayedShell]) {
+      expect(result).toMatchObject({ replayed: true });
+      expect(events.some(event => event.kind === 'approval.requested' || event.kind === 'tool.started')).toBe(false);
+    }
+    expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('made\n');
+    expect(f.rows('SELECT count(*) AS count FROM effect_intents')).toEqual([{ count: 2 }]);
+    expect(f.state.requests).toHaveLength(4);
   }, 60_000);
 
   it('refuses an approved edit whose file changed while the owner was reading the diff, and keeps what the other writer wrote (T-L4 slice 2)', async () => {

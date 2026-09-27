@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, type ApprovalActor, type ApprovalRecord, type ApprovalSubject } from '#domain/index.js';
-import { sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
+import { isDeepStrictEqual } from 'node:util';
+import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, EffectError, type ApprovalActor, type ApprovalRecord, type ApprovalSubject,
+  type EffectCommand, type EffectIntentApproval, type VerifiedPrincipal } from '#domain/index.js';
+import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
+import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
-import { expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
 /** The action an agent tool-call approval authorizes: exactly this call of this turn, tool version, resource and arguments (C12). */
@@ -98,4 +101,66 @@ export function expireOrphanedToolCallApprovals(store: ApprovalStore, integrity:
     if (page.length < pageLimit) return { expired, failed };
     after = page.at(-1)!;
   }
+}
+
+/** One agent tool call at its effect (C12 G3): the subject rebuilt from the call being executed, and which stored approval the owner's allow
+ * named (null when the owner was not asked). The reference only says which record to read; it never admits anything by itself. */
+export interface AgentToolCallAdmission {
+  readonly scopeId: string;
+  readonly subject: ToolCallSubject;
+  readonly approval: (EffectIntentApproval & { readonly started: ClockSample }) | null;
+}
+
+/**
+ * The effect approval gate of one agent tool call (C12 G3): authority comes from the durable `agent-tool-call` record, never from turn
+ * state. A call needs it when the effect decision asks (`require-approval` or a required descriptor) or when the owner was asked for it
+ * (tool decision, write floor, shell risk). Then the command is admitted only by a sealed (MAC) `allow` whose subject and action digest
+ * are exactly this call — rebuilt from the executed arguments, not copied from the request — requested by this principal, decided on the
+ * request it names, and still inside its expiry at the claim (wall clock and the producer's monotonic TTL, I40-c). The claimed intent
+ * pins the approval (its consumption); every later pass of that command verifies the pinned record without a window, even without a
+ * pointer, and a terminal record replays untouched. `consumed` (per turn) keeps one approval to one command; across processes the subject's call position and the
+ * turn's durable claim do (a turn runs once).
+ */
+export function agentToolCallApprovalGate(records: () => Promise<{ readonly store: ApprovalStore; readonly integrity: IntegrityAuthority }>, clock: TrustedClock,
+  call: AgentToolCallAdmission, consumed: Map<string, string>): EffectApprovalGate {
+  const expectedDigest = agentToolCallActionDigest(call.scopeId, call.subject);
+  const verified = async (reference: EffectIntentApproval, command: EffectCommand, principal: VerifiedPrincipal) => {
+    if (command.scopeId !== call.scopeId) throw new ApprovalError('APPROVAL_CONFLICT');
+    // Opened only for a call that needs its record: a call nobody was asked for and the effect allows reads no approval.
+    const { store, integrity } = await records();
+    const loaded = store.load(command.scopeId, reference.approvalId);
+    if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
+    const record = verifyApproval(loaded, integrity), { request } = record;
+    const requester = request.requester;
+    if (request.scopeId !== call.scopeId || !isDeepStrictEqual(approvalSubject(request), call.subject) || request.actionDigest !== expectedDigest
+      || reference.actionDigest !== expectedDigest || requester.id !== principal.id || requester.issuer !== principal.issuer || requester.subject !== principal.subject) {
+      throw new ApprovalError('APPROVAL_CONFLICT');
+    }
+    if (record.status === 'pending') throw new ApprovalError('APPROVAL_REQUIRED');
+    if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
+    if (record.decision?.decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
+    if (record.decision.requestDigest !== approvalRequestDigest(request)) throw new ApprovalError('APPROVAL_INTEGRITY');
+    return record;
+  };
+  return {
+    async admit(descriptor, decision, command, principal, context) {
+      const { record } = context;
+      // A terminal record replays its outcome: nothing is admitted again.
+      if (record && (record.state === 'settled' || record.state === 'refused')) return;
+      // Consumed: the intent pinned this approval; it is still the sealed allow of exactly this call, whatever the clock says now.
+      if (record?.intent.approval) { await verified(record.intent.approval, command, principal); return { approval: record.intent.approval }; }
+      if (descriptor.approval !== 'required' && decision === 'allow' && !call.approval) return;
+      if (!call.approval) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+      const reference: EffectIntentApproval = { approvalId: call.approval.approvalId, actionDigest: call.approval.actionDigest };
+      const stored = await verified(reference, command, principal);
+      const user = consumed.get(reference.approvalId);
+      if (user !== undefined && user !== command.commandId) throw new ApprovalError('APPROVAL_CONFLICT');
+      // Admission is measured now (and again right before the claim): the owner's allow is usable only inside the request's expiry.
+      const now = clock.sample(), { started } = call.approval, { expiresAt } = stored.request;
+      if (now.wallMs >= expiresAt || now.monotonicMs - started.monotonicMs >= expiresAt - started.wallMs) throw new ApprovalError('APPROVAL_EXPIRED');
+      if (stored.decision!.decidedAt > now.wallMs + MAX_WALL_SKEW_MS) throw new ApprovalError('APPROVAL_CONFLICT');
+      consumed.set(reference.approvalId, command.commandId);
+      return { approval: reference };
+    },
+  };
 }
