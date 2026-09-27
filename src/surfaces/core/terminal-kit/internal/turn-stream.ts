@@ -26,8 +26,10 @@ export type TurnDelta =
     readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup }
   /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
   | { readonly kind: 'message'; readonly message: AgentChatMessage }
-  /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. */
-  | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }
+  /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. `compacting` (TL-A, derived on the
+   * client from this measurement and the engine's own rule, not a wire field): the service summarizes older messages before the round. */
+  | { readonly kind: 'context'; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality;
+    readonly compacting?: boolean }
   /** The history was compacted (T-L5b): `messages` replaces every non-system message of the caller's history. */
   | { readonly kind: 'compacted'; readonly messages: readonly AgentChatMessage[]; readonly replacedMessages: number }
   /** A tool call waits for the owner's decision (T-L4): the surface shows a decision card; the approval binds the exact call. */

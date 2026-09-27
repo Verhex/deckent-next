@@ -18,20 +18,22 @@ export interface StatusStripProps {
   readonly labels: WorklineStatusLabels;
   /** The person's permission mode (catalog text, droppable); absent when unknown. */
   readonly mode?: PermissionMode | undefined;
+  /** A chat turn runs and Esc cancels it now (TL-A D5). */
+  readonly cancellable?: boolean | undefined;
 }
 
 /**
  * One inline text node measured against the live terminal width (Ink `useWindowSize` re-renders on resize), so the row
  * never wraps and never leaves stale lines behind when the terminal narrows (legacy f18d53fb8, row 7143).
  */
-export function StatusStrip({ target, model, state, busy, queued, notice, labels, mode }: StatusStripProps) {
+export function StatusStrip({ target, model, state, busy, queued, notice, labels, mode, cancellable }: StatusStripProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { columns } = useWindowSize();
   const { frame } = useAnimation({ interval: 120, isActive: busy });
   const [since, setSince] = useState<number | null>(null);
   useEffect(() => { setSince(busy ? Date.now() : null); }, [busy]);
   const segments = worklineStatusSegments({ scope: target, model, state, busy, spinner: glyphs.spinner[frame % glyphs.spinner.length],
-    elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode });
+    elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode, cancellable });
   const separator = ` ${glyphs.separator} `;
   const layout = fitStatusRow(segments, columns || 80, separator, glyphs.ellipsis);
   return (

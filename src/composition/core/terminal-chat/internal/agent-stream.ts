@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
+import { terminalCompactionExpected, type TerminalTurnAdmission } from './turn-phase.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */
 export interface TerminalAgentTurnPorts {
   chatTurn(projectRoot: string, command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, options: ConfigLoadOptions,
     signal?: AbortSignal): Promise<ChatTurnResult>;
   cancelChatTurn(projectRoot: string, command: ChatTurnCancellation, options: ConfigLoadOptions): Promise<unknown>;
-  /** Local configuration check before contacting the service (a missing `terminal.chat` is named, not a transport error). */
-  preflight?(projectRoot: string, options: ConfigLoadOptions): Promise<void>;
+  /** Local configuration check before contacting the service (a missing `terminal.chat` is named, not a transport error); it may
+   * return the service's admission from the same configuration, which lets the stream name the summarizing phase (TL-A). */
+  preflight?(projectRoot: string, options: ConfigLoadOptions): Promise<TerminalTurnAdmission | void>;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
@@ -26,18 +28,26 @@ type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown }
  * closure note. A replayed turn shows its stored answer. Aborting (or leaving the loop early) cancels this exact turn at once.
  */
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
-  await ports.preflight?.(input.projectRoot, input.options);
+  const admission = await ports.preflight?.(input.projectRoot, input.options) ?? null;
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages] };
   const cancel = () => ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;
   const queue: TurnDelta[] = [], targets = new Map<string, string | null>();
   let outcome: Outcome | null = null, wake: (() => void) | null = null, roundText = '';
+  // The history the service measures (TL-A): the sent messages, each appended message, a compaction's replacement. Protocol v15 has no
+  // phase event, so a measurement after which the engine's rule compacts is marked `compacting` here; one round compacts at most once.
+  const history: AgentTurnMessage[] = [...input.messages];
+  let round = 0, compactedRound = 0;
   const notify = () => { const resume = wake; wake = null; resume?.(); };
   const onEvent = (event: AgentTurnStreamEvent) => {
     if (event.kind === 'text') roundText += event.text;
     if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); }
-    queue.push(toDelta(event, targets)); notify();
+    if (event.kind === 'message') history.push(event.message);
+    if (event.kind === 'compacted') { history.splice(0, history.length, ...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages); compactedRound = round; }
+    if (event.kind === 'context') round = event.round;
+    const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission);
+    queue.push(toDelta(event, targets, compacting)); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
@@ -69,12 +79,13 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>): TurnDelta {
+function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean): TurnDelta {
   switch (event.kind) {
     case 'text': case 'reasoning': return { kind: event.kind, text: event.text };
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
     case 'message': return { kind: 'message', message: event.message };
-    case 'context': return { kind: 'context', promptTokens: event.promptTokens, windowTokens: event.windowTokens, quality: event.quality };
+    case 'context': return { kind: 'context', promptTokens: event.promptTokens, windowTokens: event.windowTokens, quality: event.quality,
+      ...(compacting ? { compacting } : {}) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision,
       summary: event.summary, preview: event.preview, expiresAt: event.expiresAt };

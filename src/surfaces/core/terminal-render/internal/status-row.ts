@@ -53,15 +53,19 @@ export function fillTemplate(template: string, values: Readonly<Record<string, s
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole));
 }
 
-export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string }>;
+/** `cancelHint` (TL-A D5) is optional until the catalog carries `terminal.render.cancelHint` (`i18n-delta.json`); neutral text meanwhile. */
+export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; cancelHint?: string }>;
+const NEUTRAL_CANCEL_HINT = 'Esc cancels';
 export type WorklineStatusInput = Readonly<{
   scope: string; model?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
   queued?: number | undefined; notice?: string | undefined; labels: WorklineStatusLabels;
   /** The person's permission mode from the service (T-L4 slice 4c); shown only as its catalog text, never free text. */
   mode?: PermissionMode | undefined;
+  /** A running turn that Esc (or Ctrl+C) cancels now (TL-A D5): the row says so while it runs. */
+  cancellable?: boolean | undefined;
 }>;
 
-/** Display order scope · model · state · mode · elapsed · queue · notice; drop order notice → elapsed → mode → model → queue. */
+/** Display order scope · model · state · cancel · mode · elapsed · queue · notice; drop order notice → cancel → elapsed → mode → model → queue. */
 export function worklineStatusSegments(input: WorklineStatusInput): StatusSegment[] {
   const segment = (id: string, text: string, role: SpanRole | null, priority: number, droppable = true, shrink = false): StatusSegment =>
     Object.freeze({ id, text, role, priority, droppable, shrink });
@@ -72,6 +76,7 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
     segment('scope', input.scope, 'accent', 90, false, true),
     ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
+    ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
     ...(mode ? [segment('mode', mode, mode === 'ask' ? 'muted' : 'warning', 55)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),
     ...(input.queued ? [segment('queue', fillTemplate(input.labels.queued, { count: input.queued }), 'warning', 70)] : []),

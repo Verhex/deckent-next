@@ -3,7 +3,7 @@ import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { WorklinePaletteProvider, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
-import { AssistantLive, renderAssistantStream, renderCompleteReply, startAssistantStream, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
@@ -26,6 +26,7 @@ import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index
 import type { ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
+import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -48,6 +49,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly mentions?: WorklineMentionLabels;
   /** `/mode` notices (T-L4 slice 4c); without them the notice is language-neutral (command, catalog mode, policy field). */
   readonly mode?: WorklineModeLabels;
+  /** `/reasoning` notices (TL-A D6); optional until the catalog carries `terminal.reasoning.*` (`i18n-delta.json`), neutral text meanwhile. */
+  readonly reasoning?: WorklineReasoningLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -110,6 +113,8 @@ export function WorklineApp(props: WorklineProps) {
   const queue = useRef<Array<{ readonly text: string; readonly mentions: readonly string[] }>>([]);
   const setBusy = useCallback((next: boolean) => { busyRef.current = next; setBusyState(next); }, []);
   const [cancelling, setCancelling] = useState(false);
+  // A chat turn is running: Esc cancels it now (TL-A D5).
+  const [turnRunning, setTurnRunning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
@@ -125,6 +130,7 @@ export function WorklineApp(props: WorklineProps) {
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode);
   const refreshMode = mode.refresh;
+  const reasoning = useReasoningPreview(push, labels.reasoning);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
 
   // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
@@ -205,7 +211,10 @@ export function WorklineApp(props: WorklineProps) {
       if (controller.signal.aborted) return;
       if (props.streamTurn) {
         // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
-        let state = startAssistantStream(startedAtMs), answer = '';
+        // From the start the live region says what the turn waits for (TL-A D1): never a silent wait.
+        const opened = openAssistantStream(startedAtMs);
+        let state = opened.state, answer = '';
+        setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         for await (const delta of props.streamTurn(messages, controller.signal)) {
           if (delta.kind === 'text') answer += delta.text;
@@ -237,7 +246,7 @@ export function WorklineApp(props: WorklineProps) {
       history.current = messages;
       push([notice('error', errorText(error))]);
     } finally {
-      setLive(null);
+      setLive(null); setTurnRunning(false);
       turn.current = null;
       setBusy(false);
       setCancelling(false);
@@ -250,6 +259,7 @@ export function WorklineApp(props: WorklineProps) {
   const perform = useCallback(async (line: string, mentioned: readonly string[] = []): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned); return true; }
+    if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (slash.command === 'mode') {
       setBusy(true);
       try { await mode.run(slash.args); } finally { setBusy(false); }
@@ -280,7 +290,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, runTurn, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, reasoning.run, runTurn, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the
@@ -312,11 +322,12 @@ export function WorklineApp(props: WorklineProps) {
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
-      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} /> : null}
+      {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
+        waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}
-        queued={queue.current.length} labels={labels.render} mode={mode.mode} />
+        queued={queue.current.length} labels={labels.render} mode={mode.mode} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card (P4) takes the keyboard away from it. */}
       <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen} onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}

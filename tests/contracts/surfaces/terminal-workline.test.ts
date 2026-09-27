@@ -87,7 +87,11 @@ describe('ledger buffer (Ink Static contract)', () => {
     await until(() => view.stdout.text.includes('THINKING'), 'reasoning narration while thinking');
     release();
     await until(() => view.stdout.text.includes('First') && view.stdout.text.includes('tail') && view.stdout.text.includes('3 in 4 out'), 'answer and footer');
-    expect(view.stdout.text).not.toContain('SECRET-REASONING');
+    // Owner 2026-09-27 night (TL-A D6): while it streams the reasoning shows as a dim live preview, but it is never printed to the
+    // scrollback: the last frame (every printed row and the live region after the answer) no longer carries it.
+    await settle(30);
+    expect(view.stdout.text).toContain('SECRET-REASONING');
+    expect(view.stdout.text.slice(view.stdout.text.lastIndexOf('you: hello'))).not.toContain('SECRET-REASONING');
     expect(view.stdout.text).not.toContain('**line**');
     view.stdin.write('again\r');
     await until(() => seen.length === 2, 'second turn');
