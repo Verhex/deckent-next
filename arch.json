@@ -1592,6 +1592,30 @@
         "src/engine/core/effect"
       ],
       "plan": "EXECUTION"
+    },
+    "src/domain/core/audit": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/engine/core/audit": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/audit-store": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/domain/core/primitives",
+        "src/engine/core/audit"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {

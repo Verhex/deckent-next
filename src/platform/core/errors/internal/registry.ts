@@ -197,6 +197,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED;
   // text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
+  AUDIT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INVALID', p, l) }) },
+  AUDIT_INTEGRITY: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INTEGRITY', p, l) }) },
+  AUDIT_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_CONFLICT', p, l) }) },
+  AUDIT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_UNAVAILABLE', p, l) }) },
   MANAGED_FILE_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_MISSING', p, l) }) },
   MANAGED_FILE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSAFE', p, l) }) },
   MANAGED_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.MANAGED_FILE_UNSUPPORTED', p, l) }) },
