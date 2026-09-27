@@ -8,6 +8,7 @@ import { openSqliteModelActivationStore, openSqliteModelInvocationStore } from '
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { restoreLegacyInFlight } from '../support/legacy-allocation.js';
 
 const options = { busyTimeoutMs: 20, journalMode: 'delete' as const, durability: 'full' as const };
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
@@ -66,6 +67,7 @@ async function seedV16(path: string) {
       INSERT INTO model_invocation_contents(scope_id,invocation_id,record)
         SELECT scope_id,invocation_id,record FROM model_invocation_contents_v17 WHERE record IS NOT NULL;
       DROP TABLE model_invocation_contents_v17; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=16;`);
+    restoreLegacyInFlight(db);
   } finally { db.close(); }
 }
 

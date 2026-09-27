@@ -106,7 +106,8 @@ it('atomically prevents a pending send, releases only in-flight capacity, and re
   expect(controls(base.path)).toBe(1);
 });
 
-it('records requested cancellation after permission, preserves unknown capacity, and reports terminal invocations', async () => {
+// INFLIGHT-FIX: a requested cancellation leaves the slot held while the send may still be open; the `unknown` settlement releases it.
+it('records requested cancellation after permission, holds the slot until the call settles unknown, and reports terminal invocations', async () => {
   const requestedBase = await fixture(), requested = await openClaim(requestedBase), requestedClaim = requested.result.record.receipt.claim;
   await requested.store.permitSend(requestedClaim, 'sender', 21);
   expect(await requested.store.cancelInvocation(cancellation(requestedClaim))).toMatchObject({ receipt: { disposition: 'requested' } });
@@ -116,7 +117,7 @@ it('records requested cancellation after permission, preserves unknown capacity,
   const unknownBase = await fixture(), unknown = await openClaim(unknownBase), unknownClaim = unknown.result.record.receipt.claim;
   await unknown.store.permitSend(unknownClaim, 'sender', 21);
   await unknown.store.recordUnknown(unknownClaim, 'transport-error', 22);
-  expect(allocation(unknownBase.path)).toEqual({ lifetime_calls: 1, in_flight: 1 });
+  expect(allocation(unknownBase.path)).toEqual({ lifetime_calls: 1, in_flight: 0 });
   unknown.store.close();
 
   const terminalBase = await fixture(), terminal = await openClaim(terminalBase), terminalClaim = terminal.result.record.receipt.claim;

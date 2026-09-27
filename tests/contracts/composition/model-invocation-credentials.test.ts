@@ -115,8 +115,11 @@ it.each(['policy', 'profile', 'cancel'] as const)('does not send if %s changes w
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
   await f.policy(true);
   expect((await invokeConfiguredModel(f.project, f.command('one'), options)).replayed).toBe(true);
-  await expect(invokeConfiguredModel(f.project, f.command('next'), options)).rejects.toThrow();
-  expect(lookups).toBe(1); expect(f.headers).toEqual([]);
+  // Nothing was sent and the request never opened: the slot (maxInFlight 1) admits the next command (INFLIGHT-FIX). The resolver
+  // repeats its policy/profile change, so only the cancel case reaches the provider this time.
+  const next = await invokeConfiguredModel(f.project, f.command('next'), options);
+  expect(next.receipt.outcome).toMatchObject({ state: change === 'cancel' ? 'responded' : 'unknown' });
+  expect(lookups).toBe(2); expect(f.headers).toEqual(change === 'cancel' ? [`Bearer ${secret}`] : []);
 });
 
 it('retains no echoed secret or response body when the authenticated provider echoes its credential', async () => {

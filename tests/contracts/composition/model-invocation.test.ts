@@ -149,7 +149,7 @@ describe('configured native model invocation', () => {
     await expect(invokeConfiguredModel(changed.project, changed.command('changed'), { env: changed.env })).rejects.toThrow(); expect(changed.requests).toBe(0);
   });
 
-  it('enforces durable call quota and retains capacity after an unknown bounded response without resending', async () => {
+  it('enforces durable call quota and frees the slot of an unknown bounded response without resending it (INFLIGHT-FIX)', async () => {
     const quota = await fixture({ maxCalls: 1, maxInFlight: 1 });
     await invokeConfiguredModel(quota.project, quota.command('first'), { env: quota.env });
     await expect(invokeConfiguredModel(quota.project, quota.command('second'), { env: quota.env })).rejects.toThrow(); expect(quota.requests).toBe(1);
@@ -157,9 +157,10 @@ describe('configured native model invocation', () => {
     const first = await invokeConfiguredModel(unknown.project, unknown.command('unknown'), { env: unknown.env });
     expect(first.receipt.outcome).toMatchObject({ state: 'unknown' }); expect(unknown.requests).toBe(1);
     expect((await invokeConfiguredModel(unknown.project, unknown.command('unknown'), { env: unknown.env })).replayed).toBe(true);
-    await expect(invokeConfiguredModel(unknown.project, unknown.command('blocked'), { env: unknown.env })).rejects.toThrow();
+    // Its request is closed, so its slot (maxInFlight 1) admits the next command; the unknown one is never sent again.
+    expect((await invokeConfiguredModel(unknown.project, unknown.command('next'), { env: unknown.env })).receipt.claim.commandId).toBe('next');
     // This non-echo fixture checks request-body omission, not confidentiality of arbitrary provider responses.
-    expect(unknown.requests).toBe(1); expect((await readFile(unknown.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
+    expect(unknown.requests).toBe(2); expect((await readFile(unknown.ledger)).includes(Buffer.from('prompt-must-not-persist'))).toBe(false);
   });
 });
 

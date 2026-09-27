@@ -21,7 +21,8 @@ export function validateModelAllocationPageSize(limit: number): void {
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
 }
-/** Counts retained invocation records, including pre-spending records; it grants no runtime admission. */
+/** Counts retained invocation records, including pre-spending records; it grants no runtime admission. A ledger an earlier build left
+ * with slots held by settled `unknown` calls is inconsistent here until the service start releases them. */
 export async function verifyModelAllocationIntegrity(reader: ModelAllocationIntegrityReader, scopeId: string,
   allocationId: string, pageSize: number, signal?: AbortSignal) {
   if (!identitySchema.safeParse(scopeId).success || !identitySchema.safeParse(allocationId).success) {
@@ -51,8 +52,8 @@ export async function verifyModelAllocationIntegrity(reader: ModelAllocationInte
         throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       }
       cursor = id; lifetimeCalls++;
-      const state = receipt.outcome?.state;
-      if (state === undefined || state === 'unknown') inFlight++;
+      // Only an open claim holds a slot; a settled `unknown` was written after its local request closed (INFLIGHT-FIX).
+      if (receipt.outcome === null) inFlight++;
       if (lifetimeCalls > allocation.lifetimeCalls || inFlight > allocation.inFlight) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
     if (page.nextInvocationId !== null) {

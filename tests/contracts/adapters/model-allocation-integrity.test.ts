@@ -70,7 +70,8 @@ async function seedOutcomes(base: Awaited<ReturnType<typeof fixture>>, scopeId =
   } finally { store.close(); }
 }
 
-it('audits typed receipts across pages and retains only pending or unknown invocation capacity', async () => {
+// INFLIGHT-FIX: a settled `unknown` (its local request closed) no longer holds capacity; only an open claim does.
+it('audits typed receipts across pages and retains only pending (open) invocation capacity', async () => {
   const base = await fixture(); await seedOutcomes(base);
   const reader = await openSqliteModelAllocationIntegrityReader(base.path, { busyTimeoutMs: 20 });
   try {
@@ -78,8 +79,8 @@ it('audits typed receipts across pages and retains only pending or unknown invoc
     expect(first?.receipts.map(receipt => receipt.claim.invocationId)).toEqual(['allocation-a-pending', 'allocation-b-unknown']);
     const second = await reader.readPage({ scopeId: 'scope', allocationId: 'allocation', checkpoint: first!.checkpoint, afterInvocationId: first!.nextInvocationId, limit: 2 });
     expect(second?.receipts.map(receipt => receipt.claim.invocationId)).toEqual(['allocation-c-prevented', 'allocation-d-responded']);
-    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation', 2)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 2,
-      checkpoint: { allocation: { scopeId: 'scope', allocationId: 'allocation', lifetimeCalls: 4, inFlight: 2 } } });
+    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation', 2)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 1,
+      checkpoint: { allocation: { scopeId: 'scope', allocationId: 'allocation', lifetimeCalls: 4, inFlight: 1 } } });
   } finally { reader.close(); }
 });
 
@@ -88,9 +89,9 @@ it('isolates allocation and scope pages without making reader writes', async () 
   await seedOutcomes(base, 'other', 'allocation-a'); const before = await readFile(base.path);
   const reader = await openSqliteModelAllocationIntegrityReader(base.path, { busyTimeoutMs: 20 });
   try {
-    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation-a', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 2 });
-    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation-b', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 2 });
-    await expect(verifyModelAllocationIntegrity(reader, 'other', 'allocation-a', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 2 });
+    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation-a', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 1 });
+    await expect(verifyModelAllocationIntegrity(reader, 'scope', 'allocation-b', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 1 });
+    await expect(verifyModelAllocationIntegrity(reader, 'other', 'allocation-a', 1)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 4, inFlight: 1 });
     await expect(verifyModelAllocationIntegrity(reader, 'scope', 'missing', 1)).resolves.toEqual({ status: 'not-found' });
   } finally { reader.close(); }
   expect(await readFile(base.path)).toEqual(before);
@@ -113,7 +114,7 @@ it('rejects a checkpoint that changes between read-only pages without writing', 
   finally { racingReader.close(); }
 });
 
-it('fences an earlier page after unknown settlement changes receipt evidence but not allocation counters', async () => {
+it('fences an earlier page after unknown settlement changes receipt evidence and releases only its concurrency slot', async () => {
   const base = await fixture(); await base.activate('scope');
   const store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   let claimed: Awaited<ReturnType<typeof claim>>;
@@ -135,7 +136,8 @@ it('fences an earlier page after unknown settlement changes receipt evidence but
       await settle.permitSend(claimed!.record.receipt.claim, 'sender', 11);
       await settle.recordUnknown(claimed!.record.receipt.claim, 'transport-error', 12);
     } finally { settle.close(); }
-    expect(counters(base.path)).toEqual(before);
+    expect(counters(base.path)).toEqual({ lifetime_calls: 2, in_flight: 1 });
+    expect(before).toEqual({ lifetime_calls: 2, in_flight: 2 });
     const current = await reader.readPage({ scopeId: 'scope', allocationId: 'allocation', checkpoint: null, afterInvocationId: null, limit: 1 });
     expect(current?.checkpoint.revision).toBeGreaterThan(page!.checkpoint.revision);
     await expect(reader.readPage({ scopeId: 'scope', allocationId: 'allocation', checkpoint: page!.checkpoint,

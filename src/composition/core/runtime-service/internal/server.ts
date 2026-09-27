@@ -13,6 +13,7 @@ import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeSer
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
@@ -36,6 +37,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
    * not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */
   onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
+  /** Concurrency slots an earlier build kept for settled `unknown` model calls, released at this start (INFLIGHT-FIX). */
+  onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
 }
 
 /** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
@@ -60,6 +63,9 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
+  // Same custody: slots an earlier build kept for settled `unknown` model calls are released (INFLIGHT-FIX); open claims are never touched.
+  const slots = await releaseSettledModelSlots(path, config.storage.sqlite);
+  if (slots.released || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
   await sweepFullPreviews(config.productLayout);
   // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.

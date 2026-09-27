@@ -34,7 +34,8 @@ export interface ModelInvocationNativePort {
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
   responseBytesUpperBound?(prepared: unknown): bigint;
   /** The model execution transport operation; authorized metadata acquisition is separate. A streaming adapter may
-   * report presentation-only deltas to `onDelta`; the returned result remains the only governed outcome. */
+   * report presentation-only deltas to `onDelta`; the returned result remains the only governed outcome. It settles (resolves or
+   * rejects) only after its transport request is closed locally: the store then releases the call's concurrency slot, `unknown` included. */
   send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult>;
   /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
   observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendReportedMeasurement | null;
