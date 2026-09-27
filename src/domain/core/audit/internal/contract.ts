@@ -1,0 +1,42 @@
+import { z } from 'zod';
+import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+const digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
+export const AUDIT_EVENT_SCHEMA_VERSION = 1;
+export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
+/** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
+export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
+/**
+ * What the event summarizes — never the raw command or file content (design note §4): an edit names its workspace-relative
+ * path; a shell call keeps the first `AUDIT_SHELL_HEAD_MAX_CHARS` characters (the approval subject's head) and the argument digest.
+ */
+export const auditSummarySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('edit'), path: z.string().min(1).max(4096) }).strict(),
+  z.object({ kind: z.literal('shell'), head: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
+]);
+/**
+ * A silent decision produced by the terminal permission mode (slice 4): the mode relaxed a cell the company policy marked
+ * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
+ * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
+ */
+export const auditSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto']), cell: z.enum(['edit-non-floor', 'shell-modify']),
+    tool: z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict(),
+    call: z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict(),
+    grants: z.object({ company: identitySchema, person: identitySchema }).strict(),
+    decision: z.object({ previous: z.literal('require-approval'), next: z.literal('allow') }).strict(),
+    summary: auditSummarySchema }).strict(),
+]);
+export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
+  principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();
+/** The durable, sealed form: the event, its scope-local sequence and the key that sealed both (the approval MAC line). */
+export const auditRecordSchema = z.object({ event: auditEventSchema, sequence: counterSchema.positive(), keyId: identitySchema, mac: digest }).strict().readonly();
+/** Summary counters (owner q5: decisions that were silent already are counted, not recorded): mutable totals, not evidence. */
+export const auditCounterSchema = z.object({ scopeId: identitySchema, counter: identitySchema, count: counterSchema, updatedAtMs: counterSchema }).strict().readonly();
+export type AuditEvent = z.infer<typeof auditEventSchema>;
+export type AuditSubject = z.infer<typeof auditSubjectSchema>;
+export type AuditRecord = z.infer<typeof auditRecordSchema>;
+export type AuditCounter = z.infer<typeof auditCounterSchema>;
+export class AuditError extends Error {
+  constructor(readonly code: 'AUDIT_INVALID' | 'AUDIT_INTEGRITY' | 'AUDIT_CONFLICT' | 'AUDIT_UNAVAILABLE') { super(code); this.name = 'AuditError'; }
+}

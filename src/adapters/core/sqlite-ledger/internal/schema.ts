@@ -26,11 +26,23 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 40;
+export const CURRENT_LEDGER_VERSION = 41;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
+export const AUDIT_EVENT_LEDGER_VERSION = 41;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // General Core audit port, first slice (owner 2026-09-27 q4/q5): sealed audit events, append-only in the database itself — the
+  // triggers abort any UPDATE or DELETE, so a row can only be added; the sealed record carries its scope-local sequence, so a gap
+  // or renumbering is visible on read. Counters are mutable summaries of decisions that were silent already (q5), not evidence.
+  41: `CREATE TABLE audit_events(scope_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0),event_id TEXT NOT NULL,kind TEXT NOT NULL,
+    at_ms INTEGER NOT NULL CHECK(at_ms>=0),key_id TEXT NOT NULL,mac TEXT NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,sequence),UNIQUE(scope_id,event_id));
+    CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT,'AUDIT_APPEND_ONLY'); END;
+    CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT,'AUDIT_APPEND_ONLY'); END;
+    CREATE TABLE audit_counters(scope_id TEXT NOT NULL,counter TEXT NOT NULL,count INTEGER NOT NULL CHECK(count>=0),
+    updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms>=0),PRIMARY KEY(scope_id,counter));
+    PRAGMA user_version=41;`,
   // C12 G1: catalog operation approvals. SQLite cannot widen a CHECK in place, so `approvals` is rebuilt row for row (every task and
   // tool-call row and its sealed snapshot unchanged), the v38 indexes are recreated and operations get their own (scope, digest) index.
   40: `CREATE TABLE approvals_v40(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation')),
