@@ -24,6 +24,20 @@ export class SqliteRunWorkspaceCustody implements RunWorkspaceCustodyStore {
       assertRunExecution(run.graph, run.execution);
     } catch { throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT'); }
   }
+  /** Inside the caller's transaction, right after the Run row: the Run's first and only custody. Any existing record conflicts. */
+  admitWithin(input: RunWorkspaceCustody): RunWorkspaceCustody {
+    const candidate = runWorkspaceCustodySchema.parse(input); this.requireRun(candidate.scopeId, candidate.runId);
+    if (this.read(candidate.scopeId, candidate.runId)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CONFLICT');
+    this.db.prepare('INSERT INTO run_workspace_custody(scope_id,run_id,record) VALUES(?,?,?)')
+      .run(candidate.scopeId, candidate.runId, JSON.stringify(candidate));
+    const recorded = this.read(candidate.scopeId, candidate.runId);
+    if (!recorded || JSON.stringify(recorded) !== JSON.stringify(candidate)) throw new RunWorkspaceCustodyError('RUN_WORKSPACE_CUSTODY_CORRUPT');
+    return recorded;
+  }
+  /** Inside the caller's transaction: the recorded custody equals `candidate` exactly (source and base revision). */
+  matchesWithin(candidate: RunWorkspaceCustody): boolean {
+    return JSON.stringify(this.read(candidate.scopeId, candidate.runId)) === JSON.stringify(runWorkspaceCustodySchema.parse(candidate));
+  }
   async loadRunWorkspaceCustody(scopeInput: string, runInput: string) {
     const scopeId = identitySchema.parse(scopeInput), runId = identitySchema.parse(runInput);
     try { this.requireRun(scopeId, runId); return this.read(scopeId, runId); }

@@ -9,5 +9,7 @@ export type { IntegrationQuery, IntegrationReader } from './internal/inspection.
 export { WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, integrationDeliveryPlanSchema, integrationDeliveryIntentSchema } from './internal/delivery.js';
 export type { IntegrationDeliveryCommand, IntegrationDeliveryPlan, IntegrationDeliveryIntent, IntegrationDeliveryRecord, IntegrationDeliveryStore, IntegrationDeliveryTarget } from './internal/delivery.js';
 export type { WorkspacePatchLimitDetail } from './internal/contract.js';
-export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema } from './internal/adoption.js';
+export { pinRunToDelivery } from './internal/delivery-run.js';
+export type { DeliveryRunPinRequest } from './internal/delivery-run.js';
+export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema } from './internal/adoption.js';
 export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, WorkspaceAdoptionErrorCode } from './internal/adoption.js';

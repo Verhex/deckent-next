@@ -11,6 +11,14 @@ export type WorkspaceAdoptionErrorCode = 'ADOPTION_TARGET_DENIED' | 'ADOPTION_TA
 export class WorkspaceAdoptionError extends Error {
   constructor(readonly code: WorkspaceAdoptionErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'WorkspaceAdoptionError'; }
 }
+/** One owner of "this delivery is usable": completed in the ledger and its dedicated reference still names the delivered commit.
+ * A reference moved to another commit is the target's PATCH_CONFLICT; everything else is ADOPTION_NOT_DELIVERED. */
+export async function requireDelivered(store: Pick<IntegrationAdoptionStore, 'findDelivery'>, deliveries: Pick<IntegrationDeliveryTarget, 'delivered'>,
+  scopeId: string, deliveryCommandId: string, belongs: (delivery: IntegrationDeliveryRecord) => boolean = () => true): Promise<IntegrationDeliveryRecord> {
+  const delivery = await store.findDelivery(scopeId, deliveryCommandId);
+  if (!delivery?.delivered || !belongs(delivery) || !await deliveries.delivered(delivery.intent.plan)) throw new WorkspaceAdoptionError('ADOPTION_NOT_DELIVERED');
+  return delivery;
+}
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const adoptionTargetRefSchema = z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/);
 export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
@@ -74,9 +82,8 @@ export class WorkspaceAdoptionApplication {
     const settle = async () => { await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); };
     const previous = await this.resume(command.identity.scopeId, command.commandId, verified.session.principalRef, command, settle);
     if (previous) return previous;
-    const delivery = await this.store.findDelivery(command.identity.scopeId, command.deliveryCommandId);
-    if (!delivery?.delivered || JSON.stringify(delivery.intent.command.identity) !== JSON.stringify(command.identity)
-      || !await this.deliveries.delivered(delivery.intent.plan)) throw new WorkspaceAdoptionError('ADOPTION_NOT_DELIVERED');
+    const delivery = await requireDelivered(this.store, this.deliveries, command.identity.scopeId, command.deliveryCommandId,
+      record => JSON.stringify(record.intent.command.identity) === JSON.stringify(command.identity));
     const run = await this.accepted(command);
     const plan: IntegrationDeliveryPlan = delivery.intent.plan;
     await this.ready(command.targetRef, plan.baseCommit, 'ADOPTION_BASE_CHANGED');

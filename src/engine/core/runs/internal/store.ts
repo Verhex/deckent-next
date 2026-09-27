@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { branchDecisionSchema, runExecutionSnapshotSchema, identitySchema, counterSchema, runIdentitySchema, taskGraphSchema, attemptIdentitySchema, type RunSnapshot } from '#domain/index.js';
 import type { ReservationDiagnostic } from '#engine/core/scheduling/index.js';
+import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
 const actor = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
 const capacity = z.object({ executionSlots: counterSchema, inFlightSlots: counterSchema }).strict();
 export const executionPoolSchema = z.object({ schemaVersion: z.literal(1), poolId: identitySchema, capacity }).strict().readonly();
@@ -28,7 +29,9 @@ export interface RunStore {
   createExecutionPool(input: ExecutionPool): Promise<ExecutionPool>;
   projectRunAttempt(input: RunProjection): Promise<RunReceipt>;
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
-  createRun(input: RunCreate): Promise<RunReceipt>;
+  /** `workspace`, when given, is the Run's immutable workspace custody, written in the admission transaction and never part of the
+   * receipt command (record shapes unchanged). A replay whose custody differs is RUN_COMMAND_CONFLICT. */
+  createRun(input: RunCreate, workspace?: RunWorkspaceCustody): Promise<RunReceipt>;
   /** Atomically admits a nonempty ordered prefix fitting both limits. Command retains candidates;
    * snapshot contains only admitted attempts. Replay never expands the original admission. */
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;
