@@ -33,8 +33,20 @@ export async function resolvePolicyScopeMembership(policy: unknown, actor: { rea
   }
   const registered = new Set(granted.filter(scope => pins.get(scope) === company));
   const members = policyScopeMembership(policy, actor, granted, registered);
-  if (!members.length) throw new PolicyAuthorizationError('SCOPE_UNKNOWN');
+  if (!members.length) {
+    const foreign = granted.some(scope => { const pin = pins.get(scope); return pin !== undefined && pin !== '' && pin !== company; });
+    throw new PolicyAuthorizationError('SCOPE_UNKNOWN', foreign ? 'COMPANY' : 'UNREGISTERED');
+  }
   return members;
+}
+
+/**
+ * The same company rule where one installation acts on another installation's records (H34 S3): the target's membership resolved the
+ * scope to `scopeCompany` (its pin, or the target's company for an unpinned read); a request made for `requestCompany` never reaches
+ * it otherwise. Refused as `SCOPE_UNKNOWN` (reason `COMPANY`) before any of the target's records is read.
+ */
+export function assertRequestCompany(scopeCompany: string, requestCompany: string): void {
+  if (companyIdSchema.parse(scopeCompany) !== companyIdSchema.parse(requestCompany)) throw new PolicyAuthorizationError('SCOPE_UNKNOWN', 'COMPANY');
 }
 
 /** First-start registration set: the installation's configured own scopes plus every scope the trusted policy names explicitly

@@ -1,9 +1,9 @@
 export { DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError } from './internal/authorize.js';
-export type { PolicySource } from './internal/authorize.js';
+export type { PolicySource, PolicyRefusalReason } from './internal/authorize.js';
 export { RunPolicyAuthorization } from './internal/run.js';
 export { PoolPolicyAuthorization } from './internal/pool.js';
 export type { PoolAuthorization } from './internal/pool.js';
-export { installationOwnScopes, resolvePolicyScopeMembership } from './internal/membership.js';
+export { assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership } from './internal/membership.js';
 export type { ScopeAccess, ScopeRegistry } from './internal/membership.js';
 export { getPolicyVocabulary } from '#domain/index.js';
 export { ServicePolicyAuthorization } from './internal/service.js';

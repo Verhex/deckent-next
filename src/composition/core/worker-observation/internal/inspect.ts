@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { SystemTrustedClock, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, DockerSupervisor, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization,
+import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization, assertRequestCompany,
   type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
@@ -28,6 +28,8 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
           sources.push({ ...source, status: 'available', ...page }); remaining -= page.workers.length; continue;
         }
         const target = await loadConfiguredScopeContext(source.path, query.scopeId, options, 'read');
+        // H34 S3: the target resolved the scope for its own company; this request's company must be that company.
+        assertRequestCompany(target.config.company.id, c.config.company.id);
         const page = await inspectConfiguredInventory(source.path, { schemaVersion: 1, scopeId: query.scopeId, limit: Math.min(remaining, target.config.inspection.maxPageSize), after: query.after }, options);
         const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(target.layout, userInfo().uid, target.config.inspection.policyMaxBytes));
         const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });

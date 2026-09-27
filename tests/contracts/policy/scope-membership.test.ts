@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { resolvePolicyScopeMembership, type ScopeRegistry } from '#engine/index.js';
+import { assertRequestCompany, resolvePolicyScopeMembership, type ScopeRegistry } from '#engine/index.js';
+import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
 const actor = { issuer: 'host', subject: '1000' };
 const grant = (id: string, scopes: 'all' | string[]) => ({ id, effect: 'allow', actions: ['inspect'], scopes, principals: [actor], resource: { kind: 'scope', ids: 'all' } });
 const policy = (...grants: unknown[]) => ({ schemaVersion: 1, revision: 'p', restrictions: [], grants });
@@ -50,4 +51,25 @@ it('refuses a scope pinned to another company, even when the trusted policy name
   await expect(resolvePolicyScopeMembership(policy(grant('all', 'all')), actor, ['s'], 'default', pinned, 'write')).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
   expect(await resolvePolicyScopeMembership(policy(grant('named', ['s'])), actor, ['s'], 'acme', pinned, 'write')).toEqual(['s']);
   await expect(resolvePolicyScopeMembership(policy(grant('named', ['s'])), actor, ['s'], 'Not Valid', pinned, 'write')).rejects.toThrow();
+});
+
+// H34 S3: the refusal carries an internal typed cause; the wire code stays SCOPE_UNKNOWN for both (no disclosure).
+it('types the cause of a SCOPE_UNKNOWN refusal: another company versus no registration', async () => {
+  await expect(resolvePolicyScopeMembership(policy(grant('named', ['s'])), actor, ['s'], 'default', registry({ s: 'acme' }).reader, 'read'))
+    .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN', reason: 'COMPANY' });
+  await expect(resolvePolicyScopeMembership(policy(grant('all', 'all')), actor, ['s'], 'default', registry({ s: 'acme' }).reader, 'write'))
+    .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN', reason: 'COMPANY' });
+  await expect(resolvePolicyScopeMembership(policy(grant('all', 'all')), actor, ['fabricated'], 'default', registry().reader, 'read'))
+    .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN', reason: 'UNREGISTERED' });
+  await expect(resolvePolicyScopeMembership(policy(), actor, ['s'], 'default', registry().reader, 'read'))
+    .rejects.toMatchObject({ code: 'POLICY_DENIED', reason: null });
+});
+
+it('refuses a request made for one company on a scope another installation resolved for another company', () => {
+  expect(() => assertRequestCompany('default', 'default')).not.toThrow();
+  expect(() => assertRequestCompany('acme', 'default')).toThrow(expect.objectContaining({ code: 'SCOPE_UNKNOWN', reason: 'COMPANY' }));
+  expect(() => assertRequestCompany('acme', 'Not Valid')).toThrow();
+  let failure: unknown; try { assertRequestCompany('acme', 'default'); } catch (error) { failure = error; }
+  const surfaced = queryFailure(failure);
+  expect(surfaced.code).toBe('SCOPE_UNKNOWN'); expect(JSON.stringify({ ...surfaced, message: surfaced.message })).not.toMatch(/acme|COMPANY/);
 });
