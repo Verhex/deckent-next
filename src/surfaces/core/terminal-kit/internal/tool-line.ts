@@ -30,6 +30,17 @@ const META_PREFIX = '[deckent] ';
 const countContentLines = (content: string) => content.split('\n').filter(line => line.length > 0 && !line.startsWith(META_PREFIX)).length;
 const hasMetaNote = (content: string) => content.split('\n').some(line => line.startsWith(META_PREFIX));
 
+// grep's own line shapes (`workspace-read/internal/tools.ts`): a real hit is `path:line:text`; a context row around
+// it, only ever present when the model asked for `context` (Astra 2143 R2), is `path:line-text`; a gap between two
+// non-adjacent context blocks is a lone `--` row. Only the first shape is a match — the summary must not let context
+// rows or the block separator inflate the count the user sees. The check anchors on the FIRST colon (`[^:]*`, no
+// colons allowed before it): that is always the path/line-number boundary, so it cannot keep scanning into a
+// context line's own content and mistake something shaped like `12:34:56` (a timestamp is the everyday case) for
+// the marker. Known limit: this is still shape-derived (no new wire field, TL-B D2), so a workspace-relative path
+// that itself contained a literal ':' would be undercounted here; this product's paths never do.
+const GREP_HIT_LINE = /^[^:]*:\d+:/;
+const countGrepHitLines = (content: string) => content.split('\n').filter(line => line.length > 0 && !line.startsWith(META_PREFIX) && GREP_HIT_LINE.test(line)).length;
+
 function readFileSummary(content: string): ToolResultSummary | null {
   const meta = content.split('\n', 1)[0] ?? '';
   const range = /^\[deckent\] read_file: mode=range totalLines=(\d+) range=\S+ returned=(\d+) hasMore=(true|false)/.exec(meta);
@@ -49,7 +60,11 @@ function readFileSummary(content: string): ToolResultSummary | null {
  * incomplete" flag come from the shape of the text itself, without tools.ts adding a single new meta line for D2. */
 export function summarizeAgentToolResult(name: string, content: string): ToolResultSummary | null {
   if (name === 'read_file') return readFileSummary(content);
-  if (name === 'grep' || name === 'glob') {
+  if (name === 'grep') {
+    const count = countGrepHitLines(content);
+    return { kind: 'matches', count, more: count > 0 && hasMetaNote(content) };
+  }
+  if (name === 'glob') {
     const count = countContentLines(content);
     return { kind: 'matches', count, more: count > 0 && hasMetaNote(content) };
   }

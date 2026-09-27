@@ -233,3 +233,24 @@ it('accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap)
   const clamped = await sparseTools.execute('grep', { pattern: 'needle', context: 99, maxHits: 0 });
   expect(clamped.text).not.toContain('undefined'); expect(clamped.status).toBe('ok');
 });
+
+// Astra 2143 R2 (ported from astra-2142-extra.test.ts.txt): two matches close enough that their context windows touch
+// or overlap must both keep their ':' hit marker. The old code marked a block's lines against only the match that
+// produced that block (`j === index`), so a second match already covered by the first match's trailing context lost
+// its ':' forever and was shown as plain context (`-`) instead.
+it('marks every real hit with \':\' even when context windows are adjacent or overlapping (Astra 2143 R2)', async () => {
+  const { root } = await workspace({ 'a.txt': 'before\nMATCH one\nMATCH two\nafter\n' });
+  const tools = await createWorkspaceReadTools(root);
+  const adjacent = await tools.execute('grep', { pattern: 'MATCH', context: 1 });
+  expect(adjacent.text).toBe(['a.txt:1-before', 'a.txt:2:MATCH one', 'a.txt:3:MATCH two', 'a.txt:4-after'].join('\n'));
+  const { root: overlap } = await workspace({ 'b.txt': 'x\nMATCH a\nmid\nMATCH b\ny\n' });
+  const overlapTools = await createWorkspaceReadTools(overlap);
+  const wide = await overlapTools.execute('grep', { pattern: 'MATCH', context: 2 });
+  expect(wide.text).toBe(['b.txt:1-x', 'b.txt:2:MATCH a', 'b.txt:3-mid', 'b.txt:4:MATCH b', 'b.txt:5-y'].join('\n'));
+  // A match whose whole context window was already printed by an earlier, still-open block (here: two adjacent
+  // matches at the very end of the file) must not push an empty extra row — that would only add a stray trailing
+  // newline to the result.
+  const { root: eof } = await workspace({ 'c.txt': 'MATCH a\nMATCH b\n' });
+  const tail = await (await createWorkspaceReadTools(eof)).execute('grep', { pattern: 'MATCH', context: 1 });
+  expect(tail.text).toBe('c.txt:1:MATCH a\nc.txt:2:MATCH b');
+});
