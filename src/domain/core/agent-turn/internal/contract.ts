@@ -27,7 +27,7 @@ export type AgentTurnEvent =
   | { readonly kind: 'tool.finished'; readonly callId: string; readonly name: string; readonly status: AgentToolCallStatus; readonly ms: number; readonly bytes: number;
     readonly cleanup?: AgentToolCleanup }
   | { readonly kind: 'usage'; readonly round: number; readonly promptTokens: number; readonly completionTokens: number }
-  /** Each assistant or tool message the turn appends, in order: the client's history continues from exactly these. */
+  /** Each message the turn appends (assistant, tool, or the engine's `[deckent]` user note), in order, in order: the client's history continues from exactly these. */
   | { readonly kind: 'message'; readonly message: AgentTurnMessage }
   /** The prompt of a round as measured before it was sent (T-L5): the provider's count, or a tagged upper bound. */
   | { readonly kind: 'context'; readonly round: number; readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }

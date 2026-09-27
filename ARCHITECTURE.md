@@ -631,6 +631,32 @@ results, or a summary copying many long user messages (each ≤ 4000 characters)
 closed, not silent); and a tail that alone stays above the high-water mark is summarized again every round (billed, no progress;
 candidate guard: skip when the last compaction did not shrink the history). The byte check needs no counter port. Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →
 session snapshot → `/resume` with 44/46 messages sent whole; mutations 1–7 (`proof/F26-T-L5-FIX-2091/`).
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
+English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
+Deckent data root (workspace-relative when inside the project, else marked unreadable) with the ledger and terminal-session paths,
+the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
+decide every call (runs, waits for the operator, or is denied; a denial is final), declared-parameters-only, bounded-result
+continuation (`hasMore=true` → `nextStartLine`), same-argument read references, and one short progress line between tool rounds.
+Each sent round has exactly one system message: the segment, then the client's own system text (catalog: persona + reply language).
+The client's history, `message`/`compacted` events and saved sessions never hold the segment; measurement counts exactly what is
+sent. The turn's `requestDigest` binds `sha256(segment)`: a turn id replayed after the segment changed (new version, other project
+root or layout, other tool set) is `AGENT_TURN_CONFLICT`, never an answer to another prompt.
+**Agent tool deny floor per layout (TL-C finding).** Agent read tools (and through the same scope, edit and shell path
+classification) deny the Core floor plus the layout's `approvals` and `approvalPreviews` directories when they lie inside the
+project; previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
+and whole pending diffs readable, and `state/approval-previews` was readable even in the default layout. `@file` attachment
+(`workspace-files.ts`) still uses the Core floor only (open).
+**No-progress note (TL-C D7).** A round is without progress when it has tool calls, every call ended `duplicate`,
+`invalid-arguments` or `error`, and the model wrote no text; `denied`, approval outcomes and `cancelled` are not the model's failure.
+At the second consecutive such round the engine appends one `user` message `[deckent] The last two rounds made no progress: …`
+(once per streak; a round with progress resets it; never on a cancelled turn). No counter or limit ends the turn. The note is part
+of the appended history (`message` event; v15 schema already admits `user`), so a replay and the next turn see it.
+**Reasoning control (TL-C D8, legacy 7108 descriptor).** A catalog capability `chat-template-enable-thinking` v1 (openai-chat
+family; catalog schema v1 unchanged, capability ids are data) declares that the served chat template reads `enable_thinking`. The
+`openai-chat-http` adapter (version stays 4: the field is optional and catalog-gated) accepts `chat_template_kwargs:
+{ enable_thinking: boolean }` only for a binding that declares it supported, else `OPENAI_CHAT_REQUEST_INVALID` before any network.
+The compaction call sends `enable_thinking: false` when declared; rounds are unchanged. `reasoning_effort` and a per-turn
+`/reasoning off` transport are open (TL-C review §3).
 **Conversation sessions (T-L5c, Jev 9ae569b1).** The workline saves the whole current history (system prompt excluded) after every
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A

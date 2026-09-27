@@ -772,7 +772,7 @@
   "terminal.chat.notConfigured": "yapılandırılmamış (terminal.chat ekleyin)",
   "terminal.chat.modelNotDeclared": "sağlayıcı kataloğunda tanımlı değil",
   "terminal.chat.failed": "Sohbet turu başarısız oldu.",
-  "terminal.chat.systemPrompt": "Sen Deckent operatör terminal asistanısın. Kısa yanıt ver. İşi kendin çalıştıramaz, onaylayamaz veya değiştiremezsin; operatörü Deckent komutlarına yönlendir.",
+  "terminal.chat.systemPrompt": "Sen Deckent operatör terminal asistanısın. Türkçe yanıt ver.",
   "terminal.workline.statusCancelling": "İptal ediliyor…",
   "terminal.workline.watchFailed": "İzleme sorgusu başarısız",
   "terminal.workline.unknownCommand": "Bilinmeyen komut",

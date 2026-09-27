@@ -1118,7 +1118,8 @@
         "src/platform/core/errors",
         "src/domain/core/audit",
         "src/engine/core/audit",
-        "src/adapters/core/audit-store"
+        "src/adapters/core/audit-store",
+        "src/platform/core/host"
       ],
       "plan": "SURFACES"
     },

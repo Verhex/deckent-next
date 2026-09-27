@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SECURITY (TL-C): agent read tools and edit/shell path classification deny the layout's approvals and approval-preview
+  directories when they lie inside the project (a data root under `.deckent/live-data` exposed approval records and pending diffs).
+- ADDED (TL-C): a versioned model-facing system prompt with workspace facts; a one-line note after two rounds without progress;
+  compaction without thinking when the model declares `chat-template-enable-thinking`.
 - CHANGED (owner 2026-09-27): `runtime serve` refuses to start when one of its own scopes is pinned to another company
   (`RUNTIME_SERVICE_SCOPE_FOREIGN`, exit 78); config operations inside a registered module's namespace are refused
   (`OPERATION_NAMESPACE_RESERVED`).

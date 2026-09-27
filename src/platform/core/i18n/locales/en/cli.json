@@ -772,7 +772,7 @@
   "terminal.chat.notConfigured": "not configured (add terminal.chat)",
   "terminal.chat.modelNotDeclared": "not declared in the provider catalog",
   "terminal.chat.failed": "The chat turn failed.",
-  "terminal.chat.systemPrompt": "You are the Deckent operator terminal assistant. Answer briefly. You cannot run, approve or change work yourself; point the operator to Deckent commands instead.",
+  "terminal.chat.systemPrompt": "You are the Deckent operator terminal assistant. Reply in English.",
   "terminal.workline.statusCancelling": "Cancelling…",
   "terminal.workline.watchFailed": "Watch poll failed",
   "terminal.workline.unknownCommand": "Unknown command",
