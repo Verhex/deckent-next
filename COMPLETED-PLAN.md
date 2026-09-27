@@ -5,6 +5,12 @@ PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kan
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.
 Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve current-flow esastır.
 
+## 2026-09-27 dördüncü parti — main'e alındı ve canlıda (`900f97d`, Astra 2141 PASS; taşındı 2026-09-27 akşam)
+
+Astra 2137 → 2138 ANALYSIS + 2139 REVISE (R1 policy dosyası kimliği, R2 telafi ipuçları, R3 cleanup eki genişliği) → FIX-2139 + owner `ask` kararı → 2141 PASS → push `900f97d` → canlı geçiş. Kayıt PLAN'dan taşındığı andaki hâliyle:
+
+- **2026-09-27 dördüncü parti (`integrate/2026-09-27-d`, aday `900f97d`, Astra yeniden incelemesi 2140 bekliyor).** C12 G4: katalog operasyonları runtime servisinde v15 işlemi, MCP `execute/compensate/inspect_operation` (ipuçları tüm erişilebilir katalogdan); MCP liste sonucu yalnız metin (önceden doğrulayan istemci `list_approvals`'ı reddediyordu). Kalıcı cleanup işareti (`tool.finished.cleanup`, bitmiş satırda görünür ek). Dilim 4c: durum satırında mod ve `/mode` (`inspectPermissionMode`/`setPermissionMode`; gevşetme şirket grant'ı ister, `ask`'e dönüş istemez; yalnız kendi kayıt; önce audit, sonra policy+bindings kimlik koşullu atomik yazım). Astra 2139 R1–R3 düzeltildi. Açık sınırlar: audit `after` revizyonu niyettir; servis dışı yazıcı dar penceresi; kuyruktaki ikinci `/mode` tipli çakışma; v14 zarfı için ayrı sürüm kodu yok.
+
 ## 2026-09-27 üçüncü parti ve kapanan kayıtlar — main'e alındı (`357aeeb`, Astra 2136 PASS; taşındı 2026-09-27 akşam)
 
 Aşağıdaki kayıtlar PLAN'dan taşındıkları andaki hâliyle korunur; güncel açıklar PLAN'dadır. Üçüncü parti: Astra 2132 → 2133/2134 REVISE (R1 bileşik dar komut, R2 audit edilen karar, R3 `@file` kimliği) → düzeltmeler → 2136 PASS → push `357aeeb`. Owner kararı blokları (2026-09-26 akşam, 2026-09-27 öğleden sonra) tamamen uygulandı; M1 Hat B karar bloğu açık parçaları nedeniyle PLAN'da kaldı.

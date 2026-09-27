@@ -1,38 +1,28 @@
-# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-27 öğleden sonra, Opus 5.5 lead)
+# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-27 akşam, Opus 5.5 lead)
 
-Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde (`b596eee` ve öncesi), kanıtlar `deckent-refactor-work/proof/`.
+Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `357aeeb` (üçüncü parti; Astra 2136 PASS, tam verify `verify-4` 364/2418; push 2026-09-27). Yerel main checkout `c02a894`'te
-  kalır (canlı servis onun dist'ini kullanıyor; Astra'nın commit'lenmemiş inceleme notları orada) — owner ile uzlaştırılır. Canlı servis `b4e77dc` build'iyle çalışıyor (ledger v40, protokol v14).
-  Kabuk/düzenleme izni için owner betiği `grant-edit-shell.mjs` henüz çalıştırılmadı. DOGFOOD OFF.
-- Entegrasyon `integrate/2026-09-27` (worktree `/home/alperen/deckent-next-integrate`) üçüncü parti: H34 S3, H34 S4 (config 3 / layout 3 /
-  doctor 2), A04-2, C12 G3, roller `task` kuralı, audit portu (ledger v41), I40-c B, kurulum çıkış 78, TERM-INTERACTIVE (slash Enter,
-  `@file`, **protokol v15**), dilim 4a izin modları. Belge deltaları uygulandı (ARCHITECTURE/PLAN/CHANGELOG/COMPLETED-PLAN).
-- Astra 2132 → 2133 ANALYSIS + 2134 REVISE (R1 P1 bileşik dar komutla yazma tabanı aşımı, R2 P2 audit edilen kararla kabul eşleşmesi,
-  R3 P2 `@file` seçilen yol kimliği): düzeltmeler FIX-2133 (`e047075`) ve FIX-2134-R3 (`5538033`) partiye birleşti; kanıt `.deckent/host/reviews/astra-2132/`.
-- Dördüncü parti (C12 G4, kalıcı cleanup işareti, dilim 4c): `8ceb20f` → Astra 2139 REVISE (3 P2) → FIX-2139 (`0a6407f`) + owner kararı
-  (`ask`'e dönüş grant istemez) birleşti; yeni aday tam verify → yeniden inceleme → PASS'te yalnız o sha push; ardından canlı geçiş (owner
-  kararı: tek seferde, main uzlaştırmasıyla).
-- Terminal ajan döngüsü analizi (Fable, owner sabah oturumu): `proof/TERM-LOOP-UX-2026-09-27/`.
-- Şeritler: OWNER-EVE-SMALL (Sonnet: serve başlangıç reddi + modül ad alanı kapalı), B06-2A (Opus: Run teslim commit'ine sabit), TERM-LOOP-UX analizi (Fable).
-- Belge düzeni (owner 2026-09-27 akşam): PLAN'daki biten işler COMPLETED-PLAN'a taşındı; yetenek haritası v15/ledger v41/company/33 MCP aracıyla güncel.
-  Canlı yeniden başlatma (ledger v40 → v41 yedekli, protokol v15) owner iznindedir.
-- Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
+- `origin/main` = `900f97d` (üçüncü parti `357aeeb` Astra 2136 PASS, dördüncü parti `900f97d` Astra 2141 PASS; tam verify 374/2468).
+- Canlı servis `900f97d` build'iyle (instance `fb3091bf…`), ledger v41 (yedek `backups/ledger-v40-2026-09-27T19-07-25-142Z.db`), protokol v15,
+  config şeması 3, doctor JSON 2. Canlı policy v1 → izin modları ve `/mode` etkin değil (herkes `ask`). Owner betiği `grant-edit-shell.mjs`
+  henüz çalıştırılmadı. DOGFOOD OFF.
+- Yerel main checkout `900f97d`'ye ileri sarıldı. Astra'nın main'deki commit'lenmemiş inceleme notları (2135/2140 sınırları) yama
+  `.deckent/host/reviews/astra-main-notes-2026-09-27.patch` + stash `astra-main-notes-2026-09-27` olarak saklandı; içerik PLAN/COMPLETED-PLAN'a işlendi.
+- Ana checkout'tan çalışan iki host MCP süreci (`next-entry.mjs mcp`) eski kodla bellekte çalışıyor; sorun çıkarsa host oturumunun MCP'si yeniden başlatılır.
+- Sonraki parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`), `900f97d` + belge commit'leri.
 
 ## Şeritler (kartlar `deckent-refactor-work/cards/lanes/NEXT-2026-09-27-C.md`)
-- V15-G4 ve CLEANUP-MARK teslim edildi, dördüncü parti dalında. SLICE4C (Opus, mod durum satırı + `/mode`) çalışıyor.
-- B06-2 tasarımı (Fable) teslim: `proof/B06-2-DESIGN-2026-09-27/design-note.md`; öneri A (mevcut Run + Docker sandbox, Run teslim commit'ine
-  sabitlenir, benimseme açık `verificationRunId` ile bağlanır, ledger v42). Owner soruları S1 (A/B), S2 (v42), S3 (sandbox bağımlılıkları).
+- B06-2A (Opus) teslim: `lane/b06-2a@c478675` — Run teslim commit'ine sabit (`createDeliveryRun`), custody aynı işlemde, V1 doğrulandı; entegrasyon bekliyor.
+- OWNER-EVE-SMALL (Sonnet) çalışıyor: `runtime serve` yabancı pinli kendi kapsamında başlangıç reddi + modül ad alanı config'e kapalı.
+- TERM-LOOP-UX analizi (Fable) teslim: `proof/TERM-LOOP-UX-2026-09-27/analysis.md` — ilk tur sessiz sıkıştırmada iptal edildi (model round'u yok);
+  576 sn'nin %88'i 26 model round'u (Qwen3 düşünme), %11 sıkıştırma; gerçek döngü yok (tekrarlar 16 KiB sayfalama); `grep` deseni satırda
+  görünmüyor (görüntü hatası); sistem istemi tek cümle ve araçlarla çelişiyor. Dilim önerisi D1–D9; owner soruları aşağıda.
 
 ## Owner kararı bekleyenler
-- B06-2 S1–S3 (+ S4–S9 ayrıntı), `@file` için ayrı politika izni, dilim 4a açıkları (full-auto'da salt-okunur kabuk → audit olay v2; `rm`),
-  S3 açıkları (`runtime serve` yabancı pinli kendi kapsamında başlangıç reddi; run-progression yoklaması), A04-2 config girdilerinin overlay
-  ad alanında kalması, G3 süreçler arası tek kullanım ledger seçeneği, `lane/l5-i40` (birleşmemiş tanı testi).
-- Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md`.
-
-## Açık sınırlar (ARCHITECTURE'da)
-- Karışık sürüm: dilim 4a alanlarını (`modeEligible`, bindings v2) taşıyan belge eski build'de bütünüyle reddedilir (fail-closed).
-- Dilim 4a: hiç onay üretmemiş kurulumda ilk sessiz çağrı onay/audit bütünlük anahtarını oluşturur (sayaç yolu).
-- I40-c B: eski build yeni `agent-tool-call` kaydını `APPROVAL_INTEGRITY` ile reddeder; v41 karışık okumayı önler.
-- Kabuk sandbox değil; servis çökerse çalışan komut sahipsiz kalır.
+- Terminal döngüsü (analiz owner soruları): okuma sınırı 16 → 64 KiB + config alanı; sistem istemi sahipliği/dili/yerleşim bilgisi; düşünme
+  görünürlüğü ve özet çağrısında thinking kapatma; ilerlemesiz round dürtüsü; Esc anında iptal; `grep` `context`/`maxHits`; araç satırı ile onay
+  kaynağının ayrılması.
+- B06-2a açıkları: pinli replay'de teslim denetiminin yeniden çalışması; `ADOPTION_NOT_DELIVERED` adı; CLI yolu (2c).
+- Dilim 4a: full-auto'da salt-okunur kabuk (audit olay v2) ve `rm`; `lane/l5-i40` (birleşmemiş tanı testi).
+- Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` (+ bu akşam biten şeritler, stash'ler).
