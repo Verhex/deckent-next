@@ -1,8 +1,8 @@
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval } from './internal/integrity.js';
-export type { ApprovalStore, ApprovalReceipt } from './internal/store.js';
+export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand } from './internal/application.js';
 export { TaskApprovalAdmission, assertApprovalPolicyCurrent } from './internal/admission.js';
 export { agentToolCallActionDigest, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestAgentToolApproval, type AgentToolApprovalOutcome } from './internal/tool-call.js';
-export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, awaitOperationApproval, operationApprovalActionDigest,
+export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, awaitOperationApproval, operationApprovalActionDigest,
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';

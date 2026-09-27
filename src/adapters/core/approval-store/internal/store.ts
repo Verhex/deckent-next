@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { approvalRecordSchema, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
-import type { ApprovalStore, ApprovalReceipt } from '#engine/index.js';
+import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind } from '#engine/index.js';
 import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Uses the shared ledger; callers may supply the current reservation transaction's connection. */
@@ -50,10 +50,12 @@ export class SqliteApprovalStore implements ApprovalStore {
     const subject = approvalSubject(record.request);
     return subject.kind === 'task' ? ['task', subject.runId, subject.taskId] as const : [subject.kind, null, null] as const;
   }
-  list(scopeId: string, afterId: string | null, limit: number) {
-    if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');
-    return this.db.prepare('SELECT approval_id FROM approvals WHERE scope_id=? AND (? IS NULL OR approval_id>?) ORDER BY approval_id LIMIT ?')
-      .all(scopeId, afterId, afterId, limit).map(row => this.load(scopeId, String(row.approval_id))!);
+  list(scopeId: string, afterId: string | null, limit: number, excludeSubjects: readonly ApprovalSubjectKind[] = []) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || excludeSubjects.length > 8) throw new ApprovalError('APPROVAL_INVALID');
+    // Excluded subject kinds are part of the page selection (Astra 2128): LIMIT counts visible records only.
+    const excluded = excludeSubjects.length ? ` AND subject_kind NOT IN (${excludeSubjects.map(() => '?').join(',')})` : '';
+    return this.db.prepare(`SELECT approval_id FROM approvals WHERE scope_id=? AND (? IS NULL OR approval_id>?)${excluded} ORDER BY approval_id LIMIT ?`)
+      .all(scopeId, afterId, afterId, ...excludeSubjects, limit).map(row => this.load(scopeId, String(row.approval_id))!);
   }
   pendingToolCalls(after: { readonly scopeId: string; readonly approvalId: string } | null, limit: number) {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new ApprovalError('APPROVAL_INVALID');

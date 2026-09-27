@@ -5,7 +5,7 @@ import { identitySchema, counterSchema, approvalRequestSchema, ApprovalError, co
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
-import type { ApprovalStore } from './store.js';
+import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
 
 export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema }).strict();
@@ -46,12 +46,13 @@ export class ApprovalApplication {
     const record = this.store.load(query.scopeId, query.approvalId);
     return record ? verifyApproval(record, this.integrity) : null;
   }
-  async list(input: unknown, credential?: unknown) {
+  /** `view.excludeSubjects` narrows the page selection itself (never a post-filter): a page of `limit` visible records after `afterId`. */
+  async list(input: unknown, credential?: unknown, view: { readonly excludeSubjects?: readonly ApprovalSubjectKind[] } = {}) {
     const query = approvalListSchema.parse(input); const principal = await authenticate(this.verifier, credential, query.scopeId);
     if (query.limit > this.pageLimit) throw new ApprovalError('APPROVAL_INVALID');
     // List permission is explicit, never an inference from a grant on one specific approval.
     await this.authorize('inspect', query.scopeId, query.scopeId, principal);
-    return this.store.list(query.scopeId, query.afterId, query.limit).map(row => verifyApproval(row, this.integrity));
+    return this.store.list(query.scopeId, query.afterId, query.limit, view.excludeSubjects ?? []).map(row => verifyApproval(row, this.integrity));
   }
   async renew(input: unknown, ttlMs: number, credential?: unknown) {
     const command = approvalRenewalSchema.parse(input);

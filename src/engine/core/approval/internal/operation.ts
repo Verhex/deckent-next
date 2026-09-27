@@ -4,7 +4,7 @@ import { approvalRequestSchema, approvalSubject, encodeCommandProjection, policy
 import { MAX_WALL_SKEW_MS, sha256, type IntegrityAuthority, type TrustedClock } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
 import type { EffectAdmission, EffectApprovalContext, EffectApprovalGate } from '#engine/core/effect/index.js';
-import type { ApprovalStore } from './store.js';
+import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
 
 type OperationSubject = Extract<ApprovalSubject, { kind: 'operation' }>;
@@ -99,9 +99,13 @@ const isOperationApproval = (record: ApprovalRecord) => approvalSubject(record.r
  */
 export function approvalResultForProtocol(version: number, action: 'list' | 'inspect' | 'decide' | 'renew', result: unknown): unknown {
   if (version >= OPERATION_SUBJECT_PROTOCOL_VERSION) return result;
-  if (action === 'list' && Array.isArray(result)) return result.filter(record => !isOperationApproval(record as ApprovalRecord));
   if (action === 'inspect' && result && isOperationApproval(result as ApprovalRecord)) throw new ApprovalError('APPROVAL_MISSING');
   return result;
+}
+/** Subject kinds a client of `version` cannot parse: excluded from list page selection itself (Astra 2128), never filtered after the
+ * page was cut, so a page of `limit` is `limit` visible records and its cursor is always a record the client received. */
+export function approvalSubjectsHiddenFromProtocol(version: number): readonly ApprovalSubjectKind[] {
+  return version >= OPERATION_SUBJECT_PROTOCOL_VERSION ? [] : ['operation'];
 }
 
 export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
