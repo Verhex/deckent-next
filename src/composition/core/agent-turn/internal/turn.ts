@@ -5,7 +5,7 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
   requestAgentToolApproval, runDurableAgentTurn,
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
@@ -110,6 +110,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const parsed = chatTurnCommandSchema.safeParse(input);
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const command = parsed.data;
+  const clock = new SystemTrustedClock();
   registerProviderConfig();
   const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
   const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
@@ -208,7 +209,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
           const policy = await context.policy.load() as { revision?: unknown };
-          const resource = target ?? '(no target)', now = Date.now();
+          const resource = target ?? '(no target)', started = clock.sample(), now = started.wallMs;
           const { id, issuer, subject } = context.principal;
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject },
             subject: { kind: 'agent-tool-call', turnId: command.turnId, round, index, tool: tool.name, toolVersion: tool.version, resource, argsDigest },
@@ -222,9 +223,14 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };
-          let outcome = await awaitAgentToolApproval(journal.store, integrity, record, Date.now, approvalSignal);
+          let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
+          // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
+          if (outcome === 'allow') {
+            const consumed = clock.sample();
+            if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
+          }
           if (outcome === 'allow') { edits?.approved(tool.name, args); shell?.approved(tool.name, args); }
           settlement = outcome;
           return outcome;
@@ -262,9 +268,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (tool.toolClass === 'shell' && shell) return shell.apply(tool.name, args, toolSignal, callId, execution);
         return workspace.execute(tool.name, args, toolSignal);
       },
-      now: () => Date.now(),
+      now: () => clock.sample().wallMs,
     };
-    const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: Date.now() },
+    const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
       admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS,
         requestMaxBytes: context.config.service.inputMaxBytes,

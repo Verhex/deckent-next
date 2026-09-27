@@ -189,8 +189,8 @@ for (const path of ['cancel', 'expiry'] as const) {
     const journal = openSqliteApprovalStore(await ledger(), options);
     try {
       const record = journal.store.create(toolCall(0));
-      const wait = path === 'cancel' ? awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, () => 2_000, aborted())
-        : awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, () => 61_000, new AbortController().signal);
+      const wait = path === 'cancel' ? awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, { sample: () => ({ wallMs: 2_000, monotonicMs: 0 }) }, aborted())
+        : awaitAgentToolApproval(faulty(journal.store, 'always'), integrity, record, { sample: () => ({ wallMs: 61_000, monotonicMs: 0 }) }, new AbortController().signal);
       await expect(wait).rejects.toMatchObject({ code: 'APPROVAL_UNSETTLED' });
       expect(journal.store.load('scope', record.request.approvalId)?.status).toBe('pending');
     } finally { journal.close(); }
@@ -202,16 +202,17 @@ it('closes on a later attempt after a transient failure, and a racing writer\'s 
   try {
     // Transient failure: the second attempt closes the request as expired.
     const first = journal.store.create(toolCall(0));
-    expect(await awaitAgentToolApproval(faulty(journal.store, 'once'), integrity, first, () => 61_000, new AbortController().signal)).toBe('expired');
+    expect(await awaitAgentToolApproval(faulty(journal.store, 'once'), integrity, first, { sample: () => ({ wallMs: 61_000, monotonicMs: 0 }) }, new AbortController().signal)).toBe('expired');
     expect(journal.store.load('scope', first.request.approvalId)?.status).toBe('expired');
-    // At expiry, a decision that committed first wins: the stored allow is returned as decided.
+    // I40-c A: at expiry, a racing allow remains durable history but cannot authorize consumption.
     const second = journal.store.create(toolCall(1));
     const allowFirst = faulty(journal.store, 'once', record => journal.store.transition(record, decided(record, 'allow')));
-    expect(await awaitAgentToolApproval(allowFirst, integrity, second, () => 61_000, new AbortController().signal)).toBe('allow');
+    expect(await awaitAgentToolApproval(allowFirst, integrity, second, { sample: () => ({ wallMs: 61_000, monotonicMs: 0 }) }, new AbortController().signal)).toBe('expired');
+    expect(journal.store.load('scope', second.request.approvalId)).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
     // A cancelled turn runs nothing even when a decision raced its close; the stored decision is left as recorded.
     const third = journal.store.create(toolCall(2));
     const allowRace = faulty(journal.store, 'once', record => journal.store.transition(record, decided(record, 'allow')));
-    expect(await awaitAgentToolApproval(allowRace, integrity, third, () => 2_000, aborted())).toBe('cancelled');
+    expect(await awaitAgentToolApproval(allowRace, integrity, third, { sample: () => ({ wallMs: 2_000, monotonicMs: 0 }) }, aborted())).toBe('cancelled');
     expect(journal.store.load('scope', third.request.approvalId)).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
   } finally { journal.close(); }
 });
