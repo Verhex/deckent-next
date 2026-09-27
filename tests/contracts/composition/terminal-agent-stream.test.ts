@@ -127,6 +127,12 @@ describe('terminal agent turn stream', () => {
     // match: the count must stay the number of ':' hit lines only (ported from astra-2142-extra.test.ts.txt).
     expect(await run('grep', 'a.txt:1-before\na.txt:2:MATCH one\na.txt:3-after')).toMatchObject({ summary: { kind: 'matches', count: 1, more: false } });
     expect(await run('grep', 'a.txt:2:hit one\n--\na.txt:9:hit two')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
+    // A context line's own text can carry a `:digit:` shape that has nothing to do with the grep line marker (a
+    // timestamp is the everyday case). The hit-line check must anchor on the FIRST colon (the path/line-number
+    // boundary) and never keep scanning into the line's content for a later one, or every timestamped context row
+    // in a log file would count as a match.
+    expect(await run('grep', 'log.txt:1-2026-09-28 12:34:56 boot\nlog.txt:2:ERROR x\nlog.txt:3-12:34:57 done'))
+      .toMatchObject({ summary: { kind: 'matches', count: 1, more: false } });
     expect(await run('glob', 'src/one.ts\nsrc/two.ts')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
     expect(await run('list_dir', 'src/\nREADME.md')).toMatchObject({ summary: { kind: 'entries', count: 2 } });
     const errored = await run('read_file', '[deckent] read_file: error=not-found path="missing.ts"', 'error');

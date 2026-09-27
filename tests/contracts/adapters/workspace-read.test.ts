@@ -247,4 +247,10 @@ it('marks every real hit with \':\' even when context windows are adjacent or ov
   const overlapTools = await createWorkspaceReadTools(overlap);
   const wide = await overlapTools.execute('grep', { pattern: 'MATCH', context: 2 });
   expect(wide.text).toBe(['b.txt:1-x', 'b.txt:2:MATCH a', 'b.txt:3-mid', 'b.txt:4:MATCH b', 'b.txt:5-y'].join('\n'));
+  // A match whose whole context window was already printed by an earlier, still-open block (here: two adjacent
+  // matches at the very end of the file) must not push an empty extra row — that would only add a stray trailing
+  // newline to the result.
+  const { root: eof } = await workspace({ 'c.txt': 'MATCH a\nMATCH b\n' });
+  const tail = await (await createWorkspaceReadTools(eof)).execute('grep', { pattern: 'MATCH', context: 1 });
+  expect(tail.text).toBe('c.txt:1:MATCH a\nc.txt:2:MATCH b');
 });
