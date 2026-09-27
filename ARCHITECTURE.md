@@ -1340,6 +1340,20 @@ verification Run on the adopted commit (B06-2) and live checkout/runtime activat
 Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
 complete keeps the target blocked until operator recovery (no abandon command yet).
 
+**Delivery-pinned Run (B06-2a, no version change).** `createDeliveryRun` (SDK; composition `createConfiguredDeliveryRun`, not a
+runtime-service operation) admits the same Run contract as `createRun` plus `deliveryCommandId`. After `run:create`, trusted
+composition resolves the completed delivery of the same scope with its reference still naming the delivered commit (the
+predicate `requireDelivered` is shared with adoption), requires `attempt:read-output` on the delivered attempt, and captures
+the Git source at that exact commit. The Run row, its automatic-progression intent and its workspace custody
+(`baseRevision` = delivered commit, record v1 in the v9 `run_workspace_custody` table) commit in one transaction, so a
+progression turn never samples the moving source HEAD first. The per-attempt clone checks out the commit even though
+`refs/deckent/deliveries/*` is not cloned (`clone --local` copies the object store; proven loose and packed). The receipt
+command and Run snapshot are unchanged; a pinned replay must match the recorded custody exactly (source and commit), else
+`RUN_COMMAND_CONFLICT`, and a plain Run can never be claimed as pinned. Refusals reuse existing codes: unknown/incomplete
+delivery or missing reference `ADOPTION_NOT_DELIVERED`, moved reference `PATCH_CONFLICT`, foreign company `SCOPE_UNKNOWN`,
+missing grant `POLICY_DENIED`. The Run is not yet a verification: adoption does not consult it (B06-2b, ledger v42), the
+task kind comes from the caller (config-derived verification kind and CLI in B06-2c).
+
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 
 Cancellation is durable intent plus a deterministic terminal transition owned by the run reducer. `cancelRun`

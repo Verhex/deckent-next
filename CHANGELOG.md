@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (B06-2a): SDK `createDeliveryRun` admits a Run pinned to a completed delivery commit; the custody is written with the Run in
+  one transaction so the Run always executes the delivered commit.
 - ADDED (T-L4 slice 4c, protocol v15): the permission mode in the terminal status row and `/mode` to show or set your own mode;
   relaxing (`auto-edit`/`full-auto`) needs a company `permission-mode`/`set` grant, returning to `ask` needs none; the write is
   conditional on both policy and bindings files, audited and replaces bindings.json atomically.
