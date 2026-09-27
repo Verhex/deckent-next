@@ -101,7 +101,10 @@
     },
     "src/adapters/core/contract": {
       "dependencies": [
+        "src/adapters/core/host-shell",
         "src/adapters/core/http-conditional-effect",
+        "src/adapters/core/workspace-write",
+        "src/domain/core/adapter-registry",
         "src/domain/core/effect",
         "src/domain/core/inference-serving",
         "src/domain/core/model-invocation",
@@ -1585,6 +1588,7 @@
     "src/engine/core/adapter-registry": {
       "dependencies": [
         "src/domain/core/adapter-registry",
+        "src/domain/core/effect",
         "src/engine/core/effect"
       ],
       "plan": "EXECUTION"
