@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { RunAdmissionApplication, RunPolicyAuthorization } from '#engine/index.js';
@@ -12,7 +13,8 @@ const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r
     criterionDefinitions: [{ id: 'evidence', version: 1, description: 'Verify evidence', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] } };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-admission-')); roots.push(root);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const path = join(root, 'ledger.db');
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
   const state = { allow: true, poolAllow: true, subject: '1', contexts: 0, now: 10, poolChecks: 0 };
   const verifier = { async verify() { return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
@@ -22,7 +24,7 @@ async function fixture() {
   const poolAuthorization = { async authorize() { state.poolChecks++; if (!state.poolAllow) throw new Error('POLICY_DENIED'); } };
   const context = { async resolve() { state.contexts++; return { layoutRevision: 'layout', now: state.now++, execution: fixtureExecution(command.graph), policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 2 }, ordering: ['t'] } }; } };
   const app = new RunAdmissionApplication(store, verifier, authorization, poolAuthorization, context);
-  return { store, app, state, context, verifier, authorization, poolAuthorization };
+  return { store, app, state, context, verifier, authorization, poolAuthorization, path };
 }
 it('admits only a task graph while trusted composition supplies clock, policy and layout; replay preserves the first result', async () => {
   const { app, store, state } = await fixture();
@@ -58,4 +60,29 @@ it('concurrent identical admissions with different sampled clock values converge
   } });
   const [first, second] = await Promise.all([app.create(command), app.create(command)]);
   expect(first).toEqual(second); expect((await store.loadRun('s', 'r'))!.revision).toBe(0);
+});
+const pin = (baseRevision: string, runId = 'r') => ({ schemaVersion: 1 as const, scopeId: 's', runId, baseRevision,
+  source: { schemaVersion: 1 as const, adapter: { id: 'git', version: 1 }, sourceFingerprint: 'f'.repeat(64) } });
+it('pins workspace custody in the admission transaction; replay needs the same custody and never re-pins', async () => {
+  const { app, store } = await fixture();
+  await expect(app.create(command, undefined, async () => pin('a'.repeat(40), 'other-run'))).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  expect(await store.loadRun('s', 'r')).toBeNull();
+  const first = await app.create(command, undefined, async () => pin('a'.repeat(40)));
+  expect(await store.loadRunWorkspaceCustody('s', 'r')).toEqual(pin('a'.repeat(40)));
+  expect(await app.create(command, undefined, async () => pin('a'.repeat(40)))).toEqual(first);
+  await expect(app.create(command, undefined, async () => pin('b'.repeat(40)))).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  expect(await store.loadRunWorkspaceCustody('s', 'r')).toEqual(pin('a'.repeat(40)));
+  // The receipt command never carries the pin: record shapes are unchanged (ledger v41).
+  expect(JSON.parse((await store.loadRunReceipt('s', 'create'))!.command)).not.toHaveProperty('workspace');
+});
+it('admits nothing when the pinned custody cannot be written: Run row, progression intent and custody commit together', async () => {
+  const { app, store, path } = await fixture();
+  // An orphan record (not producible through the store) makes the in-transaction custody write fail after the Run row insert.
+  const db = new DatabaseSync(path);
+  try { db.prepare('INSERT INTO run_workspace_custody(scope_id,run_id,record) VALUES(?,?,?)').run('s', 'r', JSON.stringify(pin('c'.repeat(40)))); } finally { db.close(); }
+  const outcome = await app.create(command, undefined, async () => pin('a'.repeat(40))).then(() => 'admitted', (error: Error) => error.message);
+  expect.soft(await store.loadRun('s', 'r')).toBeNull(); expect.soft(await store.loadRunReceipt('s', 'create')).toBeNull();
+  const check = new DatabaseSync(path, { readOnly: true });
+  try { expect.soft(check.prepare('SELECT count(*) AS n FROM run_execution_intents').get()).toEqual({ n: 0 }); } finally { check.close(); }
+  expect(outcome).toBe('RUN_WORKSPACE_CUSTODY_CONFLICT');
 });

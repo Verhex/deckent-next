@@ -8,6 +8,8 @@ import { runCancellationSchema, type RunCancellation, runCreateSchema, runReserv
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
+import type { RunWorkspaceCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteRunJournal {
   constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>) {}
@@ -134,11 +136,14 @@ export class SqliteRunJournal {
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
-  async createRun(input: RunCreate): Promise<RunReceipt> {
+  async createRun(input: RunCreate, workspace?: RunWorkspaceCustody): Promise<RunReceipt> {
     const parsed = runCreateSchema.parse(input); assertRunExecution(parsed.graph, parsed.execution); const command = JSON.stringify({ action: 'create-run', ...parsed });
     const { scopeId, runId } = parsed.identity;
+    if (workspace && (workspace.scopeId !== scopeId || workspace.runId !== runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     return this.transaction(() => {
-      const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
+      const custody = new SqliteRunWorkspaceCustody(this.db);
+      const replay = this.receipt(scopeId, runId, parsed.commandId, command);
+      if (replay) { if (workspace && !custody.matchesWithin(workspace)) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return replay; }
       const snapshot = createRun(parsed.identity, parsed.graph, parsed.now, parsed.execution, parsed.branch);
       new SqliteExecutionPools(this.db).require(parsed.policy.poolId);
       planSchedulingWave(snapshot.graph, { schemaVersion: 2, capacity: parsed.policy.capacity, ordering: parsed.policy.ordering, snapshot: { graphRevision: snapshot.graph.revision, now: parsed.now, progress: snapshot.progress } });
@@ -148,6 +153,8 @@ export class SqliteRunJournal {
       // Admission and automatic progression intent commit together. Migration never retroactively opts in old Runs.
       this.db.prepare('INSERT INTO run_execution_intents(scope_id,run_id,actor_id,issuer,subject,admitted_at,command_id) VALUES(?,?,?,?,?,?,?)')
         .run(scopeId, runId, parsed.actor.id, parsed.actor.issuer, parsed.actor.subject, parsed.now, parsed.commandId);
+      // A pinned workspace is durable before any progression turn can observe the Run (never sampled from a moving HEAD later).
+      if (workspace) custody.admitWithin(workspace);
       return this.record({ commandId: parsed.commandId, command, snapshot });
     });
   }
