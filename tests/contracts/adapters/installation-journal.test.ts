@@ -12,7 +12,7 @@ function payload(root: string, updatedAtMs = 1): BootstrapJournalPayload {
   return { schemaVersion: 2, transactionId: 'transaction-1', planDigest: hex('a'), profileDigest: hex('b'), phase: 'pending',
     createdAtMs: 1, updatedAtMs, resources: [{ resource: 'config', path: join(root, '.deckent/config.json'),
       preimageDigest: null, targetDigest: hex('c'), state: 'pending' }], blockers: ['INSTALLATION_NOT_APPLIED'],
-    recovery: { authoredProfile: { schemaVersion: 1 }, normalizedConfig: { schema_version: 2 }, approval: { status: 'recorded' } } };
+    recovery: { authoredProfile: { schemaVersion: 1 }, normalizedConfig: { schema_version: 3 }, approval: { status: 'recorded' } } };
 }
 
 it('atomically creates a complete initial pending journal that survives callback failure', async () => {

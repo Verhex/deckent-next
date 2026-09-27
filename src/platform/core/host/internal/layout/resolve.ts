@@ -19,7 +19,7 @@ export interface ProductLayout {
   readonly resources: Readonly<Record<ProductResource, string>>;
 }
 export class LayoutError extends Error {
-  constructor(readonly code: 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN') { super(code); }
+  constructor(readonly code: 'LAYOUT_VERSION_UNSUPPORTED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN') { super(code); }
 }
 const hasControl = (value: string) => [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const isFixedResource = (resource: string) => registry.fixedResources.includes(resource);
@@ -65,6 +65,7 @@ export function resolveProductLayout(input: ProductLayoutInput): ProductLayout {
 }
 /** Callers retain this snapshot throughout one operation; config reload produces a new snapshot. */
 export function productResourcePath(layout: ProductLayout, resource: ProductResource): string {
+  if (layout.schemaVersion !== registry.schemaVersion) throw new LayoutError('LAYOUT_VERSION_UNSUPPORTED');
   if (!Object.hasOwn(layout.resources, resource)) throw new LayoutError('LAYOUT_RESOURCE_UNKNOWN');
   if (resource === registry.bootstrapResource) return layout.bootstrapConfigPath;
   const relative = isFixedResource(resource) ? registry.resources[resource] : layout.resources[resource]; relativeResource(relative);

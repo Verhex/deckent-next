@@ -8,7 +8,6 @@ export interface PrincipalEvidence {
   readonly assurance: PrincipalAssurance;
   readonly provenance: string;
   readonly verifiedBy: string;
-  readonly tenantId?: string;
   readonly role?: string;
 }
 export interface ActorContext {
@@ -16,7 +15,6 @@ export interface ActorContext {
   readonly assurance?: PrincipalAssurance;
   readonly provenance?: string;
   readonly identityClass?: PrincipalIdentityClass;
-  readonly tenantId?: string;
   readonly role?: string;
 }
 export function resolveLocalOsActorId(read: () => { username?: string } = userInfo): string | null {
@@ -31,7 +29,7 @@ export function resolveLocalOsPrincipal(provenance: string, options: { user?: ()
     verifiedBy: username ? 'os.userInfo' : 'os-user-unavailable' };
 }
 export function principalToActor(principal: PrincipalEvidence): ActorContext {
-  return { id: principal.id, identityClass: principal.identityClass, assurance: principal.assurance, provenance: principal.provenance, ...(principal.tenantId ? { tenantId: principal.tenantId } : {}), ...(principal.role ? { role: principal.role } : {}) };
+  return { id: principal.id, identityClass: principal.identityClass, assurance: principal.assurance, provenance: principal.provenance, ...(principal.role ? { role: principal.role } : {}) };
 }
 export function assessActorAssurance(actor: ActorContext): { ok: boolean; code: 'ACTOR_ASSURANCE_OK' | 'ACTOR_ASSURANCE_MISSING' | 'ACTOR_UNVERIFIED' } {
   if (!actor.assurance) return { ok: false, code: 'ACTOR_ASSURANCE_MISSING' };

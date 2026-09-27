@@ -108,8 +108,6 @@ export const CONFIG_FIELDS = Object.freeze({
   max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   company: field('config.field.company', z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('default') }).strict().default({})),
   enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),
-  strict_tenant_isolation: field('config.field.strict_tenant_isolation', z.boolean().default(false)),
-  tenant_id: field('config.field.tenant_id', z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('local')),
   auth_mode: field('config.field.auth_mode', z.enum(['subscription', 'api', 'hybrid', 'local']).default('subscription')),
   spawn_backend: field('config.field.spawn_backend', z.enum(['auto', 'docker', 'subprocess', 'tmux']).default('auto')),
   live_trace: field('config.field.live_trace', z.object({ enabled: z.boolean().default(false) }).strict().default({}),
