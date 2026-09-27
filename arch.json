@@ -549,7 +549,8 @@
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
         "src/engine/core/supervisor",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/domain/core/primitives"
       ],
       "plan": "SECURITY"
     },
@@ -1094,7 +1095,10 @@
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
         "src/platform/core/config",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/audit",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store"
       ],
       "plan": "SURFACES"
     },

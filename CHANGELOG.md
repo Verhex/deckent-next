@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (T-L4 slice 4a): permission modes `ask | auto-edit | full-auto` (bindings v2 `modes`, policy v2 `modeEligible`); a mode
+  relaxes only company-eligible approval cells, writes a sealed audit event before the effect, and never lowers deny or the floors.
+  Older builds refuse policy/bindings documents that carry these fields.
 - FIX (terminal): Enter runs the highlighted slash command (a command that takes an argument completes and waits); the slash
   palette filters by prefix, then subsequence.
 - ADDED (terminal, protocol v15): an `@file` picker and attachments through the runtime service (`findWorkspaceFiles`,

@@ -824,6 +824,32 @@ The 2026-09-25 review limits (Astra 2078: no path recheck of walked descriptors,
 corrected in `e12a253` (every walked directory and file is re-verified; globs match by a bounded dynamic program); Astra 2091 found
 no new blocker in them.
 
+**Permission modes — decision and audit (T-L4 slice 4a, owner 2026-09-27 q1–q5).** A person's mode is `ask | auto-edit | full-auto`
+in `bindings.json` v2 `modes` (one exact principal, explicit scopes, one mode; bindings v1 stays readable = everyone `ask`; zero or
+two entries for the same person and scope = `ask`). The company marks a v2 `require-approval` rule or role permission
+`modeEligible: true` (invalid on any other effect; v1 policy has no such field). A mode creates no authority. One pure function
+(`engine/core/policy` `decideAgentToolCall`) decides every agent tool call over the policy + bindings snapshot: the stricter of the
+`agent-tool`/`invoke` and operation/`execute` decisions (deny ends it, before the call is planned) → the floor raise (write floor,
+shell `low`, destructive, always-ask, other modify, narrow mutating raise allow) → the mode lowering, only when the policy decision
+itself is `require-approval`, every matching `require-approval` rule on each asking side is eligible, the cell is relaxable in the
+mode (ordinary edit: auto-edit/full-auto; narrow mutating shell: full-auto) and the person has exactly one mode entry. Allow rules
+never lower; a raised allow is never lowered; read tools and read-only shell commands under require-approval always ask. The narrow
+mutating shell tier is a separate classifier layer (`classifyShellMutation`): single-stage pipelines of `mkdir [-p -v]`,
+`touch [-c]`, `cp [-n -v] src dst`, `mv [-n -v] src dst` whose sources pass the read check and whose targets pass a write check
+(inside the workspace, not denied, not on the write floor, parent a real directory, target absent or a single-link regular file;
+no glob, `~`, `..`, leading `-`); interpreters, privilege, eval, xargs, tee, package managers, network tools, anything the strict
+scanner refuses and PowerShell are the always-ask floor, decided first; `rm` is not narrow. The turn authorizes with the whole
+decision and `prepare` repeats it. At the effect a call the owner was not asked for is decided again on fresh policy: a
+relaxation first writes one sealed `permission-mode` audit event (audit port, ledger v41; event id = scope, turn, round, index,
+arguments digest; summary = workspace path or first 200 characters + arguments digest) — if it cannot be written nothing runs
+(`audit-unavailable`) — and the effect gate re-decides on every admission (a deny or a lost relaxation since stops the effect);
+a decision that was silent without a mode increments `agent-tool.silent.edit|shell` (summary, not evidence: a counter failure does
+not stop the call). Owner-approved calls keep the C12 G3 gate unchanged. The protocol and ledger v41 are unchanged by 4a; the
+mode is not on the wire yet (status row and `/mode` join the v15 package). Version note: a policy document carrying `modeEligible`, or
+bindings v2, is refused as a whole by a build before this slice (strict schemas) — fail closed, never a silent relaxation. Side effect: on an installation that never produced an approval, the first silent call creates the approval/audit
+integrity key through the counter path. Open (owner): read-only shell under an eligible rule still asks in full-auto (needs audit event v2);
+`rm` stays outside the narrow set; permanent exact resources are slice 4d.
+
 ## Package contract
 
 - Public API is `index.ts`; everything else is internal.
