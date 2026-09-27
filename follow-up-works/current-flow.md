@@ -12,17 +12,17 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Ana checkout'tan çalışan iki host MCP süreci (`next-entry.mjs mcp`) eski kodla bellekte çalışıyor; sorun çıkarsa host oturumunun MCP'si yeniden başlatılır.
 - Sonraki parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`), `900f97d` + belge commit'leri.
 
-## Şeritler (kartlar `deckent-refactor-work/cards/lanes/NEXT-2026-09-27-C.md`)
-- B06-2A (Opus) teslim: `lane/b06-2a@c478675` — Run teslim commit'ine sabit (`createDeliveryRun`), custody aynı işlemde, V1 doğrulandı; entegrasyon bekliyor.
-- OWNER-EVE-SMALL (Sonnet) çalışıyor: `runtime serve` yabancı pinli kendi kapsamında başlangıç reddi + modül ad alanı config'e kapalı.
-- TERM-LOOP-UX analizi (Fable) teslim: `proof/TERM-LOOP-UX-2026-09-27/analysis.md` — ilk tur sessiz sıkıştırmada iptal edildi (model round'u yok);
-  576 sn'nin %88'i 26 model round'u (Qwen3 düşünme), %11 sıkıştırma; gerçek döngü yok (tekrarlar 16 KiB sayfalama); `grep` deseni satırda
-  görünmüyor (görüntü hatası); sistem istemi tek cümle ve araçlarla çelişiyor. Dilim önerisi D1–D9; owner soruları aşağıda.
+## Sonraki parti (`integrate/2026-09-27-d`, tam verify ve Astra incelemesi sırada)
+- B06-2a (Run teslim commit'ine sabit; replay kayıtlı custody'den), OWNER-EVE-SMALL (serve başlangıç reddi, modül ad alanı kapalı),
+  TL-A (görünür aşamalar, aşamalı iptal, düşünme ön izlemesi), TL-B (araç satırı deseni/özeti, 64 KiB okuma, grep context/maxHits),
+  TL-C (sistem istemi, ilerlemesiz round notu, özetlemede düşünme kapalı, yerleşime bağlı okuma yasağı — güvenlik), COMPOSITION-BUDGET
+  (kabul formülü engine'de tek kaynak), INFLIGHT-FIX (iptal edilen çağrı slotu bırakır; owner 2026-09-28, A3A güncellendi).
+- Canlı geçişte yapılacaklar (PASS sonrası): servis yeniden başlatma → takılı slot onarımı doğrulaması (`in_flight=0`); canlı katalog Qwen
+  modeline `chat-template-enable-thinking` eklenmesi (owner onayıyla); yerleşime bağlı okuma yasağının canlıda etkinleşmesi.
 
 ## Owner kararı bekleyenler
-- Terminal döngüsü (analiz owner soruları): okuma sınırı 16 → 64 KiB + config alanı; sistem istemi sahipliği/dili/yerleşim bilgisi; düşünme
-  görünürlüğü ve özet çağrısında thinking kapatma; ilerlemesiz round dürtüsü; Esc anında iptal; `grep` `context`/`maxHits`; araç satırı ile onay
-  kaynağının ayrılması.
-- B06-2a açıkları: pinli replay'de teslim denetiminin yeniden çalışması; `ADOPTION_NOT_DELIVERED` adı; CLI yolu (2c).
+- `/reasoning off` ile tüm turlarda düşünmeyi kapatma protokol v16 ister (karar bekliyor); `@file` ekleme yolu yerleşime bağlı okuma
+  yasağını henüz kullanmıyor; çöken süreçten kalan `claimed` slot (ayrı kart).
+- B06-2a açıkları: `ADOPTION_NOT_DELIVERED` adı; CLI yolu (2c); sonraki dilim B06-2b (benimseme bağı + ledger v42).
 - Dilim 4a: full-auto'da salt-okunur kabuk (audit olay v2) ve `rm`; `lane/l5-i40` (birleşmemiş tanı testi).
 - Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` (+ bu akşam biten şeritler, stash'ler).
