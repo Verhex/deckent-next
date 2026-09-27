@@ -122,6 +122,11 @@ describe('terminal agent turn stream', () => {
     expect(await run('grep', '[deckent] grep: no matches in 3 scanned file(s)')).toMatchObject({ summary: { kind: 'matches', count: 0, more: false } });
     expect(await run('grep', 'src/a.ts:1:needle\n[deckent] grep: truncated (200 hits cap); narrow with path or glob'))
       .toMatchObject({ summary: { kind: 'matches', count: 1, more: true } });
+    // Astra 2143 R2: a grep result with `context` mixes real hits (`path:line:text`) with context lines
+    // (`path:line-text`) and, between non-adjacent blocks, a lone `--` separator. None of those extra rows is a
+    // match: the count must stay the number of ':' hit lines only (ported from astra-2142-extra.test.ts.txt).
+    expect(await run('grep', 'a.txt:1-before\na.txt:2:MATCH one\na.txt:3-after')).toMatchObject({ summary: { kind: 'matches', count: 1, more: false } });
+    expect(await run('grep', 'a.txt:2:hit one\n--\na.txt:9:hit two')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
     expect(await run('glob', 'src/one.ts\nsrc/two.ts')).toMatchObject({ summary: { kind: 'matches', count: 2, more: false } });
     expect(await run('list_dir', 'src/\nREADME.md')).toMatchObject({ summary: { kind: 'entries', count: 2 } });
     const errored = await run('read_file', '[deckent] read_file: error=not-found path="missing.ts"', 'error');

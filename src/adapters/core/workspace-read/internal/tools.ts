@@ -148,14 +148,21 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       const lines = splitLines(text);
       const matches = await runner.match(re.source, re.flags, lines);
       scanned++;
+      // Every real match line keeps its ':' marker regardless of which match's context window prints it (Astra 2143
+      // R2): two matches close enough that their windows touch or overlap must not let the earlier window's block
+      // print the later match's own line as plain context ('-') just because it wasn't *that* window's `index`.
+      const matchSet = context > 0 ? new Set(matches) : null;
       let lastEmitted = 0, firstBlockOfFile = true;
       for (const index of matches) {
         if (hits.length >= maxHits) { hitCapped = true; return false; }
         if (context === 0) { hits.push(`${rel}:${index + 1}:${boundLine(lines[index]!, index + 1, 0, GREP_BYTES_PER_LINE).text}`); continue; }
         const from = Math.max(index - context, lastEmitted), to = Math.min(lines.length - 1, index + context);
+        // This match's whole window already printed inside an earlier, still-open block (its own line included,
+        // correctly marked ':' there via matchSet) — nothing new to emit, and pushing would add an empty row.
+        if (from > to) continue;
         const block: string[] = [];
         if (!firstBlockOfFile && from > lastEmitted) block.push('--');
-        for (let j = from; j <= to; j++) block.push(`${rel}:${j + 1}${j === index ? ':' : '-'}${boundLine(lines[j]!, j + 1, 0, GREP_BYTES_PER_LINE).text}`);
+        for (let j = from; j <= to; j++) block.push(`${rel}:${j + 1}${matchSet!.has(j) ? ':' : '-'}${boundLine(lines[j]!, j + 1, 0, GREP_BYTES_PER_LINE).text}`);
         hits.push(block.join('\n')); lastEmitted = to + 1; firstBlockOfFile = false;
       }
       return true;
