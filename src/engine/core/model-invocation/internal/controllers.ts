@@ -49,3 +49,17 @@ export class ModelInvocationControllers {
     return 'abort-requested';
   }
 }
+
+/**
+ * The send owner a runtime-service instance records on the calls it permits (FIX-2143-SLOTS). Only the service host mints it, so an open
+ * call carrying it belongs to a service instance; any other owner (a host-less direct call, a build before this one) never matches.
+ */
+const RUNTIME_SERVICE_OWNER = 'runtime-service:';
+export function runtimeServiceModelOwnerId(instanceId: string): string {
+  return identitySchema.parse(`${RUNTIME_SERVICE_OWNER}${identitySchema.parse(instanceId)}`);
+}
+/** True only for an owner minted by `runtimeServiceModelOwnerId`. Whether that instance has ended is decided by endpoint custody. */
+export function isRuntimeServiceModelOwnerId(ownerId: string): boolean {
+  return typeof ownerId === 'string' && ownerId.startsWith(RUNTIME_SERVICE_OWNER) && identitySchema.safeParse(ownerId).success
+    && ownerId.length > RUNTIME_SERVICE_OWNER.length;
+}

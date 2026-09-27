@@ -22,7 +22,7 @@ export type { ModelInvocationCancellationAdmission, ModelInvocationCancellationR
   ModelInvocationSendPermission } from './internal/port.js';
 export { ModelInvocationCancellationApplication, parseModelInvocationCancellationAdmission } from './internal/cancellation.js';
 
-export { ModelInvocationControllers } from './internal/controllers.js';
+export { ModelInvocationControllers, isRuntimeServiceModelOwnerId, runtimeServiceModelOwnerId } from './internal/controllers.js';
 export type { ModelInvocationAbortResult, ModelInvocationControllerHandle } from './internal/controllers.js';
 export { modelInvocationCancellationRecoveryCommandSchema, modelInvocationCancellationInventoryQuerySchema } from './internal/cancellation-inventory.js';
 export type { ModelInvocationCancellationRecoveryCommand, ModelInvocationCancellationInventoryQuery,

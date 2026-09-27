@@ -5,16 +5,16 @@ import { reserveInvocationSpend, settleInvocationSpend, verifyInvocationSpendRep
 import { purgeInvocationContent } from './purge.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationClaimSchema, parseModelInvocationControlRecord, parseModelInvocationCancellationReceipt, proposeModelInvocationSendPermission,
+import { counterSchema, modelInvocationClaimSchema, parseModelInvocationControlRecord, parseModelInvocationCancellationReceipt, proposeModelInvocationSendPermission,
   type ModelInvocationClaim, type ModelInvocationNativeResponse,
   type ModelInvocationResponseEvidence, type ModelInvocationUnknownReason } from '#domain/index.js';
 import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendError, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationStore, type ProviderSpendReportedMeasurement, verifyModelActivationRecord,
-  planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore } from '#engine/index.js';
+  planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore, type ModelAllocationStartCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
-import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
+import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord, visitAllocationInvocations } from './read.js';
 
 type Row = Readonly<Record<string, unknown>>;
 const encoded = (value: unknown) => JSON.stringify(value);
@@ -213,33 +213,63 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
         : createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs));
     } catch (error) { return this.fail(error); }
   }
-  /** Start reconciliation (INFLIGHT-FIX): one transaction per allocation, through the same checkpointed writer as claims. */
-  async releaseSettledSlots(): Promise<ModelAllocationSlotRelease> {
+  /** Start reconciliation (INFLIGHT-FIX, Astra 2143 R1, FIX-2143-SLOTS): one transaction per allocation, through the same checkpointed
+   * writer as claims; every decision rests on records the decoder verified in that transaction, never on a bare column. */
+  async releaseSettledSlots(custody: ModelAllocationStartCustody): Promise<ModelAllocationSlotRelease> {
     try {
+      const atMs = counterSchema.parse(custody.atMs), endedOwner = custody.endedOwner;
+      if (typeof endedOwner !== 'function') throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       const keys = this.db.prepare('SELECT scope_id,allocation_id FROM model_invocation_allocations ORDER BY scope_id,allocation_id').all() as Row[];
-      let released = 0; const inconsistent: { scopeId: string; allocationId: string }[] = [];
+      let released = 0, settled = 0; const inconsistent: { scopeId: string; allocationId: string }[] = [];
       for (const key of keys) {
         const scopeId = String(key['scope_id']), allocationId = String(key['allocation_id']);
         try {
-          released += this.transaction(() => {
-            const checkpoint = readModelAllocationCheckpoint(this.db, scopeId, allocationId);
-            if (!checkpoint) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-            const count = (state: string) => Number(this.db.prepare('SELECT count(*) AS count FROM model_invocations WHERE scope_id=? AND allocation_id=? AND state=?')
-              .get(scopeId, allocationId, state)?.['count']);
-            const plan = planModelAllocationSlotRelease(checkpoint.allocation, { open: count('claimed'), unknown: count('unknown') });
-            if (plan.kind === 'inconsistent') throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
-            if (plan.kind !== 'release') return 0;
-            writeModelAllocation(this.db, checkpoint, plan.next);
-            return plan.released;
-          });
+          const result = this.transaction(() => this.reconcileAllocation(scopeId, allocationId, endedOwner, atMs));
+          released += result.released; settled += result.settled;
         } catch (error) {
-          // A damaged or unexplained allocation is reported and left as it is; it never blocks the others or the service start.
-          if (!(error instanceof ModelInvocationStoreError) || error.code !== 'MODEL_INVOCATION_CORRUPT') throw error;
+          // A damaged or unexplained allocation is rolled back, reported and left as it is; it never blocks the others or the service start.
+          if (!(error instanceof ProviderSpendError) && (!(error instanceof ModelInvocationStoreError) || error.code !== 'MODEL_INVOCATION_CORRUPT')) throw error;
           inconsistent.push(Object.freeze({ scopeId, allocationId }));
         }
       }
-      return Object.freeze({ allocations: keys.length, released, inconsistent: Object.freeze(inconsistent) });
+      return Object.freeze({ allocations: keys.length, released, settled, inconsistent: Object.freeze(inconsistent) });
     } catch (error) { return this.fail(error); }
+  }
+  private reconcileAllocation(scopeId: string, allocationId: string, endedOwner: (ownerId: string) => boolean, atMs: number) {
+    const corrupt = () => new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+    const checkpoint = readModelAllocationCheckpoint(this.db, scopeId, allocationId);
+    if (!checkpoint) throw corrupt();
+    const allocation = checkpoint.allocation;
+    // A clean restart: no slot held and no open row, so nothing can be written and nothing needs decoding.
+    const openRows = Number(this.db.prepare("SELECT count(*) AS count FROM model_invocations WHERE scope_id=? AND allocation_id=? AND state='claimed'")
+      .get(scopeId, allocationId)?.['count']);
+    if (allocation.inFlight === 0 && openRows === 0) return { released: 0, settled: 0 };
+    let retained = 0, unknown = 0; const open: ModelInvocationRecord[] = [];
+    visitAllocationInvocations(this.db, scopeId, allocationId, record => {
+      const limits = record.receipt.profile.allocation;
+      if (limits.maxCalls !== allocation.maxCalls || limits.maxInFlight !== allocation.maxInFlight) throw corrupt();
+      retained++;
+      if (record.receipt.outcome === null) { if (open.push(record) > allocation.inFlight) throw corrupt(); }
+      else if (record.receipt.outcome.state === 'unknown') unknown++;
+    });
+    // Every claim is retained and counted once: a missing or moved row means the counts below prove nothing.
+    if (retained !== allocation.lifetimeCalls || planModelAllocationSlotRelease(allocation, { open: open.length, unknown }).kind === 'inconsistent') throw corrupt();
+    // An open call whose permitted send owner custody proves ended: its process, and with it the local request, is gone. It settles
+    // `unknown` through the ordinary settlement (spending hold, lifetime count and uncertain record kept) and frees its slot.
+    let settled = 0;
+    for (const record of open) {
+      const control = invocationControl(this.db, record);
+      if (control.send.state !== 'permitted' || !endedOwner(control.send.ownerId)) continue;
+      this.persistOutcome(record, createModelInvocationUnknownRecord(record.receipt, atMs), readModelAllocationCheckpoint(this.db, scopeId, allocationId));
+      settled++;
+    }
+    // An earlier build's surplus is planned from the counts after those settlements, so no slot is freed twice.
+    const current = readModelAllocationCheckpoint(this.db, scopeId, allocationId);
+    if (!current) throw corrupt();
+    const plan = planModelAllocationSlotRelease(current.allocation, { open: open.length - settled, unknown: unknown + settled });
+    if (plan.kind === 'inconsistent') throw corrupt();
+    if (plan.kind === 'release') writeModelAllocation(this.db, current, plan.next);
+    return { released: plan.kind === 'release' ? plan.released : 0, settled };
   }
   async purgeContent(input: ModelInvocationPurgeAdmission) {
     try { const admission = parseModelInvocationPurgeAdmission(input);

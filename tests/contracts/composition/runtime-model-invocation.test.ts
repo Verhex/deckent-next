@@ -12,7 +12,8 @@ import { promisify } from 'node:util';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime } from '#adapters/index.js';
-import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId } from '#engine/index.js';
+import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId,
+  runtimeServiceModelOwnerId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
@@ -226,7 +227,7 @@ it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a p
       expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_cancellations WHERE command_id=?')
         .get(cancellation.commandId)?.record))).toMatchObject({ command: cancellation, disposition: 'requested' });
       expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_controls').get()?.record)))
-        .toMatchObject({ send: { state: 'permitted', ownerId: descriptor.instanceId } });
+        .toMatchObject({ send: { state: 'permitted', ownerId: runtimeServiceModelOwnerId(descriptor.instanceId) } });
     } finally { audit.close(); }
     await within(closed, 'MODEL_INVOCATION_ABORT_NOT_OBSERVED');
     const settled = await within(invocation, 'MODEL_INVOCATION_ABORT_NOT_SETTLED');

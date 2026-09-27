@@ -8,7 +8,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority } from '#adapters/index.js';
-import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
+import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -37,7 +37,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
    * not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */
   onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
-  /** Concurrency slots an earlier build kept for settled `unknown` model calls, released at this start (INFLIGHT-FIX). */
+  /** Open model calls of an ended service instance settled `unknown`, and slots an earlier build kept for settled `unknown` calls,
+   * released at this start (INFLIGHT-FIX, FIX-2143-SLOTS); allocations whose records do not verify are reported untouched. */
   onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
 }
 
@@ -63,9 +64,10 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
-  // Same custody: slots an earlier build kept for settled `unknown` model calls are released (INFLIGHT-FIX); open claims are never touched.
+  // Same custody: open model calls of an ended service instance settle `unknown` (FIX-2143-SLOTS) and slots an earlier build kept for
+  // settled `unknown` calls are released (INFLIGHT-FIX); any other open call is never touched.
   const slots = await releaseSettledModelSlots(path, config.storage.sqlite);
-  if (slots.released || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
+  if (slots.released || slots.settled || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
   await sweepFullPreviews(config.productLayout);
   // Their tool-call approvals can no longer permit anything: still-pending ones (a crash, or a close that failed) are closed now.
@@ -107,7 +109,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onError: (command, error) => observer.onReconciliationError?.(command, error),
   }, options) : null;
   const instanceId = randomUUID();
-  const modelHost = { ownerId: instanceId, controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
+  // The send owner names this service instance, so the next start under custody can prove its open calls ended (FIX-2143-SLOTS).
+  const modelHost = { ownerId: runtimeServiceModelOwnerId(instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal);
