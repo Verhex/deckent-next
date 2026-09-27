@@ -11,12 +11,11 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde (`b596
 - Astra 2132 → 2133 ANALYSIS + 2134 REVISE (R1 P1 bileşik dar komutla yazma tabanı aşımı, R2 P2 audit edilen kararla kabul eşleşmesi,
   R3 P2 `@file` seçilen yol kimliği): düzeltmeler FIX-2133 (`e047075`) ve FIX-2134-R3 (`5538033`) partiye birleşti; kanıt `.deckent/host/reviews/astra-2132/`.
 - Sıradaki: tam verify (4 çalışan) → Astra yeniden inceleme → PASS'te yalnız incelenen sha push (owner 2026-09-27 izni).
-- Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
   Canlı yeniden başlatma (ledger v40 → v41 yedekli, protokol v15) owner iznindedir.
+- Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
 
-## Açık şeritler (kartlar `deckent-refactor-work/cards/lanes/NEXT-2026-09-27-C.md`, taban integrate `b2ebcd3`)
-- V15-G4 (Opus): katalog operasyonları runtime servisinde + MCP operasyon araçları (v15'e ekler, sürüm artmaz).
-- CLEANUP-MARK (Sonnet): bitmiş kabuk çağrısında kalıcı `cleanup` işareti (`tool.finished`, v15).
+## Şeritler (kartlar `deckent-refactor-work/cards/lanes/NEXT-2026-09-27-C.md`)
+- V15-G4 ve CLEANUP-MARK teslim edildi, dördüncü parti dalında. SLICE4C (Opus, mod durum satırı + `/mode`) çalışıyor.
 - B06-2 tasarımı (Fable) teslim: `proof/B06-2-DESIGN-2026-09-27/design-note.md`; öneri A (mevcut Run + Docker sandbox, Run teslim commit'ine
   sabitlenir, benimseme açık `verificationRunId` ile bağlanır, ledger v42). Owner soruları S1 (A/B), S2 (v42), S3 (sandbox bağımlılıkları).
 
