@@ -4,7 +4,7 @@ import { identitySchema, counterSchema, approvalRequestSchema, ApprovalError, co
   separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
-import type { PolicySource } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import type { ApprovalStore } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
 
@@ -15,7 +15,10 @@ export const approvalCommandSchema = approvalQuerySchema.extend({ commandId: ide
 export const approvalRenewalSchema = approvalCommandSchema.omit({ decision: true });
 export type ApprovalCommand = z.infer<typeof approvalCommandSchema>;
 export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
-  if (evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
+  const decision = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision;
+  // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
+  if (decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
+  if (decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
 }
 function commandFingerprint(tag: string, command: z.infer<typeof approvalRenewalSchema> | ApprovalCommand, actor: VerifiedPrincipal | { id: string; issuer: string; subject: string }) {
   const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: command.commandId, scopeId: command.scopeId,

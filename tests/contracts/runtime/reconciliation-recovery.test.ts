@@ -73,6 +73,18 @@ it('continues after denied or unavailable identities and reports bounded reasons
   expect(JSON.stringify(page)).not.toContain('private path'); expect(calls).toEqual(['denied', 'ok', 'unavailable']);
 });
 
+it('classifies POLICY_APPROVAL_UNSUPPORTED and SCOPE_UNKNOWN refusals as denied too, not unavailable (C12 Q8 / H34 S1)', async () => {
+  const recovery = app({ entries: [entry('unknown-scope'), entry('unsupported')], nextAfter: null }, {}, executor({
+    async reconcile(value) {
+      if (value.attemptId === 'unsupported') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
+      if (value.attemptId === 'unknown-scope') throw new PolicyAuthorizationError('SCOPE_UNKNOWN');
+      return { status: 'unresolved', outputRecorded: false };
+    },
+  }));
+  const page = await recovery.recover(command);
+  expect(page.outcomes).toMatchObject([{ status: 'failed', reason: 'denied' }, { status: 'failed', reason: 'denied' }]);
+});
+
 it('rejects foreign scope, duplicate identities, oversize pages, nonprogress cursors, and missing terminal fields before effects', async () => {
   let effects = 0;
   const run = (page: DispatchInventoryPage, limit = 2) => app(page, { maxPageSize: limit }, executor({

@@ -14,15 +14,20 @@ export const cancellationRecoveryCommandSchema = z.object({ schemaVersion: z.lit
   afterAttemptId: identitySchema.nullable() }).strict();
 export type CancellationRecoveryCommand = z.infer<typeof cancellationRecoveryCommandSchema>;
 export const cancellationRecoveryFailureReasonSchema = z.enum(['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED',
-  'POLICY_DENIED', 'POLICY_UNAVAILABLE', 'CANCELLATION_DELIVERY_CONFLICT', 'CANCELLATION_DELIVERY_CORRUPT', 'UNKNOWN']);
+  'POLICY_DENIED', 'POLICY_UNAVAILABLE', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN',
+  'CANCELLATION_DELIVERY_CONFLICT', 'CANCELLATION_DELIVERY_CORRUPT', 'UNKNOWN']);
 export type CancellationRecoveryFailureReason = z.infer<typeof cancellationRecoveryFailureReasonSchema>;
 export type CancellationRecoveryOutcome = Readonly<{ identity: AttemptIdentity; outcome: RunCancellationOutcome; reason?: CancellationRecoveryFailureReason }>;
 
+// C12 Q8 / H34 S1: an authorization or delivery failure always yields a typed per-attempt reason, never a thrown
+// parse error — an unrecognized code (a future authority adds one this schema does not yet know) degrades to
+// 'UNKNOWN' rather than crashing the whole recovery page.
 function failureReason(error: unknown): CancellationRecoveryFailureReason {
-  if (error instanceof AuthenticationError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
-  if (error instanceof PolicyAuthorizationError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
-  if (error instanceof CancellationDeliveryError) return cancellationRecoveryFailureReasonSchema.parse(error.code);
-  return 'UNKNOWN';
+  const code = error instanceof AuthenticationError || error instanceof PolicyAuthorizationError || error instanceof CancellationDeliveryError
+    ? error.code : undefined;
+  if (code === undefined) return 'UNKNOWN';
+  const parsed = cancellationRecoveryFailureReasonSchema.safeParse(code);
+  return parsed.success ? parsed.data : 'UNKNOWN';
 }
 
 /** A bounded recovery page consumes durable intent, never creates a new cancellation command.
@@ -68,7 +73,8 @@ export class CancellationRecoveryApplication {
           outcome = await this.worker.deliver(identity, credential, error => { reason = failureReason(error); });
         } catch (error) {
           outcome = { attemptId: identity.attemptId, taskId: identity.taskId,
-            status: error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable' };
+            status: error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
+              && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable' };
           outcomes[index] = Object.freeze({ identity, outcome, reason: failureReason(error) });
           continue;
         }

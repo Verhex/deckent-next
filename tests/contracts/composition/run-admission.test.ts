@@ -54,6 +54,20 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     await f.policy(false, true); await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(await readFile(f.path)).toEqual(before); expect(state()).toEqual(pinned);
   });
+  it('returns a typed refusal, not denial, when Run or pool authority is require-approval (C12 Q8: SDK surface, no catalog broker here yet)', async () => {
+    const f = await fixture();
+    const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
+    const requireApprovalGrants = (kind: 'run' | 'pool') => [
+      { id: 'run', effect: kind === 'run' ? 'require-approval' : 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r', 'r2'] } },
+      { id: 'pool', effect: kind === 'pool' ? 'require-approval' : 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
+    ];
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: requireApprovalGrants('run') }), { mode: 0o600 });
+    await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+    await writeFile(join(f.data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: requireApprovalGrants('pool') }), { mode: 0o600 });
+    await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try { expect(db.prepare('SELECT count(*) AS n FROM runs').get()!.n).toBe(0); } finally { db.close(); }
+  });
   it('keeps historical admission replay separate from new pool authority and reports missing configuration explicitly', async () => {
     const f = await fixture(); await f.policy(true, true); const first = await createRun(f.project, command, f.options);
     await f.policy(true, false); expect(await createRun(f.project, command, f.options)).toEqual(first);

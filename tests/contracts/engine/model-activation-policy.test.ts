@@ -24,3 +24,8 @@ it('does not grant activation from vocabulary membership or unavailable policy',
   const unavailable = new ModelActivationPolicyAuthorization({ async load() { throw new Error('offline'); } });
   await expect(unavailable.authorize('deactivate', target, principal)).rejects.toThrow('POLICY_UNAVAILABLE');
 });
+it('returns a typed refusal, not denial, when the grant requires approval (C12 Q8: no catalog broker here yet)', async () => {
+  const authorization = new ModelActivationPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'policy-1',
+    grants: [{ ...grant, effect: 'require-approval' }], restrictions: [] }; } });
+  await expect(authorization.authorize('activate', target, principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+});

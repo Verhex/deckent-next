@@ -4,7 +4,7 @@ import type { SandboxRequest } from '#engine/core/supervisor/index.js';
 /** Trusted composition provides authority documents, never model output or caller-authored wire fields. */
 export interface PolicySource { load(): Promise<unknown> }
 export class PolicyAuthorizationError extends Error {
-  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN') { super(code); this.name = 'PolicyAuthorizationError'; }
+  constructor(readonly code: 'POLICY_UNAVAILABLE' | 'POLICY_DENIED' | 'SCOPE_UNKNOWN' | 'POLICY_APPROVAL_UNSUPPORTED') { super(code); this.name = 'PolicyAuthorizationError'; }
 }
 export class DispatchPolicyAuthorization implements DispatchAuthorization, DispatchIdentityAuthorization {
   constructor(private readonly source: PolicySource) {}
@@ -16,6 +16,8 @@ export class DispatchPolicyAuthorization implements DispatchAuthorization, Dispa
     try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: identity.scopeId,
       resource: { kind: policyResources.attempt.kind, id: identity.attemptId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
+    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
   }
 }
@@ -26,6 +28,7 @@ export class DispatchInventoryPolicyAuthorization implements DispatchInventoryAu
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action: policyResources.scope.actions[0], scopeId, resource: { kind: policyResources.scope.kind, id: scopeId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
   }
 }

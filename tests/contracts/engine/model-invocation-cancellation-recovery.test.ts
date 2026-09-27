@@ -31,6 +31,7 @@ function entry(invocationId: string, send: 'permitted' | 'unobserved' = 'permitt
 
 function fixture(entries: readonly ModelInvocationCancellationInventoryEntry[], options: {
   readonly next?: string | null; readonly malformed?: unknown; readonly deny?: string; readonly fail?: string;
+  readonly refuse?: { readonly commandId: string; readonly code: 'POLICY_APPROVAL_UNSUPPORTED' | 'SCOPE_UNKNOWN' };
   readonly inspectError?: boolean; readonly closeError?: boolean;
 } = {}) {
   let closes = 0, aborts = 0; const queries: unknown[] = [], policies: string[] = [];
@@ -44,6 +45,7 @@ function fixture(entries: readonly ModelInvocationCancellationInventoryEntry[], 
     return { ...actor, scopeIds: ['scope'] };
   } }, { async authorize(_action, target) { policies.push(target.commandId);
     if (target.commandId === options.deny) throw Object.assign(new Error('DENIED'), { code: 'POLICY_DENIED' });
+    if (target.commandId === options.refuse?.commandId) throw Object.assign(new Error('REFUSED'), { code: options.refuse.code });
     if (target.commandId === options.fail) throw new Error('UNAVAILABLE');
     return { revision: 'fresh', ruleId: 'cancel' };
   } }, async () => inventory, { requestAbort() { aborts++; return 'abort-requested'; } }, { maxPageSize: 2 });
@@ -86,6 +88,13 @@ describe('model invocation cancellation recovery application', () => {
       { invocationId: 'first', status: 'denied' }, { invocationId: 'second', status: 'failed' },
     ] });
     expect(f.counts()).toMatchObject({ aborts: 0, closes: 1, policies: ['cancel-first', 'cancel-second'] });
+  });
+
+  it.each(['POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'] as const)(
+    'classifies a %s cancel-invocation refusal as denied, not failed (C12 Q8 / H34 S1)', async code => {
+    const f = fixture([entry('first')], { refuse: { commandId: 'cancel-first', code } });
+    await expect(f.app.recover(command)).resolves.toEqual({ nextAfterInvocationId: 'first',
+      outcomes: [{ invocationId: 'first', status: 'denied' }] });
   });
 
   it('reports unobserved custody as not-live without touching a controller or inventing terminal state', async () => {

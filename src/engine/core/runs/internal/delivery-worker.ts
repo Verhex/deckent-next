@@ -27,7 +27,8 @@ export class CancellationDeliveryWorker {
         if (claimed.acquired) {
           let outcome: 'terminal' | 'prevented' | 'unresolved' | 'denied' | 'unavailable';
           try { outcome = (await this.dispatch.cancel(record.request, credential)).kind; }
-          catch (error) { onFailure?.(error); outcome = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable'; }
+          catch (error) { onFailure?.(error); outcome = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
+            && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable'; }
           persisted = await this.store.finishCancellationDelivery({ ...input, now: this.runtime.now(), outcome });
         }
         status = persisted.state === 'terminal' || persisted.state === 'prevented' ? persisted.state : persisted.lastOutcome ?? 'unresolved';
@@ -35,7 +36,8 @@ export class CancellationDeliveryWorker {
       }
     } catch (error) {
       onFailure?.(error);
-      status = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED') ? 'denied' : 'unavailable';
+      status = error instanceof AuthenticationError || (error instanceof PolicyAuthorizationError
+        && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN')) ? 'denied' : 'unavailable';
     }
     // Durable intent plus recorded terminal evidence settle the bound task; a failed settlement never changes the delivery status.
     let settlement: RunCancellationOutcome['settlement'];

@@ -37,6 +37,11 @@ it('reauthorizes every call and keeps deny/restrictions stronger than a previous
   expect(reads).toBe(3);
 });
 
+it('returns a typed refusal, not denial, when the grant requires approval (C12 Q8: no catalog broker here yet)', async () => {
+  const authorization = new ServicePolicyAuthorization({ async load() { return { ...policy, grants: [{ ...grant, effect: 'require-approval' }] }; } });
+  await expect(authorization.authorize(target, principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+});
+
 it('rejects invalid or unavailable policy without returning private source errors', async () => {
   for (const load of [async () => ({ invalid: true }), async () => { throw new Error('private-source-detail'); }]) {
     const authorization = new ServicePolicyAuthorization({ load });
