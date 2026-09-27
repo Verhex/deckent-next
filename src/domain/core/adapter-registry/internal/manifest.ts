@@ -11,7 +11,8 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Room for signed Enterprise manifests (owner Q7). Present in v1 so the shape need not change; verification arrives with A04-3,
  * and until then a non-null signature is refused rather than accepted unverified. */
 export const manifestSignatureSchema = z.object({ algorithm: z.literal('ed25519'), keyId: identitySchema, digest, value: z.string().min(1).max(4096) }).strict().readonly();
-/** Manifest v1: pure data describing one adapter module. `namespace: null` means the root (unprefixed ids) and is only honoured
+/** Manifest v1: pure data describing one adapter module. Every level, including the `provides` collections, is frozen on parse so
+ * an admitted manifest cannot be edited through a returned reference (Astra 2126 R2). `namespace: null` means the root (unprefixed ids) and is only honoured
  * for modules the Core composition passes at registry construction; overlays must own a dotted namespace. Adapter and operation
  * ids provided by a namespaced module must live under `<namespace>.`. `provides.operations` are validated for the adds-only rule
  * (no redefinition of a registered `id@version`); they feed no catalog until the unified catalog (A04-2). */
@@ -21,8 +22,8 @@ export const adapterModuleManifestSchema = z.object({
   requires: z.object({ coreApi: z.object({ min: z.number().int().positive().safe(), max: z.number().int().positive().safe() }).strict()
     .refine(range => range.max >= range.min).readonly() }).strict().readonly(),
   provides: z.object({
-    targetAdapters: z.array(z.object({ adapterId: identitySchema, version: z.number().int().positive().safe() }).strict().readonly()).max(64),
-    operations: z.array(operationDescriptorSchema).max(1024),
+    targetAdapters: z.array(z.object({ adapterId: identitySchema, version: z.number().int().positive().safe() }).strict().readonly()).max(64).readonly(),
+    operations: z.array(operationDescriptorSchema).max(1024).readonly(),
   }).strict().readonly(),
   signature: manifestSignatureSchema.nullable(),
 }).strict().readonly();
