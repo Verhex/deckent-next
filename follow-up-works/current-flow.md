@@ -47,6 +47,10 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
   Push: Astra 2125 PASS + owner izni → yalnız `5a25b10`. Sonra canlı yeniden başlatma (ledger v38→v39 yedekli) + `grant-edit-shell.mjs` (owner).
   Sıradaki şeritler: H34 S2 (bindings/policy v2 + dört-göz), C12 G1/G2 (v40) + Q8 tipli ret, A04-2 birleşik katalog, ajan araç onayı zamanı (I40),
   dilim 4 izin modları (Astra PASS + push sonrası). Owner temizliği: `/tmp/tmp.gFyiECWkqp`.
+- **2026-09-27 öğle — parti @ `b596eee` (origin/main `5fa0812`'nin 79 commit önünde):** tam verify 4 çalışanla exit 0, 297 sn
+  (native 25, vitest 350 / 2.326, host 56; lint paralel). Push ve canlı yeniden başlatma owner kararında (bekletiliyor). Astra: 2127 REVISE
+  bulguları (2128/2129) düzeltildi → yeniden inceleme bekliyor; I40-c, test bölme ve paralel lint için ek istek gönderildi.
+  Owner kararı bekleyenler: push zamanı, tam verify için 4 çalışan, I40-c B seçeneği, kurulum çıkış kodu, rol `task` kuralı, kalıcı cleanup işareti (v15).
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
