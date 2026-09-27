@@ -6,6 +6,8 @@ export interface ApprovalStore {
   find(scopeId: string, runId: string, taskId: string, actionDigest: string): ApprovalRecord | null;
   /** The current approval of one agent tool call (C12): its action digest binds the exact call. */
   findToolCall(scopeId: string, actionDigest: string): ApprovalRecord | null;
+  /** The current approval of one catalog operation command (C12 G1): its action digest binds scope, requester and the exact subject. */
+  findOperation(scopeId: string, actionDigest: string): ApprovalRecord | null;
   list(scopeId: string, afterId: string | null, limit: number): readonly ApprovalRecord[];
   /** Keys of pending agent tool-call approvals across scopes, ordered by (scope, id) after `after` (service-start reconciliation). */
   pendingToolCalls(after: { readonly scopeId: string; readonly approvalId: string } | null, limit: number): readonly { readonly scopeId: string; readonly approvalId: string }[];

@@ -1419,7 +1419,9 @@
         "src/engine/core/authentication",
         "src/engine/core/policy",
         "src/platform/core/clock",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/effect",
+        "src/engine/core/effect"
       ],
       "plan": "SECURITY"
     },
@@ -1553,7 +1555,10 @@
         "src/platform/core/config",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/local-keyring",
+        "src/engine/core/approval"
       ],
       "plan": "EXECUTION"
     },

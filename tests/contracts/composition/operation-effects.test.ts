@@ -5,7 +5,7 @@ import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
-import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '../../../src/index.js';
+import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation, configuredApproval } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { HttpConditionalEffectTarget, registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
@@ -26,15 +26,16 @@ async function fixture() {
   const target = (kind: string, idempotencyLookup: boolean) => ({ adapter: 'http-conditional', options: { kind, baseUrl: server.baseUrl, timeoutMs: 2000, responseMaxBytes: 65536, idempotencyLookup } });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, operations: {
     catalog: [descriptor('post-order', 'records', { compensation: ref('cancel-order') }), descriptor('cancel-order', 'records'),
-      descriptor('approve-payment', 'records', { effectClass: 'irreversible', approval: 'required', precondition: 'none' }),
+      descriptor('approve-payment', 'records', { effectClass: 'irreversible', approval: 'required', precondition: 'none', admitWithinMs: 1 }),
       descriptor('post-blind', 'blind')],
     targets: [target('records', true), target('blind', false)] } }));
   registerProviderConfig(); // as every composed entry does before loading configuration
   const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   const policy = (effect: 'allow' | 'require-approval' = 'allow', actions = ['execute', 'compensate', 'inspect']) => writeFile(productResourcePath(opened.layout, 'policy'),
-    JSON.stringify({ schemaVersion: 1, revision: 'effects', restrictions: [], grants: [
+    JSON.stringify({ schemaVersion: 1, revision: `effects-${effect}`, restrictions: [], grants: [
       { id: 'operations', effect: 'allow', actions, scopes: ['s', 's2'], principals, resource: { kind: 'operation', ids: 'all' } },
+      { id: 'approvals', effect: 'allow', actions: 'all', scopes: ['s', 's2'], principals, resource: { kind: 'approval', ids: 'all' } },
       ...(effect === 'require-approval' ? [{ id: 'gate', effect, actions: ['execute'], scopes: ['s'], principals, resource: { kind: 'operation', ids: ['post-order'] } }] : []),
     ] }), { mode: 0o600 });
   await policy();
@@ -68,12 +69,100 @@ it('settles a conditional write once, replays it, refuses stale and raced precon
   await expect(f.execute(f.command('raced', { expectedVersion: '"v2"' }))).rejects.toMatchObject({ code: 'EFFECT_PRECONDITION_CHANGED' });
   expect(f.server.operations).toHaveLength(1);
 
-  await expect(f.execute(f.command('pay', { operation: ref('approve-payment'), expectedVersion: null }))).rejects.toMatchObject({ code: 'EFFECT_APPROVAL_REQUIRED' });
+  // C12 G2: a required approval is a pending result — no effect, no intent, the request is open for a decision.
+  const pay = await f.execute(f.command('pay', { operation: ref('approve-payment'), expectedVersion: null }));
+  expect(pay).toMatchObject({ schemaVersion: 2, status: 'approval-pending', commandId: 'pay', scopeId: 's', approval: { revision: 0 } });
   await f.policy('require-approval');
-  await expect(f.execute(f.command('gated'))).rejects.toMatchObject({ code: 'EFFECT_APPROVAL_REQUIRED' });
+  expect(await f.execute(f.command('gated'))).toMatchObject({ status: 'approval-pending', commandId: 'gated' });
   expect(f.server.operations).toHaveLength(1); expect(f.state('pay')).toBeUndefined(); expect(f.state('gated')).toBeUndefined();
   await f.policy('allow', ['inspect']);
   await expect(f.execute(f.command('denied'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  // No grant is refused before any ledger access: a recorded command id with another body is not a conflict probe for the unauthorized.
+  await expect(f.execute(f.command('post', { input: { amount: 11 } }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+});
+
+it('brokers a required operation approval: pending, decided allow, the same command settles once, the approval is consumed and bound to its command and input (C12 G1/G2)', async () => {
+  const f = await fixture();
+  await f.policy('require-approval');
+  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide',
+    { schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }, f.options) as Promise<{ status: string }>;
+  const pending = await f.execute(f.command('gated'));
+  if (pending.status !== 'approval-pending') throw new Error(pending.status);
+  // The same command asked again is the same pending request (idempotent on the action digest); nothing happened at the target.
+  expect(await f.execute(f.command('gated'))).toEqual(pending);
+  expect(f.server.operations).toHaveLength(0); expect(f.state('gated')).toBeUndefined();
+  const listed = await configuredApproval(f.project, 'list', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }, f.options) as { request: { subject?: { kind: string; commandId?: string } } }[];
+  expect(listed.map(record => record.request.subject)).toEqual([expect.objectContaining({ kind: 'operation', commandId: 'gated', target: { kind: 'records', id: 'PO-1' } })]);
+  // Same command, other input: another subject, another request; the first approval never covers it.
+  const other = await f.execute(f.command('gated', { input: { amount: 99 } }));
+  expect(other).toMatchObject({ status: 'approval-pending' }); if (other.status !== 'approval-pending') throw new Error(other.status);
+  expect(other.approval.approvalId).not.toBe(pending.approval.approvalId);
+
+  expect(await decide(pending.approval.approvalId, 'allow-gated', 'allow')).toMatchObject({ status: 'decided' });
+  const settled = await f.execute(f.command('gated'));
+  expect(settled).toMatchObject({ schemaVersion: 1, status: 'settled', sequence: 1, version: '"v2"' });
+  expect(f.server.operations).toHaveLength(1);
+  // The intent carries the approval reference; a replay settles from the record without a new request.
+  const record = (await inspectConfiguredOperation(f.project, { scopeId: 's', commandId: 'gated' }, f.options)).record;
+  expect(record?.intent.approval).toEqual({ approvalId: pending.approval.approvalId, actionDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  expect(await f.execute(f.command('gated', { expectedVersion: '"v1"' }))).toEqual(settled);
+  const approvals = await configuredApproval(f.project, 'list', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }, f.options) as unknown[];
+  expect(approvals).toHaveLength(2);
+  // Consumed: a new command with the same input and target is not admitted by the earlier allow; it opens its own request.
+  const again = await f.execute(f.command('gated-2', { expectedVersion: '"v2"' }));
+  expect(again).toMatchObject({ status: 'approval-pending', commandId: 'gated-2' });
+  if (again.status !== 'approval-pending') throw new Error(again.status);
+  expect(again.approval.approvalId).not.toBe(pending.approval.approvalId); expect(f.server.operations).toHaveLength(1);
+  // Deny is a typed refusal for that command; a different command opens its own request.
+  await decide(again.approval.approvalId, 'deny-gated-2', 'deny');
+  await expect(f.execute(f.command('gated-2', { expectedVersion: '"v2"' }))).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
+  expect(f.state('gated-2')).toBeUndefined();
+  // Catalog admitWithinMs: an allow that is not used in time is refused; nothing is sent.
+  const late = await f.execute(f.command('late', { operation: ref('approve-payment'), expectedVersion: null }));
+  if (late.status !== 'approval-pending') throw new Error(late.status);
+  await decide(late.approval.approvalId, 'allow-late', 'allow');
+  await new Promise(resolve => setTimeout(resolve, 15));
+  await expect(f.execute(f.command('late', { operation: ref('approve-payment'), expectedVersion: null }))).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+  expect(f.state('late')).toBeUndefined(); expect(f.server.operations).toHaveLength(1);
+});
+
+it('runs the approval flow end to end on the product CLI and through the SDK wait wrapper: pending, decided, the same command settles (C12 G2)', async () => {
+  const f = await fixture();
+  await f.policy('require-approval');
+  const cli = async (...args: string[]) => JSON.parse((await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args, '--json'],
+    { cwd: f.project, env: { ...process.env, ...f.options.env } })).stdout);
+  const input = join(f.root, 'gated.json'); await writeFile(input, JSON.stringify(f.command('cli-gated')));
+  const pending = await cli('operation', 'execute', '--input', input);
+  expect(pending).toMatchObject({ schemaVersion: 2, status: 'approval-pending', commandId: 'cli-gated', approval: { revision: 0 } });
+  expect(f.server.operations).toHaveLength(0); expect(f.state('cli-gated')).toBeUndefined();
+  // The decision: the same session-authenticated `decideApproval` every surface uses (the CLI `approval decide` reaches it through the
+  // running runtime service, which this test does not start; the SDK path is the local-sdk channel of the one application).
+  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide',
+    { schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }, f.options) as Promise<{ status: string }>;
+  expect(await decide(pending.approval.approvalId, 'cli-allow', 'allow')).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
+  const settled = await cli('operation', 'execute', '--input', input);
+  expect(settled).toMatchObject({ schemaVersion: 1, status: 'settled', commandId: 'cli-gated', sequence: 1, version: '"v2"' });
+  expect(f.server.operations).toHaveLength(1); expect(f.state('cli-gated')).toEqual({ state: 'settled', sequence: 1 });
+  expect((await cli('operation', 'inspect', '--scope', 's', '--command-id', 'cli-gated')).record.intent.approval).toMatchObject({ approvalId: pending.approval.approvalId });
+
+  // SDK wait wrapper: the core never blocks; the wrapper polls the request and resubmits once after an allow. A timeout returns the pending outcome.
+  const waited = await executeConfiguredOperation(f.project, f.command('sdk-gated', { expectedVersion: '"v2"' }) as never, f.options, { awaitApproval: { timeoutMs: 30, pollMs: 5 } });
+  expect(waited).toMatchObject({ status: 'approval-pending', commandId: 'sdk-gated' }); if (waited.status !== 'approval-pending') throw new Error(waited.status);
+  expect(f.server.operations).toHaveLength(1);
+  const settling = executeConfiguredOperation(f.project, f.command('sdk-gated', { expectedVersion: '"v2"' }) as never, f.options, { awaitApproval: { timeoutMs: 5_000, pollMs: 5 } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  await configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: waited.approval.approvalId, commandId: 'sdk-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }, f.options);
+  expect(await settling).toMatchObject({ status: 'settled', commandId: 'sdk-gated', sequence: 2, version: '"v3"' });
+  expect(f.server.operations).toHaveLength(2);
+  // The CLI wait: `--wait` polls up to the given time; a deny while waiting is the typed refusal.
+  const denyInput = join(f.root, 'deny.json'); await writeFile(denyInput, JSON.stringify(f.command('cli-denied', { expectedVersion: '"v3"' })));
+  const opened = await cli('operation', 'execute', '--input', denyInput);
+  const waiting = exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'operation', 'execute', '--input', denyInput, '--wait', '5000', '--json'],
+    { cwd: f.project, env: { ...process.env, ...f.options.env } });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  await decide(opened.approval.approvalId, 'cli-deny', 'deny');
+  await expect(waiting).rejects.toMatchObject({ stderr: expect.stringContaining('APPROVAL_DENIED') });
+  expect(f.server.operations).toHaveLength(2); expect(f.state('cli-denied')).toBeUndefined();
 });
 
 it('recovers interrupted effects from target evidence and never retries an unknown outcome blindly', async () => {

@@ -944,7 +944,7 @@
   "error.PATCH_CONFLICT": "Workspace snapshot conflicts with its recorded patch.",
   "error.EFFECT_INVALID": "The operation command is invalid (input, idempotency key, expected version or compensation reference).",
   "error.EFFECT_OPERATION_UNKNOWN": "The operation or its target is not declared in the operations catalog for this target kind. Nothing was sent.",
-  "error.EFFECT_APPROVAL_REQUIRED": "This operation requires approval before any effect. Nothing was sent; operation approval workflow is not available yet.",
+  "error.EFFECT_APPROVAL_REQUIRED": "This operation requires an approval that was not given. Nothing was sent.",
   "error.EFFECT_PRECONDITION_CHANGED": "The target record changed since the expected version; read it again and decide anew. Nothing was written.",
   "error.EFFECT_TARGET_BUSY": "Another operation on this target record is not settled or its outcome is unknown. Reconcile it before new operations.",
   "error.EFFECT_CONFLICT": "The operation command conflicts with its recorded intent, idempotency key or stored state.",

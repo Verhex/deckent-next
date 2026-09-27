@@ -944,7 +944,7 @@
   "error.PATCH_CONFLICT": "Workspace snapshot kayıtlı patch ile çelişiyor.",
   "error.EFFECT_INVALID": "Operasyon komutu geçersiz (girdi, idempotency anahtarı, beklenen sürüm veya telafi referansı).",
   "error.EFFECT_OPERATION_UNKNOWN": "Operasyon veya hedefi bu hedef türü için operasyon kataloğunda tanımlı değil. Hiçbir şey gönderilmedi.",
-  "error.EFFECT_APPROVAL_REQUIRED": "Bu operasyon etkiden önce onay ister. Hiçbir şey gönderilmedi; operasyon onay akışı henüz yok.",
+  "error.EFFECT_APPROVAL_REQUIRED": "Bu operasyon verilmemiş bir onay gerektiriyor. Hiçbir şey gönderilmedi.",
   "error.EFFECT_PRECONDITION_CHANGED": "Hedef kayıt beklenen sürümden sonra değişti; yeniden okuyup yeniden karar verin. Hiçbir şey yazılmadı.",
   "error.EFFECT_TARGET_BUSY": "Bu hedef kayıtta sonuçlanmamış ya da sonucu belirsiz başka bir operasyon var. Yeni operasyondan önce onu uzlaştırın.",
   "error.EFFECT_CONFLICT": "Operasyon komutu kayıtlı niyeti, idempotency anahtarı veya saklanan durumla çelişiyor.",

@@ -1,13 +1,21 @@
 /**
- * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v38: the v39
- * scope registry and companies tables removed); `DOWNGRADE_TO_V37_LEDGER_SQL` also rebuilds the v38 operation-keyed approvals table
- * back to task-only columns (a tool-call approval row makes it fail, as it must); `DOWNGRADE_TO_V36_LEDGER_SQL` also removes the v37
- * agent turn tables; `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL
- * again, the checkpoint child rebuilt against it).
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v39: the v40
+ * approvals rebuild reversed to the two-value subject CHECK — an operation approval row makes it fail, as it must);
+ * `DOWNGRADE_TO_V38_LEDGER_SQL` also removes the v39 scope registry and companies tables; `DOWNGRADE_TO_V37_LEDGER_SQL` also rebuilds
+ * the v38 operation-keyed approvals table back to task-only columns (a tool-call approval row makes it fail); `DOWNGRADE_TO_V36_LEDGER_SQL`
+ * also removes the v37 agent turn tables; `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild
+ * (max_calls NOT NULL again, the checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 38;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = 'DROP TABLE scope_registry; DROP TABLE companies; PRAGMA user_version=38;';
-export const DOWNGRADE_TO_V37_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE approvals_v37(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,run_id TEXT NOT NULL,
+export const PREVIOUS_LEDGER_VERSION = 39;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `CREATE TABLE approvals_v39(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call')),
+    run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
+  INSERT INTO approvals_v39 SELECT scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current FROM approvals;
+  DROP TABLE approvals; ALTER TABLE approvals_v39 RENAME TO approvals;
+  CREATE UNIQUE INDEX approvals_current_action ON approvals(scope_id,run_id,task_id,action_digest) WHERE current=1 AND subject_kind='task';
+  CREATE UNIQUE INDEX approvals_current_tool_call ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='agent-tool-call'; PRAGMA user_version=39;`;
+export const DOWNGRADE_TO_V38_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TABLE scope_registry; DROP TABLE companies; PRAGMA user_version=38;`;
+export const DOWNGRADE_TO_V37_LEDGER_SQL = `${DOWNGRADE_TO_V38_LEDGER_SQL} CREATE TABLE approvals_v37(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,run_id TEXT NOT NULL,
     task_id TEXT NOT NULL,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(scope_id,approval_id));
   INSERT INTO approvals_v37 SELECT scope_id,approval_id,run_id,task_id,action_digest,revision,snapshot,current FROM approvals;

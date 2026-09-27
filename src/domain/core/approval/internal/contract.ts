@@ -11,16 +11,22 @@ const taskApprovalRequestSchema = z.object({ schemaVersion: z.literal(1), approv
   createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional(),
 }).strict().refine(r => r.expiresAt > r.createdAt).readonly();
 /**
- * What an approval authorizes (C12, operation-keyed): a task admission, or one agent tool call — exactly this turn, round, call index,
- * tool version, canonical resource and argument digest (T-L4). The action digest binds the same fields, so an approval is call-exact.
+ * What an approval authorizes (C12, operation-keyed): a task admission; one agent tool call — exactly this turn, round, call index,
+ * tool version, canonical resource and argument digest (T-L4); or one catalog operation command — exactly this command id, operation
+ * id@version, target record, canonical input digest, descriptor + endpoint binding, expected version and compensation reference (G1).
+ * The action digest binds the same fields (plus scope and requester), so an approval is call-exact and command-exact: another command,
+ * another input or a changed catalog/endpoint is another subject, never covered by an earlier allow.
  */
 export const approvalSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema }).strict(),
   z.object({ kind: z.literal('agent-tool-call'), turnId: identitySchema, round: counterSchema.positive(), index: counterSchema,
     tool: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), toolVersion: counterSchema.positive(), resource: z.string().min(1).max(4096),
     argsDigest: digest }).strict(),
+  z.object({ kind: z.literal('operation'), operation: z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict(),
+    target: z.object({ kind: identitySchema, id: z.string().min(1).max(512) }).strict(), commandId: identitySchema, inputDigest: digest,
+    targetBinding: digest, expectedVersion: z.string().min(1).max(256).nullable(), compensates: identitySchema.nullable() }).strict(),
 ]);
-/** Operation-keyed approval request (v2, C12). Only agent tool calls use it today; task admission keeps v1. */
+/** Operation-keyed approval request (v2, C12): agent tool calls and catalog operation commands; task admission keeps v1. */
 const operationApprovalRequestSchema = z.object({ schemaVersion: z.literal(2), approvalId: identitySchema, scopeId: identitySchema,
   subject: approvalSubjectSchema, requester: approvalActorSchema, actionDigest: digest, policyRevision: identitySchema,
   summary: z.string().min(1).max(2048), createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional(),

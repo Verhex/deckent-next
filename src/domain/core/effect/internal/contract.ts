@@ -14,6 +14,9 @@ export const operationDescriptorSchema = z.object({
   precondition: z.enum(['record-version', 'none']),
   compensation: operationRefSchema.nullable(),
   inputMaxBytes: z.number().int().positive().max(1_048_576),
+  /** C12: how long an `allow` decision admits the approved command (from its decision time) before it is refused as expired; absent →
+   * the installation's `approvals.requestTtlMs`. No schema default: a stored descriptor must re-parse byte for byte (intent CAS). */
+  admitWithinMs: z.number().int().positive().safe().optional(),
 }).strict().superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });
@@ -49,8 +52,12 @@ export const effectIntentSchema = z.object({
   wireKey: digest.optional(),
   /** Descriptor + target endpoint identity at claim time; a resume against a changed binding never sends or looks up. */
   targetBinding: digest.optional(),
+  /** The operation approval this intent consumed (C12 G2): the claim is the single use of that approval; every later gate pass of this
+   * command verifies the referenced record instead of the admission window. Absent when policy allowed the command outright. */
+  approval: z.object({ approvalId: identitySchema, actionDigest: digest }).strict().readonly().optional(),
 }).strict().readonly();
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
+export type EffectIntentApproval = NonNullable<EffectIntent['approval']>;
 /** Target evidence that this intent's effect happened (idempotency record, fence). `version` is the record version after it. */
 export const effectEvidenceSchema = z.object({ kind: z.enum(['idempotency-record', 'fence']), version: z.string().min(1).max(256).nullable(),
   observedAt: counterSchema }).strict().readonly();
