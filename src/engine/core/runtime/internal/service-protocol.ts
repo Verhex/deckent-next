@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { agentTurnStreamEventSchema, identitySchema, modelInvocationDeltaSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
+import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 15 as const;
@@ -17,7 +17,7 @@ export function runtimeServiceErrorParams(params: Readonly<Record<string, unknow
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
-  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile']);
+  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -25,11 +25,27 @@ const invocationOperation = (operation: RuntimeServiceOperation): boolean => ope
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
-  || isRuntimeServiceWorkspaceFileOperation(operation);
+  || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
 }
+/** v15 (C12 G4): catalog operations on the service. Command input is the effect command (no actor field: the socket peer is the principal);
+ * results are bounded (an inspected record carries the command input). Current version only, like every non-lifecycle operation. */
+export function isRuntimeServiceEffectOperation(operation: RuntimeServiceOperation): operation is 'executeOperation' | 'compensateOperation' | 'inspectOperation' {
+  return operation === 'executeOperation' || operation === 'compensateOperation' || operation === 'inspectOperation';
+}
+export const runtimeOperationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
+export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
+/** Wire shapes of the effect outcomes (settled v1 unchanged; approval-pending v2) and of an inspection; the client validates and correlates. */
+const operationOutcomeBase = { commandId: identitySchema, scopeId: identitySchema, operation: operationRefSchema, target: effectTargetRefSchema };
+export const runtimeOperationOutcomeSchema = z.discriminatedUnion('status', [
+  z.object({ schemaVersion: z.literal(1), status: z.literal('settled'), ...operationOutcomeBase, sequence: z.number().int().positive().safe(),
+    version: z.string().min(1).max(256).nullable(), compensates: identitySchema.nullable(), evidence: z.enum(['idempotency-record', 'fence']) }).strict(),
+  z.object({ schemaVersion: z.literal(2), status: z.literal('approval-pending'), ...operationOutcomeBase, approval: z.object({ approvalId: identitySchema,
+    revision: z.number().int().nonnegative().safe(), expiresAt: z.number().int().nonnegative().safe(), summary: z.string().min(1).max(2048) }).strict() }).strict(),
+]).readonly();
+export const runtimeOperationInspectionSchema = z.object({ schemaVersion: z.literal(1), record: effectRecordSchema.nullable() }).strict().readonly();
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
 export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
@@ -50,6 +66,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'cancelChatTurn') parseChatTurnCancellation(value.input);
       else if (value.operation === 'findWorkspaceFiles') parseWorkspaceFileQuery(value.input);
       else if (value.operation === 'attachWorkspaceFile') parseWorkspaceAttachmentRequest(value.input);
+      else if (value.operation === 'executeOperation' || value.operation === 'compensateOperation') effectCommandSchema.parse(value.input);
+      else if (value.operation === 'inspectOperation') runtimeOperationQuerySchema.parse(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {

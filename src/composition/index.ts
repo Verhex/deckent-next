@@ -24,7 +24,8 @@ export { auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } 
 export { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 
 export * from '#composition/core/workspace-patch/index.js';
-export * from '#composition/core/operations/index.js';
+// Public SDK: the local operation entries only; the peer entries belong to the runtime service composition (C12 G4).
+export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 
 export * from '#composition/core/worker-observation/index.js';
 export * from '#composition/core/toolchains/index.js';

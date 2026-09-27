@@ -1,15 +1,16 @@
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, approvalCommandSchema } from '#engine/index.js';
-import { boundedToolDelivery, completeToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
+import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
+import { operationToolDefinitions } from './operation-tools.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
-import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference } from '#domain/index.js';
+import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
-  runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema,
+  runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
@@ -43,6 +44,12 @@ export interface McpApplications {
   shutdownService?(command: ShutdownCommand): Promise<ServiceShutdownAdmissionResult>;
   inferencePlan?(input: { readonly profileId?: string }): Promise<unknown>;
   inferenceBudget?(input: { readonly profileId?: string }): Promise<unknown>;
+  /** C12 G4 catalog operations (non-blocking: a required approval answers approval-pending; resubmit the same command after a decision). */
+  executeOperation?(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  compensateOperation?(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  inspectOperation?(query: RuntimeOperationQuery, delivery?: RuntimeServiceDelivery): Promise<unknown>;
+  /** The installation's reachable catalog descriptors; the operation tool hints are derived from them (absent = empty catalog). */
+  operationCatalog?: readonly OperationDescriptor[];
 }
 export interface McpLimits { maxConcurrentCalls: number; responseMaxBytes: number }
 /** Local protocol surface. Injected applications own identity, policy and data access.
@@ -177,11 +184,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       const parsed = inferenceInput.parse(input);
       return inferenceBudget.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
     } });
+  definitions.push(...operationToolDefinitions(applications));
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
-  server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, description: tool.description,
+  server.setRequestHandler('tools/list', async () => ({ tools: definitions.map(tool => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}),
     // MCP requires an object root even when a native command is an object-only discriminated union.
     inputSchema: { ...zodToJsonSchema(tool.schema, { $refStrategy: 'none' }), type: 'object' } as Tool['inputSchema'],
     annotations: { readOnlyHint: tool.readOnly, destructiveHint: tool.destructive, idempotentHint: tool.idempotent, openWorldHint: tool.openWorld ?? false },
@@ -199,8 +207,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
         if (!bounded) return failure('MCP_RESPONSE_LIMIT');
         delivery = bounded;
       }
-      const value = await tool.invoke(request.params.arguments ?? {}, delivery); const encoded = JSON.stringify(value);
-      const result = completeToolResult({ content: [{ type: 'text', text: encoded }], structuredContent: JSON.parse(encoded) as Record<string, unknown> });
+      const result = jsonToolResult(await tool.invoke(request.params.arguments ?? {}, delivery));
       if (!toolResultFits(context.mcpReq.id, result, limits.responseMaxBytes)) return tool.name === 'invoke_model' || tool.name === 'inspect_model_invocation'
         ? invocationLimit('MCP_RESPONSE_LIMIT') : failure('MCP_RESPONSE_LIMIT');
       return result;
