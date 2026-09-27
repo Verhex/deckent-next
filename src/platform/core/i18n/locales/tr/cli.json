@@ -858,7 +858,7 @@
   "terminal.slash.cancelArgument": "<run-kimliği>",
   "terminal.slash.mode": "İzin modunu göster ya da ayarla",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
-  "terminal.slash.reasoning": "Düşünme ön izlemesini göster ya da gizle",
+  "terminal.slash.reasoning": "Model düşünmesini ve ön izlemesini aç ya da kapat",
   "terminal.mode.current": "İzin modu: {mode}",
   "terminal.mode.changed": "İzin modu: {previous} → {mode}",
   "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
@@ -867,7 +867,7 @@
   "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
   "terminal.mention.truncated": "@{path} eklendi: {total} baytın ilk {bytes} baytı",
   "terminal.mention.refused": "@{path} eklenmedi: {reason}",
-  "terminal.reasoning.on": "Düşünme ön izlemesi açık",
-  "terminal.reasoning.off": "Düşünme ön izlemesi kapalı",
+  "terminal.reasoning.on": "Düşünme açık (ön izleme ve model düşünmesi)",
+  "terminal.reasoning.off": "Düşünme kapalı (ön izleme ve model düşünmesi)",
   "terminal.reasoning.usage": "Kullanım: /reasoning [on|off]"
 }

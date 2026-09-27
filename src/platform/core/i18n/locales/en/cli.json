@@ -858,7 +858,7 @@
   "terminal.slash.cancelArgument": "<runId>",
   "terminal.slash.mode": "Show or set your permission mode",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
-  "terminal.slash.reasoning": "Show or hide the reasoning preview",
+  "terminal.slash.reasoning": "Turn model thinking and its preview on or off",
   "terminal.mode.current": "Permission mode: {mode}",
   "terminal.mode.changed": "Permission mode: {previous} → {mode}",
   "terminal.mode.inert": " (no rule is mode-eligible in this scope, so the mode changes nothing here)",
@@ -867,7 +867,7 @@
   "terminal.mention.attached": "Attached @{path} ({bytes} bytes)",
   "terminal.mention.truncated": "Attached @{path}: first {bytes} of {total} bytes",
   "terminal.mention.refused": "Not attached @{path}: {reason}",
-  "terminal.reasoning.on": "Reasoning preview on",
-  "terminal.reasoning.off": "Reasoning preview off",
+  "terminal.reasoning.on": "Reasoning on (preview and model thinking)",
+  "terminal.reasoning.off": "Reasoning off (preview and model thinking)",
   "terminal.reasoning.usage": "Usage: /reasoning [on|off]"
 }

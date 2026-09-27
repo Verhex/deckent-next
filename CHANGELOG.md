@@ -4,6 +4,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (protocol v16, owner 2026-09-28): `chatTurn` optional `reasoning: 'on' | 'off'`; lifecycle window [16, 15]; `/reasoning off`
+  turns model thinking off for every round (models declaring `chat-template-enable-thinking`; others refuse the turn by name).
+- SECURITY: `@file` never lists or attaches the layout's approval records or approval previews.
+- FIX (Astra 2143): the start slot repair decides only from records verified in the same transaction; a model call left open by a
+  killed runtime service settles `unknown` at the next start and frees its slot; grep context keeps every hit marked and the tool line
+  counts hits only.
 - FIX (INFLIGHT-FIX, owner 2026-09-28): a cancelled or `unknown` model call releases its concurrency slot once its request is
   closed, so cancelled terminal rounds no longer lock the next one (`MODEL_INVOCATION_CAPACITY_EXHAUSTED`); the uncertain record,
   spending hold and lifetime count stay; the next service start releases slots earlier builds kept. Supersedes PROVIDERS/A3A.

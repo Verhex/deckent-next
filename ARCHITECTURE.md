@@ -314,7 +314,9 @@ refresh, usage and dogfood closure remain open.
   is run by no installed service may be amended in place; once pushed or run by an installed service, a change needs a version bump.
   Recorded amendment: runtime protocol v14 gained the `approval.settled` outcome `unsettled` and the `tool.output` producer before v14
   was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump. v15 was introduced 2026-09-27 (T-L5 `@file`) as the single v15 package
-  (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump.
+  (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump. v15 was pushed and runs in the live service (released). v16 was
+  introduced 2026-09-28 (OPEN-REASONING-FILE, owner) as the single v16 package: `chatTurn` gains the optional `reasoning`; it is
+  unreleased until pushed, and further v16 items add to it without another bump.
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -447,7 +449,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   a compiled terminal compares it with its own build and shows a typed notice when the service runs another or an unknown
   build, offering `/service-restart` (governed shutdown, then auto-start) — it never restarts on its own, because runs may
   be in flight. **Lifecycle compatibility window (Jev 898c8af3):** `describeService` and `shutdownService` are accepted
-  in the previous and the current protocol version ([15, 14] since v15; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
+  in the previous and the current protocol version ([16, 15] since v16; the window moves with each released version) and answered in the request's version; a client retries these two only, once per
   older version, when the connection closed unanswered — so an upgraded terminal can describe and stop a service started
   from an older build (proven live: v11 terminal → v10 service → skew notice → `/service-restart`). A retry resends the same
   shutdown command and instance, never a new one, and every other operation — anything effectful — is current-version only. `deckent runtime shutdown` without command fields builds the governed shutdown command from the live
@@ -639,13 +641,23 @@ settlement releases the slot. The `unknown` record, its evidence, its spending h
 effect and billing stay; only concurrency is corrected. Replay of a settlement never releases twice. The allocation integrity audit
 counts only open claims. `maxInFlight` therefore bounds locally open requests, not provider work that may continue after a disconnect
 (vLLM aborts a streamed request on disconnect; an API provider may keep computing — billing uncertainty is the spending hold's job).
-A claim left by a crashed process stays `claimed` and keeps its slot: no path settles it without send evidence (open limit).
-**Start reconciliation.** Under endpoint custody (with the ledger upgrade and interrupted-turn close), the runtime service releases
-slots an earlier build kept for settled `unknown` calls: per allocation, one transaction, `open = count(claimed)`,
-`unknown = count(unknown)`; only `open < inFlight <= open + unknown` is rewritten to `open` through the checkpointed writer (revision
-advances). Other counters are reported (`inconsistent`) and left untouched; a damaged allocation never blocks the start. Observer:
-`onModelAllocationSlotsReleased({ allocations, released, inconsistent })`, called only when something was released or reported.
-No ledger schema or version change.
+A claim left by a crashed **service** process is settled at the next start (FIX-2143-SLOTS, owner 2026-09-28): the service's model
+send owner is `runtime-service:<instanceId>` (minted only by `runtimeServiceModelOwnerId`, recognised by `isRuntimeServiceModelOwnerId`);
+holding endpoint custody proves no service instance of this installation is alive (the kernel frees the guard socket when a process
+dies; a clean stop releases it only after every admitted operation settled). An open call whose control is `permitted` with such an
+owner settles `unknown` through the ordinary settlement (`transport-error`, no evidence; spending hold `unknown`, `lifetimeCalls`
+unchanged, slot freed). Untouched and still holding their slot: `pending` (claim without send permission), `unobserved` (v18
+migrated), and `permitted` calls of any other owner (host-less direct call, a build before this one). The durable record does not
+carry "owner ended" as a separate reason (outcome schema v4 allows only `transport-error`); the start observer reports the count.
+**Start reconciliation.** Under endpoint custody (with the ledger upgrade and interrupted-turn close), per allocation, one
+transaction: an allocation with `inFlight = 0` and no `claimed` row is skipped (nothing can be written). Otherwise every retained row
+of the allocation is decoded with the ordinary record decoder (column/receipt/control/cancellation/content agreement), the number of
+rows must equal `lifetimeCalls`, each receipt's allocation limits must equal the checkpoint's, and open claims may not exceed
+`inFlight`; any failure rolls the transaction back and reports the allocation `inconsistent`, untouched (Astra 2143 R1). From the
+verified records: open calls of ended service owners settle `unknown` (above); then, from the counts after those settlements, only
+`open < inFlight <= open + unknown` is rewritten to `open` (earlier-build surplus). Observer:
+`onModelAllocationSlotsReleased({ allocations, released, settled, inconsistent })`, called when anything was released, settled or
+reported. No ledger schema or version change. Cost: O(retained rows) of the allocation, only when a slot is held or a row is open.
 **Terminal turn phases (TL-A, 2026-09-28).** Protocol v15 is unchanged. The runtime service emits no phase event; the terminal derives
 "the service is summarizing" from the `context` event it already receives, the history it holds, the engine's compaction rule and the
 service's admission values from the same configuration; the engine alone decides and compacts, the mark is presentation (a parity test
@@ -677,8 +689,9 @@ root or layout, other tool set) is `AGENT_TURN_CONFLICT`, never an answer to ano
 **Agent tool deny floor per layout (TL-C finding).** Agent read tools (and through the same scope, edit and shell path
 classification) deny the Core floor plus the layout's `approvals` and `approvalPreviews` directories when they lie inside the
 project; previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
-and whole pending diffs readable, and `state/approval-previews` was readable even in the default layout. `@file` attachment
-(`workspace-files.ts`) still uses the Core floor only (open).
+and whole pending diffs readable, and `state/approval-previews` was readable even in the default layout. `@file` candidates and attachments use the same `agentWorkspaceDeny(projectRoot, layout)` (OPEN-REASONING-FILE): approval records
+and pending diffs are neither listed nor attachable (`refused`/`path-denied`); the candidate index is cached per project root and
+deny list.
 **No-progress note (TL-C D7).** A round is without progress when it has tool calls, every call ended `duplicate`,
 `invalid-arguments` or `error`, and the model wrote no text; `denied`, approval outcomes and `cancelled` are not the model's failure.
 At the second consecutive such round the engine appends one `user` message `[deckent] The last two rounds made no progress: …`
@@ -688,8 +701,14 @@ of the appended history (`message` event; v15 schema already admits `user`), so 
 family; catalog schema v1 unchanged, capability ids are data) declares that the served chat template reads `enable_thinking`. The
 `openai-chat-http` adapter (version stays 4: the field is optional and catalog-gated) accepts `chat_template_kwargs:
 { enable_thinking: boolean }` only for a binding that declares it supported, else `OPENAI_CHAT_REQUEST_INVALID` before any network.
-The compaction call sends `enable_thinking: false` when declared; rounds are unchanged. `reasoning_effort` and a per-turn
-`/reasoning off` transport are open (TL-C review §3).
+The compaction call sends `enable_thinking: false` when declared; rounds are unchanged. **Thinking off per turn (protocol v16, OPEN-REASONING-FILE).** `chatTurn` accepts an optional `reasoning: 'on' | 'off'` (command
+schema 1 unchanged; the wire version carries it). With `off` the service sends `chat_template_kwargs: { enable_thinking: false }` in
+every round of a model whose binding declares the capability, and the provider counter (`/tokenize`) body carries the same switch,
+so the count is of exactly what is sent. The request digest binds `reasoning` only when present (default turns keep their digest;
+the same turn id with and without it is `AGENT_TURN_CONFLICT`). A model that does not declare the capability refuses a
+thinking-off turn by name (`AGENT_TURN_REASONING_UNSUPPORTED`, usage) before any claim, model call or spending; it is never
+ignored silently. The terminal's one `/reasoning` state drives both the preview and the request (a `/reasoning` queued before a
+message holds for it); the terminal never sends `on`. `reasoning_effort` stays open (TL-C review §3b).
 **Conversation sessions (T-L5c, Jev 9ae569b1).** The workline saves the whole current history (system prompt excluded) after every
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
