@@ -8,7 +8,7 @@ import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
-  getConfigValue, resolveGlobalConfigPaths, productResourcePath, resolveTenant, t,
+  getConfigValue, resolveGlobalConfigPaths, productResourcePath, t,
 } from '../../../src/platform/index.js';
 
 import { registerProviderConfig } from '../../../src/adapters/index.js';
@@ -41,7 +41,7 @@ describe('config public contract', () => {
     await writeFile(f.globalPath, JSON.stringify({ mode: 'balanced', language: 'tr', enforce_principal_assurance: true, providers: { brain: 'global-provider' } }));
     await writeFile(f.projectPath, JSON.stringify({ mode: 'economic', enforce_principal_assurance: false, providers: { brain: 'project-provider' } }));
     const first = await loadConfig(f.project, { env: f.env });
-    expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, providers: { brain: 'project-provider' }, schema_version: 2 });
+    expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, providers: { brain: 'project-provider' }, schema_version: 3 });
     const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'performance', DECKENT_BRAIN_PROVIDER: 'env-provider' } });
     expect(second).toMatchObject({ mode: 'performance', providers: { brain: 'env-provider' } });
     expect(second.providers.brain).toBe('env-provider');
@@ -55,7 +55,7 @@ describe('config public contract', () => {
     await saveGlobalConfig({ language: 'en' }, { env: f.env });
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     expect(JSON.parse(await readFile(legacy, 'utf8'))).toEqual({ language: 'tr' });
-    expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toEqual({ schema_version: 2, language: 'en' });
+    expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toEqual({ schema_version: 3, language: 'en' });
   });
   it('resolves cache against call-time env and file revisions and never returns a shared mutable object', async () => {
     const f = await fixture();
@@ -109,12 +109,12 @@ describe('config public contract', () => {
     const f = await fixture(); await writeFile(f.globalPath, '{bad'); await writeFile(f.projectPath, '{broken');
     const codes: string[] = [];
     const config = await loadConfig(f.project, { env: f.env, onWarning: w => codes.push(w.code) });
-    expect(config.schema_version).toBe(2); expect(codes).toContain('CONFIG_GLOBAL_CORRUPT'); expect(codes).toContain('CONFIG_HEALED');
+    expect(config.schema_version).toBe(3); expect(codes).toContain('CONFIG_GLOBAL_CORRUPT'); expect(codes).toContain('CONFIG_HEALED');
     expect(await readFile(f.globalPath, 'utf8')).toBe('{bad');
     const names = await readdir(join(f.project, '.deckent'));
     const backup = names.find(n => n.startsWith('config.json.bak.'))!;
     expect(await readFile(join(f.project, '.deckent', backup), 'utf8')).toBe('{broken');
-    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).schema_version).toBe(2);
+    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).schema_version).toBe(3);
   });
   it('rereads after 150ms and never quarantines a transient partial write', async () => {
     const f = await fixture(); await writeFile(f.projectPath, '{partial');
@@ -214,7 +214,7 @@ describe('new config contract and write authority', () => {
   });
   it('does not resolve secrets from the old sibling file and resolves fresh values from the injected backend', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ schema_version: 2, projectName: '$DECK:TOKEN' }));
+    await writeFile(f.projectPath, JSON.stringify({ schema_version: 3, projectName: '$DECK:TOKEN' }));
     await writeFile(join(f.project, '.deck'), 'TOKEN="outside-value"\n');
     const first = await loadConfig(f.project, { env: f.env });
     expect(first.projectName).toBe('$DECK:TOKEN');
@@ -241,7 +241,7 @@ describe('new config contract and write authority', () => {
     await expect(resolveConfigSecrets({ a: '$DECK:TOKEN' }, async () => { throw new Error('private-backend-value'); })).rejects.toThrow(/^SECRET_RESOLUTION_FAILED$/);
   });
 
-  it('pins configured layouts across cache copies and reloads, including tenant resolution', async () => {
+  it('pins configured layouts across cache copies and reloads, including resource paths', async () => {
     const f = await fixture(), firstRoot = join(f.root, 'data-a'), secondRoot = join(f.root, 'data-b');
     await writeFile(f.projectPath, JSON.stringify({ layout: { root: firstRoot } }));
     const first = await loadConfig(f.project, { env: f.env });
@@ -252,7 +252,6 @@ describe('new config contract and write authority', () => {
     const next = await loadConfig(f.project, { env: f.env });
     expect(next.productLayout.revision).not.toBe(first.productLayout.revision);
     expect(productResourcePath(first.productLayout, 'memory')).toBe(join(firstRoot, 'brain', 'memory.db'));
-    expect(resolveTenant(f.project, { tenantId: 'acme', layout: first.productLayout }).isolationRoot).toBe(join(firstRoot, 'tenants', 'acme'));
   });
   it('rejects invalid layout configuration instead of following arbitrary config locations', async () => {
     const f = await fixture();

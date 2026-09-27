@@ -16,7 +16,7 @@ describe('runtime shutdown contract', () => {
     const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, identity, instanceId: instance.instanceId, shutdownAvailable: true });
     expect(descriptor).toEqual({ schemaVersion: 1, identity, instanceId: 'instance-1', shutdownAvailable: true });
     expect(Object.isFrozen(identity)).toBe(true); expect(Object.isFrozen(instance)).toBe(true); expect(Object.isFrozen(descriptor)).toBe(true);
-    expect(() => serviceIdentitySchema.parse({ ...identity, tenantId: 'forged' })).toThrow();
+    expect(() => serviceIdentitySchema.parse({ ...identity, companyId: 'forged' })).toThrow();
     expect(() => runtimeServiceDescriptorSchema.parse({ ...descriptor, schemaVersion: 2 })).toThrow();
     expect(runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId: 'instance-1', shutdownAvailable: false, identity: null })).toMatchObject({ identity: null });
     expect(() => runtimeServiceDescriptorSchema.parse({ ...descriptor, shutdownAvailable: false })).toThrow();

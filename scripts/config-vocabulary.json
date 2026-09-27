@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "sources": {
-    "src/platform/core/common/internal/constants.ts": "6b1da2c40a352a3ba2c4dd5692621d2e698cb0897dca5aaf29e0f51f79f68846",
-    "src/platform/core/config-fields/internal/fields.ts": "b28df5184e5a2f912562ccf48427abfc35779f68036b8c382014511e9063fc6c",
+    "src/platform/core/common/internal/constants.ts": "9718618d62fe970c22c3cd81a9d184d205269395fcfaba0af443b2961bd926b5",
+    "src/platform/core/config-fields/internal/fields.ts": "e0fefce91b463e0d34126f54bb1569c2c410d781de7752d5f23a86337078167b",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -64,10 +64,6 @@
       "default"
     ],
     "enforce_principal_assurance": [],
-    "strict_tenant_isolation": [],
-    "tenant_id": [
-      "local"
-    ],
     "auth_mode": [
       "api",
       "hybrid",

@@ -11,7 +11,7 @@ import type { ToolchainCurrencyReport } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
-  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal, resolveTenant, resolveCallerTenant,
+  detectHostMemory, detectEnvironment, resolveLocalOsPrincipal,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
@@ -139,21 +139,17 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   locale = resolveLocale(args.language, env, config.language); mode = config.output_mode;
   context.onLocale?.(locale);
   const platform = normalizeGlobalScopePlatform(process.platform, env), host = getSystemProfile();
-  const tenant = resolveTenant(root, { env, layout: config.productLayout, tenantId: env['DECKENT_TENANT_ID'] || config.tenant_id });
-  const osPrincipal = resolveLocalOsPrincipal('cli');
-  const claim = env['DECKENT_TENANT_ID'] || (config.tenant_id === 'local' ? undefined : config.tenant_id);
-  const principal = { ...osPrincipal, ...(claim ? { tenantId: claim } : {}) };
+  const principal = resolveLocalOsPrincipal('cli');
   assertActorAssurance(principalToActor(principal), 'doctor', config.enforce_principal_assurance);
-  resolveCallerTenant(principal, config.strict_tenant_isolation);
   // Explicit opt-in only: default doctor stays network-free; the report never updates, rebuilds or activates a worker.
   if (args.toolchains && !context.inspectToolchainCurrency) throw ErrorRegistry.createError('CLI_USAGE');
   const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
-  const data = { schemaVersion: 1, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
-    paths: resolveGlobalScopePaths(platform, env), principal, tenant: { tenantId: tenant.tenantId, isolationRoot: tenant.isolationRoot },
+  const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
+    paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, status: 'ready',
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
-    workers: result.host.recommendedMaxWorkers, tenant: result.tenant.tenantId, principal: result.principal.id }, locale),
+    workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
     ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : [])].join('\n'));

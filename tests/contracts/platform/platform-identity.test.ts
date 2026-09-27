@@ -1,15 +1,13 @@
 import { mkdtemp, mkdir, symlink, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import {
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, resolveGlobalConfigPaths,
   resolveProductPaths, productResourcePath, validatePath, validateExistingPath, validateTaskId,
   suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity,
   detectHostMemory, getSystemProfile, detectEnvironment, resolveLocalOsPrincipal, resolveLocalOsActorId,
-  principalToActor, assertActorAssurance, resolveCallerTenant, isValidTenantId, tenantIsolationPath,
-  resolveTenant, withTenant, currentTenant, tenantPath,
+  principalToActor, assertActorAssurance,
 } from '../../../src/platform/index.js';
 
 describe('platform and identity contracts', () => {
@@ -85,21 +83,5 @@ describe('platform and identity contracts', () => {
     expect(assertActorAssurance(principalToActor(degraded), 'test')).toMatchObject({ ok: false });
     expect(() => assertActorAssurance(principalToActor(degraded), 'test', true)).toThrow();
     expect(() => assertActorAssurance(principalToActor(principal), 'test', true)).not.toThrow();
-  });
-  it('validates tenant identifiers at resolution and path creation and preserves precedence', () => {
-    const root = '/project', env = { DECKENT_TENANT_ID: 'environment', DECKENT_HOME: '/state' };
-    expect(resolveTenant(root, { tenantId: 'explicit', env, platform: 'linux' }).tenantId).toBe('explicit');
-    expect(resolveTenant(root, { env, platform: 'linux' }).isolationRoot).toBe('/state/tenants/environment');
-    expect(resolveTenant(root, { env: {}, platform: 'linux' }).tenantId).toBe('local');
-    for (const id of ['../other', 'UPPER', '', 'a'.repeat(64)]) {
-      expect(isValidTenantId(id)).toBe(false); expect(() => resolveTenant(root, { tenantId: id })).toThrow(); expect(() => tenantIsolationPath(root, id)).toThrow();
-    }
-    expect(() => resolveCallerTenant({ id: 'one' }, true)).toThrow();
-    expect(() => resolveCallerTenant({ id: 'one', tenantId: '../bad' }, false)).toThrow();
-    expect(resolveCallerTenant({ id: 'one' }, false)).toBe('local');
-  });
-  it('isolates concurrent async tenant scopes and refuses tenantPath escapes', async () => {
-    const result = await Promise.all(['a', 'b'].map(id => withTenant(id, '/project', async () => { await sleep(5); expect(() => tenantPath('../other')).toThrow(); return currentTenant().tenantId; })));
-    expect(result).toEqual(['a', 'b']);
   });
 });

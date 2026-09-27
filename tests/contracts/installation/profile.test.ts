@@ -15,7 +15,7 @@ const poolGrant = { id: 'pool-use', effect: 'allow' as const, actions: ['use'], 
   resource: { kind: 'pool', ids: ['local-pool'] } };
 const shutdownGrant = { id: 'runtime-shutdown', effect: 'allow' as const, actions: ['shutdown'], scopes: ['local-scope'], principals: [principal],
   resource: { kind: 'service', ids: ['runtime'] } };
-const configuration = { schema_version: 2, admission: { registry, poolId: 'local-pool', executionSlots: 4, inFlightSlots: 6,
+const configuration = { schema_version: 3, admission: { registry, poolId: 'local-pool', executionSlots: 4, inFlightSlots: 6,
   ordering: 'input-order' }, execution: { docker: {}, git: {} },
   service: { identity: { scopeId: 'local-scope', serviceId: 'runtime' } }, marker: 'normalized-default' };
 

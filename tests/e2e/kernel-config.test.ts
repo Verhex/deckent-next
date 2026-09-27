@@ -33,7 +33,7 @@ describe('K1 real binary journeys', () => {
       const f = await fixture(kind);
       expect((await f.run(['config', 'get', 'mode'])).stdout.trim()).toBe(expected);
       expect(JSON.parse((await f.run(['config', 'get', 'mode', '--json'])).stdout)).toBe(expected);
-      expect(JSON.parse((await f.run(['config', 'get', '--json'])).stdout)).toMatchObject({ schema_version: 2, mode: expected });
+      expect(JSON.parse((await f.run(['config', 'get', '--json'])).stdout)).toMatchObject({ schema_version: 3, mode: expected });
       expect(JSON.parse((await f.run(['config', 'get', 'mode', '--json'], { DECKENT_MODE: 'balanced' })).stdout)).toBe('balanced');
     }
   });
@@ -46,18 +46,20 @@ describe('K1 real binary journeys', () => {
     await expect(f.run(['config', 'get', '--json'])).rejects.toMatchObject({ code: 78, stdout: '' });
     expect(await readFile(path, 'utf8')).toBe('{"outputMode":"json"}');
   });
-  it('wires platform, actual OS identity, tenant config, host sizing and Turkish output through doctor', async () => {
+  it('wires company-only doctor JSON v2 through the real binary', async () => {
     const f = await fixture('project-override');
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
-    expect(result).toMatchObject({ schemaVersion: 1, principal: { assurance: 'os-user', provenance: 'cli' }, tenant: { tenantId: 'local' }, status: 'ready' });
-    expect(result.tenant).not.toHaveProperty('createdAt');
+    expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready' });
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'paths', 'platform', 'principal', 'schemaVersion', 'scope', 'status']);
+    expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
+    expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
     expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' })).stdout).toContain('Önerilen worker');
     expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Bellek:');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
-    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout)).toMatchObject({ schemaVersion: 1, company: { companyId: 'default' }, status: 'ready' });
+    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout)).toMatchObject({ schemaVersion: 2, company: { companyId: 'default' }, status: 'ready' });
     expect(JSON.parse((await f.run(['config', 'get', 'company.id', '--json'])).stdout)).toBe('default');
     await writeFile(path, '{"company":{"id":"acme-tr"}}');
     expect(JSON.parse((await f.run(['doctor', '--json'])).stdout).company).toEqual({ companyId: 'acme-tr' });
@@ -78,16 +80,17 @@ describe('K1 real binary journeys', () => {
     try { await f.run(['config', 'get', '--json']); expect.fail('must reject'); }
     catch (error) { expect(error).toMatchObject({ code: 78, stdout: '' }); expect(JSON.parse((error as { stderr: string }).stderr).code).toBe('CONFIG_VERSION_UNSUPPORTED'); }
   });
-  it('reports tenant traversal as usage error instead of reading another tenant directory', async () => {
-    const f = await fixture('empty');
-    await expect(f.run(['doctor', '--json'], { DECKENT_TENANT_ID: '../outside' })).rejects.toMatchObject({ code: 2, stdout: '' });
-  });
-  it('enforces strict tenant claims in the real ingress only when the flag is enabled', async () => {
+  it.each(['global', 'project'] as const)('rejects config v2 at the real %s ingress without changing bytes', async placement => {
     const f = await fixture('project-override');
-    await writeFile(join(f.project, '.deckent/config.json'), '{"strict_tenant_isolation":true}');
-    await expect(f.run(['doctor', '--json'])).rejects.toMatchObject({ code: 2, stdout: '' });
-    const admitted = JSON.parse((await f.run(['doctor', '--json'], { DECKENT_TENANT_ID: 'explicit-tenant' })).stdout);
-    expect(admitted.principal.tenantId).toBe('explicit-tenant');
+    const path = placement === 'global' ? resolveGlobalConfigPaths(f.env).platformPath : join(f.project, '.deckent/config.json');
+    const bytes = '{"schema_version":2,"company":{"id":"acme"}}';
+    await writeFile(path, bytes);
+    try { await f.run(['doctor', '--json']); expect.fail('must reject'); }
+    catch (error) {
+      expect(error).toMatchObject({ code: 78, stdout: '' });
+      expect(JSON.parse((error as { stderr: string }).stderr).code).toBe('CONFIG_VERSION_UNSUPPORTED');
+    }
+    expect(await readFile(path, 'utf8')).toBe(bytes);
   });
   it.each(['global', 'project', 'both'] as const)('rejects removed provider limits through the real CLI in %s config without changing bytes', async placement => {
     const f = await fixture('project-override');
@@ -138,9 +141,9 @@ describe('K1 blocking review reproductions', () => {
       child.kill('SIGKILL'); await closed;
       await writeFile(path, '{broken');
       const result = await f.run(['config', 'get', '--json']);
-      expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: 2 });
+      expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: 3 });
       expect(result.stderr.trim().split('\n').map(line => JSON.parse(line))).toContainEqual(expect.objectContaining({ code: 'CONFIG_LOCK_STALE_RECLAIMED' }));
-      expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(2);
+      expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(3);
     } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed; }
   });
   it('returns actionable structured diagnostics for an old live lock without stealing it', async () => {
