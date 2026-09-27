@@ -60,8 +60,8 @@ export interface EffectApprovalContext { readonly record: EffectRecord | null; r
 export type EffectAdmission = { readonly approval: EffectIntentApproval } | { readonly pending: EffectApprovalPendingRequest };
 /**
  * Approval gate. Admits (void, or the approval reference the intent will carry), reports the open request as `pending` (nothing is
- * sent and no intent is claimed), or throws a typed refusal. In-turn gates (agent edits/shell) still admit from their own turn state
- * and ignore the context (C12-G3 moves them onto the broker).
+ * sent and no intent is claimed), or throws a typed refusal. Catalog operations use the operation broker; agent edits/shell use the
+ * durable agent-tool-call record of exactly the executed call (C12 G3) — neither admits from in-memory turn state.
  */
 export interface EffectApprovalGate {
   admit(descriptor: OperationDescriptor, decision: Decision, command: EffectCommand, principal: VerifiedPrincipal, context: EffectApprovalContext): Promise<EffectAdmission | void>;

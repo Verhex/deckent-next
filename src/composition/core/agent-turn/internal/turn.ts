@@ -10,6 +10,7 @@ import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrity
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
+import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -95,7 +96,6 @@ function nativeMessages(messages: readonly AgentTurnMessage[]) {
     : message.role === 'tool' ? { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
       : { role: message.role, content: message.content });
 }
-const displayTarget = (args: Record<string, unknown>) => typeof args['path'] === 'string' ? args['path'] : typeof args['pattern'] === 'string' ? args['pattern'] : null;
 
 /**
  * One terminal agent turn inside the runtime service (T-L3, runtime `chatTurn`). The principal comes from the connection; the model,
@@ -142,6 +142,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       stream: true, stream_options: { include_usage: true },
       ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
         parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
+
+  const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
 
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
@@ -209,10 +211,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
           const policy = await context.policy.load() as { revision?: unknown };
-          const resource = target ?? '(no target)', started = clock.sample(), now = started.wallMs;
+          const callSubject = approvals.subject({ round, index }, tool, target, argsDigest), resource = callSubject.resource, started = clock.sample(), now = started.wallMs;
           const { id, issuer, subject } = context.principal;
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject },
-            subject: { kind: 'agent-tool-call', turnId: command.turnId, round, index, tool: tool.name, toolVersion: tool.version, resource, argsDigest },
+            subject: callSubject,
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
@@ -231,7 +233,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             const consumed = clock.sample();
             if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
           }
-          if (outcome === 'allow') { edits?.approved(tool.name, args); shell?.approved(tool.name, args); }
+          // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
+          if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
           settlement = outcome;
           return outcome;
         } finally {
@@ -259,13 +262,16 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
         return { promptTokens: chatTurnPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
       },
-      describe: (tool, args) => tool.toolClass === 'shell' && typeof args['command'] === 'string'
-        ? (args['command'].length > 200 ? `${args['command'].slice(0, 199)}…` : args['command']) : displayTarget(args),
+      describe: describeAgentCall,
       async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
-        if (tool.toolClass === 'edit' && edits) return edits.apply(tool.name, args, execution);
-        if (tool.toolClass === 'shell' && shell) return shell.apply(tool.name, args, toolSignal, callId, execution);
+        if ((tool.toolClass === 'edit' && edits) || (tool.toolClass === 'shell' && shell)) {
+          const { gate, close } = approvals.gate(tool, args, execution);
+          try {
+            return tool.toolClass === 'edit' ? await edits!.apply(tool.name, args, execution, gate) : await shell!.apply(tool.name, args, toolSignal, callId, execution, gate);
+          } finally { await close(); }
+        }
         return workspace.execute(tool.name, args, toolSignal);
       },
       now: () => clock.sample().wallMs,
