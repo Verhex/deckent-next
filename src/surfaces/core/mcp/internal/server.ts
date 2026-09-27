@@ -184,7 +184,7 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       const parsed = inferenceInput.parse(input);
       return inferenceBudget.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
     } });
-  definitions.push(...operationToolDefinitions(applications));
+  definitions.push(...operationToolDefinitions(applications, locale));
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
   const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',

@@ -1,5 +1,6 @@
 import { effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { runtimeOperationQuerySchema, type RuntimeOperationQuery, type RuntimeServiceDelivery } from '#engine/index.js';
+import { t, type Locale } from '#platform/index.js';
 
 export type OperationToolHints = Readonly<{ readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld: boolean }>;
 const key = (operation: OperationDescriptor['operation']) => `${operation.id}@${operation.version}`;
@@ -25,14 +26,13 @@ export function operationToolHints(catalog: readonly OperationDescriptor[]) {
 type Handler<T> = (input: T, delivery?: RuntimeServiceDelivery) => Promise<unknown>;
 interface OperationHandlers { executeOperation?: Handler<EffectCommand>; compensateOperation?: Handler<EffectCommand>; inspectOperation?: Handler<RuntimeOperationQuery>;
   operationCatalog?: readonly OperationDescriptor[] }
-/** The three catalog operation tools (C12 G4), each advertised only when composition supplies its handler; bounded delivery. Descriptions
- * await their i18n keys (lane i18n-delta), so they are empty until then. */
-export function operationToolDefinitions(applications: OperationHandlers) {
+/** The three catalog operation tools (C12 G4), each advertised only when composition supplies its handler; bounded delivery. */
+export function operationToolDefinitions(applications: OperationHandlers, locale: Locale) {
   const derived = operationToolHints(applications.operationCatalog ?? []);
-  const tool = <T>(name: string, hints: OperationToolHints, schema: typeof effectCommandSchema | typeof runtimeOperationQuerySchema, handler: Handler<T> | undefined) =>
-    handler ? [{ ...hints, name, description: '', schema, boundedDelivery: true,
+  const tool = <T>(name: string, description: string, hints: OperationToolHints, schema: typeof effectCommandSchema | typeof runtimeOperationQuerySchema, handler: Handler<T> | undefined) =>
+    handler ? [{ ...hints, name, description, schema, boundedDelivery: true,
       invoke: (input: unknown, delivery?: RuntimeServiceDelivery) => handler.call(applications, schema.parse(input) as T, delivery) }] : [];
-  return [...tool('execute_operation', derived.execute, effectCommandSchema, applications.executeOperation),
-    ...tool('compensate_operation', derived.compensate, effectCommandSchema, applications.compensateOperation),
-    ...tool('inspect_operation', derived.inspect, runtimeOperationQuerySchema, applications.inspectOperation)];
+  return [...tool('execute_operation', t('mcp.tool.executeOperation', {}, locale), derived.execute, effectCommandSchema, applications.executeOperation),
+    ...tool('compensate_operation', t('mcp.tool.compensateOperation', {}, locale), derived.compensate, effectCommandSchema, applications.compensateOperation),
+    ...tool('inspect_operation', t('mcp.tool.inspectOperation', {}, locale), derived.inspect, runtimeOperationQuerySchema, applications.inspectOperation)];
 }

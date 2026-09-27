@@ -291,7 +291,8 @@
         "src/surfaces/core/mcp",
         "src/composition/core/toolchains",
         "src/engine/core/inference-serving",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/operations"
       ],
       "plan": "SURFACES"
     },
@@ -443,7 +444,10 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/operations",
+        "src/domain/core/effect",
+        "src/engine/core/effect"
       ],
       "plan": "EXECUTION"
     },
@@ -582,7 +586,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
         "src/engine/core/runs",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/domain/core/effect"
       ],
       "plan": "EXECUTION"
     },
@@ -849,7 +854,8 @@
         "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/i18n",
-        "src/engine/core/toolchain-currency"
+        "src/engine/core/toolchain-currency",
+        "src/domain/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -1563,7 +1569,9 @@
         "src/composition/core/scoped-request",
         "src/adapters/core/approval-store",
         "src/adapters/core/local-keyring",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/runtime"
       ],
       "plan": "EXECUTION"
     },

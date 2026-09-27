@@ -634,5 +634,8 @@
   "mcp.tool.listApprovals": "List scoped approval requests.",
   "mcp.tool.inspectApproval": "Inspect one approval and its evidence.",
   "mcp.tool.decideApproval": "Decide an approval from a verified live session.",
-  "mcp.tool.renewApproval": "Explicitly renew a closed approval request."
+  "mcp.tool.renewApproval": "Explicitly renew a closed approval request.",
+  "mcp.tool.executeOperation": "Execute a catalog operation on its declared target through the runtime service. A required approval returns approval-pending and sends nothing; resubmit the same command after the decision.",
+  "mcp.tool.compensateOperation": "Compensate a settled catalog operation with its catalog compensation as a new operation (same approval rules).",
+  "mcp.tool.inspectOperation": "Inspect the durable record of a catalog operation command in a scope."
 }
