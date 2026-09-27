@@ -214,7 +214,18 @@ function menuKey(state: ComposerState, key: ComposerKey, menu: ComposerMenu): Co
   if (key.type === 'escape') return step(menu.kind === 'slash' ? { ...state, dismissed: state.text } : { ...state, mentions: null });
   if (menu.kind === 'mention' && (key.type === 'tab' || key.type === 'submit')) return step(completeMention(state, menu.start, menu.items[menu.selected]!));
   if (menu.kind === 'slash' && key.type === 'tab') return step(edit(state, 0, state.text.length, `/${menu.items[menu.selected]!.name} `));
+  if (menu.kind === 'slash' && key.type === 'submit') return runSlash(state, menu.items[menu.selected]!);
   return null;
+}
+
+/**
+ * Enter on a palette row. A fully typed name runs as typed (the user already chose; a missing argument gets the command's usage
+ * line). Otherwise a command that takes an argument completes to `/name ` and waits, and any other runs as `/name`.
+ */
+function runSlash(state: ComposerState, command: SlashCommand): ComposerStep {
+  if (state.text.toLowerCase() === `/${command.name}`) return submit(state);
+  if (command.argumentKey !== undefined) return step(edit(state, 0, state.text.length, `/${command.name} `));
+  return submit(edit(state, 0, state.text.length, `/${command.name}`));
 }
 
 function mentionResult(state: ComposerState, key: Extract<ComposerKey, { type: 'mentions' }>): ComposerState {
@@ -228,7 +239,12 @@ function textKey(state: ComposerState, text: string, context: ComposerContext): 
   // Enter submits; a chunk with inner newlines is a paste and never submits by itself.
   const body = text.replace(/[\r\n]+$/u, '');
   if (text.length > 1 && /[\r\n]/u.test(body)) return step(paste(state, text, context));
-  if (text.length > 1 && body !== text) return submit(insert(state, cleanText(body)));
+  if (text.length > 1 && body !== text) {
+    // Text and Enter in one chunk take the same palette rule as a separate Enter: the highlighted command, never the bare prefix.
+    const typed = insert(state, cleanText(body));
+    const menu = composerMenu(typed, context.commands);
+    return menu?.kind === 'slash' ? runSlash(typed, menu.items[menu.selected]!) : submit(typed);
+  }
   if (text.length > 1 && shouldCollapse(text, context.policy ?? PASTE_COLLAPSE)) return step(paste(state, text, context));
   return step(insert(state, cleanText(text)));
 }

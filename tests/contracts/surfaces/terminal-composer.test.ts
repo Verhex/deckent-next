@@ -185,13 +185,20 @@ describe('composer paste and chunked input', () => {
 });
 
 describe('composer completion, shortcuts panel and mentions', () => {
-  it('opens the slash popup on a bare prefix; arrows select, Tab completes, Enter submits what was typed', () => {
+  it('opens the slash popup on a bare prefix; arrows select, Tab completes, Enter runs the highlighted command', () => {
     let { state } = run(typed('/wa'));
     expect(composerMenu(state)!.items.map(command => command.name)).toEqual(['watch-workers', 'watch-runs', 'watch-stop']);
     state = run([K.down, K.tab], state).state;
     expect(state.text).toBe('/watch-runs ');
     expect(composerMenu(state)).toBeNull();
-    expect(submitted(run([...typed('/ru'), K.submit]).intents)).toEqual(['/ru']);
+    // Owner 2026-09-27: Enter selects. A command without an argument runs; one with an argument completes and waits.
+    expect(submitted(run([...typed('/wa'), K.down, K.submit]).intents)).toEqual(['/watch-runs']);
+    const waiting = run([...typed('/ru'), K.submit]);
+    expect([submitted(waiting.intents), waiting.state.text, pendingArgument(waiting.state.text)?.name]).toEqual([[], '/run ', 'run']);
+    expect(submitted(run([...typed('r-1'), K.submit], waiting.state).intents)).toEqual(['/run r-1']);
+    expect(submitted(run([text('/sta\r')]).intents)).toEqual(['/status']);
+    expect(composerMenu(run(typed('/wwk')).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
+    expect(submitted(run([...typed('/zz'), K.submit]).intents)).toEqual(['/zz']);
     expect(pendingArgument(run([...typed('/ru'), K.tab]).state.text)?.name).toBe('run');
     const dismissed = run([...typed('/wa'), K.esc]).state;
     expect(composerMenu(dismissed)).toBeNull();

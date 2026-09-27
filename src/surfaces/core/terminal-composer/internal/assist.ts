@@ -42,11 +42,23 @@ export function expandChips(text: string, pastes: readonly PasteChip[]): string 
     .reduce((wire, paste) => wire.split(paste.chip).join(paste.body), text);
 }
 
-/** Popup candidates while the draft is a bare `/prefix` (no whitespace yet). */
+/** True when every character of `query` occurs in `text` in order (case already folded by the caller). */
+export function isSubsequence(query: string, text: string): boolean {
+  let at = 0;
+  for (const char of query) {
+    at = text.indexOf(char, at);
+    if (at < 0) return false;
+    at += char.length;
+  }
+  return true;
+}
+
+/** Popup candidates while the draft is a bare `/prefix` (no whitespace yet): prefix matches first, then fuzzy (subsequence) ones. */
 export function slashMatches(text: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): readonly SlashCommand[] {
   if (!/^\/\S*$/u.test(text)) return [];
-  const prefix = text.slice(1).toLowerCase();
-  return commands.filter(command => command.name.startsWith(prefix));
+  const query = text.slice(1).toLowerCase();
+  const prefix = commands.filter(command => command.name.startsWith(query));
+  return [...prefix, ...commands.filter(command => !prefix.includes(command) && isSubsequence(query, command.name))];
 }
 
 /** The command whose argument is being typed: `/run ` with nothing after it shows the argument hint. */
