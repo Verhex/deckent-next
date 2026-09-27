@@ -985,5 +985,8 @@
   "error.SESSION_REQUIRED": "A verified live session is required.",
   "error.SESSION_EXPIRED": "The session expired or its clock evidence changed.",
   "error.SESSION_INACTIVE": "The session is no longer active.",
-  "error.INTEGRITY_KEY_UNAVAILABLE": "The local integrity key is unavailable or unsafe."
+  "error.INTEGRITY_KEY_UNAVAILABLE": "The local integrity key is unavailable or unsafe.",
+  "error.PERMISSION_MODE_CONFLICT": "The policy or the bindings changed after your mode was read; nothing was written. Check /mode and try again.",
+  "error.PERMISSION_MODE_UNSUPPORTED": "Permission modes need a v2 policy with its bindings file; nothing was written.",
+  "error.PERMISSION_MODE_INVALID": "The permission mode request is not valid: the mode must be ask, auto-edit or full-auto."
 }

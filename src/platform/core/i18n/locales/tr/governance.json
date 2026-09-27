@@ -985,5 +985,8 @@
   "error.SESSION_REQUIRED": "Doğrulanmış canlı oturum gerekli.",
   "error.SESSION_EXPIRED": "Oturumun süresi doldu veya saat kanıtı değişti.",
   "error.SESSION_INACTIVE": "Oturum artık etkin değil.",
-  "error.INTEGRITY_KEY_UNAVAILABLE": "Yerel bütünlük anahtarı kullanılamıyor veya güvenli değil."
+  "error.INTEGRITY_KEY_UNAVAILABLE": "Yerel bütünlük anahtarı kullanılamıyor veya güvenli değil.",
+  "error.PERMISSION_MODE_CONFLICT": "Modunuz okunduktan sonra policy ya da bindings değişti; hiçbir şey yazılmadı. /mode ile bakıp yeniden deneyin.",
+  "error.PERMISSION_MODE_UNSUPPORTED": "İzin modları bindings dosyasıyla birlikte v2 policy ister; hiçbir şey yazılmadı.",
+  "error.PERMISSION_MODE_INVALID": "İzin modu isteği geçerli değil: mod ask, auto-edit ya da full-auto olmalı."
 }

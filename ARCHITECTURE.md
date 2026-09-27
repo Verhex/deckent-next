@@ -860,6 +860,27 @@ mode is not on the wire yet (status row and `/mode` join the v15 package). Versi
 bindings v2, is refused as a whole by a build before this slice (strict schemas) — fail closed, never a silent relaxation. Side effect: on an installation that never produced an approval, the first silent call creates the approval/audit
 integrity key through the counter path. Open (owner): read-only shell under an eligible rule still asks in full-auto (needs audit event v2);
 `rm` stays outside the narrow set; permanent exact resources are slice 4d.
+**Mode status and `/mode` (T-L4 slice 4c, owner q7, protocol v15).** Two v15 operations, current version only (a v14 envelope is
+refused; window stays [15,14]): `inspectPermissionMode {scopeId}` → `{supported, mode, revision, eligible}` over the request's
+policy + bindings snapshot (scope admission `read`; `eligible` = a mode-eligible require-approval rule can apply to this person here;
+`supported: false` for a v1 policy), and `setPermissionMode {scopeId, mode, expectedRevision}` → the view + `previous`, `changed`.
+No actor field: the socket peer is the principal and only that exact issuer + subject's bindings v2 `modes` entries change (the
+scope leaves them; unless `ask`, it joins the caller's entry of that mode or a new `m-<hash>` entry); every other entry and the role
+`bindings` are kept. `PermissionModeApplication` (engine/core/policy) owns the transition: conditional on the effective
+`policy+bindings` revision (`PERMISSION_MODE_CONFLICT`), a company `permission-mode`/`set` grant whose resource id is the target
+mode (deny/no grant → `POLICY_DENIED`, require-approval → `POLICY_APPROVAL_UNSUPPORTED`; `ask` needs the grant too), v1 policy →
+`PERMISSION_MODE_UNSUPPORTED`. Every decision writes a sealed `permission-mode-change` audit event (audit subject union extension;
+ledger v41 unchanged): `requested`, `previous`, `decision {effect, ruleId}`, `bindingsRevision {before, after|null}`; an allowed
+change is recorded before the file changes (no record, no change; an unrecordable refusal is still a refusal) — so an `allow`
+record's `after` revision is intent, not proof: a rename failure or a replacement detected by the identity check (typed conflict)
+leaves a record whose revision never reached the file. `FilePolicySource.update`
+is the conditional store: per-file serialization in the service process, policy + bindings read under the usual guards, the new
+document written to a same-directory `O_CREAT|O_EXCL|O_NOFOLLOW` file with the original 0400/0600 mode, flushed, the target's
+identity (dev/ino/size/mtime/ctime) re-checked, then `rename` + directory fsync; the writer must be the trusted owner uid. The new
+bindings revision is `m-` + sha256(previous revision, new body) (chained, no ABA). A bindings v1 file becomes v2 on the first
+non-`ask` write. The terminal shows the mode as a droppable status-row segment (catalog text only; drop order notice → elapsed →
+mode → model → queue; hidden when unknown or unsupported), refreshed at open, after `/mode` and after each turn; `/mode` shows it
+and `/mode <mode>` sets it with the revision last read. The surface reads and writes no file.
 
 ## Package contract
 

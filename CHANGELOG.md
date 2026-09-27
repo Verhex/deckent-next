@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (T-L4 slice 4c, protocol v15): the permission mode in the terminal status row and `/mode` to show or set your own mode;
+  setting needs a company `permission-mode`/`set` grant, is audited and replaces bindings.json atomically.
 - ADDED (terminal, protocol v15): the finished shell call line keeps a cleanup marker (`group-ended`, `unverified`) after the
   live output is gone; `tool.finished` carries an optional `cleanup` field for shell calls.
 - ADDED (C12 G4, protocol v15): catalog operations on the runtime service (`executeOperation`, `compensateOperation`,

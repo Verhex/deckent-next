@@ -842,6 +842,13 @@
   "terminal.slash.runArgument": "<run-kimliği>",
   "terminal.slash.transcriptArgument": "<n|deneme-kimliği>",
   "terminal.slash.cancelArgument": "<run-kimliği>",
+  "terminal.slash.mode": "İzin modunu göster ya da ayarla",
+  "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
+  "terminal.mode.current": "İzin modu: {mode}",
+  "terminal.mode.changed": "İzin modu: {previous} → {mode}",
+  "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
+  "terminal.mode.unsupported": "İzin modları v2 policy ister; burada herkes sorar ({mode}).",
+  "terminal.mode.usage": "Kullanım: /mode [ask|auto-edit|full-auto]",
   "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
   "terminal.mention.truncated": "@{path} eklendi: {total} baytın ilk {bytes} baytı",
   "terminal.mention.refused": "@{path} eklenmedi: {reason}"

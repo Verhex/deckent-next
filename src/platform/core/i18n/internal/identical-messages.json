@@ -92,6 +92,7 @@
   "sync.format_run_label",
   "sync.scope_prompt",
   "terminal.render.tool",
+  "terminal.slash.modeArgument",
   "terminal.worker.ordinal",
   "tool.confirm_git_commit",
   "tui.bg_turn.completed",

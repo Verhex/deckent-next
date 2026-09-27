@@ -167,8 +167,8 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     const before = await stat(join(f.data, 'bindings.json'), { bigint: true });
     const wide = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', '/mode\r'],
-      ['/mode · ask', '/mode auto-edit\r'],
-      ['/mode · ask → auto-edit', 'go\r'],
+      ['Permission mode: ask', '/mode auto-edit\r'],
+      ['Permission mode: ask → auto-edit', 'go\r'],
       ['Mode turn done.', '/exit\r'],
     ]);
     expect(wide.timeout, wide.output).toBeUndefined();
@@ -183,10 +183,10 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(file.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, scopes: ['scope'], mode: 'auto-edit' })]);
     expect(f.audit().map(row => (row as { kind: string }).kind)).toEqual(['permission-mode-change', 'permission-mode']);
     // After the change the status row carries the mode on a wide terminal: more occurrences than the one notice line.
-    const after = wide.output.slice(wide.output.indexOf('/mode · ask → auto-edit'));
+    const after = wide.output.slice(wide.output.indexOf('Permission mode: ask → auto-edit'));
     expect(after.split('auto-edit').length - 1).toBeGreaterThan(1);
     // Narrow: the mode is shown once by `/mode` (the notice) and never in the status row.
-    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['/mode · auto-edit', '/exit\r']], 30);
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['auto-edit', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     expect(narrow.output.split('auto-edit').length - 1).toBe(1);

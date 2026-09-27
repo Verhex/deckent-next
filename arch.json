@@ -447,7 +447,12 @@
         "src/platform/core/managed-files",
         "src/composition/core/operations",
         "src/domain/core/effect",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/domain/core/audit",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/file-policy",
+        "src/platform/core/clock"
       ],
       "plan": "EXECUTION"
     },
@@ -554,7 +559,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/supervisor",
         "src/engine/core/provider-spend",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/audit"
       ],
       "plan": "SECURITY"
     },
@@ -587,7 +593,8 @@
         "src/engine/core/policy",
         "src/engine/core/runs",
         "src/domain/core/provider-spend",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/domain/core/policy"
       ],
       "plan": "EXECUTION"
     },
@@ -742,7 +749,8 @@
     },
     "src/surfaces/core/terminal-render": {
       "dependencies": [
-        "src/surfaces/core/terminal-kit"
+        "src/surfaces/core/terminal-kit",
+        "src/domain/core/policy"
       ],
       "plan": "SURFACES"
     },
@@ -761,7 +769,8 @@
         "src/domain/core/inference-serving",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/domain/core/policy"
       ],
       "plan": "SURFACES"
     },
