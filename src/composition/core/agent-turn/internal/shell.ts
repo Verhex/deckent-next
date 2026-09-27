@@ -17,6 +17,20 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  */
 export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
+/**
+ * What the result says about processes the command left behind (Astra 2124), within the host shell's process-group contract:
+ * `clean` adds nothing; `group-ended` names members of the command's group that were ended (the group was then observed empty);
+ * `unverified` says the output may be incomplete and a process the command started may still run, possibly outside its group.
+ * Nothing here claims a process outside the group was seen or ended.
+ */
+function cleanupNote(cleanup: HostShellResult['cleanup']): string | null {
+  if (cleanup === 'unverified') {
+    return '[deckent] cleanup unverified: the output may be incomplete, and a process the command started may still be running, possibly '
+      + 'outside its process group (that everything ended could not be verified); this is not a sandbox.';
+  }
+  return cleanup === 'group-ended' ? '[deckent] cleanup: processes the command left running in its process group were ended; '
+    + 'a process that left the group is not observed.' : null;
+}
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly silent: boolean }
   | { readonly ok: false; readonly text: string };
 
@@ -51,7 +65,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   const describeResult = (command: string, result: HostShellResult) => {
     const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
-    return `[deckent] run_shell: ${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`;
+    const note = cleanupNote(result.cleanup);
+    return `[deckent] run_shell: ${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
+      + (note ? `${result.output.endsWith('\n') || result.output === '' ? '' : '\n'}${note}` : '');
   };
   return {
     plan,
@@ -82,6 +98,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         // Each run is its own record, so an uncertain run never makes the shell busy for the next one.
         target: { kind: HOST_SHELL_TARGET_KIND, id: `run-${commandId.slice(0, 32)}` }, idempotencyKey: commandId, input: { command: planned.command }, expectedVersion: null };
       let result: HostShellResult | null = null, skipped = false;
+      // The owner sees the cleanup note on the call's streamed output (the display surfaces show for the call), before the result.
+      const showCleanup = async (ran: HostShellResult) => {
+        const note = cleanupNote(ran.cleanup);
+        if (!note) return;
+        channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${note}\n` });
+        await channel.drained();
+      };
       const onOutput = (stream: 'stdout' | 'stderr', text: string) => {
         if (skipped) return;
         // Presentation only: past half the channel's room the display stops once, visibly; the result keeps its own bounded output.
@@ -106,11 +129,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
+        await showCleanup(ran);
         return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran) };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
+        if (ran) await showCleanup(ran);
         if (ran && ran.status !== 'exited') {
           return { status: 'error', text: `${describeResult(planned.command, ran)}\n[deckent] the command was stopped; what it changed before that is unknown.` };
         }

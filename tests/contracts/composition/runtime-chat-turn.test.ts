@@ -558,6 +558,52 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(toolText(plain)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(cat src\/\.\.\/public\.txt\)\nINSIDE_PUBLIC$/u);
   }, 30_000);
 
+  // Astra 2124: the host shell reports what it could verify about processes the command left (`cleanup`); the tool result says it.
+  it('says in the tool result when the cleanup is unverified or group members were ended, and keeps a clean result unchanged (Astra 2124)', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
+    const client = f.client();
+    const run = async (turnId: string, commandLine: string) => {
+      f.state.script = [...f.state.script.slice(0, f.state.requests.length), { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: commandLine }) } }, { content: 'Ok.' }];
+      const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+      const started = performance.now();
+      await client.chatTurn(ask(turnId), event => {
+        events.push(event);
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+      });
+      await Promise.all(pending);
+      return { events, ms: performance.now() - started };
+    };
+    // A descendant that left the process group (setsid) holds the pipes: they are released after the bounded drain.
+    let escaped: number | null = null;
+    try {
+      const unverified = await run('turn-shell-escaped', "setsid sh -c 'echo $$ > escaped.pid; echo ready; exec sleep 5' & sleep 0.2; exit 0");
+      escaped = Number((await readFile(join(f.project, 'escaped.pid'), 'utf8')).trim());
+      expect(unverified.ms).toBeLessThan(4_000);
+      expect(unverified.events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok' });
+      const text = toolText(unverified.events);
+      expect(text).toMatch(/^\[deckent\] run_shell: exit 0 after /u);
+      expect(text).toContain('[deckent] cleanup unverified:');
+      expect(text).toContain('the output may be incomplete');
+      expect(text).toContain('outside its process group');
+      expect(text).not.toMatch(/processes? (?:were|was) ended|verified (?:dead|ended)/u);
+      // The owner sees it on the call's streamed output, the display the surfaces show for a running call.
+      expect(unverified.events.filter(event => event.kind === 'tool.output').map(event => event.kind === 'tool.output' && event.text).join(''))
+        .toContain('[deckent] cleanup unverified:');
+    } finally { if (escaped) try { process.kill(-escaped, 'SIGKILL'); } catch { /* already gone */ } }
+    // A background member of the group still alive when the shell exits is ended; the group is then observed empty.
+    const ended = await run('turn-shell-group-ended', 'sleep 5 & echo started');
+    expect(ended.ms).toBeLessThan(4_000);
+    const endedText = toolText(ended.events);
+    expect(endedText).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(sleep 5 & echo started\)\nstarted\n/u);
+    expect(endedText).toContain('[deckent] cleanup: processes the command left running in its process group were ended');
+    expect(endedText).not.toContain('cleanup unverified');
+    // Clean: the result is exactly as before (no note).
+    const clean = await run('turn-shell-clean', 'echo hi > clean.txt');
+    expect(toolText(clean.events)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(echo hi > clean\.txt\)\n$/u);
+    expect(clean.events.some(event => event.kind === 'tool.output')).toBe(false);
+  }, 60_000);
+
   // Astra 2113 repro (ported, asserting the corrected behavior): the fixture provider names every tool call `call_1`.
   it('runs the same command again in a later round as its own effect, although the provider reuses the call id (Astra 2113)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
