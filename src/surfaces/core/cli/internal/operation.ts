@@ -1,18 +1,20 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { EffectCommand, EffectRecord } from '#domain/index.js';
-import type { EffectResult } from '#engine/index.js';
+import type { EffectOutcome } from '#engine/index.js';
 import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import type { CommandContext } from './kernel-commands.js';
-export type OperationEffectHandler = (root: string, command: EffectCommand, options: ConfigLoadOptions) => Promise<EffectResult>;
+export type OperationEffectHandler = (root: string, command: EffectCommand, options: ConfigLoadOptions,
+  submit?: { readonly awaitApproval?: { readonly timeoutMs: number } }) => Promise<EffectOutcome>;
 export type OperationInspectHandler = (root: string, query: { readonly scopeId: string; readonly commandId: string }, options: ConfigLoadOptions)
   => Promise<Readonly<{ schemaVersion: 1; record: EffectRecord | null }>>;
-/** `deckent operation execute|compensate --input <file|->` and `inspect --scope <id> --command-id <id>`. */
+/** `deckent operation execute|compensate --input <file|-> [--wait <ms>]` and `inspect --scope <id> --command-id <id>`. A required approval
+ * is reported as pending (C12 G2); `--wait` polls the decision up to the given time and resubmits the same command once after an allow. */
 export async function operationCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1]; const values = new Map<string, string>(); let json = false;
   const help = argv.length === 2 && (action === '--help' || action === '-h');
   if (!help && action !== 'execute' && action !== 'compensate' && action !== 'inspect') throw ErrorRegistry.createError('CLI_USAGE');
-  const allowed = action === 'inspect' ? ['--scope', '--command-id', '--lang'] : ['--input', '--lang'];
+  const allowed = action === 'inspect' ? ['--scope', '--command-id', '--lang'] : ['--input', '--wait', '--lang'];
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i]!; if (flag === '--json' && !json) { json = true; continue; }
     if (!allowed.includes(flag) || values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE');
@@ -34,10 +36,14 @@ export async function operationCommand(argv: readonly string[], context: Command
   }
   const source = values.get('--input'); const handler = action === 'execute' ? context.executeOperation : context.compensateOperation;
   if (!source || !handler) throw ErrorRegistry.createError('CLI_USAGE');
+  const wait = values.get('--wait'); const timeoutMs = wait === undefined ? undefined : Number(wait);
+  if (timeoutMs !== undefined && (!/^\d{1,9}$/.test(wait!) || timeoutMs < 1)) throw ErrorRegistry.createError('CLI_USAGE');
   const config = await loadConfig(root, options);
   const input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
     { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
-  const result = await handler(root, input as EffectCommand, options);
-  emit(result, { ...sinks, json, render: data => t('cli.operation.settled', { operation: data.operation.id, version: data.operation.version,
-    kind: data.target.kind, id: data.target.id, sequence: data.sequence, recordVersion: data.version ?? t('cli.value.none', {}, locale) }, locale) });
+  const result = await handler(root, input as EffectCommand, options, timeoutMs === undefined ? undefined : { awaitApproval: { timeoutMs } });
+  // A pending outcome is rendered as its JSON (the `approvals` commands' text form) until the lead adds `cli.operation.pending` (i18n-delta).
+  emit(result, { ...sinks, json, render: data => data.status === 'approval-pending' ? JSON.stringify(data, null, 2)
+    : t('cli.operation.settled', { operation: data.operation.id, version: data.operation.version,
+      kind: data.target.kind, id: data.target.id, sequence: data.sequence, recordVersion: data.version ?? t('cli.value.none', {}, locale) }, locale) });
 }

@@ -1,15 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
+import { LocalOsSessionAuthority, openSqliteApprovalStore, upgradeExistingProductLedger } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { approvalRequestSchema, approvalSubject } from '#domain/index.js';
 import { ApprovalApplication, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestTaskApproval, sealApproval, verifyApproval, type ApprovalStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { DOWNGRADE_TO_V37_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V37_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -22,6 +22,89 @@ const toolCall = (index = 0, argsDigest = digest('args')) => sealApproval({ requ
   scopeId: 'scope', subject: { kind: 'agent-tool-call', turnId: 'turn-1', round: 2, index, tool: 'edit_file', toolVersion: 1, resource: 'src/a.ts', argsDigest },
   requester, actionDigest: digest(`call:${index}:${argsDigest}`), policyRevision: 'p1', summary: 'edit_file · src/a.ts', createdAt: 1_000, expiresAt: 61_000 }),
 revision: 0, status: 'pending', decision: null }, integrity);
+const operation = (commandId = 'cmd-1', inputDigest = digest('input')) => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 2, approvalId: `op-${commandId}-${inputDigest.slice(0, 6)}`,
+  scopeId: 'scope', subject: { kind: 'operation', operation: { id: 'post-order', version: 1 }, target: { kind: 'records', id: 'PO-1' }, commandId, inputDigest,
+    targetBinding: digest('binding'), expectedVersion: '"v1"', compensates: null },
+  requester, actionDigest: digest(`operation:${commandId}:${inputDigest}`), policyRevision: 'p1', summary: 'post-order@1 · records/PO-1', createdAt: 1_000, expiresAt: 61_000 }),
+revision: 0, status: 'pending', decision: null }, integrity);
+
+it('upgrades a real v39 ledger to v40 (C12 G1): 0600 backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
+  const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
+  expect(CURRENT_LEDGER_VERSION).toBe(40); expect(PREVIOUS_LEDGER_VERSION).toBe(39);
+  const seeded = openSqliteApprovalStore(path, options);
+  const task = requestTaskApproval(seeded.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
+    policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
+  const call = seeded.store.create(toolCall(0));
+  seeded.close();
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  // v39 cannot hold an operation approval; the v40 rebuild is what admits it.
+  expect(() => db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+    .run('scope', 'op', 'operation', null, null, digest('op'), 0, '{}')).toThrow(/CHECK/);
+  const before = db.prepare('SELECT * FROM approvals ORDER BY approval_id').all(); db.close();
+  const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T00:00:00.000Z'));
+  expect(upgrade).toEqual({ from: 39, to: 40, backupPath: join(backups, 'ledger-v39-2026-09-27T00-00-00-000Z.db') });
+  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
+  const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
+  try { expect(backup.prepare('PRAGMA user_version').get()).toEqual({ user_version: 39 }); expect(backup.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before); }
+  finally { backup.close(); }
+  const upgraded = openSqliteApprovalStore(path, options);
+  try {
+    const check = new DatabaseSync(path, { readOnly: true });
+    try {
+      expect(check.prepare('PRAGMA user_version').get()).toEqual({ user_version: 40 });
+      expect(check.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before);
+      expect(check.prepare("SELECT name FROM sqlite_schema WHERE type='index' AND tbl_name='approvals' ORDER BY name").all().map(row => row.name))
+        .toEqual(['approvals_current_action', 'approvals_current_operation', 'approvals_current_tool_call', 'sqlite_autoindex_approvals_1']);
+    } finally { check.close(); }
+    expect(verifyApproval(upgraded.store.load('scope', task.request.approvalId), integrity)).toEqual(task);
+    expect(verifyApproval(upgraded.store.findToolCall('scope', call.request.actionDigest), integrity)).toEqual(call);
+    const first = upgraded.store.create(operation());
+    expect(approvalSubject(first.request)).toMatchObject({ kind: 'operation', commandId: 'cmd-1' });
+    expect(upgraded.store.findOperation('scope', first.request.actionDigest)).toEqual(first);
+    expect(upgraded.store.findToolCall('scope', first.request.actionDigest)).toBeNull();
+    // A subject kind outside the contract is refused by the ledger itself.
+    const raw = new DatabaseSync(path);
+    try {
+      expect(() => raw.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+        .run('scope', 'x', 'process', null, null, digest('x'), 0, '{}')).toThrow(/CHECK/);
+      // A ledger holding an operation approval cannot go back to v39: the rebuild fails on the narrower CHECK.
+      expect(() => raw.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL)).toThrow(/CHECK/);
+      expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 40 });
+    } finally { raw.close(); }
+  } finally { upgraded.close(); }
+});
+
+it('stores an operation approval by its exact action digest: idempotent open, one current row per digest, never renewed, untouched by the tool-call sweep (C12 G1)', async () => {
+  const path = await ledger(), journal = openSqliteApprovalStore(path, options);
+  try {
+    const first = journal.store.create(operation());
+    expect(journal.store.create(operation())).toEqual(first);
+    const otherInput = journal.store.create(operation('cmd-1', digest('other-input'))), otherCommand = journal.store.create(operation('cmd-2'));
+    expect(new Set([first, otherInput, otherCommand].map(record => record.request.approvalId)).size).toBe(3);
+    // The partial unique index keeps one current row per (scope, digest) for operations.
+    const raw = new DatabaseSync(path);
+    try {
+      expect(() => raw.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
+        .run('scope', 'dup', 'operation', null, null, first.request.actionDigest, 0, JSON.stringify(first))).toThrow(/UNIQUE/);
+    } finally { raw.close(); }
+    const clock = { sample: () => ({ wallMs: 2_000, monotonicMs: 2 }) };
+    const sessions = await LocalOsSessionAuthority.create(['scope'], 60_000, clock); const { principal } = await sessions.verifySession(undefined);
+    const policy = { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
+      { id: 'decide', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } }] };
+    const approvals = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, { load: async () => policy }, integrity, clock, 'terminal', 10);
+    const denied = await approvals.decide({ schemaVersion: 1, scopeId: 'scope', approvalId: otherCommand.request.approvalId, commandId: 'deny-op',
+      expectedRevision: 0, decision: 'deny', reason: 'Not this one' });
+    await expect(approvals.renew({ schemaVersion: 1, scopeId: 'scope', approvalId: denied.request.approvalId, commandId: 'renew-op',
+      expectedRevision: 1, reason: 'again' }, 60_000)).rejects.toMatchObject({ code: 'APPROVAL_INVALID' });
+    // Service start closes orphaned tool-call approvals only: an operation approval belongs to its command, not to a turn.
+    const call = journal.store.create(toolCall(0));
+    expect(journal.store.pendingToolCalls(null, 10)).toEqual([{ scopeId: 'scope', approvalId: call.request.approvalId }]);
+    expect(expireOrphanedToolCallApprovals(journal.store, integrity, 10)).toEqual({ expired: 1, failed: 0 });
+    expect(journal.store.load('scope', first.request.approvalId)?.status).toBe('pending');
+    expect(journal.store.load('scope', otherInput.request.approvalId)?.status).toBe('pending');
+    expect(journal.store.load('scope', call.request.approvalId)?.status).toBe('expired');
+  } finally { journal.close(); }
+});
 
 it('keeps every existing task approval byte for byte across the v38 rebuild, still verifying its seal (C12)', async () => {
   const path = await ledger();

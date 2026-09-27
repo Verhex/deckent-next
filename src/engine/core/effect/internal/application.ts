@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { effectCommandSchema, effectIntentSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
-  evaluatePolicy, policyResources, type EffectCommand, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
+  evaluatePolicy, policyResources, type EffectCommand, type EffectIntentApproval, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
   type VerifiedPrincipal } from '#domain/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
@@ -52,36 +52,57 @@ export class OperationPolicyAuthorization {
     return decision.decision;
   }
 }
-/** Approval gate. C11-1 has no operation approval workflow yet: any required approval stops before the effect. */
-export interface EffectApprovalGate { admit(descriptor: OperationDescriptor, decision: Decision, command: EffectCommand, principal: VerifiedPrincipal): Promise<void> }
+/** The open approval request a pending outcome reports: enough for a surface to decide it and resubmit the same command. */
+export type EffectApprovalPendingRequest = Readonly<{ approvalId: string; revision: number; expiresAt: number; summary: string }>;
+/** What the gate asks against (C12 G2): the command's stored record (null before the first claim), the descriptor + endpoint binding the
+ * intent pins, and the canonical input digest the intent records. A terminal record is replayed, never re-approved. */
+export interface EffectApprovalContext { readonly record: EffectRecord | null; readonly targetBinding: string; readonly inputDigest: string }
+export type EffectAdmission = { readonly approval: EffectIntentApproval } | { readonly pending: EffectApprovalPendingRequest };
+/**
+ * Approval gate. Admits (void, or the approval reference the intent will carry), reports the open request as `pending` (nothing is
+ * sent and no intent is claimed), or throws a typed refusal. In-turn gates (agent edits/shell) still admit from their own turn state
+ * and ignore the context (C12-G3 moves them onto the broker).
+ */
+export interface EffectApprovalGate {
+  admit(descriptor: OperationDescriptor, decision: Decision, command: EffectCommand, principal: VerifiedPrincipal, context: EffectApprovalContext): Promise<EffectAdmission | void>;
+}
+/** Gate without any operation approval workflow: a required approval stops before the effect (kept for compositions without a broker). */
 export const refuseRequiredApproval: EffectApprovalGate = {
   async admit(descriptor, decision) { if (descriptor.approval === 'required' || decision === 'require-approval') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); },
 };
+/** Settled outcome (contract v1, unchanged byte for byte on every surface). */
 export type EffectResult = Readonly<{ schemaVersion: 1; status: 'settled'; commandId: string; scopeId: string; operation: OperationRef; target: EffectTargetRef;
   sequence: number; version: string | null; compensates: string | null; evidence: 'idempotency-record' | 'fence' }>;
+/** Pending outcome (contract v2, C12 G2): the command needs a decision on `approval`; nothing was sent and no intent exists for it. The
+ * same command (same `commandId`, same input) is resubmitted after an `allow`; a deny or an unused allow is a typed refusal. */
+export type EffectApprovalPending = Readonly<{ schemaVersion: 2; status: 'approval-pending'; commandId: string; scopeId: string; operation: OperationRef;
+  target: EffectTargetRef; approval: EffectApprovalPendingRequest }>;
+export type EffectOutcome = EffectResult | EffectApprovalPending;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const wireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
   `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
 const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
   digest(`effect-binding:1\0${encodeCommandProjection('effect-descriptor', descriptor)}\0${target.identity()}`);
+/** Unwinds `run` at the gate with the pending outcome (an outcome, never surfaced as an error). */
+class PendingSignal { constructor(readonly outcome: EffectApprovalPending) {} }
 
-/** Executes catalog operations against external targets through one contract: intent before effect, conditional write, idempotency,
- * re-authorization and live session right before the effect, evidence-based settlement, typed unknown without blind retry, and
- * compensation as a new operation. Nothing here is specific to Git or to one ERP. */
+/** Executes catalog operations against external targets through one contract: approval before intent, intent before effect, conditional
+ * write, idempotency, re-authorization and live session right before the effect, evidence-based settlement, typed unknown without blind
+ * retry, and compensation as a new operation. Nothing here is specific to Git or to one ERP. */
 export class EffectApplication {
   constructor(private readonly catalog: OperationCatalog, private readonly targets: EffectTargets, private readonly store: EffectStore,
     private readonly approvals: EffectApprovalGate, private readonly sessions: SessionVerifier & SessionAuthority,
     private readonly authorization: OperationPolicyAuthorization, private readonly clock: TrustedClock) {}
 
-  execute(input: unknown, credential?: unknown) {
+  /** Runs to settlement or throws; a pending approval is `EFFECT_APPROVAL_REQUIRED` here (callers that handle pending use `submit`). */
+  async execute(input: unknown, credential?: unknown): Promise<EffectResult> { return this.settledOnly(await this.submit('execute', input, credential)); }
+  async compensate(input: unknown, credential?: unknown): Promise<EffectResult> { return this.settledOnly(await this.submit('compensate', input, credential)); }
+  /** Submits the command: settled, or approval-pending with the open request (nothing sent, no intent). */
+  async submit(action: 'execute' | 'compensate', input: unknown, credential?: unknown): Promise<EffectOutcome> {
     const command = effectCommandSchema.parse(input);
-    if (command.compensates !== undefined) throw new EffectError('EFFECT_INVALID');
-    return this.run(command, 'execute', credential);
-  }
-  async compensate(input: unknown, credential?: unknown) {
-    const command = effectCommandSchema.parse(input);
-    if (command.compensates === undefined) throw new EffectError('EFFECT_INVALID');
-    return this.run(command, 'compensate', credential);
+    if ((command.compensates !== undefined) !== (action === 'compensate')) throw new EffectError('EFFECT_INVALID');
+    try { return await this.run(command, action, credential); }
+    catch (error) { if (error instanceof PendingSignal) return error.outcome; throw error; }
   }
   async inspect(scopeId: string, commandId: string, credential?: unknown) {
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, scopeId);
@@ -90,33 +111,42 @@ export class EffectApplication {
     await this.authorization.authorize('inspect', scopeId, record.intent.command.operation, verified.principal);
     return record;
   }
+  private settledOnly(outcome: EffectOutcome): EffectResult {
+    if (outcome.status !== 'settled') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+    return outcome;
+  }
 
   private async run(command: EffectCommand, action: 'execute' | 'compensate', credential?: unknown): Promise<EffectResult> {
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
     const descriptor = await this.catalog.resolve(command.operation);
     const target = descriptor ? this.targets.resolve(descriptor.targetKind) : null;
     if (!descriptor || !target || descriptor.targetKind !== command.target.kind || target.kind !== descriptor.targetKind) throw new EffectError('EFFECT_OPERATION_UNKNOWN');
-    const authorize = async () => {
-      const decision = await this.authorization.authorize(action, command.scopeId, command.operation, verified.principal);
-      await this.approvals.admit(descriptor, decision, command, verified.principal);
-    };
-    await authorize();
-    const settle = async () => { await authorize(); await assertSessionActive(verified.session, this.sessions, this.clock); };
+    const current = binding(descriptor, target);
     const previous = await this.store.loadEffect(command.scopeId, command.commandId);
-    if (previous) {
-      if (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef)) {
-        throw new EffectError('EFFECT_CONFLICT');
-      }
-      return this.resume(previous, target, settle, binding(descriptor, target));
+    if (previous && (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef))) {
+      throw new EffectError('EFFECT_CONFLICT');
     }
+    // The canonical input is fixed before any authority is asked: the approval subject and the intent bind the same digest, and an
+    // input the catalog would refuse never opens a request.
+    let encoded: string;
+    try { encoded = encodeCommandProjection('effect-input', command.input ?? null); } catch { throw new EffectError('EFFECT_INVALID'); }
+    if (Buffer.byteLength(encoded) > descriptor.inputMaxBytes) throw new EffectError('EFFECT_INVALID');
+    const inputDigest = previous ? previous.intent.inputDigest : digest(encoded);
+    // Policy, then the approval gate: a pending approval ends the submission here (or before the effect, see `settle`), nothing is sent.
+    const authorize = async (record: EffectRecord | null) => {
+      const decision = await this.authorization.authorize(action, command.scopeId, command.operation, verified.principal);
+      const admission = await this.approvals.admit(descriptor, decision, command, verified.principal, { record, targetBinding: current, inputDigest });
+      if (admission && 'pending' in admission) throw new PendingSignal(this.pending(command, admission.pending));
+      return admission?.approval;
+    };
+    const approval = await authorize(previous);
+    const settle = async (record: EffectRecord) => { await authorize(record); await assertSessionActive(verified.session, this.sessions, this.clock); };
+    if (previous) return this.resume(previous, target, settle, current);
     if (action === 'compensate') {
       const original = await this.store.loadEffect(command.scopeId, command.compensates!);
       if (!original) throw new EffectError('EFFECT_NOT_COMPENSABLE');
       assertCompensation(original, command);
     }
-    let encoded: string;
-    try { encoded = encodeCommandProjection('effect-input', command.input ?? null); } catch { throw new EffectError('EFFECT_INVALID'); }
-    if (Buffer.byteLength(encoded) > descriptor.inputMaxBytes) throw new EffectError('EFFECT_INVALID');
     if (descriptor.precondition === 'record-version') {
       if (command.expectedVersion === null) throw new EffectError('EFFECT_INVALID');
       // A stale decision is refused before any intent: the target changed since the caller read it.
@@ -124,15 +154,16 @@ export class EffectApplication {
       try { observed = await target.observe(command.target); } catch (error) { throw new EffectError('EFFECT_TARGET_UNAVAILABLE', { cause: error }); }
       if (observed.version !== command.expectedVersion) throw new EffectError('EFFECT_PRECONDITION_CHANGED');
     }
+    // Approval → intent → effect (owner Q1): the claim carries the approval it consumed; the gate then verifies that record, not a window.
     const intent = effectIntentSchema.parse({ schemaVersion: 1, command, descriptor, actor: verified.session.principalRef,
-      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest: digest(encoded),
-      wireKey: wireKey(command), targetBinding: binding(descriptor, target) });
+      idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest, wireKey: wireKey(command), targetBinding: current,
+      ...(approval ? { approval } : {}) });
     return this.apply(await this.store.claimEffect(intent), target, settle);
   }
 
   /** Crash/replay settlement from target evidence: applied → settle; absent → the idempotent write is (re)sent; the target cannot tell →
    * unknown, never a blind retry. Terminal records replay their outcome. */
-  private async resume(record: EffectRecord, target: EffectTarget, settle: () => Promise<void>, current: string): Promise<EffectResult> {
+  private async resume(record: EffectRecord, target: EffectTarget, settle: (record: EffectRecord) => Promise<void>, current: string): Promise<EffectResult> {
     if (record.state === 'settled') return this.result(record);
     if (record.state === 'refused') throw new EffectError(record.refusal!);
     // Never redirect an unsettled effect: a changed descriptor/endpoint (or an older intent without a pinned binding and
@@ -147,9 +178,9 @@ export class EffectApplication {
     return this.apply(record, target, settle);
   }
 
-  private async apply(record: EffectRecord, target: EffectTarget, settle: () => Promise<void>): Promise<EffectResult> {
+  private async apply(record: EffectRecord, target: EffectTarget, settle: (record: EffectRecord) => Promise<void>): Promise<EffectResult> {
     const { command } = record.intent;
-    await settle();
+    await settle(record);
     try {
       const applied = await target.apply({ target: command.target, operation: command.operation, idempotencyKey: record.intent.wireKey!,
         expectedVersion: command.expectedVersion, input: command.input ?? null });
@@ -182,6 +213,10 @@ export class EffectApplication {
       if (current?.state === 'settled' && JSON.stringify(current.intent) === JSON.stringify(previous.intent)) return current;
       throw error;
     }
+  }
+  private pending(command: EffectCommand, approval: EffectApprovalPendingRequest): EffectApprovalPending {
+    return Object.freeze({ schemaVersion: 2, status: 'approval-pending', commandId: command.commandId, scopeId: command.scopeId, operation: command.operation,
+      target: command.target, approval: Object.freeze({ ...approval }) });
   }
   private result(record: EffectRecord): EffectResult {
     const { command } = record.intent;
