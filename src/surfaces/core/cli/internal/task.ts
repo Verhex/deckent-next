@@ -63,7 +63,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
       const deliveryCommandId = values.get('--delivery-command-id'), targetRef = values.get('--target');
       if (!deliveryCommandId || !targetRef) throw usage(!deliveryCommandId ? '--delivery-command-id' : '--target');
       if (!context.adoptWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-      emit(await context.adoptWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 1, commandId, identity, deliveryCommandId, targetRef }, options), { ...sinks, render }); return;
+      emit(await context.adoptWorkspaceIntegration(context.root ?? process.cwd(), { schemaVersion: 2, commandId, identity, deliveryCommandId, targetRef }, options), { ...sinks, render }); return;
     }
     const adoptionCommandId = values.get('--adoption-command-id'); if (!adoptionCommandId) throw usage('--adoption-command-id');
     if (!context.rollbackWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

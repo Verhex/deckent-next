@@ -4,13 +4,10 @@ import type { TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { IntegrationDeliveryPlan, IntegrationDeliveryRecord, IntegrationDeliveryTarget } from './delivery.js';
-
-export type WorkspaceAdoptionErrorCode = 'ADOPTION_TARGET_DENIED' | 'ADOPTION_TARGET_MISSING' | 'ADOPTION_TARGET_CHECKED_OUT'
-  | 'ADOPTION_BASE_CHANGED' | 'ADOPTION_NOT_DELIVERED' | 'ADOPTION_NOT_ACCEPTED' | 'ADOPTION_TARGET_BUSY' | 'ADOPTION_SUPERSEDED'
-  | 'ADOPTION_TARGET_MOVED' | 'ADOPTION_CONFLICT' | 'ADOPTION_CORRUPT';
-export class WorkspaceAdoptionError extends Error {
-  constructor(readonly code: WorkspaceAdoptionErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'WorkspaceAdoptionError'; }
-}
+import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from './adoption-error.js';
+import { adoptionVerificationSchema, verifyDeliveredCommit, type AdoptionVerification, type AdoptionVerificationPolicy,
+  type AdoptionVerificationStore } from './verification.js';
+export { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode };
 /** One owner of "this delivery is usable": completed in the ledger and its dedicated reference still names the delivered commit.
  * A reference moved to another commit is the target's PATCH_CONFLICT; everything else is ADOPTION_NOT_DELIVERED. */
 export async function requireDelivered(store: Pick<IntegrationAdoptionStore, 'findDelivery'>, deliveries: Pick<IntegrationDeliveryTarget, 'delivered'>,
@@ -21,28 +18,34 @@ export async function requireDelivered(store: Pick<IntegrationAdoptionStore, 'fi
 }
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const adoptionTargetRefSchema = z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/);
-export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
-  identity: attemptIdentitySchema, deliveryCommandId: identitySchema, targetRef: adoptionTargetRefSchema }).strict().readonly();
+/** v2 (B06-2b): an adoption may name the verification Run of the delivered commit and the task kind it verifies — both or neither. */
+export const integrationAdoptionCommandSchema = z.object({ schemaVersion: z.literal(2), commandId: identitySchema,
+  identity: attemptIdentitySchema, deliveryCommandId: identitySchema, targetRef: adoptionTargetRefSchema,
+  verificationRunId: identitySchema.optional(), verificationKind: identitySchema.optional() }).strict()
+  .refine(command => (command.verificationRunId === undefined) === (command.verificationKind === undefined), 'ADOPTION_VERIFICATION_INCOMPLETE').readonly();
 export type IntegrationAdoptionCommand = z.infer<typeof integrationAdoptionCommandSchema>;
 export const integrationRollbackCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
   identity: attemptIdentitySchema, adoptionCommandId: identitySchema }).strict().readonly();
 export type IntegrationRollbackCommand = z.infer<typeof integrationRollbackCommandSchema>;
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict();
 /** Evidence basis of an adoption. `task-acceptance` = the attempt's recorded Task acceptance (process-exit criteria today);
- * it is not a verification run of the adopted commit, so an adoption is never reported as verified. */
+ * it is not a verification run of the adopted commit. Verification is the separate, optional `verification` binding (v2). */
 export const adoptionBasisSchema = z.literal('task-acceptance');
 const move = { targetRef: adoptionTargetRefSchema, fromCommit: oid, toCommit: oid };
 export const integrationAdoptionIntentSchema = z.discriminatedUnion('kind', [
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('adopt'), command: integrationAdoptionCommandSchema, ...move,
+  z.object({ schemaVersion: z.literal(2), kind: z.literal('adopt'), command: integrationAdoptionCommandSchema, ...move,
     deliveryRef: z.string().regex(/^refs\/deckent\/deliveries\/[a-f0-9]{64}$/), basis: adoptionBasisSchema,
-    acceptance: z.object({ runRevision: z.number().int().nonnegative() }).strict(), actor: actorSchema }).strict(),
+    acceptance: z.object({ runRevision: z.number().int().nonnegative() }).strict(), verification: adoptionVerificationSchema.nullable(),
+    actor: actorSchema }).strict(),
   z.object({ schemaVersion: z.literal(1), kind: z.literal('rollback'), command: integrationRollbackCommandSchema, ...move,
     actor: actorSchema }).strict(),
-]).readonly();
+]).refine(intent => intent.kind === 'rollback' || (intent.verification === null ? intent.command.verificationRunId === undefined
+  : intent.verification.runId === intent.command.verificationRunId && intent.verification.kind === intent.command.verificationKind
+    && intent.verification.commit === intent.toCommit), 'ADOPTION_VERIFICATION_INCONSISTENT').readonly();
 export type IntegrationAdoptionIntent = z.infer<typeof integrationAdoptionIntentSchema>;
 /** `sequence` is the per-target fence assigned by the store when the intent is claimed. */
 export interface IntegrationAdoptionRecord { readonly intent: IntegrationAdoptionIntent; readonly sequence: number; readonly settled: boolean }
-export interface IntegrationAdoptionStore {
+export interface IntegrationAdoptionStore extends AdoptionVerificationStore {
   findDelivery(scopeId: string, commandId: string): Promise<IntegrationDeliveryRecord | null>;
   loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null>;
   loadAdoption(scopeId: string, commandId: string): Promise<IntegrationAdoptionRecord | null>;
@@ -60,18 +63,20 @@ export interface IntegrationAdoptionTarget {
    * changes. A stale caller whose expected fence is no longer current cannot move the branch. Never touches an index, worktree or HEAD. */
   move(targetRef: string, fromCommit: string, toCommit: string, expected: AdoptionFence | null, next: AdoptionFence): Promise<void>;
 }
-type AdoptionResult = Readonly<{ schemaVersion: 1; status: 'adopted' | 'rolled-back'; command: IntegrationAdoptionCommand | IntegrationRollbackCommand;
-  targetRef: string; fromCommit: string; toCommit: string; sequence: number; basis: 'task-acceptance'; verification: 'not-verified'; application: 'branch-reference' }>;
+/** v2: `verified` only when the adoption bound an accepted verification Run of this exact commit (see adoptionVerificationSchema). */
+type AdoptionResult = Readonly<{ schemaVersion: 2; status: 'adopted' | 'rolled-back'; command: IntegrationAdoptionCommand | IntegrationRollbackCommand;
+  targetRef: string; fromCommit: string; toCommit: string; sequence: number; basis: 'task-acceptance';
+  verification: Readonly<{ status: 'not-verified' }> | Readonly<{ status: 'verified' } & AdoptionVerification>; application: 'branch-reference' }>;
 
 const sameFence = (a: AdoptionFence | null, b: AdoptionFence) => a !== null && a.sequence === b.sequence && a.scopeId === b.scopeId && a.commandId === b.commandId;
 /** Moves a configured, not-checked-out branch to a delivered commit, or back to its previous tip. Never writes the live checkout,
- * never accepts a Task and never claims verification of the adopted commit. Deckent's own commands are fenced through the target's fence reference;
+ * never accepts a Task, and claims verification only through a bound, accepted verification Run of the delivered commit. Deckent's own commands are fenced through the target's fence reference;
  * Git writers outside Deckent are not fenced (a foreign move turns into a conflict, never into attributed success). */
 export class WorkspaceAdoptionApplication {
   constructor(private readonly store: IntegrationAdoptionStore, private readonly deliveries: Pick<IntegrationDeliveryTarget, 'delivered'>,
     private readonly target: IntegrationAdoptionTarget, private readonly allowedTargets: readonly string[],
     private readonly sessions: SessionVerifier & SessionAuthority, private readonly authorization: DispatchIdentityAuthorization,
-    private readonly clock: TrustedClock) {}
+    private readonly clock: TrustedClock, private readonly verification: AdoptionVerificationPolicy) {}
 
   async adopt(input: unknown, credential?: unknown): Promise<AdoptionResult> {
     const command = integrationAdoptionCommandSchema.parse(input);
@@ -86,10 +91,13 @@ export class WorkspaceAdoptionApplication {
       record => JSON.stringify(record.intent.command.identity) === JSON.stringify(command.identity));
     const run = await this.accepted(command);
     const plan: IntegrationDeliveryPlan = delivery.intent.plan;
+    const verification = command.verificationRunId === undefined || command.verificationKind === undefined ? null
+      : await verifyDeliveredCommit(this.store, this.verification, verified.principal,
+        { scopeId: command.identity.scopeId, runId: command.verificationRunId, kind: command.verificationKind, commit: plan.commit });
     await this.ready(command.targetRef, plan.baseCommit, 'ADOPTION_BASE_CHANGED');
-    const intent = integrationAdoptionIntentSchema.parse({ schemaVersion: 1, kind: 'adopt', command, targetRef: command.targetRef,
+    const intent = integrationAdoptionIntentSchema.parse({ schemaVersion: 2, kind: 'adopt', command, targetRef: command.targetRef,
       fromCommit: plan.baseCommit, toCommit: plan.commit, deliveryRef: plan.ref, basis: 'task-acceptance',
-      acceptance: { runRevision: run.revision }, actor: verified.session.principalRef });
+      acceptance: { runRevision: run.revision }, verification, actor: verified.session.principalRef });
     return this.apply(await this.store.claimAdoption(intent), settle);
   }
 
@@ -164,8 +172,10 @@ export class WorkspaceAdoptionApplication {
 
   private result(record: IntegrationAdoptionRecord): AdoptionResult {
     const { intent } = record;
-    return Object.freeze({ schemaVersion: 1, status: intent.kind === 'adopt' ? 'adopted' : 'rolled-back', command: intent.command,
+    const verification = intent.kind === 'adopt' && intent.verification ? Object.freeze({ status: 'verified' as const, ...intent.verification })
+      : Object.freeze({ status: 'not-verified' as const });
+    return Object.freeze({ schemaVersion: 2, status: intent.kind === 'adopt' ? 'adopted' : 'rolled-back', command: intent.command,
       targetRef: intent.targetRef, fromCommit: intent.fromCommit, toCommit: intent.toCommit, sequence: record.sequence,
-      basis: 'task-acceptance', verification: 'not-verified', application: 'branch-reference' });
+      basis: 'task-acceptance', verification, application: 'branch-reference' });
   }
 }

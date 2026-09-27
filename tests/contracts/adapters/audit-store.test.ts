@@ -10,7 +10,7 @@ import { createHmacIntegrity } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { AUDIT_EVENT_LEDGER_VERSION, CURRENT_LEDGER_VERSION, openSqliteLedger, readScopeCompanies } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V40_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -37,8 +37,8 @@ function event(scopeId: string, n: number, cell: 'edit-non-floor' | 'shell-modif
 
 it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, every row kept, then the append-only audit table admits events', async () => {
   const { path, backups } = await ledger();
-  expect(CURRENT_LEDGER_VERSION).toBe(41); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41); expect(PREVIOUS_LEDGER_VERSION).toBe(40);
-  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  expect(CURRENT_LEDGER_VERSION).toBe(42); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V40_LEDGER_SQL);
   db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
     .run('scope', 'op', 'operation', null, null, 'b'.repeat(64), 0, '{"op":1}');
   db.prepare("INSERT INTO agent_turns VALUES(?,?,?,?,'finished',?)").run('scope', 't1', 'p', 'd'.repeat(64), '{"turn":1}');
@@ -52,11 +52,11 @@ it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, 
 
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T12:00:00.000Z'));
   const backupPath = join(backups, 'ledger-v40-2026-09-27T12-00-00-000Z.db');
-  expect(upgrade).toEqual({ from: 40, to: 41, backupPath });
+  expect(upgrade).toEqual({ from: 40, to: CURRENT_LEDGER_VERSION, backupPath });
   expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
   expect(version(backupPath)).toBe(40);
   expect(rows(backupPath, 'SELECT * FROM approvals')).toEqual(before.approvals);
-  expect(version(path)).toBe(41);
+  expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
   expect(rows(path, 'SELECT * FROM approvals')).toEqual(before.approvals);
   expect(rows(path, 'SELECT * FROM agent_turns')).toEqual(before.turns);
   expect(rows(path, "SELECT name FROM sqlite_schema WHERE type='trigger' AND tbl_name='audit_events' ORDER BY name").map(row => row.name))
@@ -85,7 +85,7 @@ it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, 
 it('refuses to upgrade over a foreign same-name audit table of another shape: typed error after the v40 backup, ledger stays at v40', async () => {
   const { path, backups } = await ledger('dn-audit-foreign-');
   const db = new DatabaseSync(path);
-  db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE audit_events(id INTEGER PRIMARY KEY, payload TEXT);`);
+  db.exec(`${DOWNGRADE_TO_V40_LEDGER_SQL} CREATE TABLE audit_events(id INTEGER PRIMARY KEY, payload TEXT);`);
   db.close();
   await expect(upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T12:00:00.000Z'))).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(version(path)).toBe(40);
@@ -96,7 +96,7 @@ it('refuses to upgrade over a foreign same-name audit table of another shape: ty
   expect(rows(path, "SELECT name FROM pragma_table_info('audit_events') ORDER BY cid").map(row => row.name)).toEqual(['id', 'payload']);
 });
 
-it('refuses a ledger newer than this build (an older build meets v41 the same way) on writer opens and the read-only registry lookup', async () => {
+it('refuses a ledger newer than this build (an older build meets v42 the same way) on writer opens and the read-only registry lookup', async () => {
   const { path } = await ledger('dn-audit-newer-');
   const db = new DatabaseSync(path); db.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1};`); db.close();
   for (const mode of ['allow', 'forbid'] as const) expect(() => openSqliteLedger(path, options, mode)).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));

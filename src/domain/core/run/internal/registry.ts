@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { identitySchema, counterSchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+import { identitySchema, counterSchema, immutableJsonObjectSchema, type JsonValue } from '#domain/core/primitives/index.js';
+import { encodeDeckentJson } from '#domain/core/task-graph/index.js';
 /** Registry entries are product data; installed implementations own parameter semantics. */
 export const implementationReferenceSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly();
 export const executionProfileDefinitionSchema = z.object({ id: identitySchema, version: counterSchema.positive(),
@@ -25,6 +26,13 @@ export const executionRegistrySchema = z.object({ schemaVersion: z.literal(1), r
     }
   });
 }).readonly();
+export const EXECUTION_PROFILE_ENCODING_VERSION = 1;
+/** Deckent profile encoding v1: the criterion encoding v1 rules (sorted keys, JSON escaping, no whitespace) over a parsed
+ * definition. Callers hash its UTF-8 bytes; equal encodings mean the same image, command and bounds for a task kind. */
+export function encodeExecutionProfileDefinition(input: unknown): string {
+  const definition = executionProfileDefinitionSchema.parse(input) as unknown as JsonValue;
+  return encodeDeckentJson({ encodingVersion: EXECUTION_PROFILE_ENCODING_VERSION, definition });
+}
 export type ExecutionRegistry = z.infer<typeof executionRegistrySchema>;
 export type ExecutionProfileDefinition = z.infer<typeof executionProfileDefinitionSchema>;
 export type EvaluatorDefinition = z.infer<typeof evaluatorDefinitionSchema>;
