@@ -74,7 +74,8 @@ export class ModelInvocationCancellationRecoveryApplication {
           await this.authorization.authorize('cancel-invocation', entry.control.cancellation!.command, principal);
           status = entry.control.send.state === 'unobserved' ? 'not-live' : this.controllers.requestAbort(entry.control);
         } catch (error) {
-          status = error && typeof error === 'object' && 'code' in error && error.code === 'POLICY_DENIED' ? 'denied' : 'failed';
+          status = error && typeof error === 'object' && 'code' in error
+            && (error.code === 'POLICY_DENIED' || error.code === 'POLICY_APPROVAL_UNSUPPORTED' || error.code === 'SCOPE_UNKNOWN') ? 'denied' : 'failed';
         }
         outcomes.push(Object.freeze({ invocationId: entry.receipt.claim.invocationId, status }));
       }

@@ -22,7 +22,8 @@ export type ReconciliationRecoveryPage = Readonly<{ nextAfter: string | null; ou
 
 function failureReason(error: unknown): 'denied' | 'unavailable' {
   const code = z.object({ code: z.string() }).passthrough().safeParse(error);
-  return code.success && ['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED', 'POLICY_DENIED'].includes(code.data.code)
+  return code.success && ['AUTHENTICATION_REQUIRED', 'AUTHENTICATION_SCOPE_DENIED', 'POLICY_DENIED',
+    'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(code.data.code)
     ? 'denied' : 'unavailable';
 }
 function follows(value: string, previous: string) {

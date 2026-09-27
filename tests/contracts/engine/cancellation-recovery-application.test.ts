@@ -12,7 +12,8 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 const limits = { maxAttempts: 2, retryDelayMs: 5, claimTtlMs: 10 };
 const identity = (attemptId: string, scopeId = 's') => ({ scopeId, runId: 'r', taskId: attemptId, attemptId, generation: 1, layoutRevision: 'l' });
 
-function harness(page: readonly ReturnType<typeof identity>[], options: { scopeDeny?: boolean; runDeny?: (id: string) => boolean; runError?: Error; loadError?: Error; attemptDeny?: (id: string) => boolean; concurrency?: number } = {}) {
+function harness(page: readonly ReturnType<typeof identity>[], options: { scopeDeny?: boolean; runDeny?: (id: string) => boolean; runError?: Error; loadError?: Error;
+  attemptDeny?: (id: string) => boolean; attemptDenyCode?: 'POLICY_DENIED' | 'POLICY_APPROVAL_UNSUPPORTED' | 'SCOPE_UNKNOWN'; concurrency?: number } = {}) {
   const calls = { scans: 0, limit: 0, verifier: 0, scopes: 0, runs: [] as string[], claims: 0, cancels: [] as string[], active: 0, maximum: 0, cancelCommands: 0 };
   const record = (value: ReturnType<typeof identity>, state: 'claimed' | 'terminal' = 'claimed') => ({ schemaVersion: 1 as const, identity: value, state,
     attempts: 1, token: 'token', claimUntil: 10, nextEligibleAt: 1, lastOutcome: state === 'terminal' ? 'terminal' as const : null });
@@ -27,7 +28,7 @@ function harness(page: readonly ReturnType<typeof identity>[], options: { scopeD
   const scope = { async authorize() { calls.scopes++; if (options.scopeDeny) throw new PolicyAuthorizationError('POLICY_DENIED'); } };
   const run = { async authorize(_action: unknown, query: { runId: string }) { calls.runs.push(query.runId); if (options.runError) throw options.runError; if (options.runDeny?.(query.runId)) throw new PolicyAuthorizationError('POLICY_DENIED'); } };
   const dispatch = {
-    async authorizeCancellation(request: { identity: ReturnType<typeof identity> }) { if (options.attemptDeny?.(request.identity.attemptId)) throw new PolicyAuthorizationError('POLICY_DENIED'); },
+    async authorizeCancellation(request: { identity: ReturnType<typeof identity> }) { if (options.attemptDeny?.(request.identity.attemptId)) throw new PolicyAuthorizationError(options.attemptDenyCode ?? 'POLICY_DENIED'); },
     async cancel(request: { identity: ReturnType<typeof identity> }) { calls.cancels.push(request.identity.attemptId); calls.active++; calls.maximum = Math.max(calls.maximum, calls.active); await new Promise(resolve => setTimeout(resolve, 2)); calls.active--; return { kind: 'terminal' }; },
   };
   const app = new CancellationRecoveryApplication(store as never, verifier, scope as never, run as never, dispatch as never,
@@ -48,6 +49,13 @@ it('reauthorizes scope and Run for each bounded identity, while one denied attem
   expect(result.outcomes.map(value => value.outcome.status)).toEqual(['denied', 'terminal']);
 });
 
+it.each(['POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'] as const)(
+  'classifies a %s attempt-cancellation refusal as denied inside the shared delivery worker (C12 Q8 / H34 S1)', async code => {
+  const f = harness([identity('a')], { attemptDeny: () => true, attemptDenyCode: code });
+  const result = await f.app.drain({ schemaVersion: 1, scopeId: 's', afterAttemptId: null });
+  expect(result.outcomes[0]!.outcome.status).toBe('denied');
+});
+
 it('denies a Run before claiming delivery or consuming its retry budget', async () => {
   const f = harness([identity('a')], { runDeny: () => true });
   const result = await f.app.drain({ schemaVersion: 1, scopeId: 's', afterAttemptId: null });
@@ -61,6 +69,15 @@ it.each([
   const f = harness([identity('a')], { runError: error }); const result = await f.app.drain({ schemaVersion: 1, scopeId: 's', afterAttemptId: null });
   expect(result.outcomes[0]!.outcome.status).toBe('unavailable'); expect(result.outcomes[0]!.reason).toBe(reason);
   expect(JSON.stringify(result)).not.toContain('secret=/tmp/private-token'); expect(f.calls.claims).toBe(0); expect(f.calls.cancels).toEqual([]);
+});
+
+it.each(['POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'] as const)(
+  'classifies a %s Run refusal as denied (not unavailable) and completes the page without crashing (C12 Q8 / H34 S1)', async code => {
+  const f = harness([identity('a')], { runError: new PolicyAuthorizationError(code) });
+  const result = await f.app.drain({ schemaVersion: 1, scopeId: 's', afterAttemptId: null });
+  expect(result.outcomes[0]!.outcome.status).toBe('denied');
+  expect(result.outcomes[0]!.reason).toBe(code);
+  expect(f.calls.claims).toBe(0); expect(f.calls.cancels).toEqual([]);
 });
 
 it.each(['wrong-scope', 'duplicate', 'oversized'] as const)('fails closed for a %s recovery page before dispatching', async kind => {

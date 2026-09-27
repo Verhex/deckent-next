@@ -45,12 +45,12 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
               workers.push({ ...basic, provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle,
                 patchRecorded: !!record.patch, files, diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
                   ...(files ? files.log.diagnostics : ['activity-unavailable'])] });
-            } catch (error) { workers.push({ ...basic, diagnostics: [queryFailure(error).code === 'POLICY_DENIED' ? 'output-denied' : 'observation-unavailable'] }); }
+            } catch (error) { workers.push({ ...basic, diagnostics: [['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
           }
         } finally { reader.close(); }
         remaining -= workers.length;
         sources.push({ ...source, status: 'available', workers, nextAfter: page.page.nextAfter, truncated: page.page.nextAfter !== null });
-      } catch (error) { sources.push({ ...source, status: queryFailure(error).code === 'POLICY_DENIED' ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }
+      } catch (error) { sources.push({ ...source, status: ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'denied' : 'unavailable', workers: [], nextAfter: null, truncated: false }); }
     }
     return Object.freeze({ schemaVersion: 1, observedAt: clock.sample().wallMs, scopeId: query.scopeId, sources, control: 'observe-only' });
   } catch (error) { throw queryFailure(error); }
