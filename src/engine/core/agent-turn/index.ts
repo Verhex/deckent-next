@@ -6,3 +6,4 @@ export type { AgentTurnStore, AgentTurnClaim, AgentTurnOutcome, AgentTurnToolCal
 export { AGENT_COMPACTION_HIGH_WATER, AGENT_COMPACTION_KEEP_MESSAGES, AGENT_COMPACTION_USER_MESSAGE_CHARS, agentCompactionSummarySchema,
   planAgentCompaction, renderAgentCompaction } from './internal/compaction.js';
 export type { AgentCompactionPlan, AgentCompactionSummary } from './internal/compaction.js';
+export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admission.js';

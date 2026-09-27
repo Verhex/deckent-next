@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, awaitAgentToolApproval,
+import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, agentTurnAdmission, awaitAgentToolApproval,
   requestAgentToolApproval, runDurableAgentTurn,
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
@@ -39,8 +39,6 @@ function canonical(value: unknown): string {
 }
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
-/** Tokens kept free beyond the completion limit (legacy default): chat template and tokenizer differences never overflow a round. */
-export const CHAT_TURN_SAFETY_RESERVE_TOKENS = 2_048;
 /**
  * Conservative prompt bound when the provider has no counter (legacy formula): every UTF-8 byte of messages and tools counts as a
  * token, plus fixed overheads per request, message and tool. It never under-counts; it is always labelled `upper-bound`.
@@ -290,10 +288,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: { outputReserveTokens: chat.maxCompletionTokens, safetyReserveTokens: CHAT_TURN_SAFETY_RESERVE_TOKENS,
-        requestMaxBytes: context.config.service.inputMaxBytes,
-        // The longest answer (a token is at most 4 UTF-8 bytes) and one user message of up to an eighth of the bound, at most 32 KiB.
-        requestReserveBytes: chat.maxCompletionTokens * 4 + Math.min(32_768, Math.floor(context.config.service.inputMaxBytes / 8)) } }, store, ports);
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes) }, store, ports);
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');

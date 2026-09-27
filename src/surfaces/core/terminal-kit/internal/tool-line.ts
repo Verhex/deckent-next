@@ -1,4 +1,4 @@
-import type { ToolResultSummary } from '#surfaces/index.js';
+import type { ToolResultSummary } from './turn-stream.js';
 
 /**
  * Tool-line presentation derived entirely client-side from data the engine already puts on the wire (TL-B D2,
