@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CHANGED (owner 2026-09-27): `runtime serve` refuses to start when one of its own scopes is pinned to another company
+  (`RUNTIME_SERVICE_SCOPE_FOREIGN`, exit 78); config operations inside a registered module's namespace are refused
+  (`OPERATION_NAMESPACE_RESERVED`).
 - ADDED (B06-2a): SDK `createDeliveryRun` admits a Run pinned to a completed delivery commit; the custody is written with the Run in
   one transaction so the Run always executes the delivered commit.
 - ADDED (T-L4 slice 4c, protocol v15): the permission mode in the terminal status row and `/mode` to show or set your own mode;

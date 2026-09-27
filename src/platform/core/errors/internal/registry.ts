@@ -130,7 +130,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // and the INSTALLATION_PROFILE_* siblings above — the operator's remedy is their own company.id or ledger, not a transport retry).
   // Locale key not yet present (locale files are lead-owned, common; same temporary pattern as POLICY_APPROVAL_UNSUPPORTED /
   // INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED before their keys were added). See i18n-delta.json for the suggested en/tr text.
-  RUNTIME_SERVICE_SCOPE_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' }, l) }) },
+  RUNTIME_SERVICE_SCOPE_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_SCOPE_FOREIGN', p, l) }) },
   RUN_WORKSPACE_CUSTODY_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_WORKSPACE_CUSTODY_CONFLICT', p, l) }) },
   RUN_WORKSPACE_CUSTODY_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_WORKSPACE_CUSTODY_CORRUPT', p, l) }) },
   WORKSPACE_CUSTODY_UNCONVERTIBLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_CUSTODY_UNCONVERTIBLE', p, l) }) },
