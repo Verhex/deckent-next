@@ -17,7 +17,7 @@ export function configuredServiceShutdown(config: ResolvedConfig, instance: Serv
       let document;
       try { document = policySchema.parse(await source.load()); }
       catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-      const scopes = await resolveConfiguredScopeMembership(config, document, readLocalOsIdentity(), [instance.scopeId]);
+      const scopes = await resolveConfiguredScopeMembership(config, document, readLocalOsIdentity(), [instance.scopeId], 'write');
       const authentication = new LocalPeerShutdownAuthentication(peer, scopes);
       return new ServiceShutdownApplication(instance, authentication, new ServicePolicyAuthorization(source), openStore, Date.now)
         .admit(input, undefined);

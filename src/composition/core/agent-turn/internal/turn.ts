@@ -111,7 +111,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const command = parsed.data;
   registerProviderConfig();
-  const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer);
+  const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
   const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   const chat = readTerminalChatConfig(config);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
@@ -288,7 +288,7 @@ export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: u
   host: RuntimeChatTurnHost): Promise<ChatTurnCancellationResult> {
   const parsed = chatTurnCancellationSchema.safeParse(input);
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-  const context = await loadPeerInvocationContext(projectRoot, parsed.data.scopeId, options, peer);
+  const context = await loadPeerInvocationContext(projectRoot, parsed.data.scopeId, options, peer, 'write');
   const running = host.running.get(runningKey(parsed.data.scopeId, parsed.data.turnId));
   if (!running || running.principalKey !== principalKeyOf(context.principal)) return Object.freeze({ schemaVersion: 1, turnId: parsed.data.turnId, state: 'not-running' });
   running.controller.abort();

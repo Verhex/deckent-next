@@ -21,7 +21,7 @@ export type ScopeAccess = 'read' | 'write';
  * `SCOPE_UNKNOWN`. `'all'` never pins or declares. Unknown or pinned elsewhere → `SCOPE_UNKNOWN`; no flag relaxes this.
  */
 export async function resolvePolicyScopeMembership(policy: unknown, actor: { readonly issuer: string; readonly subject: string },
-  candidates: readonly string[], companyId: string, registry: ScopeRegistry, access: ScopeAccess = 'write'): Promise<readonly string[]> {
+  candidates: readonly string[], companyId: string, registry: ScopeRegistry, access: ScopeAccess): Promise<readonly string[]> {
   const company = companyIdSchema.parse(companyId);
   const granted = policyScopeGrants(policy, actor, candidates);
   if (!granted.length) throw new PolicyAuthorizationError('POLICY_DENIED');

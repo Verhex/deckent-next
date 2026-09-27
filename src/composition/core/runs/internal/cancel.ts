@@ -9,7 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function requestConfiguredRunCancellation(projectRoot: string, input: RunCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = runCommandSchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const store = {
       async loadRun(scopeId: string, runId: string) {
         const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });

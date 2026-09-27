@@ -12,7 +12,7 @@ export async function purgePeerConfiguredModelInvocationContent(projectRoot: str
     const parsed = modelInvocationPurgeCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data as ModelInvocationPurgeCommand;
-    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer), clock = new SystemTrustedClock();
+    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write'), clock = new SystemTrustedClock();
     return await new ModelInvocationPurgeApplication({ async verify() { return context.principal; } },
       new ModelInvocationPolicyAuthorization(context.policy),
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),

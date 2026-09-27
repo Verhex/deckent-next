@@ -16,7 +16,7 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
   options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } };
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(
       createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));

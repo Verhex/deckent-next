@@ -8,7 +8,7 @@ import { workspacePatchContext } from './configured.js';
 export async function deliverConfiguredWorkspaceIntegration(root: string, input: IntegrationDeliveryCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = integrationDeliveryCommandSchema.parse(input);
-    const c = await workspacePatchContext(root, command.identity, options, false);
+    const c = await workspacePatchContext(root, command.identity, options, false, 'write');
     await c.authorization.authorizeIdentity('deliver-integration', command.identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
     const git = { ...c.config.execution.git, sourceRoot: resolve(root), workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };

@@ -9,7 +9,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function admitConfiguredModelActivation(projectRoot: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = modelActivationCommandSchema.parse(input);
-    const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const app = new ModelActivationApplication({ async verify() { return principal; } },
       new ModelActivationPolicyAuthorization({ async load() { return document; } }),
       new ModelBindingApplication({ async read() { return config['provider_catalog']; } }),

@@ -1,16 +1,17 @@
 import { userInfo } from 'node:os';
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { ModelInvocationStoreError } from '#engine/index.js';
+import { ModelInvocationStoreError, type ScopeAccess } from '#engine/index.js';
 import type { LocalPeerIdentity } from '#adapters/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 
-export async function loadInvocationContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
-  const context = await loadConfiguredScopeContext(projectRoot, scopeId, options);
+export async function loadInvocationContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) {
+  const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, access);
   return withFreshPolicy(projectRoot, options, context);
 }
-export async function loadPeerInvocationContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity) {
-  const context = await loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer);
+export async function loadPeerInvocationContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity,
+  access: ScopeAccess) {
+  const context = await loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer, access);
   return withFreshPolicy(projectRoot, options, context);
 }
 function withFreshPolicy(projectRoot: string, options: ConfigLoadOptions, context: Awaited<ReturnType<typeof loadConfiguredScopeContext>>) {

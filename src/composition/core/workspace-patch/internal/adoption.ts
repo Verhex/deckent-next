@@ -10,7 +10,7 @@ import { workspacePatchContext } from './configured.js';
 async function withAdoption<T>(root: string, identity: AttemptIdentity, options: ConfigLoadOptions, action: 'adopt-integration' | 'rollback-integration',
   use: (application: WorkspaceAdoptionApplication) => Promise<T>): Promise<T> {
   try {
-    const c = await workspacePatchContext(root, identity, options, false);
+    const c = await workspacePatchContext(root, identity, options, false, 'write');
     await c.authorization.authorizeIdentity(action, identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
     const git = { ...c.config.execution.git, sourceRoot: resolve(root), workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };

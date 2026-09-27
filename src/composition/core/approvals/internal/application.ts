@@ -9,8 +9,10 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
   options: ConfigLoadOptions = {}, peer?: LocalPeerIdentity, capacity?: number) {
   try {
     const parsed = (action === 'list' ? approvalListSchema : action === 'inspect' ? approvalQuerySchema : action === 'renew' ? approvalRenewalSchema : approvalCommandSchema).parse(input);
-    const context = peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer)
-      : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options);
+    // Query/command split (Astra 2126 R1): list and inspect are reads and never pin a scope; decide and renew are write admissions.
+    const access = action === 'list' || action === 'inspect' ? 'read' : 'write';
+    const context = peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
+      : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access);
     const { config, layout, document, principal } = context;
     const id = 'approvalId' in parsed ? parsed.approvalId : parsed.scopeId;
     authorizeApproval(document, action === 'renew' ? 'renew' : action === 'decide' ? 'decide' : 'inspect', parsed.scopeId, id, principal);
@@ -24,8 +26,8 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
         if (Buffer.byteLength(JSON.stringify(result)) > (capacity ?? config.service.responseMaxBytes)) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
       };
       const app = new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
-        { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer)
-          : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options)).document }, integrity, clock,
+        { load: async () => (peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
+          : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access)).document }, integrity, clock,
         peer ? 'local-runtime' : 'local-sdk', config.approvals.pageSize, check);
       const result = action === 'list' ? await app.list(parsed) : action === 'inspect' ? await app.inspect(parsed) : action === 'renew' ? await app.renew(parsed, config.approvals.requestTtlMs) : await app.decide(parsed);
       check(result); return result;

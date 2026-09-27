@@ -11,7 +11,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = taskEvaluationCommandSchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.identity.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } };
     const policy = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
     const authorization = { authorize: (identity: typeof command.identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', identity, actor) };

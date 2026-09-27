@@ -28,7 +28,7 @@ function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
 /** The one fail-closed membership decision for every scoped entry point (CLI/SDK/MCP, runtime socket peer, inventory, service
  * shutdown): trusted grants, then a durable pin to the configured company, written at a declared scope's first admission (H34 S1). */
 export async function resolveConfiguredScopeMembership(config: ResolvedConfig, document: unknown,
-  identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[], access: ScopeAccess = 'write'): Promise<readonly string[]> {
+  identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[], access: ScopeAccess): Promise<readonly string[]> {
   return resolvePolicyScopeMembership(document, identity, scopeIds, config.company.id, configuredScopeRegistry(config), access);
 }
 

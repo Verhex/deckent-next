@@ -13,13 +13,13 @@ export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
   options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
-  return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options), options, signal, delivery);
+  return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, delivery);
 }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
   peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,
   onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) {
-  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), options, signal, delivery, host, onDelta);
+  return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta);
 }
 async function invoke(input: ModelInvocationCommand,
   loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>, options: ConfigLoadOptions, signal?: AbortSignal, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost,
@@ -43,7 +43,7 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
     const parsed = modelInvocationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data as ModelInvocationCommand;
-    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer);
+    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
     return await application(context, options).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
 }
