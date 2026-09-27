@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (I40-c): agent tool approvals use the trusted clock; a decision too close to expiry is refused early, expiry never extended.
+- FIX (Astra 2128/2129): v14 approval lists exclude operation subjects during page selection; the operation approval window is
+  re-checked right before the first intent claim.
 - ADDED (C12 G1/G2): operations that require approval open an approval request and return `approval-pending`; the same command
   resubmitted after an allow applies the effect once (`admitWithinMs`, ledger v40); SDK `awaitApproval`, CLI `--wait`.
 - ADDED (H34 S2): policy v2 roles, a separate `bindings.json` for role membership, four-eyes (`requester-cannot-approve`).

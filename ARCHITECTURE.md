@@ -1155,8 +1155,11 @@ taken over only when it is at most `now − MAX_WALL_SKEW_MS`, in the atomic cla
 retry waits retryDelayMs + 5 s, including a process's own). Config write-lock waits and in-process failure backoff are monotonic;
 lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
 Remaining raw-`Date.now` comparisons across
-processes (agent tool-approval request time and expiry; record-only timestamps) are listed in the I40 review and are not yet on
-this contract.
+processes (record-only timestamps) are listed in the I40 review and are not yet on this contract. Agent tool approvals (I40-c):
+request and turn timestamps read the trusted clock; the deciding process refuses with `APPROVAL_EXPIRED` when
+`wallMs + MAX_WALL_SKEW_MS >= expiresAt` (a decision in the last ≤ 5 s may be refused early; the TTL is never extended); the
+consumer applies expiry with its own floored wall clock and a monotonic TTL from creation, and re-checks after asynchronous policy
+evaluation. A single expiry authority (only the requesting process judges expiry) is a separate owner decision.
 This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
 
