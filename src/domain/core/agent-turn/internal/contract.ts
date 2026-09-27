@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { agentToolCallSchema } from '#domain/core/agent-tool/index.js';
+import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
 
 /**
@@ -23,7 +23,9 @@ export type AgentTurnEvent =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'reasoning'; readonly text: string }
   | { readonly kind: 'tool.started'; readonly callId: string; readonly name: string; readonly target: string | null }
-  | { readonly kind: 'tool.finished'; readonly callId: string; readonly name: string; readonly status: AgentToolCallStatus; readonly ms: number; readonly bytes: number }
+  /** `cleanup` (Astra 2124, protocol v15 addition, no version bump): only the host shell tool's finish ever carries it. */
+  | { readonly kind: 'tool.finished'; readonly callId: string; readonly name: string; readonly status: AgentToolCallStatus; readonly ms: number; readonly bytes: number;
+    readonly cleanup?: AgentToolCleanup }
   | { readonly kind: 'usage'; readonly round: number; readonly promptTokens: number; readonly completionTokens: number }
   /** Each assistant or tool message the turn appends, in order: the client's history continues from exactly these. */
   | { readonly kind: 'message'; readonly message: AgentTurnMessage }
@@ -60,7 +62,8 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string().min(1) }).strict(),
   z.object({ kind: z.literal('reasoning'), text: z.string().min(1) }).strict(),
   z.object({ kind: z.literal('tool.started'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), target: z.string().max(4096).nullable() }).strict(),
-  z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count }).strict(),
+  z.object({ kind: z.literal('tool.finished'), callId: z.string().min(1).max(256), name: z.string().min(1).max(64), status: callStatusSchema, ms: count, bytes: count,
+    cleanup: agentToolCleanupSchema.optional() }).strict(),
   z.object({ kind: z.literal('usage'), round: z.number().int().positive().safe(), promptTokens: count, completionTokens: count }).strict(),
   z.object({ kind: z.literal('message'), message: agentTurnMessageSchema }).strict(),
   z.object({ kind: z.literal('context'), round: z.number().int().positive().safe(), promptTokens: count, windowTokens: z.number().int().positive().safe().nullable(),

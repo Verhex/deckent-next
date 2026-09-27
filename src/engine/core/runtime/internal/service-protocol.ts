@@ -80,7 +80,9 @@ export function isRuntimeServiceStreamingOperation(operation: RuntimeServiceOper
 /** Largest number of turn events one event frame carries. */
 export const RUNTIME_SERVICE_EVENT_FRAME_EVENTS = 256;
 /**
- * `chatTurn` (v12; v13 adds `context` and `compacted`; v14 adds `approval.requested`, `approval.settled` and `tool.output`) answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
+ * `chatTurn` (v12; v13 adds `context` and `compacted`; v14 adds `approval.requested`, `approval.settled` and `tool.output`; v15
+ * adds `tool.finished`'s optional `cleanup`, host shell calls only, added within v15 without a further version bump — CLEANUP-MARK)
+ * answers with zero or more ordered event frames, then exactly one response frame carrying the turn result. Unlike
  * delta frames, event frames carry required data (the turn's `message` events are the client's history): each frame is bounded,
  * the stream as a whole is not (a turn has no budget), and the producer waits for the peer to drain instead of dropping. A peer
  * that disconnects before the response cancels the turn. A replayed turn sends at most its stored answer as a text event.

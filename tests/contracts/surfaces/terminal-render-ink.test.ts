@@ -2,8 +2,9 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AssistantLive, WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
+import { AssistantLive, AssistantUnitRow, WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
   type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
+import type { ToolUnit } from '#surfaces/core/terminal-render/index.js';
 
 const render_: AssistantRenderLabels = { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok',
   elapsed: '{seconds}s', tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED',
@@ -80,6 +81,35 @@ describe('rendered assistant output in the Ink workline', () => {
     await until(() => view.stdout.last.includes('company-acme/site-istanbul'), 'wide status row');
     view.stdout.columns = 36; view.stdout.emit('resize');
     await until(() => (view.stdout.last.split('\n').find(text => text.includes('READY'))?.length ?? 99) <= 36, 'narrowed status row');
+  });
+});
+
+// Astra 2124 durable marker (CLEANUP-MARK, protocol v15): the finished tool line shows a short suffix for a shell call whose
+// cleanup was not `clean`; `clean` or an absent field add nothing, and the real catalog word (once wired) takes over the fallback.
+describe("finished tool call line's cleanup suffix", () => {
+  const toolLabels: AssistantRenderLabels = { ...render_, tool: '{name} {target}', toolRunning: '{tool} {seconds}s',
+    toolStatus: { error: 'ERR', denied: 'DENIED', 'approval-required': 'NEEDS-APPROVAL', 'approval-expired': 'EXPIRED',
+      'invalid-arguments': 'INVALID', duplicate: 'DUP', cancelled: 'CANCELLED' }, context: 'CTX', compacted: 'COMPACTED' };
+  const unit = (cleanup?: ToolUnit['cleanup']): ToolUnit => ({ kind: 'tool', name: 'run_shell', target: 'sleep 5 & echo started', status: 'ok', ms: 1_234,
+    ...(cleanup !== undefined ? { cleanup } : {}) });
+
+  it('shows the neutral fallback suffix for unverified and group-ended, and none for clean or an absent field', async () => {
+    const row = async (cleanup?: ToolUnit['cleanup']) => {
+      const view = mountElement(createElement(AssistantUnitRow, { unit: unit(cleanup), labels: toolLabels }));
+      await until(() => view.stdout.last.includes('run_shell'), 'finished tool line');
+      return view.stdout.last;
+    };
+    expect(await row('unverified')).toContain('cleanup: unverified');
+    expect(await row('group-ended')).toContain('cleanup: group-ended');
+    expect(await row('clean')).not.toContain('cleanup');
+    expect(await row(undefined)).not.toContain('cleanup');
+  });
+
+  it('shows the catalog word instead of the neutral fallback once labels.toolCleanup is supplied', async () => {
+    const catalogued: AssistantRenderLabels = { ...toolLabels, toolCleanup: { 'group-ended': 'GRUP-SONLANDI', unverified: 'DOGRULANAMADI' } };
+    const view = mountElement(createElement(AssistantUnitRow, { unit: unit('unverified'), labels: catalogued }));
+    await until(() => view.stdout.last.includes('DOGRULANAMADI'), 'catalogued cleanup suffix');
+    expect(view.stdout.last).not.toContain('cleanup: unverified');
   });
 });
 

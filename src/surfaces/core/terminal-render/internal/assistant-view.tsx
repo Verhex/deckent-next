@@ -13,6 +13,10 @@ export type AssistantRenderLabels = Readonly<{
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
   /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
+  /** Suffix word for a finished host shell call whose `cleanup` (Astra 2124) was `group-ended` or `unverified`; `clean` or an
+   * absent field show nothing. Optional until the catalog carries `terminal.render.toolCleanup.*` (see `i18n-delta.json`); the
+   * row falls back to short, language-neutral text meanwhile (the TERM-INTERACTIVE `@file` pattern). */
+  toolCleanup?: Readonly<Record<Exclude<NonNullable<ToolUnit['cleanup']>, 'clean'>, string>>;
   /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
   context: string;
   /** `{count}` earlier messages were replaced by a summary to fit the context window. */
@@ -21,6 +25,9 @@ export type AssistantRenderLabels = Readonly<{
 
 const INDENT = 2;
 const LIVE_TAIL_LINES = 8;
+// Until the catalog carries `terminal.render.toolCleanup.*` the finished line falls back to short, language-neutral text
+// (TERM-INTERACTIVE's `@file` notice pattern); `labels.toolCleanup` takes over once the lead wires the real catalog keys.
+const NEUTRAL_TOOL_CLEANUP: NonNullable<AssistantRenderLabels['toolCleanup']> = { 'group-ended': 'cleanup: group-ended', unverified: 'cleanup: unverified' };
 const seconds = (ms: number, digits = 1) => (ms / 1000).toFixed(digits);
 const tokenText = (count: number, approximate: boolean) => `${approximate ? '~' : ''}${count}`;
 
@@ -55,7 +62,10 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
   }
   if (unit.kind === 'tool') {
     const failed = unit.status !== 'ok' && unit.status !== 'duplicate';
-    const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]])].join(` ${glyphs.separator} `);
+    // Astra 2124: a durable suffix for a shell call whose cleanup was not `clean`; `clean` or no field shows nothing.
+    const cleanupWord = unit.cleanup && unit.cleanup !== 'clean' ? (labels.toolCleanup ?? NEUTRAL_TOOL_CLEANUP)[unit.cleanup] : null;
+    const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]]),
+      ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
     return (
       <Box paddingLeft={INDENT}>
         <Text {...(failed ? palette.error : palette.muted)} wrap="truncate-end">{glyphs.separator} {toolText(unit, labels)} {glyphs.separator} {tail}</Text>

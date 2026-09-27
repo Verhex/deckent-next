@@ -22,10 +22,20 @@ export const agentToolSpecSchema = z.object({
 }).strict().readonly();
 export type AgentToolSpec = z.infer<typeof agentToolSpecSchema>;
 
+/**
+ * What the host shell call could verify about processes it left behind in its process group (Astra 2124): `clean` — nothing
+ * left; `group-ended` — surviving members were ended and the group was then observed empty; `unverified` — the group could not
+ * be observed empty, or its pipes were released while still held (a descendant that left the group, e.g. `setsid`, is never
+ * seen). Only the host shell tool's outcome ever carries this; every other tool leaves it undefined.
+ */
+export const agentToolCleanupSchema = z.enum(['clean', 'group-ended', 'unverified']);
+export type AgentToolCleanup = z.infer<typeof agentToolCleanupSchema>;
+
 /** What a tool returns to the loop: model-facing text (bounded by the tool) and whether it succeeded. */
 export const agentToolOutcomeSchema = z.object({
   status: z.enum(['ok', 'error']),
   text: z.string(),
+  cleanup: agentToolCleanupSchema.optional(),
 }).strict().readonly();
 export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
 
