@@ -7,6 +7,7 @@ import type { ConversationSessionLabels } from '#surfaces/core/terminal/index.js
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
   return {
     assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
+    toolCleanup: { 'group-ended': t('terminal.render.toolCleanup.groupEnded', {}, locale), unverified: t('terminal.render.toolCleanup.unverified', {}, locale) },
     thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
     tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),
     truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),

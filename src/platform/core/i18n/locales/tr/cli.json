@@ -749,6 +749,8 @@
   "terminal.render.toolStatus.invalidArguments": "geçersiz argümanlar",
   "terminal.render.toolStatus.duplicate": "öncekiyle aynı çağrı, önceki sonuç kullanıldı",
   "terminal.render.toolStatus.cancelled": "iptal edildi",
+  "terminal.render.toolCleanup.groupEnded": "arkada bıraktığı süreçler sonlandırıldı",
+  "terminal.render.toolCleanup.unverified": "temizlik doğrulanamadı",
   "terminal.session.banner": "Deckent terminal oturumu (satır modu). Komutlar: /status, /exit.",
   "terminal.service.started": "Runtime servisi arka planda başlatıldı (pid {pid}, günlük {log}); terminal kapansa da çalışmaya devam eder. {stop}",
   "terminal.service.connected": "Runtime servisine bağlanıldı ({instance}). {stop}",

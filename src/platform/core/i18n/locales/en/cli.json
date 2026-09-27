@@ -749,6 +749,8 @@
   "terminal.render.toolStatus.invalidArguments": "invalid arguments",
   "terminal.render.toolStatus.duplicate": "same call as before, earlier result reused",
   "terminal.render.toolStatus.cancelled": "cancelled",
+  "terminal.render.toolCleanup.groupEnded": "processes it left running were ended",
+  "terminal.render.toolCleanup.unverified": "cleanup unverified",
   "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /exit.",
   "terminal.service.started": "Runtime service started in the background (pid {pid}, log {log}); it keeps running after the terminal closes. {stop}",
   "terminal.service.connected": "Runtime service connected ({instance}). {stop}",

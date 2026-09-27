@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (terminal, protocol v15): the finished shell call line keeps a cleanup marker (`group-ended`, `unverified`) after the
+  live output is gone; `tool.finished` carries an optional `cleanup` field for shell calls.
 - ADDED (C12 G4, protocol v15): catalog operations on the runtime service (`executeOperation`, `compensateOperation`,
   `inspectOperation`) and MCP `execute_operation`, `compensate_operation`, `inspect_operation` with hints derived from the catalog.
 - FIX (MCP): list results are sent as text only; a validating MCP client no longer rejects `list_approvals`.

@@ -732,7 +732,10 @@ environment never reach the command unless their name is allowed. The process gr
 itself, surviving group members get the same SIGTERM → 2 s → SIGKILL; inherited pipes still open afterwards are drained for a 1 s
 grace and then released, and the timeout or a cancellation releases them at once (the status stays `exited`). The result reports
 `cleanup`: `clean`, `group-ended`, or `unverified` (the group could not be observed empty after SIGKILL, or pipes were released while
-held); the agent shell tool puts that note in the model's result and the owner's stream (Astra 2124). This is a process-group
+held); the agent shell tool puts that note in the model's result and the owner's stream (Astra 2124). Protocol v15 also carries the value as an optional `cleanup` field on the
+`tool.finished` event and on the agent tool outcome — the host shell tool's outcome only, enforced at the single emission point in the
+agent-turn loop; the terminal's finished call line shows a short suffix for `group-ended`/`unverified` and nothing for `clean` or an absent
+field (CLEANUP-MARK; closes Astra 2124 open item 1, owner 2026-09-27). This is a process-group
 contract, not a sandbox: a descendant that left the group (setsid, a daemon) is not observed and can outlive the call. Output streams
 in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 16 KiB (`HOST_SHELL_RESULT_MAX_BYTES`; a quarter head, the
 rest tail), cut on UTF-8 boundaries — a character split across two pipe reads is carried to the next read, never replaced by U+FFFD
