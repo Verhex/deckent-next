@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore } from '#adapters/index.js';
-import { assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, PoolPolicyAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
+import { assertApprovalPolicyCurrent, TaskApprovalAdmission, authenticate, policyGatesTaskAdmission, PoolPolicyAuthorization, RunPolicyAuthorization, RunReservationApplication, runReservationCommandSchema, type RunReservationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -22,7 +22,8 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
     let approvalJournal: ReturnType<typeof openSqliteApprovalStore> | undefined;
     try {
       let admission: TaskApprovalAdmission | undefined;
-      if ([...document.grants, ...document.restrictions].some(rule => rule.resource.kind === 'task')) {
+      // A task rule may come from an explicit grant/restriction or from a role a binding grants to this principal (H34 S2 follow-up).
+      if (policyGatesTaskAdmission(document)) {
         const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
         approvalJournal = openSqliteApprovalStore(await path(), config.storage.sqlite);
         admission = new TaskApprovalAdmission(document, principal, approvalJournal.store, integrity, config.approvals.requestTtlMs);

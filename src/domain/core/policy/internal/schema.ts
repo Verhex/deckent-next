@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { policyResources } from './vocabulary.js';
 
 const selection = z.union([z.literal('all'), z.array(identitySchema).min(1).readonly()]);
 const principalRef = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
@@ -45,11 +44,7 @@ type V2Body = { readonly roles: readonly z.infer<typeof role>[]; readonly grants
 function checkV2(policy: V2Body, context: z.RefinementCtx) {
   unique(context, [...policy.grants, ...policy.restrictions, ...policy.separationOfDuties].map(rule => rule.id), 'POLICY_DUPLICATE_RULE');
   unique(context, policy.roles.map(value => value.id), 'POLICY_DUPLICATE_ROLE');
-  for (const value of policy.roles) {
-    unique(context, value.permissions.map(item => item.id), 'POLICY_DUPLICATE_RULE');
-    // Task admission restrictions are wired only when explicit task rules exist (runs/reserve); a role cannot carry one yet.
-    if (value.permissions.some(item => item.resource.kind === policyResources.task.kind)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'POLICY_ROLE_TASK' });
-  }
+  for (const value of policy.roles) unique(context, value.permissions.map(item => item.id), 'POLICY_DUPLICATE_RULE');
 }
 function checkBindings(entries: readonly z.infer<typeof binding>[], context: z.RefinementCtx) {
   unique(context, entries.map(value => value.id), 'POLICY_DUPLICATE_BINDING');
