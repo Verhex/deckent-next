@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { identitySchema, counterSchema, approvalRequestSchema, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
-  type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
+  separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
@@ -97,7 +97,10 @@ export class ApprovalApplication {
     if (record.status !== 'pending' || record.revision !== command.expectedRevision) throw new ApprovalError('APPROVAL_CONFLICT');
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
     if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
-    await this.authorize('decide', command.scopeId, command.approvalId, verified.principal);
+    const policy = await this.authorize('decide', command.scopeId, command.approvalId, verified.principal);
+    // Four-eyes (policy v2 data, C12 Q6): the session-verified decider may not approve a request it made; withdrawing it grants nothing.
+    if (command.decision === 'allow' && separationOfDutiesViolation(policy, { scopeId: command.scopeId, requester: record.request.requester,
+      decider: verified.session.principalRef }) !== null) throw new ApprovalError('APPROVAL_DENIED');
     await assertSessionActive(verified.session, this.sessions, this.clock);
     const now = this.clock.sample().wallMs;
     record = this.expired(record, now);
