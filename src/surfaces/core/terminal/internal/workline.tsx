@@ -25,6 +25,7 @@ import { Composer, type ComposerLabels } from '#surfaces/core/terminal-composer/
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
 import type { ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
+import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -45,6 +46,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly sessions?: ConversationSessionLabels;
   /** `@file` attachment notices (T-L5); without them the notice is language-neutral (path, bytes, refusal code). */
   readonly mentions?: WorklineMentionLabels;
+  /** `/mode` notices (T-L4 slice 4c); without them the notice is language-neutral (command, catalog mode, policy field). */
+  readonly mode?: WorklineModeLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -77,6 +80,8 @@ export interface WorklineProps {
   readonly mentionDelayMs?: number;
   /** Conversation snapshots of this scope for `/resume` (T-L5c). */
   readonly sessions?: ConversationSessionPort;
+  /** The person's permission mode through the runtime service (status row segment and `/mode`, T-L4 slice 4c). */
+  readonly permissionMode?: WorklinePermissionModePort;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -118,6 +123,9 @@ export function WorklineApp(props: WorklineProps) {
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
   const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
+  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode);
+  const refreshMode = mode.refresh;
+  useEffect(() => { void refreshMode(); }, [refreshMode]);
 
   // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
   const closed = useRef(false);
@@ -233,13 +241,20 @@ export function WorklineApp(props: WorklineProps) {
       turn.current = null;
       setBusy(false);
       setCancelling(false);
+      // The mode may have been changed elsewhere meanwhile; the status row follows the service.
+      void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, props.attachMentions, props.streamTurn, push, session, systemPrompt, work]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const perform = useCallback(async (line: string, mentioned: readonly string[] = []): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned); return true; }
+    if (slash.command === 'mode') {
+      setBusy(true);
+      try { await mode.run(slash.args); } finally { setBusy(false); }
+      return true;
+    }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
       setBusy(true);
       try { push(await session.run(slash.command, slash.args, history)); }
@@ -265,7 +280,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, props.restartService, push, runTurn, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, runTurn, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the
@@ -301,7 +316,7 @@ export function WorklineApp(props: WorklineProps) {
       {work.region}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}
-        queued={queue.current.length} labels={labels.render} />
+        queued={queue.current.length} labels={labels.render} mode={mode.mode} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card (P4) takes the keyboard away from it. */}
       <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen} onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}

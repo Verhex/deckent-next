@@ -7,6 +7,7 @@ import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } f
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { phaseLabel } from './transcript.js';
 import type { CommandContext } from './kernel-commands.js';
+import type { PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
@@ -260,6 +261,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.attachTerminalMentions ? { attachMentions: (text: string, paths: readonly string[], signal: AbortSignal) =>
       context.attachTerminalMentions!(root, { scopeId, text, paths }, options, signal) } : {}),
     ...(sessions ? { sessions } : {}),
+    // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
+    ...(context.inspectPermissionMode && context.setPermissionMode ? { permissionMode: {
+      inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
+      set: (mode: PermissionMode, expectedRevision: string) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision }, options) } } : {}),
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal) =>
       context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },

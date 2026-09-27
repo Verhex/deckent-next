@@ -197,6 +197,11 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED;
   // text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
+  // T-L4 slice 4c (`/mode`): typed outcomes of setting one's own permission mode. Locale keys are lead-owned; until they exist the
+  // text is the language-neutral error.unknown with the code (see the slice's i18n-delta.json).
+  PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'PERMISSION_MODE_CONFLICT' }, l) }) },
+  PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'PERMISSION_MODE_UNSUPPORTED' }, l) }) },
+  PERMISSION_MODE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'PERMISSION_MODE_INVALID' }, l) }) },
   AUDIT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INVALID', p, l) }) },
   AUDIT_INTEGRITY: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INTEGRITY', p, l) }) },
   AUDIT_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_CONFLICT', p, l) }) },

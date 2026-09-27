@@ -6,7 +6,8 @@ import { RuntimeServiceProtocolError, classifyRuntimeServiceOperation, isRuntime
 const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun', 'inspectInventory',
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
-  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation'] as const;
+  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
+  'inspectPermissionMode', 'setPermissionMode'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const binding = { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) };
 const invocation = {
@@ -235,5 +236,25 @@ describe('runtime protocol v15 composer @file operations', () => {
     expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(15);
     expect(RUNTIME_SERVICE_LIFECYCLE_VERSIONS).toEqual([15, 14]);
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 13, requestId: 'request-9', operation: 'describeService', input: {} }).success).toBe(false);
+  });
+
+  it('adds the permission-mode read and write to v15 as bounded, current-only control operations without an actor field (T-L4 slice 4c)', () => {
+    const inspect = { schemaVersion: 15, requestId: 'request-1', operation: 'inspectPermissionMode', delivery: { maxResultBytes: 4096 },
+      input: { schemaVersion: 1, scopeId: 'scope-1' } };
+    const set = { ...inspect, operation: 'setPermissionMode', input: { schemaVersion: 1, scopeId: 'scope-1', mode: 'auto-edit', expectedRevision: 'p1+b1' } };
+    for (const request of [inspect, set]) {
+      expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+      expect(classifyRuntimeServiceOperation(request.operation as never)).toBe('control');
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, delivery: undefined }).success).toBe(false);
+      // A v14 client never reaches them: neither a current request nor a lifecycle one.
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 14 }).success).toBe(false);
+      expect(runtimeServiceLifecycleRequestSchema.safeParse({ ...request, schemaVersion: 14, delivery: undefined }).success).toBe(false);
+    }
+    for (const input of [{ ...set.input, mode: 'yolo' }, { ...set.input, principal: { issuer: 'h', subject: '2' } }, { ...set.input, expectedRevision: '' },
+      { schemaVersion: 1, scopeId: 'scope-1', mode: 'ask' }]) {
+      expect(runtimeServiceRequestSchema.safeParse({ ...set, input }).success).toBe(false);
+    }
+    expect(runtimeServiceRequestSchema.safeParse({ ...inspect, input: { ...inspect.input, subject: '2' } }).success).toBe(false);
+    expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(15);
   });
 });

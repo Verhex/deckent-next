@@ -1,3 +1,4 @@
+import { PERMISSION_MODES, type PermissionMode } from '#domain/index.js';
 import type { SpanRole } from './spans.js';
 import { cells, truncateEnd, truncateStart } from './text-width.js';
 
@@ -56,17 +57,22 @@ export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string }>
 export type WorklineStatusInput = Readonly<{
   scope: string; model?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
   queued?: number | undefined; notice?: string | undefined; labels: WorklineStatusLabels;
+  /** The person's permission mode from the service (T-L4 slice 4c); shown only as its catalog text, never free text. */
+  mode?: PermissionMode | undefined;
 }>;
 
-/** Display order scope · model · state · elapsed · queue · notice; drop order notice → elapsed → model → queue. */
+/** Display order scope · model · state · mode · elapsed · queue · notice; drop order notice → elapsed → mode → model → queue. */
 export function worklineStatusSegments(input: WorklineStatusInput): StatusSegment[] {
   const segment = (id: string, text: string, role: SpanRole | null, priority: number, droppable = true, shrink = false): StatusSegment =>
     Object.freeze({ id, text, role, priority, droppable, shrink });
   const state = input.busy && input.spinner ? `${input.spinner} ${input.state}` : input.state;
+  // The segment text is the catalog value itself; anything outside the catalog shows no mode at all.
+  const mode = PERMISSION_MODES.find(value => value === input.mode);
   return [
     segment('scope', input.scope, 'accent', 90, false, true),
     ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
+    ...(mode ? [segment('mode', mode, mode === 'ask' ? 'muted' : 'warning', 55)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),
     ...(input.queued ? [segment('queue', fillTemplate(input.labels.queued, { count: input.queued }), 'warning', 70)] : []),
     ...(input.notice ? [segment('notice', input.notice, 'warning', 40)] : []),

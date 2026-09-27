@@ -15,6 +15,9 @@ export const policyResources = Object.freeze({
   providerSpendAccount: Object.freeze({ kind: 'provider-spend-account' as const, actions: Object.freeze(['inspect', 'audit'] as const) }),
   // Terminal agent tools (T-L3): the resource id is the tool name; every call of the loop is authorized with action invoke.
   agentTool: Object.freeze({ kind: 'agent-tool' as const, actions: Object.freeze(['invoke'] as const) }),
+  // A person setting their own terminal permission mode (T-L4 slice 4c): the resource id is the target mode; the rule never names
+  // whose entry — only the caller's own entry is ever written. The mode itself creates no authority.
+  permissionMode: Object.freeze({ kind: 'permission-mode' as const, actions: Object.freeze(['set'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];
