@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { includes, policySchema } from './evaluate.js';
+import { includes, policySchema, principalGrants } from './schema.js';
 
 /** Company identity (H34): one registry key per customer company; the same shape the installation config accepts. */
 export const companyIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
@@ -8,13 +8,14 @@ export const companyIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
 type Actor = { readonly issuer: string; readonly subject: string };
 function allowGrants(input: unknown, actor: Actor) {
   const policy = policySchema.parse(input); const issuer = identitySchema.parse(actor.issuer); const subject = identitySchema.parse(actor.subject);
-  return policy.grants.filter(rule => rule.effect === 'allow' && (rule.principals === 'all'
+  // Explicit grants and the actor's role grants (H34 S2): a role binding makes a registered scope reachable like a grant does.
+  return principalGrants(policy, { issuer, subject }).filter(rule => rule.effect === 'allow' && (rule.principals === 'all'
     || rule.principals.some(principal => principal.issuer === issuer && principal.subject === subject)));
 }
 const unique = (candidates: readonly string[]) => [...new Set(candidates.map(candidate => identitySchema.parse(candidate)))];
 
 /** Scopes the trusted policy names explicitly in an allow grant. A named scope is declared by the installation authority;
- * `'all'` declares nothing. */
+ * `'all'` declares nothing. Role bindings never declare a scope: registration is company policy, bindings are membership data. */
 export function policyDeclaredScopes(input: unknown): readonly string[] {
   const policy = policySchema.parse(input);
   return Object.freeze([...new Set(policy.grants.flatMap(rule => rule.effect === 'allow' && rule.scopes !== 'all' ? rule.scopes : []))]);

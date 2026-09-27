@@ -18,6 +18,7 @@
     "ledger": "state/ledger.db",
     "workspaces": "workspaces",
     "policy": "policy.json",
+    "bindings": "bindings.json",
     "runtimeSocket": "state/runtime.sock",
     "runtimeLog": "state/runtime-service.log",
     "ledgerBackups": "state/backups",
