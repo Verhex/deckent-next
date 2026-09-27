@@ -787,6 +787,7 @@
   "error.RUNTIME_SERVICE_TRANSPORT": "The runtime response could not be delivered safely. Inspect recorded state before retrying.",
   "error.SCOPE_UNKNOWN": "This scope is not registered to your company. Name it in the installation policy or ask an administrator to register it.",
   "error.POLICY_APPROVAL_UNSUPPORTED": "This action requires approval, but there is no approval workflow for it yet outside the operation catalog. It is refused, not granted.",
+  "error.INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED": "This installation grant requires approval, but there is no approval workflow for it yet. It is refused, not granted.",
   "error.AUDIT_INVALID": "The audit event is not a valid bounded summary; nothing was recorded and no effect was applied.",
   "error.AUDIT_INTEGRITY": "Audit evidence could not be verified: a record, its row or the sequence of records was altered.",
   "error.AUDIT_CONFLICT": "An audit event with this id already exists with different content; nothing was recorded.",

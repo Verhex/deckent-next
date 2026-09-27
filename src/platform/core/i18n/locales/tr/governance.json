@@ -787,6 +787,7 @@
   "error.RUNTIME_SERVICE_TRANSPORT": "Runtime yanıtı güvenle iletilemedi. Yeniden denemeden önce kayıtlı durumu inceleyin.",
   "error.SCOPE_UNKNOWN": "Bu scope şirketinize kayıtlı değil. Kurulum politikasında adlandırın ya da bir yöneticiden kaydetmesini isteyin.",
   "error.POLICY_APPROVAL_UNSUPPORTED": "Bu işlem onay gerektiriyor, ama katalog dışında henüz bir onay akışı yok. Yetki verilmiyor, reddediliyor.",
+  "error.INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED": "Bu kurulum izni onay gerektiriyor, ama henüz bir onay akışı yok. Yetki verilmiyor, reddediliyor.",
   "error.AUDIT_INVALID": "Denetim olayı geçerli bir sınırlı özet değil; kayıt yazılmadı ve etki uygulanmadı.",
   "error.AUDIT_INTEGRITY": "Denetim kanıtı doğrulanamadı: bir kayıt, satırı ya da kayıt sırası değiştirilmiş.",
   "error.AUDIT_CONFLICT": "Bu kimlikli denetim olayı farklı içerikle zaten var; kayıt yazılmadı.",
