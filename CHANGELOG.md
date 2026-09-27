@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (C12 G4, protocol v15): catalog operations on the runtime service (`executeOperation`, `compensateOperation`,
+  `inspectOperation`) and MCP `execute_operation`, `compensate_operation`, `inspect_operation` with hints derived from the catalog.
+- FIX (MCP): list results are sent as text only; a validating MCP client no longer rejects `list_approvals`.
 - ADDED (T-L4 slice 4a): permission modes `ask | auto-edit | full-auto` (bindings v2 `modes`, policy v2 `modeEligible`); a mode
   relaxes only company-eligible approval cells, writes a sealed audit event before the effect, and never lowers deny or the floors.
   Older builds refuse policy/bindings documents that carry these fields.
