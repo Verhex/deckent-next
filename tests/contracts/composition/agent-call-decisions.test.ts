@@ -25,7 +25,7 @@ const snapshot = (tool: Effect, mode: string | null) => resolvePolicyBindings({ 
   { id: 'file-write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['workspace.file.write'] } }] },
 mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
 
-/** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads twice, execute once, each admission once. */
+/** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
 async function fixture(loads: unknown[]) {
   const root = await mkdtemp(join(tmpdir(), 'dn-call-decisions-')); roots.push(root);
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
@@ -66,16 +66,14 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
   });
 
   it('stops the effect when the policy denies between the audit and an admission; runs nothing when it changed before the effect', async () => {
-    const denied = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'),
-      snapshot('require-approval', 'auto-edit'), snapshot('deny', 'auto-edit')]);
+    const denied = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('deny', 'auto-edit')]);
     expect(await denied.decisions.authorize(edit, args)).toBe('allow');
     expect(await denied.execute()).toMatchObject({ outcome: { status: 'error', text: 'POLICY_DENIED' }, admissions: ['admitted', 'POLICY_DENIED'] });
-    const lost = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'),
-      snapshot('require-approval', null)]);
+    const lost = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', null)]);
     expect(await lost.decisions.authorize(edit, args)).toBe('allow');
     expect(await lost.execute()).toMatchObject({ outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, admissions: ['EFFECT_APPROVAL_REQUIRED'] });
     for (const [changed, text] of [[snapshot('deny', 'auto-edit'), 'denied-by-policy'], [snapshot('require-approval', null), 'approval-required']] as const) {
-      const before = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), changed]);
+      const before = await fixture([snapshot('require-approval', 'auto-edit'), changed]);
       expect(await before.decisions.authorize(edit, args)).toBe('allow');
       const result = await before.execute();
       expect(result).toMatchObject({ eventsAtRun: -1, admissions: [] });

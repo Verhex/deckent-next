@@ -38,9 +38,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const keyOf = (tool: AgentToolSpec, args: Record<string, unknown>) => agentToolArgumentsDigest(tool.name, args);
   const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? WORKSPACE_FILE_WRITE_OPERATION.operation
     : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : null;
-  /** Fresh snapshot + pure decision; an unreadable or invalid policy is `deny` (fail closed). */
-  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell): Promise<AgentToolCallDecision | null> => {
-    try { return decideAgentToolCall(await context.policy.load(), { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell }); }
+  const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
+  /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
+  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown): Promise<AgentToolCallDecision | null> => {
+    const policy = snapshot === undefined ? await load() : snapshot;
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell }); }
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
@@ -58,15 +60,17 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       if (!args) return (await decide(tool, 'read'))?.decision === 'deny' ? 'deny' : 'require-approval';
       const key = keyOf(tool, args);
       stored.delete(key);
-      // Policy first: the cell is irrelevant to a deny, and a denied call is answered before its target is planned (no content leaks).
-      const first = await decide(tool, 'read');
+      // One snapshot for the whole authorization. Policy first: the cell is irrelevant to a deny, and a denied call is answered
+      // before its target is planned (no content leaks).
+      const snapshot = await load();
+      const first = await decide(tool, 'read', snapshot);
       if (!first || first.decision === 'deny') return 'deny';
       if (tool.toolClass === 'read') { stored.set(key, { cell: 'read', decision: first }); return first.decision; }
       const planned = tool.toolClass === 'edit' && edits ? await edits.plan(tool.name, args).then(plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)
         : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args).then(plan => plan.ok ? null : plan.text) : `[deckent] ${tool.name}: error=unknown-tool`;
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? `[deckent] ${tool.name}: error=failed` }); return 'require-approval'; }
-      const decision = await decide(tool, cell);
+      const decision = await decide(tool, cell, snapshot);
       if (!decision) return 'deny';
       stored.set(key, { cell, decision });
       return decision.decision;
