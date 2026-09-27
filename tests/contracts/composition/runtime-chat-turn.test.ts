@@ -1030,6 +1030,27 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
     } finally { view.instance.unmount(); }
   }, 30_000);
 
+  // Astra 2134 R3: a picked spaced name used to reach the service as its first word, so a file with that shorter name was sent instead.
+  it('sends the content of the picked spaced file, never of the file named by its first word', async () => {
+    const { f, props } = await workspace();
+    await Promise.all([writeFile(join(f.project, 'src', 'a'), 'SHORT-NAME\n'), writeFile(join(f.project, 'src', 'a b.ts'), 'SPACED-NAME\n')]);
+    f.state.script = [{ content: 'Seen.' }];
+    const view = mountWorkline(props);
+    try {
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      await typeInto(view, 'explain @"a b');
+      await until(() => view.stdout.text.includes('> @"src/a b.ts"'), 'picker offers the spaced file quoted');
+      await typeInto(view, '\t');
+      await until(() => view.stdout.text.includes('> explain @"src/a b.ts" |'), 'picked');
+      await typeInto(view, '\r');
+      await until(() => f.state.requests.length === 1 && view.stdout.text.includes('Seen.'), 'answered');
+      const user = (f.state.requests[0]!['messages'] as { role: string; content: string }[]).at(-1)!;
+      expect(user.content).toContain('--- attached file src/a b.ts (12 bytes) ---\nSPACED-NAME\n--- end of src/a b.ts ---');
+      expect(user.content).not.toContain('SHORT-NAME');
+      await until(() => view.stdout.text.includes('@src/a b.ts · 12 B'), 'attachment notice');
+    } finally { view.instance.unmount(); }
+  }, 30_000);
+
   it('runs /help on Enter and completes a command that takes an argument, then runs it with the argument', async () => {
     const { f, props } = await workspace();
     await mkdir(join(f.data, 'sessions'), { mode: 0o700 });
