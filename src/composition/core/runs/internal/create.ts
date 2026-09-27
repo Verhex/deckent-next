@@ -11,7 +11,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
-  pin?: (context: ScopeContext) => Promise<RunWorkspaceCustody>) {
+  pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
   const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
   const { config, layout, document, principal, path } = context;
   const store = {
@@ -39,7 +39,7 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
         capacity: { executionSlots: profile.executionSlots, inFlightSlots: profile.inFlightSlots }, ordering: admitted.graph.tasks.map(task => task.id) } };
     } });
-  return Object.freeze({ schemaVersion: 1 as const, layout, admission: await app.create(command, undefined, pin ? () => pin(context) : undefined) });
+  return Object.freeze({ schemaVersion: 1 as const, layout, admission: await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined) });
 }
 /** Local OS ingress. Existing pool provisioning is required; no implicit pool creation or config-derived grants. */
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
@@ -53,7 +53,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
   try {
     const { deliveryCommandId, ...fields } = runDeliveryAdmissionSchema.parse(input);
     const command = runAdmissionSchema.parse(fields);
-    return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }) => {
+    return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }, replay) => {
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
       const git = { ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
       const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
@@ -61,7 +61,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
       try {
         return await pinRunToDelivery(store, new GitIntegrationDelivery(git), new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)),
           identity => authorization.authorizeIdentity('read-output', identity, principal),
-          { scopeId: command.scopeId, runId: command.runId, deliveryCommandId });
+          { scopeId: command.scopeId, runId: command.runId, deliveryCommandId, replay });
       } finally { store.close(); }
     });
   } catch (error) { throw queryFailure(error); }

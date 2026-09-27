@@ -136,4 +136,21 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await f.create('v');
     expect(f.custody('v')?.baseRevision).toBe(f.plan.commit);
   });
+
+  it('answers a pinned replay from the recorded custody before the delivery reference check (owner 2026-09-27, like adoption resume)', async () => {
+    const f = await delivered();
+    const admitted = await f.create('v');
+    // The reference is deleted, then moved: the replay answer of the admitted command must not change.
+    await f.git('update-ref', '-d', f.plan.ref);
+    expect(await f.create('v').catch((error: { code?: string }) => error.code)).toEqual(admitted);
+    const moved = await f.git('commit-tree', `${f.base}^{tree}`, '-p', f.base, '-m', 'someone moves the delivery reference');
+    await f.git('update-ref', f.plan.ref, moved);
+    expect(await f.create('v').catch((error: { code?: string }) => error.code)).toEqual(admitted);
+    expect(f.custody('v')?.baseRevision).toBe(f.plan.commit);
+    // A first admission still runs the full check, and a replay still needs the same custody and the read grant.
+    await expect(f.create('w')).rejects.toMatchObject({ code: 'PATCH_CONFLICT' });
+    expect(f.runs('w')).toBe(0);
+    await f.policy(['execute', 'recover-output']);
+    await expect(f.create('v')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  });
 });
