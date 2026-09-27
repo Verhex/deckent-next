@@ -78,6 +78,25 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     expect(await f.call('edit_file', { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' })).toMatchObject({ card: true, status: 'denied' });
   }, 90_000);
 
+  it('lets a person tighten their own mode to ask without any set grant (owner R4), audited as allowed without a rule', async () => {
+    const f = await modeRuntime({ grants: [], mode: null });
+    await authority(f, editEligible);
+    await writeFile(join(f.data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [roleBinding],
+      modes: [theirs, lookalike, { id: 'mine', principal: me[0], scopes: ['scope'], mode: 'auto-edit' }] }), { mode: 0o600 });
+    const runtime = client(f);
+    expect(await runtime.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' })).toMatchObject({ mode: 'auto-edit', revision: 'p1+b1' });
+    await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    const cleared = await runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'ask', expectedRevision: 'p1+b1' });
+    expect(cleared).toMatchObject({ mode: 'ask', previous: 'auto-edit', changed: true });
+    const file = await bindings(f);
+    expect(file.modes).toEqual([theirs, lookalike]);
+    expect(changes(f)).toEqual([
+      { kind: 'permission-mode-change', requested: 'full-auto', previous: 'auto-edit', decision: { effect: 'deny', ruleId: null }, bindingsRevision: { before: 'b1', after: null } },
+      { kind: 'permission-mode-change', requested: 'ask', previous: 'auto-edit', decision: { effect: 'allow', ruleId: null }, bindingsRevision: { before: 'b1', after: file.revision } }]);
+    // The next turn is back to asking: an eligible edit shows a card again.
+    expect(await f.call('edit_file', { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' })).toMatchObject({ card: true, status: 'denied' });
+  }, 90_000);
+
   it('answers a typed conflict for a stale revision and for one of two concurrent writes; exactly one write lands', async () => {
     const f = await modeRuntime({ grants: [], mode: null });
     await authority(f, [...editEligible, setGrant()]);

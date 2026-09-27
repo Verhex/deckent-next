@@ -90,18 +90,20 @@ it.each(Object.entries(EXPECTED))('reports the evidenced annotations for %s', as
 const hints = async (operationCatalog: McpApplications['operationCatalog']) => Object.fromEntries((await listAnnotatedTools({ operationCatalog }))
   .filter(tool => tool.name.endsWith('_operation')).map(tool => [tool.name, tool.annotations]));
 it('derives the operation tool hints from the catalog descriptors: read-only, destructive and open-world follow the effect classes (C12 G4)', async () => {
-  // Only read operations: executing cannot change the target; nothing is compensable, so compensation reaches no target at all.
+  // Compensation is bounded by the whole reachable catalog (Astra 2139 R2): the compensating operation resolves from the current
+  // catalog while the pairing comes from the original's pinned historical descriptor, so any reachable operation may be a compensation
+  // even when no current descriptor names it. Only read operations: neither tool can change a target, both reach one.
   expect(await hints([descriptor('read-order', 'read')])).toEqual({
     execute_operation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-    compensate_operation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    compensate_operation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     inspect_operation: EXPECTED.inspect_operation });
-  // One irreversible operation among reads makes execution destructive; its compensation set stays empty.
+  // One irreversible operation among reads makes both destructive, although no current descriptor names a compensation.
   expect(await hints([descriptor('read-order', 'read'), descriptor('approve-payment', 'irreversible')])).toMatchObject({
     execute_operation: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    compensate_operation: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } });
-  // A read compensation of a write: executing is destructive, compensating is read-only.
+    compensate_operation: { readOnlyHint: false, destructiveHint: true, openWorldHint: true } });
+  // A read compensation of a write: the write itself may be a historically pinned compensation, so compensating is not read-only.
   expect(await hints([descriptor('post-order', 'write', 'recheck-order'), descriptor('recheck-order', 'read')])).toMatchObject({
-    execute_operation: { readOnlyHint: false, destructiveHint: true }, compensate_operation: { readOnlyHint: true, destructiveHint: false, openWorldHint: true } });
+    execute_operation: { readOnlyHint: false, destructiveHint: true }, compensate_operation: { readOnlyHint: false, destructiveHint: true, openWorldHint: true } });
   // No reachable operation: the tools can change nothing and reach nothing.
   expect(await hints([])).toEqual({
     execute_operation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },

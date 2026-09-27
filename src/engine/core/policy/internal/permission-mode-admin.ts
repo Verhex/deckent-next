@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeView, policyResources,
   policySchema, resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
-  type VerifiedPrincipal } from '#domain/index.js';
+  type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
 
 export class PermissionModeError extends Error {
@@ -12,8 +12,8 @@ export interface PermissionModeSnapshot { readonly policy: unknown; readonly bin
 /**
  * The bindings file as a conditional, atomic write target (T-L4 slice 4c). `update` reads policy + bindings under the store's file
  * guards and, serialized with every other update of the same file, asks `work` what to write. A document to write replaces the file
- * atomically and only if the file is still exactly the one read; a replacement in between is `PERMISSION_MODE_CONFLICT` and nothing
- * is written. `work` runs synchronously inside that window (it may record audit evidence; a throw writes nothing).
+ * atomically and only if both authority files — the bindings and the policy that authorized the change — are still exactly the ones
+ * read; a replacement of either in between is `PERMISSION_MODE_CONFLICT` and nothing is written. `work` runs synchronously inside that window (it may record audit evidence; a throw writes nothing).
  */
 export interface PermissionModeBindingsStore {
   update<T>(work: (snapshot: PermissionModeSnapshot) => { readonly write: unknown; readonly result: T }): Promise<T>;
@@ -31,8 +31,8 @@ export function inspectPermissionMode(policy: unknown, principal: VerifiedPrinci
 /**
  * A person sets their own terminal permission mode in one scope (T-L4 slice 4c, owner q7). The principal is the verified caller —
  * never an input — and only that exact issuer + subject's `modes` entries change. The change is conditional on the effective revision
- * (`policy+bindings`) the caller read, needs a company `permission-mode`/`set` grant for the target mode (require-approval has no broker
- * here: `POLICY_APPROVAL_UNSUPPORTED`), and every decision is audited; an allowed change is recorded before the file is replaced
+ * (`policy+bindings`) the caller read, needs a company `permission-mode`/`set` grant for a relaxed target mode (require-approval has no
+ * broker here: `POLICY_APPROVAL_UNSUPPORTED`; tightening to `ask` needs none, owner R4), and every decision is audited; an allowed change is recorded before the file is replaced
  * (no record, no change). The mode itself grants nothing: lowering stays the decision function's, on company-eligible rules only.
  */
 export class PermissionModeApplication {
@@ -48,8 +48,12 @@ export class PermissionModeApplication {
       if (policy.schemaVersion === 1) throw new PermissionModeError('PERMISSION_MODE_UNSUPPORTED');
       const bindings = bindingsFileSchema.parse(snapshot.bindings);
       const before = permissionModeView(policy, actor, command.scopeId);
-      const decision = evaluatePolicy(policy, { principal, scopeId: command.scopeId, action: policyResources.permissionMode.actions[0],
+      const evaluated = evaluatePolicy(policy, { principal, scopeId: command.scopeId, action: policyResources.permissionMode.actions[0],
         resource: { kind: policyResources.permissionMode.kind, id: command.mode } });
+      // Owner R4 (2026-09-27): tightening to `ask` — the most restrictive mode, the absence of an entry — needs no set grant, and a
+      // company deny cannot keep a person in a relaxed mode. The scope boundary still holds. Audited as `allow` with no rule id: a
+      // grant always names its rule, so a null rule records that no grant was required.
+      const decision: Pick<PolicyDecision, 'decision' | 'ruleId'> = command.mode === 'ask' && evaluated.reason !== 'SCOPE' ? { decision: 'allow' } : evaluated;
       const record = (after: string | null) => this.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
         principal: actor, policyRevision: policy.revision, atMs: this.now(), subject: { kind: 'permission-mode-change', requested: command.mode, previous: before.mode,
           decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: { before: bindings.revision, after } } });

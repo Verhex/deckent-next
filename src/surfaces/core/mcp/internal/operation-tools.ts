@@ -3,7 +3,6 @@ import { runtimeOperationQuerySchema, type RuntimeOperationQuery, type RuntimeSe
 import { t, type Locale } from '#platform/index.js';
 
 export type OperationToolHints = Readonly<{ readOnly: boolean; destructive: boolean; idempotent: boolean; openWorld: boolean }>;
-const key = (operation: OperationDescriptor['operation']) => `${operation.id}@${operation.version}`;
 /** Hints of one catalog operation tool over the operations it can reach: read-only when every one only reads, destructive when any may
  * change or irreversibly act on its target, open-world when any exists (targets are external systems). Idempotent regardless of the
  * catalog: a recorded command resumes its durable record and a settled/refused one replays without a second effect
@@ -14,12 +13,13 @@ function hints(reachable: readonly OperationDescriptor[]): OperationToolHints {
     idempotent: true, openWorld: reachable.length > 0 });
 }
 /** MCP hints of the catalog operation tools, derived from the installation's reachable catalog descriptors (C12 G4), never fixed per tool.
- * Compensation reaches only the operations named as a reachable operation's compensation. Hints are advisory and grant nothing. */
+ * Compensation is bounded by the whole reachable catalog, not by the current catalog's `compensation` references (Astra 2139 R2): the
+ * compensating command's operation resolves from the current catalog, but the pairing is checked against the original intent's pinned
+ * descriptor (engine/core/effect/internal/application.ts `run`; domain `assertCompensation`), so a settled effect whose operation has
+ * left the catalog still reaches its compensation. Any reachable operation may be such a pinned compensation; nothing outside the
+ * reachable catalog is. Hints are advisory and grant nothing. */
 export function operationToolHints(catalog: readonly OperationDescriptor[]) {
-  const byKey = new Map(catalog.map(entry => [key(entry.operation), entry]));
-  const compensations = [...new Set(catalog.flatMap(entry => entry.compensation ? [key(entry.compensation)] : []))]
-    .flatMap(ref => byKey.has(ref) ? [byKey.get(ref)!] : []);
-  return Object.freeze({ execute: hints(catalog), compensate: hints(compensations),
+  return Object.freeze({ execute: hints(catalog), compensate: hints(catalog),
     inspect: Object.freeze({ readOnly: true, destructive: false, idempotent: true, openWorld: false }) });
 }
 

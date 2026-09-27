@@ -44,6 +44,20 @@ describe.skipIf(process.platform === 'win32')('conditional bindings replacement 
     expect((await readdir(g.root)).sort()).toEqual(['bindings.json', 'policy.json']);
   });
 
+  it('refuses with a typed conflict when the policy that authorized the write was replaced after it was read (Astra 2139 R1)', async () => {
+    const g = await fixture();
+    const { renameSync, writeFileSync } = await import('node:fs');
+    const before = await readFile(join(g.root, 'bindings.json'), 'utf8');
+    await expect(g.source.update(() => {
+      writeFileSync(join(g.root, 'other'), JSON.stringify({ ...policy, revision: 'p2' }), { mode: 0o600 });
+      renameSync(join(g.root, 'other'), join(g.root, 'policy.json'));
+      return { write: bindings('mine'), result: null };
+    })).rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
+    expect(await readFile(join(g.root, 'bindings.json'), 'utf8')).toBe(before);
+    expect((await readdir(g.root)).sort()).toEqual(['bindings.json', 'policy.json']);
+    expect((await g.source.load()).revision).toBe('p2+b1');
+  });
+
   it('serializes updates of the same file: the second sees the first one\'s result', async () => {
     const f = await fixture();
     const revisions = await Promise.all(['b2', 'b3'].map(next => f.source.update(snapshot => ({ write: bindings(next), result: (snapshot.bindings as { revision: string }).revision }))));
