@@ -10,7 +10,7 @@ import { openSqliteModelActivationStore, openSqliteModelAllocationIntegrityReade
   openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
-import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest,
+import { createModelAllocationCheckpoint, createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest,
   verifyModelAllocationIntegrity } from '#engine/index.js';
 
 const execute = promisify(execFile), roots: string[] = [];
@@ -49,18 +49,26 @@ function row(db: DatabaseSync, table: string, invocationId: string) {
   return db.prepare(`SELECT record FROM ${table} WHERE scope_id=? AND invocation_id=?`).get('scope', invocationId) as { record: string } | undefined;
 }
 
-it('claims one canonical record, replays it, and retains a null-content unknown claim in capacity', async () => {
-  const base = await fixture(2, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+// INFLIGHT-FIX (lead card 2026-09-28, reverses PROVIDERS/A3A "unknown outcomes retain capacity"): an `unknown` is written only after the
+// local send settled (its HTTP request is closed), so it releases its concurrency slot; it stays counted and uncertain.
+it('claims one canonical record, replays it, and releases a closed null-content unknown claim slot while keeping it counted', async () => {
+  const base = await fixture(3, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   const input = admission(base, 'command-1', 'invocation-1'), first = await store.claim(input);
   expect(first).toMatchObject({ replayed: false, record: { receipt: { outcome: null }, content: null } });
   expect(await store.claim({ ...input, invocationId: 'ignored-on-replay' })).toEqual({ replayed: true, record: first.record });
   await store.permitSend(first.record.receipt.claim, 'sender', 10);
   const unknown = await store.recordUnknown(first.record.receipt.claim, 'transport-error', 11);
   expect(unknown).toMatchObject({ receipt: { outcome: { schemaVersion: 4, state: 'unknown', evidence: null, content: null } }, content: null });
-  await expect(store.claim(admission(base, 'command-2', 'invocation-2'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  // The slot is free again (maxInFlight 1): a second call is admitted while the first stays an uncertain, counted record.
+  const second = await store.claim(admission(base, 'command-2', 'invocation-2'));
+  expect(second).toMatchObject({ replayed: false, record: { receipt: { outcome: null } } });
+  // A replayed settlement returns the same record and never releases a second slot.
+  expect(await store.recordUnknown(first.record.receipt.claim, 'transport-error', 11)).toEqual(unknown);
+  await expect(store.claim(admission(base, 'command-3', 'invocation-3'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
   store.close();
   const db = new DatabaseSync(base.path, { readOnly: true });
-  expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 1, in_flight: 1 });
+  expect(db.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get()).toEqual({ lifetime_calls: 2, in_flight: 1 });
+  expect(db.prepare("SELECT state FROM model_invocations WHERE invocation_id='invocation-1'").get()).toEqual({ state: 'unknown' });
   expect(db.prepare('SELECT count(*) AS count FROM model_invocation_contents').get()?.count).toBe(0);
   expect(String(row(db, 'model_invocations', 'invocation-1')?.record)).not.toContain('private prompt');
   db.close();
@@ -107,7 +115,8 @@ it('keeps only evidence summaries in rejected and partial receipts while preserv
   const unknown = await partialStore.recordUnknown(partialClaim.record.receipt.claim, 'transport-error', 31, partial);
   expect(unknown.receipt.outcome).toMatchObject({ state: 'unknown', evidence: { body: { observedBytes: 10, complete: false } }, content: { kind: 'response-body' } });
   expect(unknown.content).toMatchObject({ kind: 'response-body', data: partial.body.data });
-  await expect(partialStore.claim(admission(partialBase, 'blocked', 'blocked-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  // A partial (interrupted) response is also a closed local request: its slot is released (INFLIGHT-FIX).
+  expect(await partialStore.claim(admission(partialBase, 'next', 'next-id'))).toMatchObject({ replayed: false });
   partialStore.close();
 });
 
@@ -334,4 +343,71 @@ it('admits any number of calls for an allocation without a lifetime total while 
   // The allocation contract of an id is fixed: switching the same id to a lifetime total is refused, a new id is needed.
   const capped = { ...base, profile: { ...base.profile, allocation: { ...base.profile.allocation, maxCalls: 100 } } };
   await expect(store.claim(admission(capped, 'command-capped', 'invocation-capped'))).rejects.toThrow('MODEL_INVOCATION_ALLOCATION_CONFLICT');
+});
+
+/** Rewrites the allocation counter as a build before INFLIGHT-FIX left it (a settled `unknown` kept its slot), with a valid checkpoint. */
+function forceInFlight(path: string, inFlight: number) {
+  const db = new DatabaseSync(path);
+  try {
+    const current = db.prepare(`SELECT a.record,c.revision FROM model_invocation_allocations a JOIN model_invocation_allocation_checkpoints c
+      ON c.scope_id=a.scope_id AND c.allocation_id=a.allocation_id`).get() as { record: string; revision: number };
+    const next = createModelAllocationCheckpoint({ ...JSON.parse(current.record), inFlight }, current.revision + 1);
+    db.prepare('UPDATE model_invocation_allocations SET in_flight=?,record=?').run(inFlight, JSON.stringify(next.allocation));
+    db.prepare('UPDATE model_invocation_allocation_checkpoints SET revision=?,digest=?').run(next.revision, next.digest);
+    return next.revision;
+  } finally { db.close(); }
+}
+const counters = (path: string) => {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try { return db.prepare(`SELECT a.lifetime_calls,a.in_flight,c.revision FROM model_invocation_allocations a JOIN model_invocation_allocation_checkpoints c
+    ON c.scope_id=a.scope_id AND c.allocation_id=a.allocation_id`).get(); } finally { db.close(); }
+};
+
+it('releases slots an earlier build kept for settled unknown calls, never an open claim, and leaves an unexplained counter untouched', async () => {
+  const base = await fixture(8, 2), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const cancelled = await store.claim(admission(base, 'cancelled', 'cancelled-id'));
+  await store.permitSend(cancelled.record.receipt.claim, 'sender', 10);
+  await store.recordUnknown(cancelled.record.receipt.claim, 'transport-error', 11);
+  await store.claim(admission(base, 'open', 'open-id'));
+  store.close();
+  // The live symptom: one open call plus one slot still held by a settled unknown fill maxInFlight 2.
+  const stuckRevision = forceInFlight(base.path, 2);
+  const repair = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  try {
+    await expect(repair.claim(admission(base, 'blocked', 'blocked-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+    expect(await repair.releaseSettledSlots()).toEqual({ allocations: 1, released: 1, inconsistent: [] });
+    expect(counters(base.path)).toEqual({ lifetime_calls: 2, in_flight: 1, revision: stuckRevision + 1 });
+    // Idempotent: nothing more to release, no write.
+    expect(await repair.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [] });
+    expect(counters(base.path)).toEqual({ lifetime_calls: 2, in_flight: 1, revision: stuckRevision + 1 });
+    // The released slot admits one call; the open claim still holds its own, so the limit stays enforced.
+    expect(await repair.claim(admission(base, 'after', 'after-id'))).toMatchObject({ replayed: false });
+    await expect(repair.claim(admission(base, 'over', 'over-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  } finally { repair.close(); }
+  const integrity = await openSqliteModelAllocationIntegrityReader(base.path, { busyTimeoutMs: options.busyTimeoutMs });
+  try { await expect(verifyModelAllocationIntegrity(integrity, 'scope', 'allocation', 10)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 3, inFlight: 2 }); }
+  finally { integrity.close(); }
+  const db = new DatabaseSync(base.path, { readOnly: true });
+  expect(db.prepare('SELECT state,count(*) AS count FROM model_invocations GROUP BY state ORDER BY state').all())
+    .toEqual([{ state: 'claimed', count: 2 }, { state: 'unknown', count: 1 }]);
+  db.close();
+
+  // A counter below the open claims is not something the old rule explains: reported, never rewritten.
+  const damaged = await fixture(8, 2), seed = await openSqliteModelInvocationStore(damaged.path, options, 'forbid');
+  await seed.claim(admission(damaged, 'open', 'open-id')); seed.close();
+  const damagedRevision = forceInFlight(damaged.path, 0);
+  const check = await openSqliteModelInvocationStore(damaged.path, options, 'forbid');
+  try { expect(await check.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
+  finally { check.close(); }
+  expect(counters(damaged.path)).toEqual({ lifetime_calls: 1, in_flight: 0, revision: damagedRevision });
+  // Nor is a counter above open + unknown (a definitive response never held a slot under any rule).
+  const excess = await fixture(8, 2), excessSeed = await openSqliteModelInvocationStore(excess.path, options, 'forbid');
+  const answered = await excessSeed.claim(admission(excess, 'answered', 'answered-id'));
+  await excessSeed.permitSend(answered.record.receipt.claim, 'sender', 10);
+  await excessSeed.recordResponse(answered.record.receipt.claim, { schemaVersion: 1, native: { id: 'r' }, usage: null }, 11); excessSeed.close();
+  const excessRevision = forceInFlight(excess.path, 1);
+  const excessCheck = await openSqliteModelInvocationStore(excess.path, options, 'forbid');
+  try { expect(await excessCheck.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
+  finally { excessCheck.close(); }
+  expect(counters(excess.path)).toEqual({ lifetime_calls: 1, in_flight: 1, revision: excessRevision });
 });

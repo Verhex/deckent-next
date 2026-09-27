@@ -1,10 +1,12 @@
 import type { SupervisorProfileValidator } from '#engine/index.js';
-import type { ModelAllocationIntegrityReader, ModelInvocationStore, ModelInvocationPurgeStore, ModelInvocationCancellationStore } from '#engine/index.js';
+import type { ModelAllocationIntegrityReader, ModelAllocationSlotReleaseStore, ModelInvocationStore, ModelInvocationPurgeStore,
+  ModelInvocationCancellationStore } from '#engine/index.js';
 import type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Lazy native SQLite boundary; importing adapter aggregates never loads node:sqlite. */
 export async function openSqliteModelInvocationStore(path: string, options: SqliteLedgerOptions,
-  migrationMode: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator): Promise<ModelInvocationStore & ModelInvocationPurgeStore & ModelInvocationCancellationStore> {
+  migrationMode: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator)
+  : Promise<ModelInvocationStore & ModelInvocationPurgeStore & ModelInvocationCancellationStore & ModelAllocationSlotReleaseStore> {
   const implementation = await import('./internal/open.js');
   return implementation.openSqliteModelInvocationStore(path, options, migrationMode, profiles);
 }

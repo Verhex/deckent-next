@@ -208,7 +208,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   expect((await readFile(f.ledger)).includes(Buffer.from('prompt-shared'))).toBe(false);
 }, 15_000);
 
-it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a partial native response remains ambiguous and capacity stays held', async () => {
+it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a partial native response remains ambiguous and its closed request frees its slot (INFLIGHT-FIX)', async () => {
   const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
   const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('cancel-held-partial');
@@ -236,7 +236,7 @@ it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a p
     expect(Buffer.from((inspection.responseContent as { data: string }).data, 'base64').toString('utf8')).toBe('{"id":"partial"');
     const allocation = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
-      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+      .toEqual({ lifetime_calls: 1, in_flight: 0 }); } finally { allocation.close(); }
     expect(f.requests).toBe(1);
   } finally { f.releaseResponse(); }
 }, 15_000);
@@ -295,7 +295,7 @@ it.skipIf(process.platform !== 'linux')('recovers a durable requested cancellati
     expect(f.requests).toBe(1);
     const allocation = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
-      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+      .toEqual({ lifetime_calls: 1, in_flight: 0 }); } finally { allocation.close(); }
 
     expect(await service.stop()).toMatchObject({ state: 'clean' }); await service.done;
     services.splice(services.indexOf(service), 1);
@@ -311,7 +311,7 @@ it.skipIf(process.platform !== 'linux')('recovers a durable requested cancellati
     expect(f.requests).toBe(1);
     const restartedAllocation = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(restartedAllocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
-      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { restartedAllocation.close(); }
+      .toEqual({ lifetime_calls: 1, in_flight: 0 }); } finally { restartedAllocation.close(); }
   } finally { f.releaseResponse(); }
 }, 20_000);
 
@@ -339,7 +339,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
     expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
     const allocation = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
-      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+      .toEqual({ lifetime_calls: 1, in_flight: 0 }); } finally { allocation.close(); }
     expect(f.requests).toBe(1);
   } finally { f.releaseResponse(); }
 }, 20_000);
@@ -371,7 +371,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
     expect(settled.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { body: { complete: false } } });
     const allocation = new DatabaseSync(f.ledger, { readOnly: true });
     try { expect(allocation.prepare('SELECT lifetime_calls,in_flight FROM model_invocation_allocations').get())
-      .toEqual({ lifetime_calls: 1, in_flight: 1 }); } finally { allocation.close(); }
+      .toEqual({ lifetime_calls: 1, in_flight: 0 }); } finally { allocation.close(); }
     expect(f.requests).toBe(1);
   } finally {
     f.releaseResponse();

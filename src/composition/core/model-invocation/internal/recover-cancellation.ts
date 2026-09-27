@@ -1,4 +1,4 @@
-import { openSqliteModelInvocationCancellationInventory } from '#adapters/index.js';
+import { openSqliteModelInvocationCancellationInventory, openSqliteModelInvocationStore } from '#adapters/index.js';
 import { ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization,
   ModelInvocationStoreError, modelInvocationCancellationRecoveryCommandSchema,
   type ModelInvocationControllers } from '#engine/index.js';
@@ -22,4 +22,11 @@ export async function recoverConfiguredModelCancellations(projectRoot: string, i
       async () => openSqliteModelInvocationCancellationInventory(await context.path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
       controllers, { maxPageSize: config.cancellation.recoveryPageSize }).recover(command);
   } catch (error) { throw queryFailure(error); }
+}
+
+/** Start reconciliation under endpoint custody (INFLIGHT-FIX): slots an earlier build kept for settled `unknown` calls are released;
+ * open claims and unexplained counters are never rewritten. */
+export async function releaseSettledModelSlots(ledgerPath: string, sqlite: Parameters<typeof openSqliteModelInvocationStore>[1]) {
+  const store = await openSqliteModelInvocationStore(ledgerPath, sqlite, 'forbid');
+  try { return await store.releaseSettledSlots(); } finally { store.close(); }
 }

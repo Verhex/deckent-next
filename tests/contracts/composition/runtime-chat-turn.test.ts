@@ -19,6 +19,7 @@ import { renderAssistantStream, startAssistantStream, type AssistantUnit } from 
 import type { TurnDelta } from '#surfaces/index.js';
 import { agentFileEffectCommandId, agentShellEffectCommandId, chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
@@ -118,16 +119,17 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
       resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }]), ...(options.extraGrants ?? [])];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
-  const interrupted: unknown[] = [], swept: unknown[] = [];
+  const interrupted: unknown[] = [], swept: unknown[] = [], released: unknown[] = [];
   const start = async (observed = true) => {
     const service = await startConfiguredRuntimeService(project, observed ? { async onPage() {}, async onError() {},
-      onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); } }
+      onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); },
+      onModelAllocationSlotsReleased(result) { released.push(result); } }
       : { async onPage() {}, async onError() {} }, { env });
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
-  return { project, data, env, state, rows, ledger, start, interrupted, swept, grants, writePolicy, client: () => createConfiguredRuntimeClient(project, { env }) };
+  return { project, data, env, state, rows, ledger, start, interrupted, swept, released, grants, writePolicy, binding, client: () => createConfiguredRuntimeClient(project, { env }) };
 }
 const editGrants = (toolEffect: 'allow' | 'require-approval') => [
   { id: 'edit-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['edit_file', 'write_file'] } },
@@ -1012,6 +1014,80 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(record.outcome).toMatchObject({ finish: 'cancelled' });
     while (f.state.closed === 0 && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
     expect(f.state.closed).toBe(1);
+  }, 30_000);
+
+  // INFLIGHT-FIX (TL-A PTY symptom, live ledger 2026-09-28): a cancelled round settles `unknown` after its provider request is closed and
+  // frees its concurrency slot; the uncertain record and the lifetime count stay. Open requests still bound maxInFlight (2).
+  it('frees the slot of a cancelled round once its request is closed, so a third turn answers after two cancelled ones', async () => {
+    const f = await runtime(); await f.start();
+    f.state.script = [{ hold: true }, { hold: true }, { content: 'third answer' }];
+    const counters = () => f.rows('SELECT lifetime_calls,in_flight FROM model_invocation_allocations')[0];
+    const states = () => f.rows('SELECT state,count(*) AS count FROM model_invocations GROUP BY state ORDER BY state');
+    const waitUntil = async (check: () => boolean, label: string) => {
+      const until = performance.now() + 5_000;
+      while (!check()) { if (performance.now() >= until) throw new Error(label); await new Promise(resolve => setTimeout(resolve, 10)); }
+    };
+    const client = f.client(), leaving = new AbortController(); let firstSeen = false, secondSeen = false;
+    const first = client.chatTurn(ask('turn-held-1'), event => { if (event.kind === 'text') firstSeen = true; });
+    const second = f.client().chatTurn(ask('turn-held-2'), event => { if (event.kind === 'text') secondSeen = true; }, leaving.signal);
+    await waitUntil(() => firstSeen && secondSeen, 'HELD_STREAMS_NOT_OPEN');
+    expect(counters()).toEqual({ lifetime_calls: 2, in_flight: 2 });
+    // Two really open calls: a third call (a direct invocation with its own process-local controllers) meets the ledger limit.
+    const direct = { schemaVersion: 1 as const, commandId: 'direct-over-limit', scopeId: 'scope', reference, catalogRevision: 'catalog-1',
+      expectedBinding: f.binding, nativeRequest: { model: 'native-chat', messages: [{ role: 'user', content: 'over the limit' }], max_completion_tokens: 8 } };
+    await expect(invokeConfiguredModel(f.project, direct, { env: f.env })).rejects.toMatchObject({ code: 'MODEL_INVOCATION_CAPACITY_EXHAUSTED' });
+    expect(f.state.requests).toHaveLength(2);
+    // Cancel both: one through the cancel operation, one by the client leaving mid-stream (the terminal's Esc closes its stream).
+    expect(await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-held-1' })).toMatchObject({ state: 'cancelling' });
+    expect(await first).toMatchObject({ finish: 'cancelled' });
+    leaving.abort();
+    await expect(second).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+    // The provider saw both requests closed before the slots are counted free.
+    await waitUntil(() => f.state.closed === 2, 'HELD_REQUESTS_NOT_CLOSED');
+    await waitUntil(() => JSON.stringify(states()) === JSON.stringify([{ state: 'unknown', count: 2 }]), 'CANCELLED_ROUNDS_NOT_SETTLED');
+    expect(counters()).toEqual({ lifetime_calls: 2, in_flight: 0 });
+    const third = await f.client().chatTurn(ask('turn-third'), () => undefined);
+    expect(third).toMatchObject({ finish: 'stop', answer: 'third answer', rounds: 1 });
+    expect(f.state.requests).toHaveLength(3);
+    // Both uncertain records remain, and every claim stays counted.
+    expect(states()).toEqual([{ state: 'responded', count: 1 }, { state: 'unknown', count: 2 }]);
+    expect(counters()).toEqual({ lifetime_calls: 3, in_flight: 0 });
+  }, 30_000);
+
+  // INFLIGHT-FIX repair: the live ledger holds slots an earlier build kept for settled `unknown` rounds; the next start (under endpoint
+  // custody) releases exactly those and reports it. Stopping and starting the fixed build is the whole operator action.
+  it('releases at start the slots an earlier build kept for cancelled rounds, and the terminal is usable again', async () => {
+    const f = await runtime(); const first = await f.start();
+    f.state.script = [{ hold: true }, { hold: true }, { content: 'after repair' }];
+    const client = f.client();
+    for (const turnId of ['turn-old-1', 'turn-old-2']) {
+      let seen = false;
+      const running = client.chatTurn(ask(turnId), event => { if (event.kind === 'text') seen = true; });
+      const until = performance.now() + 5_000;
+      while (!seen && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+      await client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId });
+      expect(await running).toMatchObject({ finish: 'cancelled' });
+    }
+    await first.stop(); await first.done.catch(() => undefined); services.splice(services.indexOf(first), 1);
+    expect(f.released).toEqual([]);
+    // Rewrite the counter as the earlier build left it (both settled unknown rounds still holding their slots, maxInFlight 2).
+    const db = new DatabaseSync(f.ledger);
+    let stuckRevision: number;
+    try {
+      const current = db.prepare(`SELECT a.record,c.revision FROM model_invocation_allocations a JOIN model_invocation_allocation_checkpoints c
+        ON c.scope_id=a.scope_id AND c.allocation_id=a.allocation_id`).get() as { record: string; revision: number };
+      const stuck = engine.createModelAllocationCheckpoint({ ...JSON.parse(current.record), inFlight: 2 }, current.revision + 1);
+      db.prepare('UPDATE model_invocation_allocations SET in_flight=?,record=?').run(2, JSON.stringify(stuck.allocation));
+      db.prepare('UPDATE model_invocation_allocation_checkpoints SET revision=?,digest=?').run(stuck.revision, stuck.digest);
+      stuckRevision = stuck.revision;
+    } finally { db.close(); }
+    await f.start();
+    expect(f.released).toEqual([{ allocations: 1, released: 2, inconsistent: [] }]);
+    expect(f.rows(`SELECT a.lifetime_calls,a.in_flight,c.revision FROM model_invocation_allocations a JOIN model_invocation_allocation_checkpoints c
+      ON c.scope_id=a.scope_id AND c.allocation_id=a.allocation_id`)).toEqual([{ lifetime_calls: 2, in_flight: 0, revision: stuckRevision + 1 }]);
+    expect(await f.client().chatTurn(ask('turn-after-repair'), () => undefined)).toMatchObject({ finish: 'stop', answer: 'after repair' });
+    expect(f.rows('SELECT state,count(*) AS count FROM model_invocations GROUP BY state ORDER BY state'))
+      .toEqual([{ state: 'responded', count: 1 }, { state: 'unknown', count: 2 }]);
   }, 30_000);
 
   it('closes turns a stopped service left running at the next start, and a second start beside a live service touches none', async () => {

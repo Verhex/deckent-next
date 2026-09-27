@@ -10,6 +10,7 @@ import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { restoreLegacyInFlight } from '../support/legacy-allocation.js';
 
 const options = { busyTimeoutMs: 20, journalMode: 'delete' as const, durability: 'full' as const };
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
@@ -88,6 +89,7 @@ async function seedV14(path: string, corrupt?: 'receipt' | 'allocation') {
         PRIMARY KEY(scope_id,invocation_id),UNIQUE(scope_id,command_id));
       INSERT INTO model_invocations SELECT * FROM model_invocations_current; DROP TABLE model_invocations_current;
       CREATE INDEX model_invocations_allocation_state ON model_invocations(scope_id,allocation_id,state); DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=14;`);
+    restoreLegacyInFlight(downgrade);
     if (corrupt === 'allocation') {
       const allocation = JSON.parse(String(downgrade.prepare('SELECT record FROM model_invocation_allocations').get()?.record));
       downgrade.prepare('UPDATE model_invocation_allocations SET lifetime_calls=?,record=?').run(1, JSON.stringify({ ...allocation, lifetimeCalls: 1 }));
@@ -140,6 +142,7 @@ async function seedV15(path: string, corrupt?: 'state' | 'identity' | 'count') {
     db.exec(`DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_cancellations;
       DROP TABLE model_invocation_controls; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=15;`);
+    restoreLegacyInFlight(db);
     if (corrupt === 'state') db.prepare("UPDATE model_invocations SET state='claimed' WHERE invocation_id='rejected-id'").run();
     if (corrupt === 'identity') {
       const row = db.prepare("SELECT record FROM model_invocations WHERE invocation_id='responded-id'").get() as { record: string };
