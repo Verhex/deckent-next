@@ -6,7 +6,9 @@ import { effectCommandSchema, type EffectCommand } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-import type { ScopeAccess } from '#engine/index.js';
+
+/** Query ('read') or command ('write') admission of the scope; stated by every entry below (Astra 2126 R1). */
+type ScopeAccess = Parameters<typeof loadConfiguredScopeContext>[3];
 
 /** Local SDK/CLI producer for catalog operations. Catalog, principal and session come from configuration and the local OS session,
  * never from the wire; targets are resolved from configuration through the adapter registry (Core entries and registered modules). Operation approval is not yet a workflow: any required approval stops before the effect (C12). */
