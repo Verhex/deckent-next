@@ -3,5 +3,8 @@ export { bindingsFileSchema, PERMISSION_MODES, policyFileSchema, policyHasResour
 export { companyIdSchema, policyDeclaredScopes, policyScopeGrants, policyScopeMembership } from './internal/scope.js';
 export type { Policy, PolicyRequest, PolicyDecision } from './internal/evaluate.js';
 export type { PermissionMode, PolicyFile } from './internal/schema.js';
+export { parsePermissionModeCommand, parsePermissionModeQuery, permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeView,
+  permissionModeViewSchema, withPrincipalPermissionMode } from './internal/mode.js';
+export type { PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from './internal/mode.js';
 export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';
 export type { CorePolicyResource, CorePolicyAction } from './internal/vocabulary.js';

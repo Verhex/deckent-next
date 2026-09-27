@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
-  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
+  parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseWorkspaceAttachmentRequest,
+  parseWorkspaceFileQuery } from '#domain/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 15 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
@@ -17,7 +18,8 @@ export function runtimeServiceErrorParams(params: Readonly<Record<string, unknow
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
-  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation']);
+  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
+  'inspectPermissionMode', 'setPermissionMode']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -25,7 +27,7 @@ const invocationOperation = (operation: RuntimeServiceOperation): boolean => ope
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
-  || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation);
+  || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
@@ -34,6 +36,11 @@ export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeService
  * results are bounded (an inspected record carries the command input). Current version only, like every non-lifecycle operation. */
 export function isRuntimeServiceEffectOperation(operation: RuntimeServiceOperation): operation is 'executeOperation' | 'compensateOperation' | 'inspectOperation' {
   return operation === 'executeOperation' || operation === 'compensateOperation' || operation === 'inspectOperation';
+}
+/** v15 (T-L4 slice 4c): the caller's own terminal permission mode — read, and set conditionally on the revision read. No actor field:
+ * the socket peer is the principal; single bounded answers; current version only. */
+export function isRuntimeServicePermissionModeOperation(operation: RuntimeServiceOperation): operation is 'inspectPermissionMode' | 'setPermissionMode' {
+  return operation === 'inspectPermissionMode' || operation === 'setPermissionMode';
 }
 export const runtimeOperationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
 export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
@@ -68,6 +75,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'attachWorkspaceFile') parseWorkspaceAttachmentRequest(value.input);
       else if (value.operation === 'executeOperation' || value.operation === 'compensateOperation') effectCommandSchema.parse(value.input);
       else if (value.operation === 'inspectOperation') runtimeOperationQuerySchema.parse(value.input);
+      else if (value.operation === 'inspectPermissionMode') parsePermissionModeQuery(value.input);
+      else if (value.operation === 'setPermissionMode') parsePermissionModeCommand(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {

@@ -1,4 +1,4 @@
-import type { ModelReference } from '#domain/index.js';
+import type { ModelReference, PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { AgentChatMessage, TurnDelta, WorklineMentionAttachment } from '#surfaces/core/terminal/index.js';
 
@@ -39,3 +39,7 @@ export type TerminalMentionFindHandler = (root: string, input: Readonly<{ scopeI
 /** Attaches a line's `@path` mentions through the service (v15 `attachWorkspaceFile`): the message to send and one note per path. */
 export type TerminalMentionAttachHandler = (root: string, input: Readonly<{ scopeId: string; text: string; paths: readonly string[] }>,
   options: ConfigLoadOptions, signal?: AbortSignal) => Promise<WorklineMentionAttachment>;
+/** The caller's own permission mode (runtime v15 `inspectPermissionMode`, T-L4 slice 4c). */
+export type TerminalPermissionModeInspectHandler = (root: string, input: PermissionModeQuery, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<PermissionModeView>;
+/** Sets the caller's own mode (v15 `setPermissionMode`), conditional on the revision read; the service writes, never the terminal. */
+export type TerminalPermissionModeSetHandler = (root: string, input: PermissionModeCommand, options: ConfigLoadOptions) => Promise<PermissionModeChange>;

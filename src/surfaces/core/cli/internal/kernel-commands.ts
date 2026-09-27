@@ -16,7 +16,8 @@ import {
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
-import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler } from './terminal-chat.js';
+import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
+  TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler } from './terminal-chat.js';
 
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
@@ -61,6 +62,8 @@ export interface CommandContext extends ModelCommandContext {
   streamTerminalChat?: TerminalChatStreamHandler;
   findTerminalMentions?: TerminalMentionFindHandler;
   attachTerminalMentions?: TerminalMentionAttachHandler;
+  inspectPermissionMode?: TerminalPermissionModeInspectHandler;
+  setPermissionMode?: TerminalPermissionModeSetHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;

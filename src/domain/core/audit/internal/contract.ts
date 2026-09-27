@@ -14,6 +14,8 @@ export const auditSummarySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('edit'), path: z.string().min(1).max(4096) }).strict(),
   z.object({ kind: z.literal('shell'), head: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
 ]);
+/** The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). */
+const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto']);
 /**
  * A silent decision produced by the terminal permission mode (slice 4): the mode relaxed a cell the company policy marked
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
@@ -26,6 +28,14 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
     grants: z.object({ company: identitySchema, person: identitySchema }).strict(),
     decision: z.object({ previous: z.literal('require-approval'), next: z.literal('allow') }).strict(),
     summary: auditSummarySchema }).strict(),
+  /**
+   * A person's request to set their own terminal permission mode (slice 4c): the authorization decision on `permission-mode`/`set`
+   * and, when allowed, the bindings revision it writes (`after` null: nothing was written — refused or already that mode). Recorded
+   * before the bindings file is replaced; no record, no change.
+   */
+  z.object({ kind: z.literal('permission-mode-change'), requested: permissionMode, previous: permissionMode,
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
+    bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();

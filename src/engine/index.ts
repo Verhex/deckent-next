@@ -11,7 +11,8 @@ export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutc
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
 export { PoolPolicyAuthorization, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership } from '#engine/core/policy/index.js';
 export type { PoolAuthorization, PolicyRefusalReason, PolicySource, ScopeAccess, ScopeRegistry } from '#engine/core/policy/index.js';
-export { ServicePolicyAuthorization, decideAgentToolCall } from '#engine/core/policy/index.js';
+export { ServicePolicyAuthorization, decideAgentToolCall, PermissionModeApplication, PermissionModeError, inspectPermissionMode } from '#engine/core/policy/index.js';
+export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from '#engine/core/policy/index.js';
 export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from '#engine/core/policy/index.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';

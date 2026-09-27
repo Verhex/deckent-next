@@ -14,3 +14,5 @@ export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spe
 export { AgentToolPolicyAuthorization } from './internal/agent-tool.js';
 export { decideAgentToolCall } from './internal/permission-mode.js';
 export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from './internal/permission-mode.js';
+export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';
+export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from './internal/permission-mode-admin.js';

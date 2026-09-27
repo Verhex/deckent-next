@@ -56,6 +56,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
     attachTerminalMentions: (projectRoot, input, options, signal) => attachTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
+    // T-L4 slice 4c: `/mode` and the status row read and set the caller's own permission mode through the runtime service (v15).
+    inspectPermissionMode: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectPermissionMode(input, signal),
+    setPermissionMode: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setPermissionMode(input),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
     inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount,

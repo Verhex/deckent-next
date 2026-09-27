@@ -1,4 +1,4 @@
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
+import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
@@ -14,8 +14,10 @@ import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandIn
   type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
-import { runtimeOperationInspectionSchema, runtimeOperationOutcomeSchema, runtimeOperationQuerySchema, type RuntimeOperationQuery } from '#engine/index.js';
+import { PermissionModeError, runtimeOperationInspectionSchema, runtimeOperationOutcomeSchema, runtimeOperationQuerySchema, type RuntimeOperationQuery } from '#engine/index.js';
 import { effectCommandSchema, EffectError, type EffectCommand, type EffectRecord } from '#domain/index.js';
+import { permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeViewSchema, type PermissionModeChange,
+  type PermissionModeCommand, type PermissionModeQuery, type PermissionModeView } from '#domain/index.js';
 import type { EffectOutcome } from '#engine/index.js';
 import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
   type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
@@ -46,6 +48,10 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   executeOperation(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<EffectOutcome>;
   compensateOperation(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<EffectOutcome>;
   inspectOperation(query: RuntimeOperationQuery, delivery?: RuntimeServiceDelivery): Promise<Readonly<{ schemaVersion: 1; record: EffectRecord | null }>>;
+  /** v15 (T-L4 slice 4c): the caller's own permission mode in one scope, the effective revision and whether any rule is mode-eligible. */
+  inspectPermissionMode(query: PermissionModeQuery, signal?: AbortSignal): Promise<PermissionModeView>;
+  /** v15: sets the caller's own mode, conditional on `expectedRevision` (typed `PERMISSION_MODE_CONFLICT` when it moved). */
+  setPermissionMode(command: PermissionModeCommand, signal?: AbortSignal): Promise<PermissionModeChange>;
 }>;
 
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
@@ -104,6 +110,30 @@ function effectOperationMethods(call: RuntimeCall) {
   };
 }
 
+/** v15 permission-mode methods: both ends validate; an answer for another scope, or a set answer for another mode, is not trusted. */
+function permissionModeMethods(call: RuntimeCall) {
+  return {
+    async inspectPermissionMode(input: PermissionModeQuery, signal?: AbortSignal) {
+      try {
+        const parsed = permissionModeQuerySchema.safeParse(input);
+        if (!parsed.success) throw new PermissionModeError('PERMISSION_MODE_INVALID');
+        const result = permissionModeViewSchema.safeParse(await call('inspectPermissionMode', parsed.data, undefined, signal));
+        if (!result.success || result.data.scopeId !== parsed.data.scopeId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw error instanceof PermissionModeError ? ErrorRegistry.createError(error.code) : queryFailure(error); }
+    },
+    async setPermissionMode(input: PermissionModeCommand, signal?: AbortSignal) {
+      try {
+        const parsed = permissionModeCommandSchema.safeParse(input);
+        if (!parsed.success) throw new PermissionModeError('PERMISSION_MODE_INVALID');
+        const result = permissionModeChangeSchema.safeParse(await call('setPermissionMode', parsed.data, undefined, signal));
+        if (!result.success || result.data.scopeId !== parsed.data.scopeId || result.data.mode !== parsed.data.mode) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw error instanceof PermissionModeError ? ErrorRegistry.createError(error.code) : queryFailure(error); }
+    },
+  };
+}
+
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
@@ -121,7 +151,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
-        || isRuntimeServiceEffectOperation(operation)
+        || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -160,7 +190,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
     && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile'
-    && !isRuntimeServiceEffectOperation(operation)).map(operation =>
+    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation)).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
@@ -183,6 +213,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     },
     ...workspaceFileMethods(call),
     ...effectOperationMethods(call),
+    ...permissionModeMethods(call),
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);
