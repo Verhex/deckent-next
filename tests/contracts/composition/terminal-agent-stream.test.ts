@@ -42,6 +42,19 @@ describe('terminal agent turn stream', () => {
     expect(p.commands[0]!.turnId).toMatch(/^[0-9a-f-]{36}$/); expect(p.cancelled).toEqual([]);
   });
 
+  // Astra 2124 durable marker (CLEANUP-MARK, protocol v15): the mapper carries `cleanup` onto the finished tool delta when the
+  // service event has it, and leaves the key off entirely (never `undefined`) when the event has none.
+  it("carries tool.finished's cleanup onto the delta when present, and omits the key entirely when absent", async () => {
+    const p = ports(async (command, onEvent) => {
+      onEvent({ kind: 'tool.started', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo' });
+      onEvent({ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 12, bytes: 3, cleanup: 'group-ended' });
+      return result({ turnId: command.turnId, answer: null });
+    });
+    const deltas = await collect(streamTerminalAgentTurn(input, p.value));
+    expect(deltas.find(delta => delta.kind === 'tool' && delta.phase === 'finished')).toEqual(
+      { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 12, cleanup: 'group-ended' });
+  });
+
   it('shows a replayed answer, and never merges an answer that differs from what was shown', async () => {
     expect(await collect(streamTerminalAgentTurn(input, ports(async command => result({ turnId: command.turnId, replayed: true })).value)))
       .toEqual([{ kind: 'text', text: 'It exports a.' }, { kind: 'done', finish: 'stop', note: null }]);

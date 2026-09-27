@@ -90,6 +90,24 @@ describe('runtime service protocol', () => {
     expect(runtimeServiceResponseSchema.safeParse(frame).success).toBe(false);
   });
 
+  // CLEANUP-MARK (Astra 2124, protocol v15 addition, no version bump): `tool.finished`'s optional `cleanup`, host shell only.
+  it("admits tool.finished's optional cleanup within v15 without a version bump, and a v14 envelope never carries it", () => {
+    const base = { schemaVersion: 15, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
+    for (const cleanup of ['clean', 'group-ended', 'unverified'] as const) {
+      const frame = { ...base, events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup }] };
+      expect(runtimeServiceEventFrameSchema.parse(frame)).toEqual(frame);
+    }
+    // Every other tool's finish keeps parsing exactly as before: the field is optional, not required by the bump.
+    const withoutCleanup = { ...base, events: [{ kind: 'tool.finished', callId: 'c1', name: 'read_file', status: 'ok', ms: 3, bytes: 10 }] };
+    expect(runtimeServiceEventFrameSchema.parse(withoutCleanup)).toEqual(withoutCleanup);
+    expect(runtimeServiceEventFrameSchema.safeParse({ ...base,
+      events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup: 'maybe' }] }).success).toBe(false);
+    // A v14 envelope is rejected outright by the existing version gate, whether or not the event it carries names the new field:
+    // there is no live wire path where an older client ever sees `cleanup`.
+    expect(runtimeServiceEventFrameSchema.safeParse({ ...base, schemaVersion: 14,
+      events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup: 'unverified' }] }).success).toBe(false);
+  });
+
   it('requires input to be present and rejects old or extra request fields', () => {
     const request = { schemaVersion: 15, requestId: 'request-1', operation: 'inspectRun', input: null };
     expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);

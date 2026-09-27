@@ -143,14 +143,15 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const ran = result as HostShellResult | null;
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran) };
+        // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran), cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
         if (ran && ran.status !== 'exited') {
-          return { status: 'error', text: `${describeResult(planned.command, ran)}\n[deckent] the command was stopped; what it changed before that is unknown.` };
+          return { status: 'error', text: `${describeResult(planned.command, ran)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'

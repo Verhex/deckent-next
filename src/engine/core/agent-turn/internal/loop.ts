@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AGENT_COMPACTION_HIGH_WATER, planAgentCompaction, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
-import type { AgentContextQuality, AgentToolCall, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
+import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
@@ -209,9 +209,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null;
-      const result = async (status: AgentToolCallStatus, content: string) => {
+      // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
+      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
-        emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8') });
+        emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8'),
+          ...(cleanup !== undefined ? { cleanup } : {}) });
         await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
         return message;
       };
@@ -251,7 +253,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       // A successful write may change what any earlier read saw: those reads run again.
       if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();
-      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text);
+      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text, tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
   }

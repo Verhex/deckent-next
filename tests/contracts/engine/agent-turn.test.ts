@@ -316,3 +316,22 @@ it('gives every executed call its position in the turn, distinct even when the p
   expect(result).toMatchObject({ finish: 'stop', toolCalls: 3 });
   expect(executions).toEqual(['call_1@1.0', 'call_1@2.0', 'call_2@2.1']);
 });
+
+// Astra 2124 durable marker (CLEANUP-MARK, protocol v15): tool.finished carries the outcome's `cleanup` only for the shell tool
+// class; the emission boundary trusts the tool's declared class, not merely whether the outcome happens to carry the field.
+it("carries the outcome's cleanup on tool.finished only for the shell tool, dropping it for any other tool class", async () => {
+  const shell: AgentToolSpec = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'Run.', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } };
+  const value: AgentTurnPorts = { ...ports([]).value,
+    async invokeRound(input) {
+      return input.round === 1 ? answer('', [call('c1', 'run_shell', { command: 'sleep 5 & echo hi' }), call('c2', 'read_file', { path: 'a' })]) : answer('done');
+    },
+    // A read tool's outcome carrying `cleanup` (never legitimate) proves the boundary trusts the class, not the outcome shape.
+    async execute(tool) { return tool.name === 'run_shell' ? { status: 'ok', text: 'shell ok', cleanup: 'group-ended' } : { status: 'ok', text: 'read ok', cleanup: 'unverified' }; } };
+  const events: AgentTurnEvent[] = [];
+  await runAgentTurn({ messages: user, tools: [shell, readFile], signal: new AbortController().signal, emit: event => events.push(event) }, value);
+  const finished = events.filter(event => event.kind === 'tool.finished');
+  expect(finished.find(event => event.kind === 'tool.finished' && event.callId === 'c1')).toMatchObject({ name: 'run_shell', cleanup: 'group-ended' });
+  const readFinished = finished.find(event => event.kind === 'tool.finished' && event.callId === 'c2');
+  expect(readFinished).toMatchObject({ name: 'read_file', status: 'ok' });
+  expect(readFinished).not.toHaveProperty('cleanup');
+});

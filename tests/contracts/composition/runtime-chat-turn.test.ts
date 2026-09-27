@@ -560,10 +560,22 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(toolText(plain)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(cat src\/\.\.\/public\.txt\)\nINSIDE_PUBLIC$/u);
   }, 30_000);
 
-  // Astra 2124: the host shell reports what it could verify about processes the command left (`cleanup`); the tool result says it.
+  // Astra 2124: the host shell reports what it could verify about processes the command left (`cleanup`); the tool result says it,
+  // and (CLEANUP-MARK, protocol v15) the same value rides `tool.finished` and reaches the terminal renderer's finished unit.
   it('says in the tool result when the cleanup is unverified or group members were ended, and keeps a clean result unchanged (Astra 2124)', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow') }); await f.start();
     const client = f.client();
+    const toolUnitOf = (events: AgentTurnStreamEvent[]) => {
+      let state = startAssistantStream(0); const units: AssistantUnit[] = [];
+      for (const event of events) {
+        const delta = event.kind === 'tool.started' ? { kind: 'tool' as const, phase: 'started' as const, callId: event.callId, name: event.name, target: event.target, status: null, ms: null }
+          : event.kind === 'tool.finished' ? { kind: 'tool' as const, phase: 'finished' as const, callId: event.callId, name: event.name, target: null, status: event.status, ms: event.ms,
+            ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}) } : null;
+        if (!delta) continue;
+        const step = renderAssistantStream(state, delta, 0); state = step.state; units.push(...step.staticUnits);
+      }
+      return units.find((unit): unit is Extract<AssistantUnit, { kind: 'tool' }> => unit.kind === 'tool') ?? null;
+    };
     const run = async (turnId: string, commandLine: string) => {
       f.state.script = [...f.state.script.slice(0, f.state.requests.length), { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: commandLine }) } }, { content: 'Ok.' }];
       const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
@@ -582,7 +594,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       const unverified = await run('turn-shell-escaped', "setsid sh -c 'echo $$ > escaped.pid; echo ready; exec sleep 5' & sleep 0.2; exit 0");
       escaped = Number((await readFile(join(f.project, 'escaped.pid'), 'utf8')).trim());
       expect(unverified.ms).toBeLessThan(4_000);
-      expect(unverified.events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok' });
+      expect(unverified.events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'unverified' });
+      expect(toolUnitOf(unverified.events)).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'unverified' });
       const text = toolText(unverified.events);
       expect(text).toMatch(/^\[deckent\] run_shell: exit 0 after /u);
       expect(text).toContain('[deckent] cleanup unverified:');
@@ -600,10 +613,14 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(endedText).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(sleep 5 & echo started\)\nstarted\n/u);
     expect(endedText).toContain('[deckent] cleanup: processes the command left running in its process group were ended');
     expect(endedText).not.toContain('cleanup unverified');
-    // Clean: the result is exactly as before (no note).
+    expect(ended.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok', cleanup: 'group-ended' });
+    expect(toolUnitOf(ended.events)).toMatchObject({ status: 'ok', cleanup: 'group-ended' });
+    // Clean: the result is exactly as before (no note), and the durable marker carries the verified-clean value too.
     const clean = await run('turn-shell-clean', 'echo hi > clean.txt');
     expect(toolText(clean.events)).toMatch(/^\[deckent\] run_shell: exit 0 after [\d.]+s \(echo hi > clean\.txt\)\n$/u);
     expect(clean.events.some(event => event.kind === 'tool.output')).toBe(false);
+    expect(clean.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok', cleanup: 'clean' });
+    expect(toolUnitOf(clean.events)).toMatchObject({ status: 'ok', cleanup: 'clean' });
   }, 60_000);
 
   // Astra 2113 repro (ported, asserting the corrected behavior): the fixture provider names every tool call `call_1`.

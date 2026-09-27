@@ -64,6 +64,19 @@ describe('assistant stream state machine', () => {
     expect(silent.footer?.finish).toBe('cancelled');
   });
 
+  // Astra 2124 durable marker (CLEANUP-MARK): a finished tool delta's `cleanup` rides the resulting unit unchanged; absent stays absent.
+  it("carries a finished tool delta's cleanup onto the unit, and leaves it off when the delta has none", () => {
+    // The finished delta itself carries the resolved target (agent-stream.ts fills it from the started phase); the pure state
+    // machine reads it directly off the finished delta, not off its own earlier `started` phase.
+    const withCleanup = play([[{ kind: 'tool', phase: 'started', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: null, ms: null }, 0],
+      [{ kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 20, cleanup: 'group-ended' }, 20]]);
+    expect(withCleanup.units).toEqual([{ kind: 'tool', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 20, cleanup: 'group-ended' }]);
+    const withoutCleanup = play([[{ kind: 'tool', phase: 'started', callId: 'c2', name: 'read_file', target: 'a.ts', status: null, ms: null }, 0],
+      [{ kind: 'tool', phase: 'finished', callId: 'c2', name: 'read_file', target: 'a.ts', status: 'ok', ms: 5 }, 5]]);
+    expect(withoutCleanup.units).toEqual([{ kind: 'tool', name: 'read_file', target: 'a.ts', status: 'ok', ms: 5 }]);
+    expect(withoutCleanup.units[0]).not.toHaveProperty('cleanup');
+  });
+
   it('adapts a complete non-streaming reply into lead units plus a footer', () => {
     expect(renderCompleteReply('# Hi\n\n| a |\n|---|\n| 1 |', 100, 350)).toEqual([
       { kind: 'text', markdown: '# Hi\n', lead: true },
