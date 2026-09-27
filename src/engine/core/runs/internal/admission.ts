@@ -12,8 +12,9 @@ export type RunAdmission = z.infer<typeof runAdmissionSchema>;
 /** Local SDK ingress for a Run pinned to a completed delivery of the same scope; the commit is resolved by trusted composition. */
 export const runDeliveryAdmissionSchema = runAdmissionSchema.extend({ deliveryCommandId: identitySchema }).strict();
 export type RunDeliveryAdmission = z.infer<typeof runDeliveryAdmissionSchema>;
-/** Trusted composition resolves the pinned workspace custody after `run:create` authorization. Never a wire field. */
-export type RunWorkspacePin = () => Promise<RunWorkspaceCustody>;
+/** Trusted composition resolves the pinned workspace custody after `run:create` authorization. Never a wire field. `replay` is true
+ * when the command already has a receipt: the answer then comes from recorded state, never from a live reference that may have moved. */
+export type RunWorkspacePin = (replay: boolean) => Promise<RunWorkspaceCustody>;
 export interface RunAdmissionContext {
   /** Trusted composition resolves installation layout, clock and execution policy. Never read them from model wire fields. */
   resolve(command: RunAdmission, principal: VerifiedPrincipal): Promise<Pick<RunCreate, 'now' | 'policy' | 'execution'> & { layoutRevision: string }>;
@@ -49,9 +50,9 @@ export class RunAdmissionApplication {
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     await this.authorization.authorize('create', command, principal);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
-    const workspace = pin ? runWorkspaceCustodySchema.parse(await pin()) : undefined;
-    if (workspace && (workspace.scopeId !== command.scopeId || workspace.runId !== command.runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     const replay = await this.store.loadRunReceipt(command.scopeId, command.commandId);
+    const workspace = pin ? runWorkspaceCustodySchema.parse(await pin(replay !== null)) : undefined;
+    if (workspace && (workspace.scopeId !== command.scopeId || workspace.runId !== command.runId)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
     if (replay) return this.pinned(replay, command, actor, workspace);
     const resolved = command.branch ? resolveAdmissionBranch(command.graph, command.branch) : undefined;
     const graph = resolved?.graph ?? command.graph;
