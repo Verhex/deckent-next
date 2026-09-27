@@ -1349,7 +1349,7 @@ the Git source at that exact commit. The Run row, its automatic-progression inte
 progression turn never samples the moving source HEAD first. The per-attempt clone checks out the commit even though
 `refs/deckent/deliveries/*` is not cloned (`clone --local` copies the object store; proven loose and packed). The receipt
 command and Run snapshot are unchanged; a pinned replay must match the recorded custody exactly (source and commit), else
-`RUN_COMMAND_CONFLICT`, and a plain Run can never be claimed as pinned. Refusals reuse existing codes: unknown/incomplete
+`RUN_COMMAND_CONFLICT`, and a plain Run can never be claimed as pinned. Like adoption's resume, a replay is answered from the recorded state before the delivery reference check (candidate from the ledger's delivered `plan.commit`), so a deleted or moved reference does not change it; a first admission always runs the full check (owner 2026-09-27 night). Refusals reuse existing codes: unknown/incomplete
 delivery or missing reference `ADOPTION_NOT_DELIVERED`, moved reference `PATCH_CONFLICT`, foreign company `SCOPE_UNKNOWN`,
 missing grant `POLICY_DENIED`. The Run is not yet a verification: adoption does not consult it (B06-2b, ledger v42), the
 task kind comes from the caller (config-derived verification kind and CLI in B06-2c).
