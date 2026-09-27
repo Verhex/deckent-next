@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { operationDescriptorSchema } from '#domain/core/effect/index.js';
+import { operationKey } from './catalog.js';
 
 /** Version of the Core port contract a target adapter module binds to (`EffectTarget`, `OperationCatalog`). Bumps only when
  * those ports change incompatibly; a manifest whose range excludes it is refused before anything is registered. */
@@ -15,7 +16,7 @@ export const manifestSignatureSchema = z.object({ algorithm: z.literal('ed25519'
  * an admitted manifest cannot be edited through a returned reference (Astra 2126 R2). `namespace: null` means the root (unprefixed ids) and is only honoured
  * for modules the Core composition passes at registry construction; overlays must own a dotted namespace. Adapter and operation
  * ids provided by a namespaced module must live under `<namespace>.`. `provides.operations` are validated for the adds-only rule
- * (no redefinition of a registered `id@version`); they feed no catalog until the unified catalog (A04-2). */
+ * (no redefinition of a registered `id@version`) and feed the unified catalog (A04-2) next to the config catalog. */
 export const adapterModuleManifestSchema = z.object({
   schemaVersion: z.literal(1),
   module: z.object({ id: identitySchema, version: identitySchema, tier: moduleTierSchema, namespace: identitySchema.nullable() }).strict().readonly(),
@@ -39,7 +40,6 @@ export class RegistryError extends Error {
 }
 
 const moduleKey = (manifest: AdapterModuleManifest) => `${manifest.module.id}@${manifest.module.version}`;
-const operationKey = (operation: { readonly id: string; readonly version: number }) => `${operation.id}@${operation.version}`;
 const within = (id: string, namespace: string) => id.startsWith(`${namespace}.`);
 const overlaps = (a: string, b: string) => a === b || within(a, b) || within(b, a);
 const rootIds = (manifest: AdapterModuleManifest) => [...manifest.provides.targetAdapters.map(adapter => adapter.adapterId), ...manifest.provides.operations.map(entry => entry.operation.id)];

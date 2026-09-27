@@ -1,6 +1,6 @@
 import type { z } from 'zod';
-import { admitModuleManifest, RegistryError, type AdapterModuleManifest } from '#domain/index.js';
-import type { EffectTarget, EffectTargets } from '#engine/core/effect/index.js';
+import { admitModuleManifest, unifyOperationCatalog, RegistryError, type AdapterModuleManifest, type CatalogOperation, type OperationDescriptor, type OperationRef } from '#domain/index.js';
+import type { EffectTarget, EffectTargets, OperationCatalog } from '#engine/core/effect/index.js';
 
 /** Code side of one provided target adapter: a strict options schema whose output names the target `kind` (so configuration can
  * check kind uniqueness without constructing targets) and a factory that builds the target from validated options. */
@@ -9,6 +9,9 @@ export interface TargetAdapterFactory {
   create(options: unknown): EffectTarget;
 }
 export interface AdapterModuleRegistration { readonly manifest: AdapterModuleManifest; readonly factories: Readonly<Record<string, TargetAdapterFactory>> }
+/** The one operation catalog every producer resolves from (A04-2): Core code operations, registered module operations and the
+ * installation's config catalog, unified without conflict. `entries()` carries provenance for inspection; it grants nothing. */
+export interface UnifiedOperationCatalog extends OperationCatalog { entries(): readonly CatalogOperation[] }
 export interface ResolvedTargetAdapter { readonly manifest: AdapterModuleManifest; readonly adapterId: string; readonly version: number; readonly factory: TargetAdapterFactory }
 export interface ConfiguredTarget { readonly adapter: string; readonly options?: unknown }
 
@@ -21,7 +24,7 @@ const snapshot = (factory: TargetAdapterFactory): TargetAdapterFactory => {
  * validated against it, so a validated config never changes meaning afterwards. Registration never grants authority: policy
  * still decides every operation. */
 export class AdapterRegistry {
-  private readonly modules: AdapterModuleRegistration[] = [];
+  private readonly modules: (AdapterModuleRegistration & { readonly root: boolean })[] = [];
   private readonly adapters = new Map<string, ResolvedTargetAdapter>();
   private sealed = false;
   private constructor() {}
@@ -36,6 +39,19 @@ export class AdapterRegistry {
   }
   seal(): void { this.sealed = true; }
   manifests(): readonly AdapterModuleManifest[] { return this.modules.map(module => module.manifest); }
+  /** Every manifest-provided operation with its provenance: `core` for construction-time (root) modules, `module` for overlays. Root is
+   * the registry's own record of how the module was admitted, never read back from manifest data. */
+  operations(): readonly CatalogOperation[] {
+    return this.modules.flatMap(module => module.manifest.provides.operations.map(descriptor => Object.freeze({ descriptor,
+      provenance: Object.freeze({ source: module.root ? 'core' as const : 'module' as const, module: `${module.manifest.module.id}@${module.manifest.module.version}` }) })));
+  }
+  /** Unifies the registered operations with a validated config catalog (typed `OperationCatalogError` on conflict, Core redefinition,
+   * reserved target kind or unknown compensation). Config validation and the composition resolver both go through this one function. */
+  catalog(configCatalog: readonly OperationDescriptor[], configTargetKinds: readonly string[]): UnifiedOperationCatalog {
+    const unified = unifyOperationCatalog(this.operations(), configCatalog, configTargetKinds);
+    const entries = Object.freeze([...unified.values()]);
+    return Object.freeze({ entries: () => entries, async resolve(operation: OperationRef) { return unified.get(`${operation.id}@${operation.version}`)?.descriptor ?? null; } });
+  }
   adapter(adapterId: string): ResolvedTargetAdapter | null { return this.adapters.get(adapterId) ?? null; }
   /** Builds the installation's targets from validated configuration; unknown adapters were already refused by config validation. */
   targets(configured: readonly ConfiguredTarget[]): EffectTargets {
@@ -59,7 +75,7 @@ export class AdapterRegistry {
       throw new RegistryError('REGISTRY_FACTORY_MISMATCH');
     }
     const factories = Object.freeze(Object.fromEntries(declared.map(id => [id, snapshot(registration.factories[id]!)])));
-    this.modules.push(Object.freeze({ manifest, factories }));
+    this.modules.push(Object.freeze({ manifest, factories, root }));
     for (const adapter of manifest.provides.targetAdapters) {
       this.adapters.set(adapter.adapterId, Object.freeze({ manifest, adapterId: adapter.adapterId, version: adapter.version, factory: factories[adapter.adapterId]! }));
     }

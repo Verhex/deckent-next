@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { LocalOsSessionAuthority, findOperation, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
-  registerProviderConfig, resolveOperationTargets } from '#adapters/index.js';
+import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
+  registerProviderConfig, resolveOperationCatalog, resolveOperationTargets } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, type EffectOutcome } from '#engine/index.js';
 import { effectCommandSchema, type EffectCommand } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -16,8 +16,9 @@ type ScopeAccess = Parameters<typeof loadConfiguredScopeContext>[3];
 export interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
 type Wait = (scopeId: string, approvalId: string, wait: NonNullable<OperationSubmitOptions['awaitApproval']>) => Promise<'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled'>;
 
-/** Local SDK/CLI producer for catalog operations. Catalog, principal and session come from configuration and the local OS session,
- * never from the wire; targets are resolved from configuration through the adapter registry (Core entries and registered modules).
+/** Local SDK/CLI producer for catalog operations. Principal and session come from configuration and the local OS session, never from
+ * the wire; the catalog is the unified resolver (Core code operations, registered module operations, config catalog) and targets are
+ * resolved from configuration through the same adapter registry (Core entries and registered modules).
  * A required approval goes through the operation approval broker (C12 G2): the first submission opens the request and reports it as
  * pending; the same command resubmitted after an `allow` applies the effect and consumes the approval. */
 async function withEffects<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess,
@@ -26,7 +27,7 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     registerProviderConfig();
     const { config, layout, principal, path } = await loadConfiguredScopeContext(root, scopeId, options, access);
     const operations = readOperationsConfig(config as unknown as Record<string, unknown>);
-    const targets = resolveOperationTargets(operations);
+    const catalog = resolveOperationCatalog(operations), targets = resolveOperationTargets(operations);
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
@@ -39,7 +40,7 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     try {
       const broker = new OperationApprovalBroker(journal.store, integrity, source, clock,
         { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
-      const application = new EffectApplication({ async resolve(ref) { return findOperation(operations, ref.id, ref.version); } }, targets, store, broker, sessions, policy, clock);
+      const application = new EffectApplication(catalog, targets, store, broker, sessions, policy, clock);
       return await use(application, (waitScope, approvalId, wait) => awaitOperationApproval(journal.store, integrity, { scopeId: waitScope, approvalId },
         () => clock.sample().wallMs, clock.sample().wallMs + wait.timeoutMs, wait.signal, wait.pollMs));
     } finally { journal.close(); store.close(); }
