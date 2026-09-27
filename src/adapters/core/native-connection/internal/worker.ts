@@ -29,6 +29,52 @@ export function secretValues(value: unknown, into: string[] = []): string[] {
   else if (value && typeof value === 'object') for (const entry of Object.values(value)) secretValues(entry, into);
   return into;
 }
+/** B09-2: bounded claims, never acceptance. Mirrored by the pure domain report schema; no host imports in this mounted file. */
+const REPORT_MAX_BYTES = 32768;
+const reportText = (maxLength: number) => ({ type: 'string', maxLength });
+const reportObject = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
+export const finalReportJsonSchema = reportObject({ schemaVersion: { type: 'integer', const: 1 }, summary: reportText(4000),
+  changedFiles: { type: 'array', maxItems: 100, items: reportText(256) },
+  checks: { type: 'array', maxItems: 50, items: reportObject({ command: reportText(512), outcome: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] } }) },
+  openIssues: { type: 'array', maxItems: 50, items: reportText(1000) } });
+interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown' }[]; openIssues: string[] }
+type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
+export function validateFinalReport(value: unknown, secrets: readonly string[]): FinalReportResult {
+  if (Buffer.byteLength(JSON.stringify(value) ?? '') > REPORT_MAX_BYTES) return { status: 'unavailable', reason: 'oversized' };
+  const object = (v: unknown, keys: string[]): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+    && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
+  const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+  const texts = (v: unknown, count: number, max: number): v is string[] => Array.isArray(v) && v.length <= count && v.every(x => text(x, max));
+  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues']) || value.schemaVersion !== 1
+    || !text(value.summary, 4000) || !texts(value.changedFiles, 100, 256) || !texts(value.openIssues, 50, 1000)
+    || !Array.isArray(value.checks) || value.checks.length > 50 || !value.checks.every(c => object(c, ['command', 'outcome'])
+      && text(c.command, 512) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
+  const input = value as unknown as FinalReport;
+  const report: FinalReport = { schemaVersion: 1, summary: redactText(input.summary, secrets, 4000),
+    changedFiles: input.changedFiles.map(x => redactText(x, secrets, 256)),
+    checks: input.checks.map(x => ({ command: redactText(x.command, secrets, 512), outcome: x.outcome })),
+    openIssues: input.openIssues.map(x => redactText(x, secrets, 1000)) };
+  return Buffer.byteLength(JSON.stringify(report)) > REPORT_MAX_BYTES ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
+}
+function finalReportCollector(provider: string, secrets: readonly string[]) {
+  let result: FinalReportResult = { status: 'unavailable', reason: 'missing' };
+  return {
+    observe(line: string) {
+      let data; try { data = JSON.parse(line) as Record<string, unknown>; } catch { return; }
+      if (!data || typeof data !== 'object') return;
+      if (provider === 'claude' && data.type === 'result') result = data.structured_output === undefined
+        ? { status: 'unavailable', reason: 'missing' } : validateFinalReport(data.structured_output, secrets);
+      if (provider === 'codex' && data.type === 'item.completed') {
+        const item = data.item as Record<string, unknown> | undefined;
+        if (item?.type !== 'agent_message') return;
+        try { result = validateFinalReport(JSON.parse(String(item.text)), secrets); }
+        catch { result = { status: 'unavailable', reason: 'invalid' }; }
+      }
+    },
+    oversized() { result = { status: 'unavailable', reason: 'oversized' }; },
+    finish: () => result,
+  };
+}
 const CLAUDE_TOOLS: Readonly<Record<string, string>> = { Read: 'read', NotebookRead: 'read', Edit: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit',
   Write: 'write', Bash: 'shell', BashOutput: 'shell', KillShell: 'shell', KillBash: 'shell', Grep: 'search', Glob: 'search', LS: 'search',
   WebFetch: 'network', WebSearch: 'network', Task: 'agent', Agent: 'agent' };
@@ -222,10 +268,13 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
  * Splits a native stdout stream into lines and normalizes each onto contract events. Observation never changes execution:
  * a normalizer or delivery fault is counted as unmapped and never thrown into the child process listeners (Astra 2066 R2).
  */
-export function createNativeLineObserver(provider: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void) {
-  let pending = '';
+export function createNativeLineObserver(provider: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void, report?: ReturnType<typeof finalReportCollector>) {
+  let pending = ''; let skipping = false;
+  const decoder = new TextDecoder();
   const normalizeLine = (line: string) => {
     try {
+      if (Buffer.byteLength(line) > 1_048_576) { report?.oversized(); countUnmapped(state, 'oversized-line'); return; }
+      report?.observe(line);
       if (provider === 'claude') push(normalizeClaudeLine(line, state));
       else if (provider === 'codex') push(normalizeCodexLine(line, state, codex));
       else if (line.trim()) countUnmapped(state, `${provider}-event`);
@@ -233,12 +282,14 @@ export function createNativeLineObserver(provider: string, state: NormalizerStat
   };
   return {
     observe(part: Buffer) {
-      pending += part.toString('utf8');
-      const lines = pending.split('\n'); pending = lines.pop() ?? '';
-      if (pending.length > 1_048_576) { countUnmapped(state, 'oversized-line'); pending = ''; }
-      for (const line of lines) normalizeLine(line);
+      for (const piece of decoder.decode(part, { stream: true }).split(/(?<=\n)/)) {
+        const ended = piece.endsWith('\n');
+        if (!skipping) pending += piece;
+        if (Buffer.byteLength(pending) > 1_048_576) { report?.oversized(); countUnmapped(state, 'oversized-line'); pending = ''; skipping = true; }
+        if (ended) { if (!skipping) normalizeLine(pending.trimEnd()); pending = ''; skipping = false; }
+      }
     },
-    flush() { if (pending) normalizeLine(pending); pending = ''; },
+    flush() { pending += decoder.decode(); if (pending && !skipping) normalizeLine(pending); pending = ''; },
   };
 }
 /** Unmapped native event types are reported as counts, never silently dropped. */
@@ -282,6 +333,7 @@ async function main() {
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; home: string; file: string;
     credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
+    finalReport?: { schemaVersion: 1 };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
     promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
       segments: { kind: string; id: string; version: number; sha256: string }[]; sha256: string; argvSha256: string } };
@@ -308,6 +360,7 @@ async function main() {
     if (channel === 'codex-instructions-file' && (!argv.includes('model_instructions_file="/tmp/deckent-prompt/core.txt"')
       || !argv.includes('project_doc_max_bytes=0'))) throw new Error();
   }
+  let reportSupported = false;
   if (setup.preflight) {
     // Probe in a clean directory before credentials are written or task tools can run.
     const probe = '/tmp/deckent-preflight'; await mkdir(probe, { mode: 0o700 });
@@ -316,13 +369,29 @@ async function main() {
         maxBuffer: 1048576, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: { PATH: process.env.PATH, HOME: probe, LANG: 'C.UTF-8', DISABLE_AUTOUPDATER: '1' } });
       const version = run(['--version']).trim(); const help = run(setup.preflight.helpArgs).split(/[\s,=]+/);
+      const reportFlag = { claude: '--json-schema', codex: '--output-schema' }[setup.provider];
+      reportSupported = !!reportFlag && help.includes(reportFlag);
       if (setup.preflight.schemaVersion !== 1 || version !== setup.preflight.cliVersion
-        || setup.preflight.requiredFlags.some(flag => !help.includes(flag))) throw new Error();
+        || setup.preflight.requiredFlags.some(flag => {
+          if (help.includes(flag)) return false;
+          // Claude 2.1.278 hides max-turns in help; its parser still validates it before login.
+          if (setup.provider === 'claude' && flag === '--max-turns') {
+            try { run(['--max-turns', 'invalid', '--print', 'probe']); }
+            catch (error) { return !String((error as { stderr?: unknown }).stderr ?? '').includes("option '--max-turns <turns>' argument 'invalid' is invalid. must be a number"); }
+          }
+          return true;
+        })) throw new Error();
     } catch {
       process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 78,
         signal: null, outputBytes: 0, failure: 'preflight' }) + '\n');
       process.exitCode = 78; return;
     }
+  }
+  if (setup.finalReport && reportSupported) {
+    const schema = JSON.stringify(finalReportJsonSchema);
+    const extra = setup.provider === 'claude' ? ['--json-schema', schema] : ['--output-schema', '/tmp/deckent-report-schema.json'];
+    if (setup.provider === 'codex') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
+    const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...extra);
   }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
   await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });
@@ -360,7 +429,8 @@ async function main() {
   const codex = createCodexState();
   if (setup.provider !== 'claude') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
-  const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events));
+  const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets) : undefined;
+  const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events), report);
   const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);
   const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {
@@ -372,6 +442,12 @@ async function main() {
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
     : /connect|proxy|network|fetch failed|socket|ENOTFOUND|ECONN/i.test(tail) ? 'connection' : 'native';
   lineObserver.flush();
+  if (setup.finalReport) {
+    const final = report?.finish() ?? { status: 'unavailable', reason: 'unsupported' };
+    if (final.status === 'unavailable' && (final.reason === 'invalid' || final.reason === 'oversized')) channel.push([
+      { schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), kind: 'dropped', reason: final.reason === 'oversized' ? 'byte-cap' : 'invalid', count: 1 }]);
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', ...final }) + '\n');
+  }
   channel.push(flushUnmapped(state)); await channel.close(state);
   process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', ...result, outputBytes: bytes,
     failure: result.code === 0 ? null : failure }) + '\n');

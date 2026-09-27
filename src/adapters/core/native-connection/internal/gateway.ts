@@ -85,7 +85,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, home: spec.home, file: spec.file,
-      credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery,
+      credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery, finalReport: binding.finalReport,
       ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
   });

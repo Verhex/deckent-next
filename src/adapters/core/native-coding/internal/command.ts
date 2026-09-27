@@ -8,7 +8,7 @@ import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from '
 // Its CLI flags implement native protocols, not mutable permission/model selection policy.
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
 export const nativeCodingInvocationSchema = z.object({
-  schemaVersion: z.literal(2), provider: z.enum(['codex', 'claude', 'cursor']),
+  schemaVersion: z.union([z.literal(2), z.literal(3)]), maxTurns: z.number().int().positive().safe().optional(), provider: z.enum(['codex', 'claude', 'cursor']),
   cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   discovery: z.object({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
     settings: z.object({ disableAllHooks: z.boolean() }).strict().readonly().optional(),
@@ -17,11 +17,11 @@ export const nativeCodingInvocationSchema = z.object({
   model: argument.refine(value => value.length <= 256 && !value.startsWith('-') && value.trim() === value),
   prompt: argument.refine(value => Buffer.byteLength(value, 'utf8') <= 65_536).optional(),
   composition: nativePromptCompositionSchema.optional(),
-}).strict().refine(value => (value.prompt !== undefined) !== (value.composition !== undefined)).readonly();
+}).strict().refine(value => value.schemaVersion === 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined)).readonly();
 export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
 export class NativeCodingProfileError extends Error {
-  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED') {
+  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED') {
     super(code); this.name = 'NativeCodingProfileError';
   }
 }
@@ -37,6 +37,9 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   const invocation = parsed.data;
   const command = commands[invocation.provider];
+  if (invocation.maxTurns !== undefined && invocation.provider !== 'claude') throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
+  if (invocation.schemaVersion === 3 && Number(template.parameters.outputBytes) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  const turnArgs = invocation.maxTurns === undefined ? [] : ['--max-turns', String(invocation.maxTurns)];
   const { mode, settings } = invocation.discovery;
   if ((mode === 'disabled' && !command.disabledArgs)
     || (settings && (invocation.provider !== 'claude' || mode !== 'repository'))) {
@@ -47,13 +50,14 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const delivery = invocation.composition ? composeNativePrompt(invocation.composition, command.coreChannel) : undefined;
   const coreArgs = delivery ? command.coreArgs : [];
   // No shell interpolation. End-of-options keeps even a dash-prefixed prompt as task data.
-  const argv = [command.executable, ...command.args, ...discoveryArgs, ...settingsArgs, ...coreArgs,
+  const argv = [command.executable, ...command.args, ...turnArgs, ...discoveryArgs, ...settingsArgs, ...coreArgs,
     command.modelFlag, invocation.model, '--', delivery ? '__DECKENT_TASK_PROMPT__' : invocation.prompt!];
   const profile = executionProfileDefinitionSchema.parse({ ...template, parameters: { ...template.parameters, argv,
     nativeSubscription: { schemaVersion: 1, provider: invocation.provider,
+      ...(invocation.schemaVersion === 3 ? { finalReport: { schemaVersion: 1 } } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,
-      requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...discoveryArgs,
+      requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...discoveryArgs,
         ...(settings ? ['--settings'] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
   validateDockerTaskProfile(profile);
