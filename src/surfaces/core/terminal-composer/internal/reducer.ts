@@ -4,7 +4,8 @@
  * cursor-model, input-history, paste-composer, interrupt-policy, at-ref) without its disk or filesystem access.
  */
 import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
-import { chipFor, chipSpans, cleanText, expandChips, mentionAt, mentionPaths, PASTE_COLLAPSE, shouldCollapse, slashMatches, type PasteChip, type PastePolicy } from './assist.js';
+import { chipFor, chipSpans, cleanText, expandChips, mentionAt, mentionPaths, mentionText, PASTE_COLLAPSE, quotedMentionEnd, shouldCollapse, slashMatches, type PasteChip,
+  type PastePolicy } from './assist.js';
 import { lineEnd, lineStart, nextBoundary, previousBoundary, snapToCluster, verticalOffset, wordLeft, wordRight } from './text.js';
 
 export const COMPOSER_LIMITS = Object.freeze({ historyEntries: 500, exitWindowMs: 2000 });
@@ -52,7 +53,7 @@ export type ComposerKey =
   | { readonly type: 'history'; readonly entries: readonly ComposerHistoryEntry[] };
 
 export type ComposerIntent =
-  /** `mentions`: the `@path` tokens of the draft outside paste chips; the owner attaches them through the service. */
+  /** `mentions`: the draft's `@path` / `@"path"` mentions outside paste chips, exact paths; the owner attaches them through the service. */
   | { readonly type: 'submit'; readonly text: string; readonly entry: ComposerHistoryEntry; readonly mentions: readonly string[] }
   | { readonly type: 'cancel' | 'exit' }
   | { readonly type: 'mention'; readonly start: number; readonly query: string };
@@ -209,8 +210,12 @@ export function composerMenu(state: ComposerState, commands?: readonly SlashComm
   return items.length ? { kind: 'slash', items, selected: state.selected % items.length } : null;
 }
 
+/**
+ * The picked path is written in the form the submit parser reads back as exactly that path (`@"src/a b.ts"` for a spaced name,
+ * Astra 2134 R3). Inside a closed `@"..."` the whole token is replaced so no half quote stays behind.
+ */
 function completeMention(state: ComposerState, start: number, path: string): ComposerState {
-  return { ...edit(state, start, state.cursor, `@${path} `), mentions: null };
+  return { ...edit(state, start, quotedMentionEnd(state.text, state.cursor) ?? state.cursor, `${mentionText(path)} `), mentions: null };
 }
 
 function menuKey(state: ComposerState, key: ComposerKey, menu: ComposerMenu): ComposerStep | null {
@@ -219,8 +224,9 @@ function menuKey(state: ComposerState, key: ComposerKey, menu: ComposerMenu): Co
     return step({ ...state, selected: (menu.selected + (key.to === 'up' ? count - 1 : 1)) % count });
   }
   if (key.type === 'escape') return step(menu.kind === 'slash' ? { ...state, dismissed: state.text } : { ...state, mentions: null, mentionDismissed: state.text });
-  // A path typed out in full is already a reference: Enter sends the line (Tab still completes it with a trailing space).
-  if (menu.kind === 'mention' && key.type === 'submit' && mentionAt(state.text, state.cursor)?.query === menu.items[menu.selected]) return null;
+  // A path typed out in full, in the form the submit parser reads back exactly, is already a reference: Enter sends the line
+  // (Tab still completes it with a trailing space). `@src/a.ts!` is not that form for `src/a.ts!`, so Enter completes it.
+  if (menu.kind === 'mention' && key.type === 'submit' && state.text.slice(menu.start, state.cursor) === mentionText(menu.items[menu.selected]!)) return null;
   if (menu.kind === 'mention' && (key.type === 'tab' || key.type === 'submit')) return step(completeMention(state, menu.start, menu.items[menu.selected]!));
   if (menu.kind === 'slash' && key.type === 'tab') return step(edit(state, 0, state.text.length, `/${menu.items[menu.selected]!.name} `));
   if (menu.kind === 'slash' && key.type === 'submit') return runSlash(state, menu.items[menu.selected]!);
