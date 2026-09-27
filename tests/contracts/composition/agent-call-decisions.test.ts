@@ -19,11 +19,11 @@ const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durabilit
 const edit: AgentToolSpec = { name: 'edit_file', version: 1, toolClass: 'edit', description: 'edit', inputSchema: { type: 'object' } } as AgentToolSpec;
 const args = { path: 'src/a.ts', old_string: 'a', new_string: 'b' };
 type Effect = 'allow' | 'deny' | 'require-approval';
-const snapshot = (tool: Effect, mode: string | null) => resolvePolicyBindings({ schemaVersion: 2, revision: `p-${tool}-${mode}`, roles: [], separationOfDuties: [], restrictions: [],
-  grants: [{ id: 'edit-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['edit_file'] },
+const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mode}`, toolGrant = 'edit-tool', modeEntry = 'me-mode') => resolvePolicyBindings({ schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
+  grants: [{ id: toolGrant, effect: tool, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['edit_file'] },
     ...(tool === 'require-approval' ? { modeEligible: true } : {}) },
   { id: 'file-write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['workspace.file.write'] } }] },
-mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
+mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: modeEntry, principal: me, scopes: ['scope'], mode }] });
 
 /** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
 async function fixture(loads: unknown[]) {
@@ -40,6 +40,9 @@ async function fixture(loads: unknown[]) {
   const decisions = createAgentCallDecisions({ context: context as never, clock: new SystemTrustedClock(), scopeId: 'scope', turnId: 'turn', edits: edits as never,
     shell: null, approvals: approvals as never });
   const events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT event_id FROM audit_events').all().length; } finally { db.close(); } };
+  const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
+    return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string } } });
+  } finally { db.close(); } };
   /** Runs the call as the effect application does: two admissions (submit, then before the first claim), recording what each saw. */
   const execute = async () => {
     const seen: { eventsAtRun: number; admissions: string[] } = { eventsAtRun: -1, admissions: [] };
@@ -53,7 +56,7 @@ async function fixture(loads: unknown[]) {
     });
     return { outcome, ...seen };
   };
-  return { decisions, execute, events, plans: () => plans };
+  return { decisions, execute, events, auditRecords, plans: () => plans };
 }
 
 describe('permission decision at the effect (T-L4 slice 4a)', () => {
@@ -80,6 +83,42 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
       expect(result.outcome.text).toContain(text);
       expect(before.events()).toBe(0);
     }
+  });
+
+  it('admits only the decision the audit event recorded: another mode, revision or a plain allow since stops the effect (Astra 2133)', async () => {
+    // authorize, execute (the audited decision), then the admissions. Astra's case: audited in auto-edit, admitted after a switch to full-auto.
+    const audited = snapshot('require-approval', 'auto-edit');
+    const sameRevision = 'p-require-approval-auto-edit';
+    for (const [label, later] of [['mode', snapshot('require-approval', 'full-auto')], ['revision', snapshot('require-approval', 'auto-edit', 'p-edited')],
+      ['plain allow', snapshot('allow', 'auto-edit')], ['mode, revision not bumped', snapshot('require-approval', 'full-auto', sameRevision)],
+      ['company grant, revision not bumped', snapshot('require-approval', 'auto-edit', sameRevision, 'edit-tool-2')],
+      ['person entry, revision not bumped', snapshot('require-approval', 'auto-edit', sameRevision, 'edit-tool', 'me-mode-2')]] as const) {
+      const f = await fixture([audited, audited, later]);
+      expect(await f.decisions.authorize(edit, args)).toBe('allow');
+      expect({ label, ...(await f.execute()) }).toEqual({ label, outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, eventsAtRun: 1,
+        admissions: ['EFFECT_APPROVAL_REQUIRED'] });
+      // No second event: the one audited decision is not replaced by the new one.
+      expect(f.events()).toBe(1);
+    }
+    // A change between the two admissions stops the second one.
+    const second = await fixture([audited, audited, audited, snapshot('require-approval', 'full-auto')]);
+    expect(await second.decisions.authorize(edit, args)).toBe('allow');
+    expect(await second.execute()).toMatchObject({ outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, admissions: ['admitted', 'EFFECT_APPROVAL_REQUIRED'] });
+    // An equal snapshot read again (same revision, same relaxation) is still admitted.
+    const same = await fixture([audited, audited, snapshot('require-approval', 'auto-edit')]);
+    expect(await same.decisions.authorize(edit, args)).toBe('allow');
+    expect(await same.execute()).toMatchObject({ outcome: { status: 'ok', text: 'ran' }, admissions: ['admitted', 'admitted'] });
+  });
+
+  it('Astra 2134 R2 repro: changing the relaxed mode after audit must not use the stale audit event', async () => {
+    const f = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'full-auto')]);
+    expect(await f.decisions.authorize(edit, args)).toBe('allow');
+    const result = await f.execute();
+    expect(result.outcome.status).toBe('error');
+    // The one event still describes the audited decision, and nothing was admitted under the new one.
+    expect(result).toMatchObject({ eventsAtRun: 1, admissions: ['EFFECT_APPROVAL_REQUIRED'] });
+    expect(f.auditRecords().map(record => [record.event.policyRevision, record.event.subject.mode]))
+      .toEqual([['p-require-approval-auto-edit+b', 'auto-edit']]);
   });
 
   it('answers deny before planning and fails closed on an unreadable policy', async () => {

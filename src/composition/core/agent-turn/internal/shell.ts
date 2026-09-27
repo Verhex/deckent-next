@@ -48,6 +48,8 @@ export function createShellWriteContext(scope: WorkspaceScope): ShellWritePathCo
       const target = await resolveWritable(scope, word.text);
       if (!target.ok) return refuse(target.error === 'outside-workspace' ? 'PATH_OUTSIDE_ROOT' : target.error === 'denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED');
       if (isWriteApprovalFloored(target.rel) || (kind === 'new-directory' && isWriteApprovalFloored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
+      // An existing directory, link or multi-link file is refused here (`not-a-file`, `is-link`, `hard-linked`): `cp`/`mv` onto a
+      // directory would write `target/basename(source)`, a path this check never saw (Astra 2133), so a directory target is not narrow.
       const current = await readWritableFile(scope, target).catch(() => null);
       if (!current?.ok) return refuse('PATH_UNRESOLVED');
       const absent = current.version === ABSENT_FILE_VERSION;

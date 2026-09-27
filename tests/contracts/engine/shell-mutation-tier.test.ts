@@ -35,7 +35,7 @@ describe.skipIf(process.platform !== 'linux')('narrow mutating shell tier (T-L4 
   it('recognizes mkdir, touch, cp and mv on checked workspace paths', async () => {
     const { tier } = await workspace();
     for (const command of ['touch new.txt', 'touch src/a.ts', 'touch -c src/b.ts', 'mkdir build', 'mkdir -p out/sub', 'cp src/a.ts copy.ts', 'cp -n src/a.ts out/a.ts',
-      'mv readme.md docs.md', 'mv -v src/a.ts out/a.ts', 'mkdir tmp && touch new.txt', 'touch x.txt; touch y.txt', 'touch -- new.txt', 'touch ./z.txt']) {
+      'mv readme.md docs.md', 'mv -v src/a.ts out/a.ts', 'touch -- new.txt', 'touch ./z.txt', 'touch end.txt;']) {
       expect({ command, ...(await tier(command)) }).toMatchObject({ command, mutation: { tier: 'narrow' }, tier: 'narrow-mutating' });
     }
   });
@@ -58,9 +58,21 @@ describe.skipIf(process.platform !== 'linux')('narrow mutating shell tier (T-L4 
       'touch .env', 'cp .env copy', 'touch .git/x', 'touch ../escape', 'touch /tmp/x', 'touch to-outside', 'touch linked-dir/x', 'cp src/a.ts linked-dir/x',
       'cp src/a.ts out', 'mv readme.md out', 'mv notes.md moved.md', 'touch hard.md', 'touch src/*.ts', 'touch ~/x', 'touch src/../new', 'touch -d yesterday a', 'cp -r src dst',
       'mv -f readme.md x', 'mkdir -m 777 d', 'mkdir src', 'mv missing.md x', 'mkdir a/b/c', 'cp a b c', 'touch a | cat', 'ln -s src/a.ts l', 'sed -i s/a/b/ src/a.ts',
-      'git add .', 'rm src/a.ts', 'chmod 600 src/a.ts', 'touch -- -n']) {
+      'git add .', 'rm src/a.ts', 'chmod 600 src/a.ts', 'touch -- -n', 'cp src/a.ts out/', 'cp src/a.ts .', 'cp src/a.ts ./', 'mv readme.md out/']) {
       expect({ command, ...(await tier(command)) }).toMatchObject({ command, tier: 'other-modify' });
     }
+  });
+
+  it('is one simple command: a compound list is not narrow, since an earlier part can change what a later part writes (Astra 2133)', async () => {
+    const { tier } = await workspace();
+    // `mkdir out2 && cp package.json out2` checked every part on the file system as it was before the command: the copy target was absent,
+    // then the first part made it a directory and the copy wrote `out2/package.json` on the write floor.
+    for (const command of ['mkdir out2 && cp package.json out2', 'mkdir tmp && touch new.txt', 'touch x.txt; touch y.txt', 'touch a || touch b',
+      'touch a\ntouch b', 'mkdir d; mv readme.md d']) {
+      expect({ command, ...(await tier(command)) }).toMatchObject({ command, mutation: { tier: 'unrecognized', reasonCode: 'NOT_NARROW' }, tier: 'other-modify' });
+    }
+    // The always-ask floor is still decided over every part first.
+    expect(await tier('touch a && wget http://x')).toMatchObject({ mutation: { tier: 'always-ask', reasonCode: 'NETWORK_TOOL' }, tier: 'always-ask' });
   });
 
   it('never demotes destructive, and keeps read-only tiers as the read classifier set them', async () => {

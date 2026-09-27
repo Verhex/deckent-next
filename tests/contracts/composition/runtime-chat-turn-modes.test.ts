@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeModeRuntimes, me, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
@@ -104,15 +104,43 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(await f.call('run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
     await expect(readFile(join(f.project, 'made.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     await f.writeAuthority(shell('require-approval', 'allow', { tool: true }), 'full-auto', 'full');
-    expect(await f.call('run_shell', { command: 'mkdir out && cp src/a.ts out.ts && touch made.txt' })).toMatchObject({ card: false, status: 'ok' });
-    expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('');
+    expect(await f.call('run_shell', { command: 'cp src/a.ts out.ts' })).toMatchObject({ card: false, status: 'ok' });
     expect(await readFile(join(f.project, 'out.ts'), 'utf8')).toBe('export const a = 1;\n');
     // A narrow command whose target is on the write floor is not narrow.
     expect(await f.call('run_shell', { command: 'touch package.json' })).toMatchObject({ card: true, status: 'denied' });
     const events = f.audit();
     expect(events.map(record => record.event.subject)).toEqual([expect.objectContaining({ mode: 'full-auto', cell: 'shell-modify',
-      summary: { kind: 'shell', head: 'mkdir out && cp src/a.ts out.ts && touch made.txt', argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u) } })]);
+      summary: { kind: 'shell', head: 'cp src/a.ts out.ts', argsDigest: expect.stringMatching(/^[0-9a-f]{64}$/u) } })]);
   }, 90_000);
+
+  it('asks for a compound command in full-auto: an earlier part must not turn a later target into a floor path (Astra 2133)', async () => {
+    const f = await modeRuntime({ grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
+      mode: 'full-auto' });
+    await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
+    // Astra's case: `mkdir out` makes the copy target a directory, so `cp` would write `out/package.json` (write floor `**/package.json`).
+    expect(await f.call('run_shell', { command: 'mkdir out && cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
+    // A harmless compound asks too: the narrow set is one simple command (no `&&`, `;`, `||`, pipe).
+    expect(await f.call('run_shell', { command: 'mkdir out && cp src/a.ts out/a.ts' })).toMatchObject({ card: true, status: 'denied' });
+    await expect(stat(join(f.project, 'out'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // A directory that exists already is not a narrow target: `cp` would write into it under a path nobody checked.
+    await mkdir(join(f.project, 'out'));
+    expect(await f.call('run_shell', { command: 'cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await f.call('run_shell', { command: 'mv src/a.ts out' })).toMatchObject({ card: true, status: 'denied' });
+    expect(await readdir(join(f.project, 'out'))).toEqual([]);
+    expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{"scripts":{"preinstall":"echo floor"}}\n');
+    expect(f.audit()).toEqual([]);
+    expect(f.rows("SELECT state FROM effect_intents WHERE target_kind='host-shell'")).toEqual([]);
+  }, 90_000);
+
+  it('Astra 2134 R1 repro: compound narrow commands must not bypass the package manifest write floor', async () => {
+    const f = await modeRuntime({ grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto' });
+    await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
+    const result = await f.call('run_shell', { command: 'mkdir out && cp package.json out' });
+    const content = await readFile(join(f.project, 'out/package.json'), 'utf8').catch(() => null);
+    expect(result.card).toBe(true);
+    expect(content).toBeNull();
+    expect(f.audit()).toEqual([]);
+  }, 60_000);
 
   it('runs nothing when the audit event cannot be written: the relaxation is not applied (M3)', async () => {
     const f = await modeRuntime({ grants: [...edit('require-approval', 'allow', { tool: true }), ...shell('require-approval', 'allow', { tool: true })], mode: 'full-auto' });
