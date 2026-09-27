@@ -45,6 +45,11 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
       expect(bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [bad] }).success).toBe(false);
     }
     expect(bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [person('ask'), person('full-auto')] }).success).toBe(false);
+    // No selection shorthand: a mode names explicit scopes (the field itself refuses 'all').
+    const all = bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [person('auto-edit', 'all' as never)] });
+    const paths = all.success ? [] : all.error.issues.flatMap(issue => 'unionErrors' in issue ? issue.unionErrors.flatMap(error => error.issues) : [issue])
+      .map(issue => issue.path.join('.'));
+    expect(paths).toContain('modes.0.scopes');
   });
 
   it('resolves exactly one mode entry for the person and scope; none, two or ask is null (fail closed)', () => {

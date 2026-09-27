@@ -68,6 +68,9 @@ describe.skipIf(process.platform !== 'linux')('narrow mutating shell tier (T-L4 
     for (const command of ['rm -rf src', 'rm -f notes.md', 'touch a && rm -rf src', 'git reset --hard', 'truncate -s 0 notes.md', 'mkdir x; rmdir x']) {
       expect({ command, ...(await tier(command)) }).toMatchObject({ command, tier: 'destructive' });
     }
+    // Worst wins even if a future narrow program overlapped the destructive table: the risk tier is decided first.
+    expect(shellPermissionTier({ risk: 'destructive', reason: 'shell.destructive.rm-recursive-or-force' },
+      { readOnly: false, risk: null, reasonCode: 'PROGRAM_NOT_ALLOWLISTED', programs: [], stageCount: 1 }, { tier: 'narrow', reasonCode: 'NARROW' })).toBe('destructive');
     expect(await tier('cat src/a.ts')).toMatchObject({ tier: 'read-none' });
     for (const command of ['find .', 'grep -r x .', 'git log -p']) expect({ command, ...(await tier(command)) }).toMatchObject({ command, tier: 'read-low' });
   });
