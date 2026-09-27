@@ -4,6 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (C12 G1/G2): operations that require approval open an approval request and return `approval-pending`; the same command
+  resubmitted after an allow applies the effect once (`admitWithinMs`, ledger v40); SDK `awaitApproval`, CLI `--wait`.
+- ADDED (H34 S2): policy v2 roles, a separate `bindings.json` for role membership, four-eyes (`requester-cannot-approve`).
+- CHANGED (C12 Q8): `require-approval` outside the operation catalog is refused with typed `POLICY_APPROVAL_UNSUPPORTED`.
+- FIX (Astra 2126): read-only queries never pin a scope; the sealed adapter registry cannot be changed through outside references.
 - FIX (Astra 2111, P1): the agent shell no longer runs `cat link/../file` silently when the link leaves the workspace.
 - FIX (Astra 2113): a repeated shell command or file write in the same turn runs/writes again instead of replaying the first effect;
   a write after the file returned to the same content no longer reports success without writing; owner approvals are single-use.

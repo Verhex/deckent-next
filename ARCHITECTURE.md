@@ -355,8 +355,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `require-approval` distinct from deny), `effect_intents` table (per-scope idempotency key, per-record sequence, a claimed
   or unknown intent blocks the record), config section `operations` (catalog + targets, empty by default), Core generic
   adapter `http-conditional-effect` (ETag/If-Match, Idempotency-Key, idempotency lookup; loopback http or https, no
-  credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. Required approval stops
-  before any effect with `EFFECT_APPROVAL_REQUIRED` until C12. Not claimed: any ERP adapter, credentials, MCP tool, registry
+  credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. A required approval goes
+  through the operation approval broker (C12 G1/G2, below). Not claimed: any ERP adapter, credentials, MCP tool, registry
   resolution of targets (A04-1 done, see below; unified catalog A04-2), migration of the five existing flows.
 - **C11-1 REVISE (Astra 2041, Jev 2bfd2ee9, 2026-09-24).** The target never sees the caller's key: the intent stores a wire
   key derived from scope, target kind+id, operation id@version and caller key, so two scopes or operations reusing a key
@@ -1155,6 +1155,33 @@ processes (agent tool-approval request time and expiry; record-only timestamps) 
 this contract.
 This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
+
+**Operation approval broker (C12 G1/G2, ledger v40).** A catalog operation whose policy answers `require-approval` no longer stops
+with `EFFECT_APPROVAL_REQUIRED`: the approval subject `operation` {operation id@version, target, commandId, input digest, target
+binding, expected version, compensates} is opened (producer integrity, `approvals.requestTtlMs`) and the first submission returns
+an `approval-pending` outcome (EffectApprovalPending, schemaVersion 2; settled EffectResult v1 unchanged byte-for-byte) — no intent,
+no effect (owner Q1: approval → intent → effect). After an `allow`, resubmitting the same command applies the effect once: the
+intent carries `approval {approvalId, actionDigest}` and consumes it; another commandId or input is another request; the allow is
+usable only within `admitWithinMs` (descriptor data, default `approvals.requestTtlMs`; owner Q3) and a decision time beyond
+`now + MAX_WALL_SKEW_MS` is refused. The core never blocks; SDK `awaitApproval` / CLI `deckent operation … --wait <ms>` poll and
+resubmit once (owner Q2). Ledger v40 adds `operation` to the approvals subject CHECK (backed-up migration; a v39 build refuses
+v40). Released runtime protocol v14 is kept: requests below v15 never receive operation-subject approvals (list omits them,
+inspect answers `APPROVAL_MISSING`); they are listed and decided through SDK `configuredApproval` or CLI `approval decide` until
+G4 (v15). Authorization points outside the catalog answer `require-approval` with typed `POLICY_APPROVAL_UNSUPPORTED` (still a
+refusal; owner Q8), and cancellation recovery and its classifiers treat it and `SCOPE_UNKNOWN` as denials, never as a crashed page.
+
+**Roles, bindings and four-eyes (H34 S2, policy v2).** Policy documents are v1 or v2; v2 adds `roles` (role → permission rules) and
+`separationOfDuties` (`requester-cannot-approve` over scopes). Role membership lives in a separate `bindings` layout resource
+(`bindings.json`, same owner/mode/link/size guarantees as the policy file; owner H34 d): principals → roles over scopes. The source
+merges both into one effective document (revision = policy + bindings), so every existing gate evaluates roles; order stays
+scope → deny/restriction → require-approval → allow → NO_GRANT; role rules are derived per request for that principal only (exact
+issuer + subject); a role is never a call parameter; a binding grants membership in a pinned scope but never declares or pins one.
+v1 parsing is unchanged (bindings are not read); an older reader refuses v2. Four-eyes is enforced in `ApprovalApplication.decide`
+on `allow` only (the requester's own allow → `APPROVAL_DENIED`). Roles cannot target `task` rules yet (Run reservation reads
+explicit task rules; typed `POLICY_INVALID`). Adding the `bindings` resource changes every installation's layout revision:
+admitted but unexecuted Runs from before the update get `RUN_STORE_CONFLICT` at execution (same as earlier resource additions).
+Scope access mode is stated at every call (Astra 2126 R1): queries pass `read` and never pin a scope; only write admissions pin.
+The sealed adapter registry holds immutable snapshots of factories and manifests (Astra 2126 R2).
 
 **Company scope registry (H34 S1, ledger v39).** Every request scope resolves to a company or is refused with typed `SCOPE_UNKNOWN`;
 no flag relaxes this. Ledger v39 adds `companies(company_id)` and `scope_registry(scope_id PK, company_id FK, origin
