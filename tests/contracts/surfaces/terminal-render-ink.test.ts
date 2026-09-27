@@ -111,6 +111,50 @@ describe("finished tool call line's cleanup suffix", () => {
     await until(() => view.stdout.last.includes('DOGRULANAMADI'), 'catalogued cleanup suffix');
     expect(view.stdout.last).not.toContain('cleanup: unverified');
   });
+
+  // Astra 2139 R3 (reviewer repro astra-2137-cleanup-width.test.ts.txt): a long but ordinary command must not push the warning off the
+  // line. The command text is shortened; the elapsed/status/cleanup tail keeps its place, or its own wrapped line when very narrow.
+  const LONG = "node -e \"const {spawn}=require('node:child_process'); spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{detached:true,stdio:'inherit'}).unref()\"";
+  const catalogued: AssistantRenderLabels = { ...toolLabels, toolCleanup: { 'group-ended': 'process group ended', unverified: 'cleanup unverified' } };
+  const screenOf = async (unit: ToolUnit, columns: number, labelSet = catalogued) => {
+    const view = mountElement(createElement(AssistantUnitRow, { unit, labels: labelSet }), 'none', columns);
+    await until(() => view.stdout.last.includes('run_shell'), 'finished tool line');
+    return view.stdout.last.split('\n').filter(line => line.trim() !== '');
+  };
+  it('Astra 2137/2139 R3: an unverified cleanup stays visible at 80 columns with a long command, on the same line, the command shortened', async () => {
+    const lines = await screenOf({ ...unit('unverified'), target: LONG }, 80);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('cleanup unverified');
+    expect(lines[0]).toMatch(/^ {2}· run_shell node -e .*… · 1\.2s · cleanup unverified$/u);
+    expect(lines[0]!.length).toBeLessThanOrEqual(80);
+    // The neutral fallback and a non-ok status keep their place too.
+    const denied = await screenOf({ ...unit('group-ended'), target: LONG, status: 'denied' }, 80, toolLabels);
+    expect(denied).toHaveLength(1);
+    expect(denied[0]).toMatch(/… · 1\.2s · DENIED · cleanup: group-ended$/u);
+  });
+
+  it('Astra 2139 R3: on narrow terminals the marker is never cut; below the room for the tool name it moves to its own wrapped line', async () => {
+    for (const columns of [60, 40]) {
+      const lines = await screenOf({ ...unit('unverified'), target: LONG }, columns);
+      expect(lines.join('\n')).toContain('cleanup unverified');
+      for (const line of lines) expect(line.length).toBeLessThanOrEqual(columns);
+    }
+    const narrow = await screenOf({ ...unit('unverified'), target: LONG }, 24);
+    expect(narrow.length).toBeGreaterThan(1);
+    expect(narrow[0]).toMatch(/^ {2}· run_shell/u);
+    expect(narrow.slice(1).join(' ').replace(/\s+/gu, ' ')).toContain('cleanup unverified');
+    for (const line of narrow) expect(line.length).toBeLessThanOrEqual(24);
+  });
+
+  it('Astra 2139 R3: clean or absent cleanup adds nothing to a long line, and a short line renders exactly as before', async () => {
+    for (const cleanup of ['clean', undefined] as const) {
+      const lines = await screenOf({ ...unit(cleanup), target: LONG }, 80);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).not.toContain('cleanup');
+      expect(lines[0]).toMatch(/… · 1\.2s$/u);
+    }
+    expect(await screenOf(unit('unverified'), 100)).toEqual(['  · run_shell sleep 5 & echo started · 1.2s · cleanup unverified']);
+  });
 });
 
 describe('streaming live region', () => {

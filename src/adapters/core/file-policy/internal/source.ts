@@ -71,8 +71,8 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
   /**
    * Conditional, atomic replacement of the bindings file (T-L4 slice 4c, `PermissionModeBindingsStore`). Serialized per file in this
    * process; policy and bindings are read under the same guards as `load`; a document `work` answers is written to a new file in the
-   * same directory (`O_EXCL|O_NOFOLLOW`, the original 0400/0600 mode, flushed), and renamed over the target only when the target is
-   * still exactly the file read — otherwise `PERMISSION_MODE_CONFLICT`, nothing replaced. The writer must be the trusted owner, so the
+   * same directory (`O_EXCL|O_NOFOLLOW`, the original 0400/0600 mode, flushed), and renamed over the target only when both the target
+   * and the policy file are still exactly the files read — otherwise `PERMISSION_MODE_CONFLICT`, nothing replaced. The writer must be the trusted owner, so the
    * replaced file stays readable by `load` (a foreign-owned file would refuse all authority).
    */
   async update<T>(work: (snapshot: PermissionModeSnapshot) => { readonly write: unknown; readonly result: T }): Promise<T> {
@@ -87,7 +87,9 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     finally { release(); if (updates.get(target) === tail) updates.delete(target); }
   }
   private async updateHeld<T>(target: string, work: (snapshot: PermissionModeSnapshot) => { readonly write: unknown; readonly result: T }): Promise<T> {
-    const policy = policyFileSchema.safeParse(await this.read(this.options.path, 'policy'));
+    // The policy's identity is kept too: it authorized the change and fixed the effective revision `work` compared (Astra 2139 R1).
+    const authority = await this.readGuarded(this.options.path, 'policy');
+    const policy = policyFileSchema.safeParse(authority.value);
     if (!policy.success) throw new PolicyFileError('POLICY_FILE_INVALID');
     if (policy.data.schemaVersion === 1) {
       const outcome = work({ policy: policy.data, bindings: null });
@@ -112,8 +114,11 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
         await handle.chmod(Number(read.stat.mode & 0o777n));
         await handle.sync();
       } finally { await handle.close(); }
-      // Conditional on exactly the file read: a replacement since (another writer, the owner) is a conflict, never overwritten.
-      if (!sameFile(await lstat(target, { bigint: true }), read.stat)) throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
+      // Conditional on exactly the files read — the bindings written over and the policy that authorized the write: a replacement of
+      // either since (another writer, the owner) is a conflict, never overwritten.
+      if (!sameFile(await lstat(this.options.path, { bigint: true }), authority.stat) || !sameFile(await lstat(target, { bigint: true }), read.stat)) {
+        throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
+      }
       await rename(temporary, target);
       renamed = true;
       const directory = await open(dirname(target), constants.O_RDONLY | constants.O_DIRECTORY);

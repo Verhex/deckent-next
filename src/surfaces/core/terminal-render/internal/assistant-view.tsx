@@ -6,6 +6,7 @@ import { RenderedLines } from './lines-view.js';
 import { renderMarkdown } from './markdown.js';
 import type { LiveTail } from './stream-segmenter.js';
 import { fillTemplate } from './status-row.js';
+import { cells, truncateEnd } from './text-width.js';
 
 /** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
 export type AssistantRenderLabels = Readonly<{
@@ -66,9 +67,18 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
     const cleanupWord = unit.cleanup && unit.cleanup !== 'clean' ? (labels.toolCleanup ?? NEUTRAL_TOOL_CLEANUP)[unit.cleanup] : null;
     const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]]),
       ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
+    // Astra 2139 R3: the tail (elapsed, status, cleanup) keeps its place; a long command is shortened instead. When not even the tool
+    // name fits beside the tail, the tail takes its own wrapped line under the (truncated) command.
+    const tone = failed ? palette.error : palette.muted;
+    const head = `${glyphs.separator} ${toolText(unit, labels)}`, suffix = ` ${glyphs.separator} ${tail}`;
+    const room = width - cells(suffix);
+    if (room >= cells(`${glyphs.separator} ${unit.name}${glyphs.ellipsis}`)) {
+      return <Box paddingLeft={INDENT}><Text {...tone} wrap="truncate-end">{truncateEnd(head, room, glyphs.ellipsis)}{suffix}</Text></Box>;
+    }
     return (
-      <Box paddingLeft={INDENT}>
-        <Text {...(failed ? palette.error : palette.muted)} wrap="truncate-end">{glyphs.separator} {toolText(unit, labels)} {glyphs.separator} {tail}</Text>
+      <Box flexDirection="column" paddingLeft={INDENT}>
+        <Text {...tone} wrap="truncate-end">{head}</Text>
+        <Text {...tone} wrap="wrap">{glyphs.separator} {tail}</Text>
       </Box>
     );
   }
