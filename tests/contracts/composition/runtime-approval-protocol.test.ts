@@ -6,8 +6,9 @@ import { afterEach, expect, it } from 'vitest';
 import { configuredApproval, createConfiguredRuntimeClient } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
-import { approvalRequestSchema } from '#domain/index.js';
-import { RUNTIME_SERVICE_SCHEMA_VERSION, requestTaskApproval, sealApproval } from '#engine/index.js';
+import { z } from 'zod';
+import { approvalRecordSchema, approvalRequestSchema } from '#domain/index.js';
+import { RUNTIME_SERVICE_SCHEMA_VERSION, approvalSubjectsHiddenFromProtocol, requestTaskApproval, sealApproval } from '#engine/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
@@ -49,47 +50,50 @@ async function fixture() {
   return { project, env, task, call, operation };
 }
 
-it('never sends an operation-subject approval record to a released v14 client: lists omit it, inspecting it is APPROVAL_MISSING, while the in-process SDK sees it (C12 G1/G2)', async () => {
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(14);
+// Protocol v15 (T-L5 lane, owner 2026-09-27 v15 package) activates C12 G4 visibility: OPERATION_SUBJECT_PROTOCOL_VERSION is 15, so a
+// current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
+// (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
+it('delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(15);
+  expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation']);
+  expect(approvalSubjectsHiddenFromProtocol(15)).toEqual([]);
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
     const client = createConfiguredRuntimeClient(f.project, { env: f.env });
     const query = { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 };
-    // What a v14 client receives parses with the record schema it shipped with: task and tool-call subjects only.
     const listed = await client.listApprovals(query) as { request: { approvalId: string; subject?: { kind: string } } }[];
-    expect(listed.map(record => record.request.approvalId).sort()).toEqual([f.task.request.approvalId, 'tool-call'].sort());
-    expect(listed.every(record => record.request.subject?.kind !== 'operation')).toBe(true);
+    expect(listed.map(record => record.request.approvalId).sort()).toEqual([f.task.request.approvalId, 'operation', 'tool-call'].sort());
+    // The terminal's /approvals page parser (terminal-ledger) accepts every record v15 delivers.
+    expect(() => z.array(approvalRecordSchema).parse(listed)).not.toThrow();
     // Service start closed the orphaned tool-call approval as expired (C12 sweep); the operation approval is not a turn's and stays pending.
     expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'tool-call' })).toMatchObject({ request: f.call.request, status: 'expired' });
-    await expect(client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'operation' })).rejects.toMatchObject({ code: 'APPROVAL_MISSING' });
-    // The same application in process (SDK, local-sdk channel) lists and inspects the operation approval: it exists and is decidable.
+    expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'operation' })).toEqual(f.operation);
     const sdk = await configuredApproval(f.project, 'list', query, { env: f.env }) as { request: { approvalId: string } }[];
-    expect(sdk.map(record => record.request.approvalId).sort()).toEqual([f.task.request.approvalId, 'operation', 'tool-call'].sort());
-    expect(await configuredApproval(f.project, 'inspect', { schemaVersion: 1, scopeId: 's', approvalId: 'operation' }, { env: f.env })).toEqual(f.operation);
-    // Deciding by id over the released protocol still works (the answer is not parsed strictly by released clients).
+    expect(sdk.map(record => record.request.approvalId).sort()).toEqual(listed.map(record => record.request.approvalId).sort());
     const decided = await client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'operation', commandId: 'allow-operation', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }) as { status: string };
     expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
-    expect(await client.listApprovals(query)).toHaveLength(2);
   } finally { await stopTestRuntimeService(service); }
 });
 
-it('pages a released v14 client over visible approvals only: a page never comes back empty because of a hidden operation approval (Astra 2128)', async () => {
+it('pages a hidden-subject view over visible approvals only: a page never comes back empty because of a hidden operation approval (Astra 2128)', async () => {
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
     const client = createConfiguredRuntimeClient(f.project, { env: f.env });
-    // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the SDK page of one is the operation approval; the v14 page of one
-    // must be the next visible record (tool-call), not an empty page whose cursor the client can never learn.
+    // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the full page of one is the operation approval (SDK and v15 client);
+    // the page of one of a view that hides operation subjects (the released-v14 view) is the next visible record, never an empty page.
     const query = { schemaVersion: 1, scopeId: 's', afterId: 'n', limit: 1 };
+    const hidden = { excludeSubjects: approvalSubjectsHiddenFromProtocol(14) };
     const sdk = await configuredApproval(f.project, 'list', query, { env: f.env }) as { request: { approvalId: string } }[];
     expect(sdk.map(record => record.request.approvalId)).toEqual(['operation']);
-    const page = await client.listApprovals(query) as { request: { approvalId: string } }[];
+    expect((await client.listApprovals(query) as { request: { approvalId: string } }[]).map(record => record.request.approvalId)).toEqual(['operation']);
+    const page = await configuredApproval(f.project, 'list', query, { env: f.env }, undefined, undefined, hidden) as { request: { approvalId: string } }[];
     expect(page.map(record => record.request.approvalId)).toEqual(['tool-call']);
     // Walking the whole scope one record at a time visits every visible approval exactly once and ends on an empty page.
     const walked: string[] = []; let afterId: string | null = null;
     for (;;) {
-      const next = await client.listApprovals({ ...query, afterId }) as { request: { approvalId: string } }[];
+      const next = await configuredApproval(f.project, 'list', { ...query, afterId }, { env: f.env }, undefined, undefined, hidden) as { request: { approvalId: string } }[];
       if (!next.length) break;
       walked.push(...next.map(record => record.request.approvalId)); afterId = next.at(-1)!.request.approvalId;
     }
