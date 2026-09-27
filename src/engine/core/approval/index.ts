@@ -4,4 +4,5 @@ export { ApprovalApplication, authorizeApproval, requestTaskApproval, approvalQu
 export type { ApprovalCommand } from './internal/application.js';
 export { TaskApprovalAdmission, assertApprovalPolicyCurrent } from './internal/admission.js';
 export { agentToolCallActionDigest, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestAgentToolApproval, type AgentToolApprovalOutcome } from './internal/tool-call.js';
-export { OperationApprovalBroker, awaitOperationApproval, operationApprovalActionDigest, type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';
+export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, awaitOperationApproval, operationApprovalActionDigest,
+  type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';

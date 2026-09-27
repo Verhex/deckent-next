@@ -88,6 +88,22 @@ export class OperationApprovalBroker implements EffectApprovalGate {
   }
 }
 
+/** First runtime protocol version whose approval records may carry the `operation` subject (C12 G4/v15). */
+export const OPERATION_SUBJECT_PROTOCOL_VERSION = 15;
+const isOperationApproval = (record: ApprovalRecord) => approvalSubject(record.request).kind === 'operation';
+/**
+ * What a runtime client speaking a released protocol below `OPERATION_SUBJECT_PROTOCOL_VERSION` may receive from an approval query: such a
+ * client parses records with the strict schema it shipped with, so an operation-subject record would be unparseable for it. Lists omit
+ * operation approvals; inspecting one is the typed `APPROVAL_MISSING` (for that client the record does not exist). Decisions by id are
+ * untouched: the pending outcome names the approval and released clients do not parse a decision's answer strictly.
+ */
+export function approvalResultForProtocol(version: number, action: 'list' | 'inspect' | 'decide' | 'renew', result: unknown): unknown {
+  if (version >= OPERATION_SUBJECT_PROTOCOL_VERSION) return result;
+  if (action === 'list' && Array.isArray(result)) return result.filter(record => !isOperationApproval(record as ApprovalRecord));
+  if (action === 'inspect' && result && isOperationApproval(result as ApprovalRecord)) throw new ApprovalError('APPROVAL_MISSING');
+  return result;
+}
+
 export type OperationApprovalWait = 'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled';
 /**
  * Optional wait of a surface (SDK/terminal) for the decision of one operation approval: `allow`/`deny` as decided, `expired` when the
