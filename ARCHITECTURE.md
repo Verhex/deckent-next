@@ -719,6 +719,8 @@ unsupported-platform (Windows). It is not a sandbox: the command has the service
 the command runs in its own process group so it can be killed, which also means a service crash leaves a running command orphaned
 (the turn is closed as interrupted at the next start, but nothing signals the group; legacy had the same property; Node has no
 parent-death signal) — candidate: record the group id in the effect journal and signal it at start.
+**Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. C12 still blocks batch PASS: protocol visibility must participate in pagination before LIMIT/capacity, and a previously unconsumed operation approval must remain valid at its first intent claim after asynchronous observation. Already-consumed intent recovery must retain its separate semantics. Both violations were reproduced; current main behavior is not promoted to these integration contracts (PLAN).
+
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
@@ -754,7 +756,9 @@ Astra 2099 re-review (2026-09-26): retaining read dedupe by provider call ID is 
 a recent unrelated call can keep a compacted-away read marked visible. Also the pre-round 75% request-byte threshold does not
 ensure the completed answer plus next user input can enter the service transport; a valid configuration reproduces rejection in
 the client before runtime compaction. Both were corrected in `2900a8d` (dedupe bound to result messages; request headroom and a typed
-refusal, owner decision 2026-09-26); awaiting Astra re-review (2107).
+refusal, owner decision 2026-09-26); Astra 2117 scoped PASS (2026-09-27, 46 fresh engine/runtime tests) closes these two repros.
+The selected four-bytes-per-completion-token reserve is a sizing allowance, not a universal tokenizer byte bound; oversized
+requests still receive the typed refusal. Large compacted frames and tails above the watermark remain open limitations.
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live since the owner's 2026-09-25 migration, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
