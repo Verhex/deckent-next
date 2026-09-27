@@ -39,7 +39,7 @@
     "build": "node scripts/build.mjs",
     "build:terminal-tokens": "node scripts/build-terminal-palette.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "node scripts/package-metadata.mjs && npm run typecheck && eslint . && node scripts/lint-arch.mjs && node scripts/lint-core-memory.mjs",
+    "lint": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"npm run typecheck\" \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\"",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
     "smoke": "node dist/composition/core/cli/internal/entry.js --version",
