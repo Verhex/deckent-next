@@ -345,6 +345,11 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   INSTALLATION_PROFILE_POOL: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_POOL', p, l) }) },
   INSTALLATION_PROFILE_POLICY: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_POLICY', p, l) }) },
   INSTALLATION_PROFILE_SHUTDOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_SHUTDOWN', p, l) }) },
+  // C12 Q8 follow-up (owner 2026-09-27): installation owns its typed require-approval refusal, same 'config' category
+  // (exit 78) as its INSTALLATION_PROFILE_* siblings above, instead of the shared cross-module POLICY_APPROVAL_UNSUPPORTED
+  // ('error' category, exit 1) used by the other 9 authorization points outside the operation catalog.
+  // Locale key not yet present (locale files are lead-owned, common); see i18n-delta.json for suggested en/tr text.
+  INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED' }, l) }) },
   INSTALLATION_PROFILE_PATHS: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PROFILE_PATHS', p, l) }) },
   BOOTSTRAP_STATE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_INVALID', p, l) }) },
   BOOTSTRAP_STATE_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BOOTSTRAP_STATE_UNSAFE', p, l) }) },
