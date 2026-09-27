@@ -975,7 +975,8 @@
         "src/domain/core/model-invocation",
         "src/engine/core/model-allocation",
         "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "STORE"
     },
@@ -1291,7 +1292,8 @@
         "src/engine/core/workspaces",
         "src/domain/core/primitives",
         "src/platform/core/clock",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/principal"
       ],
       "plan": "ISOLATION"
     },
@@ -1325,7 +1327,8 @@
         "src/capabilities/core/artifacts",
         "src/engine/core/dispatch",
         "src/platform/core/clock",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "ISOLATION"
     },

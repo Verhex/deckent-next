@@ -1226,8 +1226,14 @@ field, unmapped type names included, is redacted before bounding; unknown kinds 
 become success; malformed nested data is counted, and the bridge's line observer never lets a normalizer or delivery fault reach
 the child process listeners; a file_change attributes up to 512 paths and counts the rest; tool ids are stable, bounded digests
 when the native id is long or unsafe (Astra 2066). Cursor reports only
-`session.started` and unmapped counts until its normalizer lands. Structured final report, budgets (B09-2),
-`report workers` and live `workers watch` phases (B09-3) remain open.
+`session.started` and unmapped counts until its normalizer lands. **Structured final report (B09-2).** Native authoring v3 asks the worker for a final report v1 (summary, changed-file claims, check
+claims and results, open issues) through the pinned CLI's schema flag (Claude `--json-schema`, Codex `exec --output-schema`; Cursor's
+pinned CLI has none → `unsupported`); v2 profiles are unchanged; optional `maxTurns` is profile data (Claude only, refused elsewhere).
+The container bridge validates the strict shape, bounds it (32 KiB), redacts every free-text field and seals it as a versioned
+`native-worker-report` record inside the existing dispatch stdout artifact; invalid/oversized reports count as `dropped`. The report
+is an untrusted worker claim: acceptance is unchanged (a reported `passed` check does not rescue exit 7); `task transcript` shows it
+after artifact/identity verification. Not yet measured: real model schema output and a real turn-limit stop. `report workers` and
+live `workers watch` phases (B09-3) remain open.
 
 ### Next execution host cutover (2026-09-21)
 
@@ -1413,8 +1419,8 @@ transaction moves the branch and advances the fence from the previous sequence, 
 cannot move the branch after newer records (Astra 2039). Crash settlement reads exact fence ownership: this record's fence →
 settle only; previous fence with the branch at the base → move; anything else, including a foreign writer placing the same
 commit, is a conflict. A new effect re-checks the current allow-list. Rollback CASes back to the previous tip only while the
-adopted commit is still the tip and no later record exists. The basis is Task acceptance, reported as `not-verified`; a
-verification Run on the adopted commit (B06-2) and live checkout/runtime activation (B07) are separate. Git writers outside
+adopted commit is still the tip and no later record exists. The basis is Task acceptance; an adoption reports `verification: not-verified` unless it binds a verification Run (B06-2b below).
+Live checkout/runtime activation (B07) is separate. Git writers outside
 Deckent under the same OS user and a checkout racing the observe→update-ref window are not fenced; a record that can no longer
 complete keeps the target blocked until operator recovery (no abandon command yet).
 
@@ -1429,8 +1435,28 @@ progression turn never samples the moving source HEAD first. The per-attempt clo
 command and Run snapshot are unchanged; a pinned replay must match the recorded custody exactly (source and commit), else
 `RUN_COMMAND_CONFLICT`, and a plain Run can never be claimed as pinned. Like adoption's resume, a replay is answered from the recorded state before the delivery reference check (candidate from the ledger's delivered `plan.commit`), so a deleted or moved reference does not change it; a first admission always runs the full check (owner 2026-09-27 night). Refusals reuse existing codes: unknown/incomplete
 delivery or missing reference `ADOPTION_NOT_DELIVERED`, moved reference `PATCH_CONFLICT`, foreign company `SCOPE_UNKNOWN`,
-missing grant `POLICY_DENIED`. The Run is not yet a verification: adoption does not consult it (B06-2b, ledger v42), the
-task kind comes from the caller (config-derived verification kind and CLI in B06-2c).
+missing grant `POLICY_DENIED`. Adoption binds such a Run as verification evidence (B06-2b); the task kind still comes from the caller (config-derived verification
+kind and CLI in B06-2c).
+
+**Adoption verification binding (B06-2b, ledger v42).** The adoption command is v2: optional `verificationRunId` +
+`verificationKind` (both or neither; v1 commands are no longer accepted, CLI sends v2 without them). With a binding, after the
+delivery and the attempt's Task acceptance checks and before the target check, one engine owner (`workspace-patch/verification`)
+requires: `run:inspect` on the Run (`POLICY_DENIED`), the Run in the adoption's scope with exactly one task of the named kind, its
+workspace custody on the delivered commit from the adoption's own Git source (fresh `captureSource(commit)`), and its pinned
+profile equal to the installation's current `admission.registry` profile for that kind (profile encoding v1 = criterion encoding v1
+rules, sha256) — otherwise `ADOPTION_VERIFICATION_MISMATCH`; only then the task phase: `accepted` verifies, `failed` →
+`_FAILED`, `pending|active|evaluating` → `_PENDING`, `reconciling` → `_UNSETTLED`, `cancelled` → `_CANCELLED`. Evidence
+identity precedes phase: a failed Run on another commit is a mismatch. No refusal writes a record or moves branch or fence.
+The adopt intent is v2 (`verification: null | {runId, taskId, attemptId, kind, runRevision, commit, profileFingerprint,
+criteria[]}`, checked consistent with the command and `toCommit`); rollback intents stay v1. The result is v2:
+`verification: {status: 'not-verified'} | {status: 'verified', …binding}`. `verified` means only "one task of this kind, run on
+this exact commit with this profile, ended accepted by its recorded criteria" — not independent review, live activation or product
+acceptance. A replay answers from the record; the same command id with another Run or kind is `ADOPTION_CONFLICT`. Criteria are
+recorded, not checked (the Run creator chooses them until B06-2c policy). Ledger v42 changes no table: the service-start upgrade
+backs up v41 (0600) and, in one transaction, rewrites every exact v1 adopt record whose columns agree into its canonical v2 text
+(`verification: null`, command schema 2), so pre-upgrade adoptions replay, settle and roll back; other records stay byte for byte
+(still `ADOPTION_CORRUPT` if unreadable). A v41 build refuses a v42 ledger (`ATTEMPT_STORE_VERSION`, proven with the real `de2f30f`
+build; rows written by that build migrate and an interrupted one settles afterwards). Not yet: config precondition (`execution.adoption.verification`), CLI flags and verified text, criteria policy, audit subject.
 
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 

@@ -4,6 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (B06-2b, ledger v42): an adoption can bind an accepted verification Run of the delivered commit (SDK `verificationRunId` +
+  `verificationKind`); mismatching, failed, pending, unsettled or cancelled Runs are refused by name and nothing moves; v1 adoption
+  records migrate to v2 at the service-start upgrade (backed up); a v41 build refuses a v42 ledger.
+- ADDED (B09-2): native workers can return a structured final report (native authoring v3), validated, redacted and sealed with the
+  dispatch output; shown by `task transcript` as an untrusted worker claim.
 - ADDED (protocol v16, owner 2026-09-28): `chatTurn` optional `reasoning: 'on' | 'off'`; lifecycle window [16, 15]; `/reasoning off`
   turns model thinking off for every round (models declaring `chat-template-enable-thinking`; others refuse the turn by name).
 - SECURITY: `@file` never lists or attaches the layout's approval records or approval previews.
