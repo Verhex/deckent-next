@@ -9,9 +9,9 @@ export type InstallationProfileErrorCode = 'INSTALLATION_PROFILE_INVALID' | 'INS
   | 'INSTALLATION_PROFILE_CONFIG' | 'INSTALLATION_PROFILE_REGISTRY' | 'INSTALLATION_PROFILE_ADAPTER'
   | 'INSTALLATION_PROFILE_EVALUATOR' | 'INSTALLATION_PROFILE_POOL' | 'INSTALLATION_PROFILE_POLICY'
   | 'INSTALLATION_PROFILE_SHUTDOWN' | 'INSTALLATION_PROFILE_PATHS'
-  // C12 Q8: shared with every other authorization point outside the operation catalog (no arch dependency on
-  // engine/core/policy from here; the code is the cross-module contract, not the class that throws it).
-  | 'POLICY_APPROVAL_UNSUPPORTED';
+  // C12 Q8 follow-up (owner 2026-09-27): installation's own typed require-approval refusal, config category, exit 78 —
+  // no longer the shared cross-module 'POLICY_APPROVAL_UNSUPPORTED' code the other 9 authorization points use.
+  | 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED';
 export class InstallationProfileError extends Error {
   constructor(readonly code: InstallationProfileErrorCode) { super(code); this.name = 'InstallationProfileError'; }
 }
@@ -136,8 +136,9 @@ export class InstallationPreviewApplication {
     try { poolDecision = evaluatePolicy(profile.policy, { principal: actor, scopeId: profile.scopeId,
       action: 'use', resource: { kind: 'pool', id: profile.pool.poolId } }); }
     catch { throw new InstallationProfileError('INSTALLATION_PROFILE_POLICY'); }
-    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-    if (poolDecision.decision === 'require-approval') throw new InstallationProfileError('POLICY_APPROVAL_UNSUPPORTED');
+    // C12 Q8 follow-up (owner 2026-09-27): outside the operation catalog there is no approval broker yet; require-approval
+    // must not silently collapse into denial. Installation owns its typed refusal (config category, exit 78) here.
+    if (poolDecision.decision === 'require-approval') throw new InstallationProfileError('INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED');
     if (!poolGrant || poolDecision.decision !== 'allow') throw new InstallationProfileError('INSTALLATION_PROFILE_POLICY');
 
     const service = config.data.service.identity;
@@ -161,8 +162,9 @@ export class InstallationPreviewApplication {
       try { decision = evaluatePolicy(profile.policy, { principal: actor, scopeId: service.scopeId,
         action: 'shutdown', resource: { kind: 'service', id: service.serviceId } }); }
       catch { throw new InstallationProfileError('INSTALLATION_PROFILE_SHUTDOWN'); }
-      // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
-      if (decision.decision === 'require-approval') throw new InstallationProfileError('POLICY_APPROVAL_UNSUPPORTED');
+      // C12 Q8 follow-up (owner 2026-09-27): outside the operation catalog there is no approval broker yet; require-approval
+      // must not silently collapse into denial. Installation owns its typed refusal (config category, exit 78) here.
+      if (decision.decision === 'require-approval') throw new InstallationProfileError('INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED');
       if (decision.decision !== 'allow' || decision.ruleId !== shutdownGrant.id) throw new InstallationProfileError('INSTALLATION_PROFILE_SHUTDOWN');
       shutdownRuleId = shutdownGrant.id;
     }

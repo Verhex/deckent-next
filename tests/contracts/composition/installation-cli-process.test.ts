@@ -50,3 +50,36 @@ it('compiled CLI rejects modified profile content without a write or fake built-
   await expect(f.run(['init', 'preview', '--json'])).rejects.toMatchObject({ code: 78 });
   expect(await readdir(f.project)).toEqual([]);
 });
+
+it('compiled CLI refuses a require-approval pool grant with its own typed config-category exit, not the shared policy exit code (C12 Q8 follow-up, owner 2026-09-27)', async () => {
+  const f = await fixture();
+  f.profile.policy.grants = f.profile.policy.grants.map(grant => grant.id === 'pool' ? { ...grant, effect: 'require-approval' as const } : grant);
+  f.profile.profile.digest = hashInstallationProfilePayload({ ...f.profile, profile: { id: f.profile.profile.id, version: f.profile.profile.version } });
+  await writeFile(f.path, JSON.stringify(f.profile));
+  let observed = false;
+  try { await f.run(['init', 'preview', '--profile', f.path, '--json']); }
+  catch (error) {
+    const failure = error as { code: number; stdout: string; stderr: string };
+    expect(failure.code).toBe(78); expect(failure.stdout).toBe('');
+    expect(JSON.parse(failure.stderr)).toMatchObject({ code: 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED' }); observed = true;
+  }
+  expect(observed).toBe(true);
+  expect(await readdir(f.project)).toEqual([]);
+});
+
+it('compiled CLI refuses a require-approval overlay shadowing the narrow shutdown grant with its own typed config-category exit (C12 Q8 follow-up, owner 2026-09-27; RED proven only at composition level, see installation-preview.test.ts)', async () => {
+  const f = await fixture(true);
+  f.profile.policy.grants.push({ id: 'shutdown-approval', effect: 'require-approval', actions: 'all', scopes: 'all',
+    principals: 'all', resource: { kind: 'service', ids: 'all' } });
+  f.profile.profile.digest = hashInstallationProfilePayload({ ...f.profile, profile: { id: f.profile.profile.id, version: f.profile.profile.version } });
+  await writeFile(f.path, JSON.stringify(f.profile));
+  let observed = false;
+  try { await f.run(['init', 'preview', '--profile', f.path, '--allow-shutdown', '--json']); }
+  catch (error) {
+    const failure = error as { code: number; stdout: string; stderr: string };
+    expect(failure.code).toBe(78); expect(failure.stdout).toBe('');
+    expect(JSON.parse(failure.stderr)).toMatchObject({ code: 'INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED' }); observed = true;
+  }
+  expect(observed).toBe(true);
+  expect(await readdir(f.project)).toEqual([]);
+});
