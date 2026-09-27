@@ -51,6 +51,14 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
   (native 25, vitest 350 / 2.326, host 56; lint paralel). Push ve canlı yeniden başlatma owner kararında (bekletiliyor). Astra: 2127 REVISE
   bulguları (2128/2129) düzeltildi → yeniden inceleme bekliyor; I40-c, test bölme ve paralel lint için ek istek gönderildi.
   Owner kararı bekleyenler: push zamanı, tam verify için 4 çalışan, I40-c B seçeneği, kurulum çıkış kodu, rol `task` kuralı, kalıcı cleanup işareti (v15).
+- **2026-09-27 12:00 — push + canlı:** `origin/main` = `b596eee` (Astra 2131 PASS, tam verify 4 çalışan 297 sn). Canlı servis `b4e77dc`
+  build'iyle yeniden başlatıldı (yönetilen kapatma, instance `95ce3264…`), ledger v38 → v40 (yedek `backups/ledger-v38-2026-09-27T09-01-54-491Z.db`),
+  kapsam pinleri `live`, `pilot` → `default`. Kabuk/düzenleme izni için owner `grant-edit-shell.mjs`'i çalıştırır (henüz çalıştırılmadı).
+- **Owner dışarıdayken açılan şeritler** (kartlar `cards/lanes/NEXT-2026-09-27-B.md`, taban `main@b4e77dc`, ana checkout'a yazma yasak):
+  C12-G3 (Opus, terminal kapıları broker'a), A04-2 (Fable, birleşik katalog), H34-S3 (Opus, her portta company yetkisi),
+  H34-S4 (Codex, tenant kaldırma + config 3 / layout 3 / doctor 2).
+- **Owner kararı bekleyenler:** dilim 4 izin modları q1–q4/q6/q7 (Jev eşiği karşılamadı), C12 G4 + protokol v15, I40-c B seçeneği, kurulum
+  çıkış kodu 1/78, rollerin `task` kuralı, kalıcı cleanup işareti; stash `astra-main-wip-2131-carried-into-integrate` silinsin mi.
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
