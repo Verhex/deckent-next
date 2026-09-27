@@ -133,7 +133,7 @@ it('refuses a denied request, a policy without a grant and another company\'s sc
   } finally { await stopTestRuntimeService(f.service); }
 });
 
-it('refuses a released v14 envelope for the new operation before dispatch, and bounds an inspected record by the delivery (protocol v15)', async () => {
+it('refuses a released v15 envelope for the operation before dispatch, and bounds an inspected record by the delivery (protocol v16)', async () => {
   const f = await fixture({ responseMaxBytes: 1024 });
   try {
     await f.policy('allow');
@@ -141,11 +141,11 @@ it('refuses a released v14 envelope for the new operation before dispatch, and b
     await new Promise<void>((resolve, reject) => { socket.once('error', reject); socket.connect(f.service.endpoint, () => resolve()); });
     let answer = '';
     socket.on('data', chunk => { answer += String(chunk); });
-    socket.end(encodeServiceFrame({ schemaVersion: 14, requestId: 'v14-op', operation: 'executeOperation', input: f.command('v14'),
+    socket.end(encodeServiceFrame({ schemaVersion: 15, requestId: 'v15-op', operation: 'executeOperation', input: f.command('v15'),
       delivery: { maxResultBytes: 512 } }, 65536));
     await once(socket, 'close');
     // Closed unanswered: the client sees the typed transport failure; nothing ran.
-    expect(answer).toBe(''); expect(f.rows('effect_intents', 'v14')).toEqual([]); expect(f.server.operations).toHaveLength(0);
+    expect(answer).toBe(''); expect(f.rows('effect_intents', 'v15')).toEqual([]); expect(f.server.operations).toHaveLength(0);
     // An input larger than the delivery: the settled outcome fits, the inspected record (carrying the input) is a typed limit.
     const large = f.command('large', { input: { note: 'x'.repeat(2048) } });
     expect(await f.client.executeOperation(large)).toMatchObject({ status: 'settled' });

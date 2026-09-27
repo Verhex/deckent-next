@@ -16,7 +16,8 @@ import { fixtureBudget } from '../../fixtures/priced-provider.js';
 // TL-A (D1 + D5 + D6) at the real boundary: the compiled CLI in a real pseudo-terminal against a real runtime service process
 // (protocol v15, unchanged). A turn that compacts shows "summarizing" with a live counter; Esc names the stopped part; a summary
 // stopped halfway is redone by the next turn, a finished one is kept (the provider's summary calls are counted); the reasoning
-// preview shows sanitized text and `/reasoning off` hides it.
+// preview shows sanitized text and `/reasoning off` hides it. Protocol v16 (OPEN-REASONING-FILE): `/reasoning off` also turns the model's
+// thinking off for the following rounds of a model that declares the switch; a model without it refuses such a turn by name.
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
@@ -101,12 +102,12 @@ const SUMMARY = '{"objective":"talk","findings":["q1 was answered"],"decisions":
  * history 900. The first summary call never answers (it is cancelled); the second answers after 2.5 s. Rounds answer by the last user
  * message: `q1`..`q4` at once, `q6` streams reasoning (with escape sequences) and then waits, `q7`/`q8` reason, then answer.
  */
-async function phasesProject() {
+async function phasesProject(thinkingSwitch = true) {
   await access(cli).catch(() => { throw new Error('BUILD_REQUIRED'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-phases-pty-')); roots.push(root);
   const projectRoot = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(projectRoot, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  const calls = { summary: 0, rounds: [] as string[] };
+  const calls = { summary: 0, rounds: [] as string[], thinking: [] as unknown[] };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'phases', object: 'chat.completion.chunk',
     created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   // Every round reports usage, so its spending reservation settles (without it the allocation stays held).
@@ -116,7 +117,8 @@ async function phasesProject() {
   const server = createServer((req, res) => {
     const body: Buffer[] = []; req.on('data', part => body.push(part));
     req.on('end', () => {
-      const parsed = JSON.parse(Buffer.concat(body).toString('utf8')) as { messages: Array<{ role: string; content?: string }>; stream?: boolean };
+      const parsed = JSON.parse(Buffer.concat(body).toString('utf8')) as { messages: Array<{ role: string; content?: string }>; stream?: boolean;
+        chat_template_kwargs?: unknown };
       if (req.url === '/tokenize') {
         const compacted = parsed.messages.some(message => typeof message.content === 'string' && message.content.includes('[Deckent context summary'));
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -133,7 +135,7 @@ async function phasesProject() {
         return;
       }
       const asked = [...parsed.messages].reverse().find(message => message.role === 'user')?.content ?? '';
-      calls.rounds.push(asked);
+      calls.rounds.push(asked); calls.thinking.push(parsed.chat_template_kwargs ?? null);
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const quick = /^q([1-4])$/u.exec(asked);
       if (quick) { res.end(`${chunk({ role: 'assistant', content: `ANSWER-${quick[1]}` })}${chunk({}, 'stop')}${usage}data: [DONE]\n\n`); return; }
@@ -152,7 +154,8 @@ async function phasesProject() {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
   const model = { id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
-    capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, { id: 'token-count', version: 1, state: 'supported' }] }] };
+    capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, { id: 'token-count', version: 1, state: 'supported' },
+      ...(thinkingSwitch ? [{ id: 'chat-template-enable-thinking', version: 1, state: 'supported' }] : [])] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: [model] }] };
   const definition = { encodingVersion: 1 as const, provider: { id: 'local-openai', version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
@@ -197,7 +200,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
       ['RED line', '\u001b'],
       ['cancelled (model response)', 'q7\r'],
       ['Answer seven.', '/reasoning off\r'],
-      ['Reasoning preview off', 'q8\r'],
+      ['Reasoning', 'q8\r'],
       ['Answer eight.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
@@ -218,5 +221,24 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     expect(out).toContain('PREVIEW-6 weighing the files'); expect(out).toContain('second RED line'); expect(out).toContain('PREVIEW-7 reading');
     expect(out).not.toContain('\u001b[31m'); expect(out).not.toContain('PWNED');
     expect(out).not.toContain('PREVIEW-8');
+    // v16: the same `/reasoning off` asked the service to turn thinking off; only the round after it carries the switch.
+    expect(out).toMatch(/Reasoning (preview )?off/u);
+    expect(f.calls.thinking).toEqual([null, null, null, null, null, null, { enable_thinking: false }]);
+  }, 180_000);
+
+  it('refuses a thinking-off turn by name for a model without the switch, and answers again after /reasoning on (v16)', async () => {
+    const f = await phasesProject(false);
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
+      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning off\r'], ['Reasoning', 'q2\r'],
+      // The notice texts are catalog strings (lead); the waits use their stable first word, the slash runs at once when idle.
+      ['[AGENT_TURN_REASONING_UNSUPPORTED]', '/reasoning on\r'], ['[AGENT_TURN_REASONING_UNSUPPORTED]', 'q3\r'],
+      ['ANSWER-3', '/exit\r'],
+    ]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    // The refused turn never reached the model; the others ran as today (no switch sent).
+    expect(f.calls.rounds).toEqual(['q1', 'q3']);
+    expect(f.calls.thinking).toEqual([null, null]);
   }, 180_000);
 });

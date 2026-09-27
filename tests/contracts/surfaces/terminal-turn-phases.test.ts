@@ -192,9 +192,10 @@ describe('workline (D5 + D6)', () => {
   });
 
   it('/reasoning turns the preview off and on; the narration line stays', async () => {
-    let turn = 0;
-    const streamTurn = async function* () {
-      turn++;
+    let turn = 0; const asked: unknown[] = [];
+    // v16 (OPEN-REASONING-FILE): the same state asks the turn for no model thinking while off.
+    const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, options?: { readonly reasoning?: 'off' }) {
+      turn++; asked.push(options ?? null);
       yield { kind: 'reasoning' as const, text: `PREVIEW-${turn}` };
       await settle(80);
       yield { kind: 'text' as const, text: `answer-${turn}` }; yield { kind: 'done' as const, finish: 'stop' as const };
@@ -203,12 +204,26 @@ describe('workline (D5 + D6)', () => {
     await settle(20); view.stdin.write('one\r');
     await until(() => view.stdout.text.includes('answer-1'), 'first answer');
     expect(view.stdout.text).toContain('PREVIEW-1');
-    view.stdin.write('/reasoning off\r'); await until(() => view.stdout.text.includes('Reasoning preview off'), 'off notice');
+    view.stdin.write('/reasoning off\r'); await until(() => view.stdout.text.includes('Reasoning off (preview and model thinking)'), 'off notice');
     view.stdin.write('two\r'); await until(() => view.stdout.text.includes('answer-2'), 'second answer');
     expect(view.stdout.text).not.toContain('PREVIEW-2');
-    view.stdin.write('/reasoning\r'); await until(() => view.stdout.text.includes('Reasoning preview on'), 'toggle back on');
+    view.stdin.write('/reasoning\r'); await until(() => view.stdout.text.includes('Reasoning on (preview and model thinking)'), 'toggle back on');
     view.stdin.write('three\r'); await until(() => view.stdout.text.includes('answer-3'), 'third answer');
     expect(view.stdout.text).toContain('PREVIEW-3');
     view.stdin.write('/reasoning maybe\r'); await until(() => view.stdout.text.includes('Usage: /reasoning [on|off]'), 'usage');
+    expect(asked).toEqual([null, { reasoning: 'off' }, null]);
+  });
+
+  it('applies a /reasoning off typed while a turn runs to the message queued after it (FIFO, no render in between)', async () => {
+    const asked: unknown[] = [];
+    const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, options?: { readonly reasoning?: 'off' }) {
+      asked.push(options ?? null); await settle(120);
+      yield { kind: 'text' as const, text: `answer-${asked.length}` }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mountWorkline({ streamTurn }); mounted.push(view);
+    await settle(20); view.stdin.write('one\r'); await settle(30);
+    view.stdin.write('/reasoning off\r'); await settle(10); view.stdin.write('two\r');
+    await until(() => view.stdout.text.includes('answer-2'), 'queued turn answered');
+    expect(asked).toEqual([null, { reasoning: 'off' }]);
   });
 });

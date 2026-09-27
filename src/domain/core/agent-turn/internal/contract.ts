@@ -81,9 +81,12 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
  * One terminal agent turn (runtime `chatTurn`). The principal comes from the connection, never from input; the model, tools and
  * limits come from the service's configuration. `messages` is the client's history ending with the new user message: untrusted
  * context, bound to the turn id by its digest (the same id with a different history is a conflict, never an old answer).
+ * `reasoning: 'off'` (protocol v16) asks every round to run without model thinking; absent or `'on'` is the model's default.
  */
+/** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
+export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
 export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
-  messages: z.array(agentTurnMessageSchema).min(1) }).strict().refine(command => command.messages.at(-1)?.role === 'user',
+  messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
   { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);

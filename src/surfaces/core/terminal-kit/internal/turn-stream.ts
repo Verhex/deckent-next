@@ -51,7 +51,8 @@ export type TurnDelta =
   /** `note` is the engine's deterministic closure text when the turn ended without a model answer. */
   | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
 
-export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal) => AsyncIterable<TurnDelta>;
+/** `reasoning: 'off'` (`/reasoning off`, protocol v16): the turn asks the model to run without thinking; absent otherwise. */
+export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off' }>) => AsyncIterable<TurnDelta>;
 
 /** Collects a stream into the final answer text (for line mode and tests); reasoning is excluded. */
 export async function collectTurnText(stream: AsyncIterable<TurnDelta>): Promise<{ readonly text: string; readonly finish: Extract<TurnDelta, { kind: 'done' }>['finish'] | null }> {
