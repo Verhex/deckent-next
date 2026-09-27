@@ -12,8 +12,9 @@ import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import * as engine from '#engine/index.js';
-import { cancelRuntimeChatTurn, createConfiguredRuntimeClient, runRuntimeChatTurn, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, createConfiguredRuntimeClient, findRuntimeWorkspaceFiles, runRuntimeChatTurn,
+  startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { agentFileEffectCommandId, agentShellEffectCommandId, chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
@@ -938,5 +939,104 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(f.interrupted).toEqual([{ interrupted: 1, corrupt: [] }]);
     const record = JSON.parse((f.rows("SELECT record FROM agent_turns WHERE turn_id='left'")[0] as { record: string }).record);
     expect(record.outcome).toMatchObject({ finish: 'error', note: AGENT_TURN_INTERRUPTED_NOTE });
+  }, 30_000);
+});
+
+// T-L5 `@file` (owner 2026-09-27, protocol v15): the real workline asks the real service for candidates and content; the surface reads no file.
+describe.skipIf(process.platform !== 'linux')('composer @file and slash keys through the runtime service', () => {
+  async function workspace() {
+    const f = await runtime(); await f.start();
+    const put = async (path: string, body: string | Buffer) => { await mkdir(join(f.project, path, '..'), { recursive: true }); await writeFile(join(f.project, path), body); };
+    await Promise.all([put('src/app.ts', 'export const app = 2;\n'), put('docs/environment.md', '# env notes\n'), put('.env', 'SECRET_TOKEN=hunter2\n'),
+      put('config/.env.local', 'SECRET_TOKEN=local\n'), put('secrets.json', '{"SECRET_TOKEN":1}\n'), put('.git/config', '[core]\n'), put('keys/id_rsa', 'SECRET_KEY\n'),
+      put('node_modules/pkg/index.js', 'module.exports = 1;\n'), put('src/big.log', Buffer.alloc(102_400, 'x'))]);
+    await symlink('/etc/hostname', join(f.project, 'src', 'outside.ts'));
+    const ports = { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }, options = { env: f.env };
+    const props = {
+      mentions: (query: string, signal: AbortSignal) => findTerminalMentions({ projectRoot: f.project, scopeId: 'scope', query, options, signal }, ports),
+      attachMentions: (text: string, paths: readonly string[], signal: AbortSignal) => attachTerminalMentions({ projectRoot: f.project, scopeId: 'scope', text, paths, options, signal }, ports),
+      streamTurn: (messages: readonly AgentTurnMessage[], signal: AbortSignal) => streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages, options, signal },
+        { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn }),
+      mentionDelayMs: 0,
+    };
+    return { f, props };
+  }
+  const DENIED = ['.env', 'config/.env.local', 'secrets.json', '.git/config', 'keys/id_rsa', 'node_modules/pkg/index.js', 'src/outside.ts'];
+  const typeInto = async (view: ReturnType<typeof mountWorkline>, text: string) => { for (const char of text) { view.stdin.write(char); await new Promise(resolve => setTimeout(resolve, 3)); } };
+
+  it('lists allowed workspace files for the picker and never a denied, ignored or linked one', async () => {
+    const { f, props } = await workspace();
+    const all = await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query: '', limit: 50 });
+    expect(all.paths).toEqual(expect.arrayContaining(['src/a.ts', 'src/app.ts', 'docs/environment.md', 'src/big.log']));
+    for (const path of DENIED) expect(all.paths).not.toContain(path);
+    for (const query of ['env', 'secret', 'id_rsa', 'git', 'index.js', 'outside']) {
+      const found = await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query, limit: 50 });
+      for (const path of DENIED) expect(found.paths).not.toContain(path);
+    }
+    // Name matches rank before path matches; shallow and short paths first.
+    expect((await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query: 'a', limit: 3 })).paths.slice(0, 2)).toEqual(['src/a.ts', 'src/app.ts']);
+    // A principal outside the scope gets nothing.
+    await expect(f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'other', query: '', limit: 5 })).rejects.toBeDefined();
+    expect((await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path: 'src/outside.ts', maxBytes: 100 }))).toMatchObject({ status: 'refused', reason: 'path-outside-workspace' });
+
+    const view = mountWorkline(props);
+    try {
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      await typeInto(view, 'open @env');
+      await until(() => view.stdout.text.includes('> @docs/environment.md'), 'allowed candidate offered by the service');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(view.stdout.text).not.toContain('@.env'); expect(view.stdout.text).not.toContain('.env.local');
+    } finally { view.instance.unmount(); }
+  }, 30_000);
+
+  it('sends a picked file and a large file to the model bounded and labelled, and reports a denied one without its content', async () => {
+    const { f, props } = await workspace();
+    f.state.script = [{ content: 'Seen.' }];
+    const view = mountWorkline(props);
+    try {
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      await typeInto(view, 'explain @src/a');
+      await until(() => view.stdout.text.includes('> @src/a.ts'), 'picker');
+      await typeInto(view, '\r');
+      await until(() => view.stdout.text.includes('> explain @src/a.ts |'), 'picked');
+      await typeInto(view, 'and @src/big.log and @.env\r');
+      await until(() => f.state.requests.length === 1 && view.stdout.text.includes('Seen.'), 'answered');
+      const user = (f.state.requests[0]!['messages'] as { role: string; content: string }[]).at(-1)!;
+      expect(user.role).toBe('user');
+      expect(user.content.startsWith('explain @src/a.ts and @src/big.log and @.env\n\n')).toBe(true);
+      expect(user.content).toContain('--- attached file src/a.ts (20 bytes) ---\nexport const a = 1;\n--- end of src/a.ts ---');
+      expect(user.content).toContain(`--- attached file src/big.log (first 32768 of 102400 bytes; the rest was not attached) ---\n${'x'.repeat(32_768)}\n--- end of src/big.log ---`);
+      expect(user.content).not.toContain('x'.repeat(32_769));
+      expect(user.content).not.toContain('hunter2');
+      await until(() => view.stdout.text.includes('@src/a.ts · 20 B') && view.stdout.text.includes('@src/big.log · 32768/102400 B')
+        && view.stdout.text.includes('@.env · path-denied'), 'attachment notices');
+    } finally { view.instance.unmount(); }
+  }, 30_000);
+
+  it('runs /help on Enter and completes a command that takes an argument, then runs it with the argument', async () => {
+    const { f, props } = await workspace();
+    await mkdir(join(f.data, 'sessions'), { mode: 0o700 });
+    const sessions = bindSessionScope(openTerminalSessionStore(join(f.data, 'sessions')), 'scope');
+    await sessions.save({ sessionId: '11111111-2222-4333-8444-555555555555', messages: [{ role: 'user', content: 'earlier' }, { role: 'assistant', content: 'ok', toolCalls: [] }] });
+    const view = mountWorkline({ ...props, sessions });
+    try {
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      await typeInto(view, '/hel');
+      await until(() => view.stdout.text.includes('> /help'), 'palette');
+      await typeInto(view, '\r');
+      await until(() => view.stdout.text.includes('/watch-runs · /watch-stop'), 'help ran');
+      await typeInto(view, '/res');
+      await until(() => view.stdout.text.includes('> /resume'), 'palette');
+      await typeInto(view, '\r');
+      await until(() => view.stdout.text.includes('> /resume |'), 'completed and waiting');
+      await typeInto(view, '11111111\r');
+      await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed with the argument');
+      // A fully typed name runs as typed: /resume alone lists the sessions.
+      await typeInto(view, '/new\r');
+      await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session');
+      await typeInto(view, '/resume\r');
+      await until(() => view.stdout.text.includes('SESSION 1 11111111 2 earlier'), 'listed');
+      expect(view.stdout.text).not.toContain('UNKNOWN');
+    } finally { view.instance.unmount(); }
   }, 30_000);
 });

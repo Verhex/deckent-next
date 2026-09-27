@@ -2,7 +2,8 @@
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
-  /** Catalog key of the argument hint; set only for commands that take an argument. */
+  /** Catalog key of the argument hint; set only for commands that take an argument. Enter on such a palette row completes
+   * `/name ` and waits for the argument; a command without one runs at once. */
   readonly argumentKey?: string;
 }
 
@@ -14,9 +15,9 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'watch-stop', descriptionKey: 'terminal.slash.watchStop' },
   { name: 'run', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
   { name: 'runs', descriptionKey: 'terminal.slash.runs' },
-  { name: 'transcript', descriptionKey: 'terminal.slash.transcript' },
+  { name: 'transcript', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
   { name: 'approvals', descriptionKey: 'terminal.slash.approvals' },
-  { name: 'cancel', descriptionKey: 'terminal.slash.cancel' },
+  { name: 'cancel', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },
   { name: 'service-restart', descriptionKey: 'terminal.slash.serviceRestart' },
   { name: 'context', descriptionKey: 'terminal.slash.context' },
   { name: 'resume', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },

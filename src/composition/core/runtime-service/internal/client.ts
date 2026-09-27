@@ -9,7 +9,9 @@ import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandIn
   providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
   type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink,
   chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, type AgentTurnStreamEvent,
-  type ChatTurnCancellation, type ChatTurnCancellationResult, type ChatTurnCommand, type ChatTurnResult } from '#domain/index.js';
+  type ChatTurnCancellation, type ChatTurnCancellationResult, type ChatTurnCommand, type ChatTurnResult,
+  workspaceAttachmentRequestSchema, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema,
+  type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
 import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
@@ -33,7 +35,37 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
    * Aborting disconnects, which cancels the turn at its next write; `cancelChatTurn` cancels at once. */
   chatTurn(command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal): Promise<ChatTurnResult>;
   cancelChatTurn(command: ChatTurnCancellation): Promise<ChatTurnCancellationResult>;
+  /** v15 composer `@file`: ranked candidate files of the project workspace (deny floor applied by the service). */
+  findWorkspaceFiles(query: WorkspaceFileQuery, signal?: AbortSignal): Promise<WorkspaceFileMatches>;
+  /** v15 composer `@file`: one file's bounded content, or a typed refusal. */
+  attachWorkspaceFile(request: WorkspaceAttachmentRequest, signal?: AbortSignal): Promise<WorkspaceAttachment>;
 }>;
+
+type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
+/** v15 composer `@file` methods: both ends validate; a service that answers more than was asked is not trusted with the turn's context. */
+function workspaceFileMethods(call: RuntimeCall) {
+  return {
+    async findWorkspaceFiles(input: WorkspaceFileQuery, signal?: AbortSignal) {
+      try {
+        const parsed = workspaceFileQuerySchema.safeParse(input);
+        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+        const result = workspaceFileMatchesSchema.safeParse(await call('findWorkspaceFiles', parsed.data, undefined, signal));
+        if (!result.success || result.data.paths.length > parsed.data.limit) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw queryFailure(error); }
+    },
+    async attachWorkspaceFile(input: WorkspaceAttachmentRequest, signal?: AbortSignal) {
+      try {
+        const parsed = workspaceAttachmentRequestSchema.safeParse(input);
+        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+        const result = workspaceAttachmentSchema.safeParse(await call('attachWorkspaceFile', parsed.data, undefined, signal));
+        if (!result.success || (result.data.status === 'attached' && (result.data.bytes > parsed.data.maxBytes
+          || Buffer.byteLength(result.data.content, 'utf8') !== result.data.bytes))) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        return result.data;
+      } catch (error) { throw queryFailure(error); }
+    },
+  };
+}
 
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
@@ -51,7 +83,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const requestId = randomUUID();
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
-        || operation === 'chatTurn' || operation === 'cancelChatTurn'
+        || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -89,7 +121,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
-    && operation !== 'chatTurn' && operation !== 'cancelChatTurn').map(operation =>
+    && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile').map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
@@ -110,6 +142,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         return result.data;
       } catch (error) { throw queryFailure(error); }
     },
+    ...workspaceFileMethods(call),
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);

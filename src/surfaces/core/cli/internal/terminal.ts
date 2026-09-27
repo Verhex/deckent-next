@@ -127,6 +127,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
     render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale),
+    mentions: { attached: t('terminal.mention.attached', {}, locale), truncated: t('terminal.mention.truncated', {}, locale),
+      refused: t('terminal.mention.refused', {}, locale) },
   };
 }
 
@@ -253,6 +255,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
+    // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
+    ...(context.findTerminalMentions ? { mentions: (query: string, signal: AbortSignal) => context.findTerminalMentions!(root, { scopeId, query }, options, signal) } : {}),
+    ...(context.attachTerminalMentions ? { attachMentions: (text: string, paths: readonly string[], signal: AbortSignal) =>
+      context.attachTerminalMentions!(root, { scopeId, text, paths }, options, signal) } : {}),
     ...(sessions ? { sessions } : {}),
     ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal) =>
       context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),

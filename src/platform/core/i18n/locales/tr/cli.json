@@ -837,5 +837,10 @@
   "terminal.composer.search": "(geçmişte ara)",
   "terminal.composer.exitArmed": "Çıkmak için Ctrl+C tuşuna tekrar basın.",
   "terminal.composer.shortcuts": "Klavye kısayolları\nEnter  gönder (tur çalışırken sıraya alınır)\nShift+Enter · Alt+Enter · Ctrl+J · \\ sonra Enter  yeni satır\nEsc · Ctrl+C  çalışan turu iptal et · Esc menüyü kapatır\nCtrl+C  taslağı temizle · boş satırda iki kez: çık\nCtrl+D  boş satırda çık\nYukarı/Aşağı  taslak satırları arasında gez · uçlarda geçmiş\nCtrl+R  geçmişte ara (tekrar Ctrl+R: daha eski, Enter: al)\nTab  /komut veya @yol tamamla\nSol/Sağ · Ctrl/Alt+Sol/Sağ  karakter · kelime\nHome/End · Ctrl+A/Ctrl+E  satır başı · satır sonu\nCtrl+W · Alt+Backspace  önceki kelimeyi sil\nCtrl+U · Ctrl+K · Ctrl+Y  satır başına kadar kes · satır sonuna kadar kes · keseni geri yapıştır\n?  bu panel (boş satır) · Esc kapatır",
-  "terminal.slash.runArgument": "<run-kimliği>"
+  "terminal.slash.runArgument": "<run-kimliği>",
+  "terminal.slash.transcriptArgument": "<n|deneme-kimliği>",
+  "terminal.slash.cancelArgument": "<run-kimliği>",
+  "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
+  "terminal.mention.truncated": "@{path} eklendi: {total} baytın ilk {bytes} baytı",
+  "terminal.mention.refused": "@{path} eklenmedi: {reason}"
 }

@@ -232,6 +232,27 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.output).toContain('pty-ok');
   });
 
+  // Owner report 2026-09-27 at the real boundary: compiled CLI, real runtime service (protocol v15), real pseudo-terminal keys.
+  it('runs the highlighted slash command on Enter and attaches an @file picked from the service in a real terminal', async () => {
+    const f = await governedChat();
+    await writeFile(join(f.projectRoot, 'README.md'), '# pty readme\n');
+    await writeFile(join(f.projectRoot, '.env'), 'SECRET_TOKEN=pty\n');
+    await startRuntime(f.projectRoot, f.env);
+    const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
+      ['Deckent workline', '/hel'],
+      ['/help', '\r'],
+      ['/watch-runs · /watch-stop', 'see @READ'],
+      ['> @README.md', '\r'],
+      ['see @README.md |', '\r'],
+      ['pty-ok', '/exit\r'],
+    ]);
+    expect(result.timeout, result.output).toBeUndefined();
+    expect(result.status, result.output).toBe(0);
+    expect(result.output).not.toContain('Unknown command');
+    expect(result.output).toContain('Attached @README.md (13 bytes)');
+    expect(result.output).not.toContain('@.env');
+  });
+
   it('`deckent` alone opens the terminal, starts the runtime service in the background and leaves it running for the next terminal', async () => {
     const f = await governedChat();
     const configPath = join(f.projectRoot, '.deckent/config.json');

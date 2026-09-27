@@ -24,6 +24,7 @@ import { useWorkSurface } from './work-surface.js';
 import { Composer, type ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
 import type { ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
+import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -42,6 +43,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly composer: ComposerLabels;
   /** `/resume`, `/context`, `/new` strings (T-L5c); absent when the surface has no session port. */
   readonly sessions?: ConversationSessionLabels;
+  /** `@file` attachment notices (T-L5); without them the notice is language-neutral (path, bytes, refusal code). */
+  readonly mentions?: WorklineMentionLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -68,6 +71,10 @@ export interface WorklineProps {
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
   readonly inputHistory?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
+  /** Attaches the `@path` mentions of a chat line through the service (bounded, labelled); without it mentions stay plain text. */
+  readonly attachMentions?: WorklineAttachMentions;
+  /** Composer mention lookup quiet time (tests). */
+  readonly mentionDelayMs?: number;
   /** Conversation snapshots of this scope for `/resume` (T-L5c). */
   readonly sessions?: ConversationSessionPort;
 }
@@ -95,7 +102,7 @@ export function WorklineApp(props: WorklineProps) {
   const [busy, setBusyState] = useState(false);
   // Input typed while a turn runs is queued in order and never dropped (legacy input-queue contract).
   const busyRef = useRef(false);
-  const queue = useRef<string[]>([]);
+  const queue = useRef<Array<{ readonly text: string; readonly mentions: readonly string[] }>>([]);
   const setBusy = useCallback((next: boolean) => { busyRef.current = next; setBusyState(next); }, []);
   const [cancelling, setCancelling] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
@@ -173,17 +180,21 @@ export function WorklineApp(props: WorklineProps) {
     push(fresh);
   }, failed);
 
-  const runTurn = useCallback(async (text: string) => {
+  const runTurn = useCallback(async (text: string, mentioned: readonly string[] = []) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
     const controller = new AbortController();
     turn.current = controller;
     setBusy(true);
+    // T-L5 `@file`: the service attaches the mentioned files (bounded, labelled) to this message; a failure leaves the text as typed.
+    const content = await messageWithMentions(text, mentioned, props.attachMentions, controller.signal, push, errorText, labels.mentions);
     // The agent path sends the whole conversation: the runtime measures and compacts it (T-L5, Astra 2091 R1); a message-count cut
     // would drop early instructions before any measurement. The plain line mode keeps its `historyMessages` window.
-    const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content: text }];
+    const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content }];
     const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
     try {
+      // Cancelled while the files were being attached: nothing is sent.
+      if (controller.signal.aborted) return;
       if (props.streamTurn) {
         // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
         let state = startAssistantStream(startedAtMs), answer = '';
@@ -223,12 +234,12 @@ export function WorklineApp(props: WorklineProps) {
       setBusy(false);
       setCancelling(false);
     }
-  }, [completeTurn, errorText, historyMessages, props.streamTurn, push, session, systemPrompt, work]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, props.attachMentions, props.streamTurn, push, session, systemPrompt, work]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
-  const perform = useCallback(async (line: string): Promise<boolean> => {
+  const perform = useCallback(async (line: string, mentioned: readonly string[] = []): Promise<boolean> => {
     const slash = parseSlashLine(line);
-    if (!slash) { await runTurn(line); return true; }
+    if (!slash) { await runTurn(line, mentioned); return true; }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
       setBusy(true);
       try { push(await session.run(slash.command, slash.args, history)); }
@@ -259,17 +270,17 @@ export function WorklineApp(props: WorklineProps) {
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the
   // next `shift()` is microtask-only, so no keystroke can interleave. An open decision card keeps the keys (Composer inactive).
-  const submit = useCallback(async (text: string): Promise<void> => {
+  const submit = useCallback(async (text: string, mentioned: readonly string[] = []): Promise<void> => {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (busyRef.current) {
-      queue.current.push(trimmed);
+      queue.current.push({ text: trimmed, mentions: mentioned });
       push([notice('info', `${labels.queued}: ${trimmed}`)]);
       return;
     }
-    let next: string | undefined = trimmed;
+    let next: { readonly text: string; readonly mentions: readonly string[] } | undefined = { text: trimmed, mentions: mentioned };
     while (next !== undefined && !closed.current) {
-      if (!(await perform(next))) return;
+      if (!(await perform(next.text, next.mentions))) return;
       next = queue.current.shift();
     }
   }, [labels.queued, perform, push]);
@@ -293,8 +304,9 @@ export function WorklineApp(props: WorklineProps) {
         queued={queue.current.length} labels={labels.render} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card (P4) takes the keyboard away from it. */}
-      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen} onSubmit={text => void submit(text)} onCancel={cancel} onExit={exit}
-        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})} />
+      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen} onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}
+        {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
+        {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
   );

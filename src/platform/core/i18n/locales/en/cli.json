@@ -837,5 +837,10 @@
   "terminal.composer.search": "(reverse-i-search)",
   "terminal.composer.exitArmed": "Press Ctrl+C again to exit.",
   "terminal.composer.shortcuts": "Keyboard shortcuts\nEnter  send (queued while a turn runs)\nShift+Enter · Alt+Enter · Ctrl+J · \\ then Enter  new line\nEsc · Ctrl+C  cancel the running turn · Esc closes a menu\nCtrl+C  clear the draft · twice on an empty line to exit\nCtrl+D  exit on an empty line\nUp/Down  move between draft lines · history at the edges\nCtrl+R  search history (Ctrl+R again: older, Enter: take)\nTab  complete a /command or @path\nLeft/Right · Ctrl/Alt+Left/Right  character · word\nHome/End · Ctrl+A/Ctrl+E  line start · line end\nCtrl+W · Alt+Backspace  delete the previous word\nCtrl+U · Ctrl+K · Ctrl+Y  cut to line start · cut to line end · paste the cut back\n?  this panel (empty line) · Esc closes",
-  "terminal.slash.runArgument": "<runId>"
+  "terminal.slash.runArgument": "<runId>",
+  "terminal.slash.transcriptArgument": "<n|attemptId>",
+  "terminal.slash.cancelArgument": "<runId>",
+  "terminal.mention.attached": "Attached @{path} ({bytes} bytes)",
+  "terminal.mention.truncated": "Attached @{path}: first {bytes} of {total} bytes",
+  "terminal.mention.refused": "Not attached @{path}: {reason}"
 }

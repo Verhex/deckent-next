@@ -42,11 +42,23 @@ export function expandChips(text: string, pastes: readonly PasteChip[]): string 
     .reduce((wire, paste) => wire.split(paste.chip).join(paste.body), text);
 }
 
-/** Popup candidates while the draft is a bare `/prefix` (no whitespace yet). */
+/** True when every character of `query` occurs in `text` in order (case already folded by the caller). */
+export function isSubsequence(query: string, text: string): boolean {
+  let at = 0;
+  for (const char of query) {
+    at = text.indexOf(char, at);
+    if (at < 0) return false;
+    at += char.length;
+  }
+  return true;
+}
+
+/** Popup candidates while the draft is a bare `/prefix` (no whitespace yet): prefix matches first, then fuzzy (subsequence) ones. */
 export function slashMatches(text: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): readonly SlashCommand[] {
   if (!/^\/\S*$/u.test(text)) return [];
-  const prefix = text.slice(1).toLowerCase();
-  return commands.filter(command => command.name.startsWith(prefix));
+  const query = text.slice(1).toLowerCase();
+  const prefix = commands.filter(command => command.name.startsWith(query));
+  return [...prefix, ...commands.filter(command => !prefix.includes(command) && isSubsequence(query, command.name))];
 }
 
 /** The command whose argument is being typed: `/run ` with nothing after it shows the argument hint. */
@@ -72,6 +84,17 @@ export function mentionAt(text: string, cursor: number): MentionToken | null {
     if (/\s/u.test(char)) return null;
   }
   return null;
+}
+
+/**
+ * The `@path` mentions of a submitted draft, in order and without repeats. Chip spans are blanked first: an `@name` inside pasted
+ * content is text, not a request to attach a file. Trailing sentence punctuation is not part of a path.
+ */
+export function mentionPaths(text: string, pastes: readonly PasteChip[] = []): readonly string[] {
+  let visible = text;
+  for (const span of chipSpans(text, pastes).reverse()) visible = visible.slice(0, span.start) + ' '.repeat(span.end - span.start) + visible.slice(span.end);
+  const paths = [...visible.matchAll(/(?:^|\s)@([^\s@]\S*)/gu)].map(match => match[1]!.replace(/[.,;:!?)\]}'"`]+$/u, '')).filter(path => path.length > 0);
+  return [...new Set(paths)];
 }
 
 /** Completion candidates for a mention; the composer never reads the filesystem itself. */
