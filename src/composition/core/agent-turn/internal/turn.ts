@@ -138,6 +138,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.
   const thinkingSwitch = declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY);
+  // v16 `reasoning: 'off'`: every round without thinking. A model that cannot switch is refused by name before anything is claimed
+  // or sent (never ignored silently); `/reasoning on` turns the request back to the model's default.
+  if (command.reasoning === 'off' && !thinkingSwitch) throw ErrorRegistry.createError('AGENT_TURN_REASONING_UNSUPPORTED');
+  const roundThinking = command.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {};
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
@@ -150,7 +154,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
   const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools });
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
-    binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt) })}`);
+    binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
+    ...(command.reasoning ? { reasoning: command.reasoning } : {}) })}`);
 
   // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
   const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
@@ -161,7 +166,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
     scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
     nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
-      stream: true, stream_options: { include_usage: true },
+      stream: true, stream_options: { include_usage: true }, ...roundThinking,
       ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
         parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
 

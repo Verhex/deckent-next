@@ -50,11 +50,11 @@ async function fixture() {
   return { project, env, task, call, operation };
 }
 
-// Protocol v15 (T-L5 lane, owner 2026-09-27 v15 package) activates C12 G4 visibility: OPERATION_SUBJECT_PROTOCOL_VERSION is 15, so a
-// current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
+// Protocol v15 (T-L5 lane, owner 2026-09-27 v15 package) activated C12 G4 visibility: OPERATION_SUBJECT_PROTOCOL_VERSION is 15 (a
+// threshold; v16 keeps it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it('delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(15);
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(16);
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual([]);
   const f = await fixture();

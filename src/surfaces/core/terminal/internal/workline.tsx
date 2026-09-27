@@ -216,7 +216,8 @@ export function WorklineApp(props: WorklineProps) {
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
-        for await (const delta of props.streamTurn(messages, controller.signal)) {
+        // One `/reasoning` state: off hides the preview and asks the service for a turn without model thinking (v16).
+        for await (const delta of props.streamTurn(messages, controller.signal, reasoning.current.current ? undefined : { reasoning: 'off' })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);

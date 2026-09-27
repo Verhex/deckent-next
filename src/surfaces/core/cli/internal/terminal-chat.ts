@@ -22,11 +22,11 @@ export type TerminalChatTurnHandler = (
 
 /**
  * Streamed agent turn (runtime `chatTurn`, T-L3): deltas in order (tool lines and history messages included), exactly one `done`
- * last. Aborting the signal or leaving the loop early cancels the turn.
+ * last. Aborting the signal or leaving the loop early cancels the turn. `reasoning: 'off'` asks for no model thinking (v16).
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[] }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off' }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;

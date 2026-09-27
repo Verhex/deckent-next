@@ -35,6 +35,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   AGENT_TURN_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_CONFLICT', p, l) }) },
   AGENT_TURN_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_CORRUPT', p, l) }) },
   AGENT_TURN_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.AGENT_TURN_INVALID', p, l) }) },
+  // v16 (OPEN-REASONING-FILE): neutral text equal to the proposed `en` catalog value until the lead wires `error.AGENT_TURN_REASONING_UNSUPPORTED`.
+  AGENT_TURN_REASONING_UNSUPPORTED: { category: 'usage', render: () => ({ message: 'This model does not declare that it can turn thinking off '
+    + '(catalog capability chat-template-enable-thinking), so the turn was not sent. Use /reasoning on to continue, or declare the capability.' }) },
   AGENT_TURN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_UNAVAILABLE', p, l) }) },
   TERMINAL_TTY_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_TTY_REQUIRED', p, l) }) },
   INFERENCE_METRICS_UNREAD: { category: 'error', render: (p, l) => ({ message: t('error.INFERENCE_METRICS_UNREAD', p, l) }) },

@@ -351,6 +351,55 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(f.state.requests[1]!['chat_template_kwargs']).toBeUndefined();
   }, 30_000);
 
+  // OPEN-REASONING-FILE (protocol v16): `reasoning: 'off'` turns thinking off in every round of a model that declares the switch; the counter
+  // counts the same body; the request digest binds the field; a model without the switch refuses the turn by name before anything runs.
+  it("sends enable_thinking:false in every round and the counter body when the turn asks reasoning 'off', and binds it in the digest (v16)", async () => {
+    const f = await runtime({ tokenize: true, thinkingSwitch: true }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'It exports a.' }, { content: 'Default.' }];
+    expect(await f.client().chatTurn({ ...ask('turn-off'), reasoning: 'off' }, () => undefined)).toMatchObject({ finish: 'stop', rounds: 2, answer: 'It exports a.' });
+    expect(f.state.requests).toHaveLength(2);
+    for (const request of f.state.requests) expect(request['chat_template_kwargs']).toEqual({ enable_thinking: false });
+    expect(f.state.tokenize.length).toBeGreaterThanOrEqual(2);
+    for (const counted of f.state.tokenize) expect(counted['chat_template_kwargs']).toEqual({ enable_thinking: false });
+    // The same turn id without the field is another request: a conflict, never the stored answer of the thinking-off turn.
+    await expect(f.client().chatTurn(ask('turn-off'), () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_CONFLICT' });
+    // Without the field (or with 'on') the rounds are today's request.
+    const counted = f.state.tokenize.length;
+    expect(await f.client().chatTurn({ ...ask('turn-default'), reasoning: 'on' }, () => undefined)).toMatchObject({ answer: 'Default.' });
+    expect(f.state.requests[2]!['chat_template_kwargs']).toBeUndefined();
+    for (const body of f.state.tokenize.slice(counted)) expect(body['chat_template_kwargs']).toBeUndefined();
+  }, 30_000);
+
+  it("refuses reasoning 'off' for a model that does not declare the switch, before any claim, model call or spending (v16)", async () => {
+    const f = await runtime({ tokenize: true }); await f.start();
+    f.state.script = [{ content: 'Thinking as usual.' }];
+    await expect(f.client().chatTurn({ ...ask('turn-no-switch'), reasoning: 'off' }, () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_REASONING_UNSUPPORTED' });
+    expect(f.state.requests).toHaveLength(0); expect(f.state.tokenize).toHaveLength(0);
+    expect(f.rows('SELECT count(*) AS count FROM agent_turns')).toEqual([{ count: 0 }]);
+    expect(f.rows('SELECT count(*) AS count FROM model_invocations')).toEqual([{ count: 0 }]);
+    // The same model without the field (today's request) still answers.
+    expect(await f.client().chatTurn(ask('turn-no-switch-2'), () => undefined)).toMatchObject({ answer: 'Thinking as usual.' });
+    expect(f.state.requests[0]!['chat_template_kwargs']).toBeUndefined();
+  }, 30_000);
+
+  it('turns model thinking off from the terminal: /reasoning off hides the preview and the next turn asks the service for it (v16)', async () => {
+    const f = await runtime({ thinkingSwitch: true }); await f.start();
+    f.state.script = [{ content: 'First.' }, { content: 'Second.' }, { content: 'Third.' }];
+    const streamTurn = (messages: readonly AgentTurnMessage[], signal: AbortSignal, turn?: { readonly reasoning?: 'off' }) => streamTerminalAgentTurn({
+      projectRoot: f.project, scopeId: 'scope', messages, options: { env: f.env }, signal, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}) },
+    { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn });
+    const view = mountWorkline({ streamTurn });
+    try {
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      view.stdin.write('one\r'); await until(() => f.state.requests.length === 1 && view.stdout.text.includes('First.'), 'first');
+      view.stdin.write('/reasoning off\r'); await until(() => /Reasoning (preview )?off/u.test(view.stdout.text), 'off notice');
+      view.stdin.write('two\r'); await until(() => f.state.requests.length === 2 && view.stdout.text.includes('Second.'), 'second');
+      view.stdin.write('/reasoning on\r'); await until(() => /Reasoning (preview )?on/u.test(view.stdout.text), 'on notice');
+      view.stdin.write('three\r'); await until(() => f.state.requests.length === 3 && view.stdout.text.includes('Third.'), 'third');
+    } finally { view.instance.unmount(); }
+    expect(f.state.requests.map(request => request['chat_template_kwargs'] ?? null)).toEqual([null, { enable_thinking: false }, null]);
+  }, 30_000);
+
   // Astra 2091 R1: with no provider count and no configured window, the service input bound (262144 here) is the compaction pressure,
   // so the history the client sends next stays under it instead of growing until the frame is refused.
   it('compacts on the service input bound when the window is unknown, so the next request keeps fitting (T-L5, Astra 2091 R1)', async () => {
@@ -1187,6 +1236,28 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
   }
   const DENIED = ['.env', 'config/.env.local', 'secrets.json', '.git/config', 'keys/id_rsa', 'node_modules/pkg/index.js', 'src/outside.ts'];
   const typeInto = async (view: ReturnType<typeof mountWorkline>, text: string) => { for (const char of text) { view.stdin.write(char); await new Promise(resolve => setTimeout(resolve, 3)); } };
+
+  // OPEN-REASONING-FILE: `@file` uses the agent tools' deny floor for this layout (TL-C D4): approval records and whole pending diffs
+  // under a data root inside the project are neither candidates nor attachable; other data files and the default layout's previews too.
+  it('never offers or attaches approval records or approval previews of the layout, and still offers other files there', async () => {
+    const f = await runtime({ dataInside: true });
+    await mkdir(join(f.data, 'approvals'), { recursive: true, mode: 0o700 }); await mkdir(join(f.data, 'state', 'approval-previews'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
+    await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
+    await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    await f.start();
+    const held = '.deckent/live-data/approvals/held.txt', diff = '.deckent/live-data/state/approval-previews/diff.txt';
+    for (const query of ['', 'held', 'diff', 'approval', 'live-data']) {
+      const found = await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query, limit: 50 });
+      expect(found.paths).not.toContain(held); expect(found.paths).not.toContain(diff);
+    }
+    expect((await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query: 'notes', limit: 50 })).paths).toContain('.deckent/live-data/notes.txt');
+    for (const path of [held, diff]) {
+      expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path, maxBytes: 1024 })).toEqual({ schemaVersion: 1, path, status: 'refused', reason: 'path-denied' });
+    }
+    expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path: '.deckent/live-data/notes.txt', maxBytes: 1024 }))
+      .toMatchObject({ status: 'attached', content: 'ordinary data file' });
+  }, 30_000);
 
   it('lists allowed workspace files for the picker and never a denied, ignored or linked one', async () => {
     const { f, props } = await workspace();

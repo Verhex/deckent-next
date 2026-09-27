@@ -268,8 +268,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectPermissionMode && context.setPermissionMode ? { permissionMode: {
       inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
       set: (mode: PermissionMode, expectedRevision: string) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision }, options) } } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal) =>
-      context.streamTerminalChat!(root, { scopeId, messages }, options, signal) } : {}),
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off' }>) =>
+      context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}) }, options, signal) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {

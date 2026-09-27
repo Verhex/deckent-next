@@ -35,8 +35,10 @@ const tokenizeTimeoutMs = (bodyBytes: number) => Math.min(30_000, 2_000 + Math.c
 async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatRequest, options: OpenAiChatNativePortOptions, signal?: AbortSignal) {
   const endpoint = prepared.definition.tokenizeEndpoint;
   if (!endpoint) return null;
+  // The thinking switch changes the rendered prompt (an empty thinking block), so the count carries it too (measured = sent).
   const body = JSON.stringify({ model: prepared.request.model, messages: prepared.request.messages,
-    ...(prepared.request.tools ? { tools: prepared.request.tools } : {}) });
+    ...(prepared.request.tools ? { tools: prepared.request.tools } : {}),
+    ...(prepared.request.chat_template_kwargs ? { chat_template_kwargs: prepared.request.chat_template_kwargs } : {}) });
   try {
     const result = await sendNativeJsonHttp({ definition: { endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) },
