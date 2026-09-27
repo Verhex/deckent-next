@@ -15,6 +15,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde (`b596
   (`ask`'e dönüş grant istemez) birleşti; yeni aday tam verify → yeniden inceleme → PASS'te yalnız o sha push; ardından canlı geçiş (owner
   kararı: tek seferde, main uzlaştırmasıyla).
 - Terminal ajan döngüsü analizi (Fable, owner sabah oturumu): `proof/TERM-LOOP-UX-2026-09-27/`.
+- Şeritler: OWNER-EVE-SMALL (Sonnet: serve başlangıç reddi + modül ad alanı kapalı), B06-2A (Opus: Run teslim commit'ine sabit), TERM-LOOP-UX analizi (Fable).
+- Belge düzeni (owner 2026-09-27 akşam): PLAN'daki biten işler COMPLETED-PLAN'a taşındı; yetenek haritası v15/ledger v41/company/33 MCP aracıyla güncel.
   Canlı yeniden başlatma (ledger v40 → v41 yedekli, protokol v15) owner iznindedir.
 - Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
 
