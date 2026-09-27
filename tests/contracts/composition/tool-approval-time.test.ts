@@ -183,7 +183,7 @@ it.each(['preview-expiry', 'policy-expiry', 'timely-allow'] as const)('wires tru
     const context = { principal: { ...requester, assurance: 'os-user', scopeIds: ['scope'] },
       config: { storage: { sqlite: { busyTimeoutMs: 2000, journalMode: 'wal', durability: 'full' } },
         approvals: { requestTtlMs: 10000, keyFile: 'unused' }, service: { inputMaxBytes: 262144 } },
-      layout: {}, path: async () => path, policy: { load: async () => ({ revision: 'policy' }) } };
+      layout: platform.resolveProductLayout({ projectRoot: roots.at(-1)! }), path: async () => path, policy: { load: async () => ({ revision: 'policy' }) } };
     vi.spyOn(modelInvocation, 'loadPeerInvocationContext').mockResolvedValue(context as unknown as Awaited<ReturnType<typeof modelInvocation.loadPeerInvocationContext>>);
     vi.spyOn(platform, 'loadConfig').mockResolvedValue({} as Awaited<ReturnType<typeof platform.loadConfig>>);
     const reference = { providerId: 'local', providerVersion: 1, modelId: 'chat', modelVersion: 1 };

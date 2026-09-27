@@ -53,6 +53,14 @@ export interface AgentTurnPorts {
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
 }
 
+/**
+ * Engine note after the second consecutive round that made no progress (TL-C D7): every call of the round was a duplicate, had
+ * invalid arguments or failed, and the model wrote no text. Once per such streak; the turn goes on (no counter, no limit).
+ */
+export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made no progress: every tool call was a duplicate, had invalid'
+  + ' arguments or failed, and no text was written. Do not repeat those calls; write what you know so far, try another approach, or ask the user.';
+const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
+
 /** A tool call's position in its turn: the model round and its index in that round's response. */
 export interface AgentToolExecution { readonly round: number; readonly index: number }
 
@@ -125,7 +133,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
   const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
-  let rounds = 0, toolCalls = 0, compactions = 0, appendedCount = 0, last: AgentTurnMessage | null = null;
+  let rounds = 0, toolCalls = 0, compactions = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
   const push = (message: AgentTurnMessage) => {
@@ -206,11 +214,13 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         ? `The model reached its output limit before answering (reasoning used the budget). ${summary()}.`
         : `The model returned no answer. ${summary()}.`);
     }
+    let progressed = outcome.content.trim() !== '';
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
       const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
+        if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
@@ -256,5 +266,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text, tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
+    stalled = progressed ? 0 : stalled + 1;
+    if (stalled === 2 && !signal.aborted) push({ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE });
   }
 }

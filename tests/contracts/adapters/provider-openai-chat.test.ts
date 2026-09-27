@@ -1,7 +1,7 @@
 import http, { Agent, createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, expect, it } from 'vitest';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID,
-  OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, prepareOpenAiChatHttpRequest } from '#adapters/core/provider-openai-chat/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, prepareOpenAiChatHttpRequest } from '#adapters/core/provider-openai-chat/index.js';
 
 const servers: Server[] = [];
 afterEach(async () => Promise.all(servers.splice(0).map(close)));
@@ -151,6 +151,30 @@ it('keeps preparation pure, rejects unsupported/getter input, binding mismatch, 
   const prepared = await port.prepare(profile(origin), binding, request); await expect(port.send(prepared)).resolves.toMatchObject({ usage: null });
   await expect(port.send(prepared)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' } satisfies Partial<OpenAiChatHttpError>); expect(requests).toBe(1);
   expect(() => prepareOpenAiChatHttpRequest({ endpoint: 'http://localhost:1/', maxOutputTokens: 1, authentication: { type: 'none' }, tariff }, limits, request)).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+});
+
+// TL-C (D8): the thinking switch is catalog-gated like tools: only a binding that declares `chat-template-enable-thinking` gets it.
+it('sends chat_template_kwargs.enable_thinking only to a model whose binding declares the reasoning switch, and refuses it otherwise', async () => {
+  const bodies: string[] = [];
+  const origin = await fixture((req, res) => { const chunks: Buffer[] = []; req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => { bodies.push(Buffer.concat(chunks).toString('utf8')); res.end(JSON.stringify(response())); }); });
+  const off = { ...request, chat_template_kwargs: { enable_thinking: false } };
+  const port = createOpenAiChatNativePort();
+  // No capability (or not `supported`): refused before any network activity.
+  await expect(port.prepare(profile(origin), binding, off)).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' } satisfies Partial<OpenAiChatHttpError>);
+  const declared = (state: string) => ({ ...binding, model: { ...binding.model, protocols: [{ family: 'openai-chat-completions', version: 'v1',
+    capabilities: [{ id: OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, version: 1, state }] }] } });
+  await expect(port.prepare(profile(origin), declared('unknown'), off)).rejects.toThrow('OPENAI_CHAT_REQUEST_INVALID');
+  // Only the typed switch: no other kwargs, no other type.
+  await expect(port.prepare(profile(origin), declared('supported'), { ...request, chat_template_kwargs: { enable_thinking: false, other: 1 } })).rejects.toThrow('OPENAI_CHAT_REQUEST_INVALID');
+  await expect(port.prepare(profile(origin), declared('supported'), { ...request, chat_template_kwargs: { enable_thinking: 'no' } })).rejects.toThrow('OPENAI_CHAT_REQUEST_INVALID');
+  expect(bodies).toEqual([]);
+  const prepared = await port.prepare(profile(origin), declared('supported'), off); await port.send(prepared);
+  expect(JSON.parse(bodies[0]!)).toEqual({ ...request, stream: false, chat_template_kwargs: { enable_thinking: false } });
+  // A request without the switch is byte-identical to before, with or without the capability.
+  const plain = await port.prepare(profile(origin), declared('supported'), request); await port.send(plain);
+  expect(JSON.parse(bodies[1]!)).toEqual({ ...request, stream: false });
+  expect(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY).toBe('chat-template-enable-thinking'); expect(OPENAI_CHAT_HTTP_ADAPTER_VERSION).toBe(4);
 });
 
 it('reports cancellation and timeout after the owned fixture has observed the request', async () => {

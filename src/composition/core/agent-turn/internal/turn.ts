@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
+import { isAbsolute, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, awaitAgentToolApproval,
   requestAgentToolApproval, runDurableAgentTurn,
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
+import { ErrorRegistry, loadConfig, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
@@ -16,6 +18,7 @@ import { inspectModelBinding } from '#composition/core/provider-catalog/index.js
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions } from './mode.js';
+import { renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt } from './system-prompt.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, and service stop. */
@@ -83,6 +86,19 @@ function parseCompactionSummary(text: string | null): AgentCompactionSummary | n
   catch { return null; }
 }
 
+/**
+ * The Core read floor plus the owner-only product directories of this layout (TL-C D4): approvals (records, integrity key) and
+ * approval previews (whole pending diffs). The floor names them under the default `.deckent`; a data root moved inside the project
+ * (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and shell paths.
+ */
+export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
+  const owned = (['approvals', 'approvalPreviews'] as const).flatMap(resource => {
+    const rel = relative(projectRoot, productResourcePath(layout, resource));
+    return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split(sep).join('/'), `${rel.split(sep).join('/')}/**`];
+  });
+  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...owned]);
+}
+
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
 export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string {
   return boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`);
@@ -119,17 +135,23 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
-  const toolCapable = binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
-    && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_TOOL_CALLS_CAPABILITY && capability.version === 1 && capability.state === 'supported'));
-  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot) : null;
+  const declares = (id: string) => binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+    && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
+  const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
+  // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.
+  const thinkingSwitch = declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY);
+  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout) }) : null;
   const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
   const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
   const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
     config: readTerminalShellConfig(config) }) : null;
   const principalKey = principalKeyOf(context.principal);
   const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
+  // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
+  // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
+  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools });
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
-    binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`) })}`);
+    binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt) })}`);
 
   // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
   const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
@@ -139,7 +161,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
     schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
     scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-    nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(messages), max_completion_tokens: chat.maxCompletionTokens,
+    nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
       stream: true, stream_options: { include_usage: true },
       ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
         parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
@@ -239,7 +261,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
           scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
           nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: COMPACTION_INSTRUCTION },
-            { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false } as unknown as JsonObject };
+            { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
+          ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
         const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
         if (result?.receipt.outcome?.state !== 'responded') return null;
         return parseCompactionSummary(extractOpenAiChatTextFromInvocation(result));

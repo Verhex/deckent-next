@@ -33,10 +33,12 @@ export type OpenAiChatTextMessage = Readonly<{ role: 'developer' | 'system' | 'u
   | Readonly<{ role: 'tool'; tool_call_id: string; content: string }>;
 export type OpenAiChatToolDefinition = Readonly<{ type: 'function'; function: Readonly<{ name: string; description?: string; parameters: JsonObject }> }>;
 /** `stream: true` requires `stream_options.include_usage` so every streamed call ends with settleable usage. `tools` is sent only
- * when the model binding declares the `tool-calls` capability (T-L2); without it the adapter keeps refusing any tool call. */
+ * when the model binding declares the `tool-calls` capability (T-L2); without it the adapter keeps refusing any tool call.
+ * `chat_template_kwargs.enable_thinking` likewise only to a binding that declares `chat-template-enable-thinking` (TL-C). */
 export type OpenAiChatTextRequest = Readonly<{ model: string; messages: readonly OpenAiChatTextMessage[];
   max_completion_tokens: number; stream?: boolean; stream_options?: Readonly<{ include_usage: true }>; n?: 1;
-  tools?: readonly OpenAiChatToolDefinition[]; tool_choice?: 'auto' | 'none' | 'required' }>;
+  tools?: readonly OpenAiChatToolDefinition[]; tool_choice?: 'auto' | 'none' | 'required';
+  chat_template_kwargs?: Readonly<{ enable_thinking: boolean }> }>;
 /** Tool names follow the agent tool contract; ids are the provider's opaque correlation strings. */
 export const OPENAI_CHAT_TOOL_NAME = /^[a-z][a-z0-9_]{1,63}$/;
 export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
@@ -44,6 +46,12 @@ export const OPENAI_CHAT_MAX_TOOLS = 128, OPENAI_CHAT_MAX_TOOL_CALLS = 128;
 export const OPENAI_CHAT_TOOL_CALLS_CAPABILITY = 'tool-calls';
 /** The server counts tokens of a chat request (messages and tools, the same body the round sends) at `tokenizeEndpoint`. */
 export const OPENAI_CHAT_TOKEN_COUNT_CAPABILITY = 'token-count';
+/**
+ * Typed reasoning control (TL-C, legacy 7108 descriptor `chat_template_kwargs.enable_thinking`): the served chat template reads
+ * `enable_thinking`, so one request can switch hidden reasoning off. Declared by catalog data (owner or server evidence, e.g. a
+ * template that reads the flag), never inferred from a model name; without it the adapter refuses the field.
+ */
+export const OPENAI_CHAT_ENABLE_THINKING_CAPABILITY = 'chat-template-enable-thinking';
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
 const positive = z.number().int().positive().safe();
@@ -79,7 +87,8 @@ const requestSchema = z.object({ model: z.string().min(1).max(1024), messages: z
   stream_options: z.object({ include_usage: z.literal(true) }).strict().optional(),
   n: z.literal(1).optional(), tools: z.array(toolSchema).min(1).max(OPENAI_CHAT_MAX_TOOLS).optional(),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
-  tool_choice: z.union([z.literal('auto'), z.literal('none'), z.literal('required')]).optional() }).strict()
+  tool_choice: z.union([z.literal('auto'), z.literal('none'), z.literal('required')]).optional(),
+  chat_template_kwargs: z.object({ enable_thinking: z.boolean() }).strict().optional() }).strict()
   .refine(value => (value.stream === true) === (value.stream_options !== undefined))
   .refine(value => value.tool_choice === undefined || value.tools !== undefined)
   .refine(value => value.tools === undefined || new Set(value.tools.map(tool => tool.function.name)).size === value.tools.length)
@@ -123,7 +132,8 @@ export function parseOpenAiChatTextRequest(input: unknown, definition: OpenAiCha
     max_completion_tokens: data.max_completion_tokens, ...(data.stream === undefined ? {} : { stream: data.stream }),
     ...(data.stream === true ? { stream_options: { include_usage: true as const } } : {}),
     ...(data.n === 1 ? { n: 1 as const } : {}), ...(data.tools ? { tools: data.tools as OpenAiChatToolDefinition[] } : {}),
-    ...(data.tool_choice ? { tool_choice: data.tool_choice } : {}) });
+    ...(data.tool_choice ? { tool_choice: data.tool_choice } : {}),
+    ...(data.chat_template_kwargs ? { chat_template_kwargs: { enable_thinking: data.chat_template_kwargs.enable_thinking } } : {}) });
 }
 
 function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer', hasTls: boolean): boolean {

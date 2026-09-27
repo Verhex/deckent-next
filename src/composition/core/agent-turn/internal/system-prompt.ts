@@ -1,0 +1,63 @@
+import { isAbsolute, relative, sep } from 'node:path';
+import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
+import { productResourcePath, type ProductLayout } from '#platform/index.js';
+
+/**
+ * Version of the model-facing system prompt (TL-C D4). The text is protocol, like tool descriptions: English, in code, never a
+ * catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
+ */
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 1;
+
+/** A path as the model's tools address it: workspace-relative inside the project, else absolute. */
+function shown(projectRoot: string, path: string): { readonly text: string; readonly inside: boolean } {
+  const rel = relative(projectRoot, path);
+  const inside = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+  return { text: inside ? rel.split(sep).join('/') : path, inside };
+}
+
+/**
+ * The service's instructions for an agent turn: where the model works (project root, Deckent data root and state, configuration),
+ * which tools exist by class and that policy and the permission mode decide each call, how bounded results continue, and one
+ * progress line between tool rounds. Deterministic for one project, layout and tool set; states no limit a tool may change.
+ */
+export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: string; readonly layout: ProductLayout; readonly tools: readonly AgentToolSpec[] }): string {
+  const { projectRoot, layout, tools } = input;
+  const data = shown(projectRoot, layout.root), at = (resource: 'ledger' | 'terminalSessions') => shown(projectRoot, productResourcePath(layout, resource)).text;
+  const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
+  const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
+    ['Shell tool', named('shell'), ' It runs in the project root on the user\'s machine.']] as const;
+  const lines = [
+    `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
+    'These instructions come from the Deckent runtime service, not from the user. You are the coding assistant of the Deckent operator'
+      + ' terminal and work on the user\'s project.',
+    '', 'Workspace:',
+    `- Project root: ${projectRoot}. Tool paths are relative to it; paths outside it are refused.`,
+    `- Deckent data root: ${data.text}${data.inside ? '' : ' (outside the project root: the tools cannot read it)'}. Its ledger ${at('ledger')}`
+      + ` is an SQLite database, not text; saved terminal conversations are in ${at('terminalSessions')}.`,
+    `- Deckent configuration: ${shown(projectRoot, layout.bootstrapConfigPath).text}.`,
+    '- Approvals, approval previews, keys and credential files are protected: the read tools refuse them; do not try to read them another way.',
+  ];
+  if (tools.length) {
+    lines.push('', 'Tools:', ...classes.flatMap(([label, names, note]) => names ? [`- ${label}: ${names}.${note}`] : []),
+      '- Policy and the permission mode decide every call: it runs at once, waits until the operator approves it, or is denied. A result'
+        + ' "error=denied-by-policy" or "error=denied-by-owner" is final: do not repeat that call; say what you needed or ask.',
+      '- Use only the parameters a tool declares; any other argument is rejected.',
+      '- Results are bounded. When a read_file result\'s first line says hasMore=true, continue from its nextStartLine instead of reading'
+        + ' from the start again. Narrow a large search with its path or glob.',
+      '- A read repeated with the same arguments returns a reference to the earlier result, not new content.');
+  }
+  lines.push('', 'Working style:',
+    ...(tools.length ? ['- Between tool rounds, write one short line to the user: what you found or what you will do next.'] : []),
+    '- Base your answer on what you have seen; say what you did not check.');
+  return lines.join('\n');
+}
+
+/**
+ * The messages as sent to the model: one system message, the service's instructions first and the client's own system text after
+ * them (a chat template takes one system message, and compaction keeps exactly the first). The client's history never holds it.
+ */
+export function withAgentTurnSystemPrompt(messages: readonly AgentTurnMessage[], prompt: string): readonly AgentTurnMessage[] {
+  const first = messages[0];
+  return first?.role === 'system' ? [{ role: 'system', content: `${prompt}\n\n${first.content}` }, ...messages.slice(1)]
+    : [{ role: 'system', content: prompt }, ...messages];
+}
