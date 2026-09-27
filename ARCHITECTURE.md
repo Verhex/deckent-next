@@ -659,8 +659,10 @@ next-request reserve) used by both the service and the terminal; it sits in the 
 may not call domain decision functions. The compaction predicate itself is still expressed twice (engine loop and terminal), guarded by
 the parity test.
 **Tool lines and read limits (TL-B, 2026-09-28).** The terminal derives a display target (grep/glob pattern first) and a finished-call
-result summary ("12 matches", "243/269 lines, more available") client-side from `message` events already on the wire; the engine's `describeAgentCall` — the C12 approval `resource` — is unchanged byte for byte; the derivation is owned by
-`surfaces/core/terminal-kit` (`describeAgentToolCallTarget`, `summarizeAgentToolResult`), composition only wires it into the stream. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
+result summary ("12 matches", "243/269 lines, more available") client-side from `message` events already on the wire; the engine's `describeAgentCall` — the C12 approval `resource` — is unchanged byte for byte; the terminal renderer (`surfaces/core/terminal-render` assistant stream) derives both from the `message` deltas the turn already
+streams, with the derivation functions in `surfaces/core/terminal-kit`; the terminal agent stream in composition carries the engine's
+target only and imports surfaces as types only, so composition (SDK, runtime service) never loads the surface layer (Ink/React) at
+runtime — guarded by `tests/contracts/composition/sdk-import-graph.test.ts` over the built `dist/index.js` graph. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
 1 KiB–1 MiB, chat schema 1 unchanged); `grep` accepts `context` (0–5) and `maxHits` (≤ 200), `context=0` byte-identical to before.
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
