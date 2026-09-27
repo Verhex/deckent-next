@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (INFLIGHT-FIX, owner 2026-09-28): a cancelled or `unknown` model call releases its concurrency slot once its request is
+  closed, so cancelled terminal rounds no longer lock the next one (`MODEL_INVOCATION_CAPACITY_EXHAUSTED`); the uncertain record,
+  spending hold and lifetime count stay; the next service start releases slots earlier builds kept. Supersedes PROVIDERS/A3A.
 - CHANGED (TL-B): tool lines show the grep/glob pattern and a result summary; read results default to 64 KiB
   (`terminal.chat.readResultMaxBytes`); `grep` accepts `context` and `maxHits`.
 - ADDED (TL-A): visible turn phases ("model is preparing a response · Ns", "summarizing earlier messages · Ns"), an "Esc cancels"

@@ -631,6 +631,21 @@ results, or a summary copying many long user messages (each ≤ 4000 characters)
 closed, not silent); and a tail that alone stays above the high-water mark is summarized again every round (billed, no progress;
 candidate guard: skip when the last compaction did not shrink the history). The byte check needs no counter port. Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →
 session snapshot → `/resume` with 44/46 messages sent whole; mutations 1–7 (`proof/F26-T-L5-FIX-2091/`).
+**Concurrency slot = locally open request (INFLIGHT-FIX, owner 2026-09-28; replaces PROVIDERS/A3A "unknown outcomes retain
+capacity").** An allocation's `inFlight` counts claims without an outcome. Every outcome — `responded`, `rejected`, `not-sent` and
+`unknown` — is recorded only after the native `send` settled, and the native port contract requires `send` to settle only after its
+transport request is closed locally (`provider-http-json` destroys its per-request agent before resolving/rejecting), so each
+settlement releases the slot. The `unknown` record, its evidence, its spending hold and `lifetimeCalls` are unchanged: uncertain
+effect and billing stay; only concurrency is corrected. Replay of a settlement never releases twice. The allocation integrity audit
+counts only open claims. `maxInFlight` therefore bounds locally open requests, not provider work that may continue after a disconnect
+(vLLM aborts a streamed request on disconnect; an API provider may keep computing — billing uncertainty is the spending hold's job).
+A claim left by a crashed process stays `claimed` and keeps its slot: no path settles it without send evidence (open limit).
+**Start reconciliation.** Under endpoint custody (with the ledger upgrade and interrupted-turn close), the runtime service releases
+slots an earlier build kept for settled `unknown` calls: per allocation, one transaction, `open = count(claimed)`,
+`unknown = count(unknown)`; only `open < inFlight <= open + unknown` is rewritten to `open` through the checkpointed writer (revision
+advances). Other counters are reported (`inconsistent`) and left untouched; a damaged allocation never blocks the start. Observer:
+`onModelAllocationSlotsReleased({ allocations, released, inconsistent })`, called only when something was released or reported.
+No ledger schema or version change.
 **Terminal turn phases (TL-A, 2026-09-28).** Protocol v15 is unchanged. The runtime service emits no phase event; the terminal derives
 "the service is summarizing" from the `context` event it already receives, the history it holds, the engine's compaction rule and the
 service's admission values from the same configuration; the engine alone decides and compacts, the mark is presentation (a parity test
