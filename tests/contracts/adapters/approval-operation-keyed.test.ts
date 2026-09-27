@@ -9,7 +9,7 @@ import { CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-
 import { approvalRequestSchema, approvalSubject } from '#domain/index.js';
 import { ApprovalApplication, awaitAgentToolApproval, expireOrphanedToolCallApprovals, requestTaskApproval, sealApproval, verifyApproval, type ApprovalStore } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, DOWNGRADE_TO_V37_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V39_LEDGER_SQL, DOWNGRADE_TO_V37_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -28,21 +28,21 @@ const operation = (commandId = 'cmd-1', inputDigest = digest('input')) => sealAp
   requester, actionDigest: digest(`operation:${commandId}:${inputDigest}`), policyRevision: 'p1', summary: 'post-order@1 · records/PO-1', createdAt: 1_000, expiresAt: 61_000 }),
 revision: 0, status: 'pending', decision: null }, integrity);
 
-it('upgrades a real v39 ledger to v40 (C12 G1): 0600 backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
+it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: 0600 backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
   const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
-  expect(CURRENT_LEDGER_VERSION).toBe(40); expect(PREVIOUS_LEDGER_VERSION).toBe(39);
+  expect(CURRENT_LEDGER_VERSION).toBe(41); expect(PREVIOUS_LEDGER_VERSION).toBe(40);
   const seeded = openSqliteApprovalStore(path, options);
   const task = requestTaskApproval(seeded.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
     policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
   const call = seeded.store.create(toolCall(0));
   seeded.close();
-  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V39_LEDGER_SQL);
   // v39 cannot hold an operation approval; the v40 rebuild is what admits it.
   expect(() => db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
     .run('scope', 'op', 'operation', null, null, digest('op'), 0, '{}')).toThrow(/CHECK/);
   const before = db.prepare('SELECT * FROM approvals ORDER BY approval_id').all(); db.close();
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T00:00:00.000Z'));
-  expect(upgrade).toEqual({ from: 39, to: 40, backupPath: join(backups, 'ledger-v39-2026-09-27T00-00-00-000Z.db') });
+  expect(upgrade).toEqual({ from: 39, to: CURRENT_LEDGER_VERSION, backupPath: join(backups, 'ledger-v39-2026-09-27T00-00-00-000Z.db') });
   expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   try { expect(backup.prepare('PRAGMA user_version').get()).toEqual({ user_version: 39 }); expect(backup.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before); }
@@ -51,7 +51,7 @@ it('upgrades a real v39 ledger to v40 (C12 G1): 0600 backup at v39 first, task a
   try {
     const check = new DatabaseSync(path, { readOnly: true });
     try {
-      expect(check.prepare('PRAGMA user_version').get()).toEqual({ user_version: 40 });
+      expect(check.prepare('PRAGMA user_version').get()).toEqual({ user_version: CURRENT_LEDGER_VERSION });
       expect(check.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before);
       expect(check.prepare("SELECT name FROM sqlite_schema WHERE type='index' AND tbl_name='approvals' ORDER BY name").all().map(row => row.name))
         .toEqual(['approvals_current_action', 'approvals_current_operation', 'approvals_current_tool_call', 'sqlite_autoindex_approvals_1']);
@@ -67,9 +67,12 @@ it('upgrades a real v39 ledger to v40 (C12 G1): 0600 backup at v39 first, task a
     try {
       expect(() => raw.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
         .run('scope', 'x', 'process', null, null, digest('x'), 0, '{}')).toThrow(/CHECK/);
-      // A ledger holding an operation approval cannot go back to v39: the rebuild fails on the narrower CHECK.
-      expect(() => raw.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL)).toThrow(/CHECK/);
-      expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: 40 });
+      // A ledger holding an operation approval cannot go back to v39: the rebuild fails on the narrower CHECK (one transaction, so the
+      // audit-table drop of the intermediate v40 step rolls back with it).
+      raw.exec('BEGIN');
+      expect(() => raw.exec(DOWNGRADE_TO_V39_LEDGER_SQL)).toThrow(/CHECK/);
+      raw.exec('ROLLBACK');
+      expect(raw.prepare('PRAGMA user_version').get()).toEqual({ user_version: CURRENT_LEDGER_VERSION });
     } finally { raw.close(); }
   } finally { upgraded.close(); }
 });

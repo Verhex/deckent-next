@@ -12,6 +12,7 @@ import { migrateModelAllocationCheckpoints } from './migration-v19.js';
 import { migrateProviderSpend } from './migration-v20.js';
 import { migrateProviderReportedSpend } from './migration-v21.js';
 import { migrateScopeRegistry } from './migration-v39.js';
+import { migrateAuditEvents } from './migration-v41.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
@@ -26,11 +27,13 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 40;
+export const CURRENT_LEDGER_VERSION = 41;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
+export const AUDIT_EVENT_LEDGER_VERSION = 41;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // 41 (audit events, general Core audit port): `migrateAuditEvents` in migration-v41.ts, dispatched below like v39.
   // C12 G1: catalog operation approvals. SQLite cannot widen a CHECK in place, so `approvals` is rebuilt row for row (every task and
   // tool-call row and its sealed snapshot unchanged), the v38 indexes are recreated and operations get their own (scope, digest) index.
   40: `CREATE TABLE approvals_v40(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation')),
@@ -233,6 +236,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === SCOPE_REGISTRY_LEDGER_VERSION) {
       migrateScopeRegistry(db, companyId);
       db.exec(`PRAGMA user_version=${SCOPE_REGISTRY_LEDGER_VERSION};`);
+      continue;
+    }
+    if (next === AUDIT_EVENT_LEDGER_VERSION) {
+      migrateAuditEvents(db);
+      db.exec(`PRAGMA user_version=${AUDIT_EVENT_LEDGER_VERSION};`);
       continue;
     }
     const sql = migrations[next];
