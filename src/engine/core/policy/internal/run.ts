@@ -7,6 +7,8 @@ export class RunPolicyAuthorization {
     let decision;
     try { decision = evaluatePolicy(await this.source.load(), { principal, action, scopeId: query.scopeId, resource: { kind: policyResources.run.kind, id: query.runId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
+    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
   }
 }

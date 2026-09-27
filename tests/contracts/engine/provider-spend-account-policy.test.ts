@@ -27,6 +27,13 @@ it('checks the exact account and scope against the current policy for every insp
   await expect(authorization.authorize('inspect', target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
 
+it('returns a typed refusal, not denial, when the grant requires approval (C12 Q8: no catalog broker here yet)', async () => {
+  const authorization = new ProviderSpendAccountPolicyAuthorization({ async load() {
+    return { schemaVersion: 1, revision: 'policy', restrictions: [], grants: [{ ...grant, effect: 'require-approval' }] };
+  } });
+  await expect(authorization.authorize('inspect', target, principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+});
+
 it('does not expose policy backend errors or grant access when policy cannot load', async () => {
   const authorization = new ProviderSpendAccountPolicyAuthorization({ async load() { throw new Error('private policy path'); } });
   await expect(authorization.authorize('inspect', target, principal)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE', message: 'POLICY_UNAVAILABLE' });

@@ -60,6 +60,27 @@ it('rejects a profile whose pool grant is not bound to the actual local identity
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+it('returns a typed refusal, not denial, when the pool grant itself requires approval (C12 Q8: no catalog broker here yet)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-install-preview-')); const project = join(root, 'absent');
+  try {
+    const profile = bound();
+    profile.policy.grants = profile.policy.grants.map(grant => grant.id === 'pool' ? { ...grant, effect: 'require-approval' } : grant);
+    await expect(previewSuppliedInstallation(project, rehash(profile), { allowShutdown: false }))
+      .rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('returns a typed refusal, not denial, when a broader require-approval overlay shadows the narrow shutdown grant (C12 Q8)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-install-preview-')); const project = join(root, 'absent');
+  try {
+    const profile = bound(installationProfile({ shutdown: true }));
+    profile.policy.grants.push({ id: 'shutdown-approval', effect: 'require-approval', actions: 'all', scopes: 'all',
+      principals: 'all', resource: { kind: 'service', ids: 'all' } });
+    await expect(previewSuppliedInstallation(project, rehash(profile), { allowShutdown: true }))
+      .rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it('reports unsupported installed adapters and evaluators with typed profile errors', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-install-preview-')); const project = join(root, 'absent');
   try {

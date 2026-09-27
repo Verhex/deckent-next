@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { evaluatePolicy } from '#domain/index.js';
-import { DispatchPolicyAuthorization } from '#engine/index.js';
+import { DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization } from '#engine/index.js';
 const principal = { id: 'user', issuer: 'installation', subject: 'uid:1000', assurance: 'os-user' as const, scopeIds: ['s'] };
 const match = { id: 'grant', actions: ['execute'], scopes: ['s'], principals: [{ issuer: 'installation', subject: 'uid:1000' }], resource: { kind: 'attempt', ids: ['a'] } };
 const policy = { schemaVersion: 1, revision: 'r1', grants: [{ ...match, effect: 'allow' }], restrictions: [] };
@@ -29,4 +29,11 @@ it('reloads trusted policy on every admission and sanitizes invalid or unavailab
   current = { secret: 'not-an-authority' }; await expect(gate.authorize('execute', request, principal)).rejects.toThrow('POLICY_UNAVAILABLE');
   const unavailable = new DispatchPolicyAuthorization({ async load() { throw new Error('private-credential'); } });
   await expect(unavailable.authorize('execute', request, principal)).rejects.toThrow('POLICY_UNAVAILABLE');
+});
+it('returns a typed refusal, never a grant, for a require-approval decision (C12 Q8: no catalog broker here yet)', async () => {
+  const gate = new DispatchPolicyAuthorization({ async load() { return { ...policy, grants: [{ ...match, effect: 'require-approval' }] }; } });
+  await expect(gate.authorize('execute', request, principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+  const inventoryGate = new DispatchInventoryPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'r1',
+    restrictions: [], grants: [{ id: 'scope-grant', effect: 'require-approval', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: 'installation', subject: 'uid:1000' }], resource: { kind: 'scope', ids: ['s'] } }] }; } });
+  await expect(inventoryGate.authorize('s', principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
 });

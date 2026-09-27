@@ -12,6 +12,8 @@ export class ModelInvocationPolicyAuthorization implements ModelInvocationAuthor
       decision = evaluatePolicy(await this.source.load(), { principal, scopeId: target.scopeId, action,
         resource: { kind: policyResources.modelInvocation.kind, id: modelInvocationTargetId(target.reference) } });
     } catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
+    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
     if (!decision.ruleId) throw new PolicyAuthorizationError('POLICY_UNAVAILABLE');
     return Object.freeze({ revision: decision.revision, ruleId: decision.ruleId });

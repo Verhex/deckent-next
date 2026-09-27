@@ -13,6 +13,8 @@ export class PoolPolicyAuthorization implements PoolAuthorization {
     try { decision = evaluatePolicy(await this.source.load(), { principal, action: policyResources.pool.actions[0], scopeId,
       resource: { kind: policyResources.pool.kind, id: poolId } }); }
     catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
+    // C12 Q8: outside the operation catalog there is no approval broker yet; require-approval must not silently collapse into denial.
+    if (decision.decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
     if (decision.decision !== 'allow') throw new PolicyAuthorizationError('POLICY_DENIED');
   }
 }
