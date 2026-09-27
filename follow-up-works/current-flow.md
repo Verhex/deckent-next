@@ -11,8 +11,10 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde (`b596
   `@file`, **protokol v15**), dilim 4a izin modları. Belge deltaları uygulandı (ARCHITECTURE/PLAN/CHANGELOG/COMPLETED-PLAN).
 - Astra 2132 → 2133 ANALYSIS + 2134 REVISE (R1 P1 bileşik dar komutla yazma tabanı aşımı, R2 P2 audit edilen kararla kabul eşleşmesi,
   R3 P2 `@file` seçilen yol kimliği): düzeltmeler FIX-2133 (`e047075`) ve FIX-2134-R3 (`5538033`) partiye birleşti; kanıt `.deckent/host/reviews/astra-2132/`.
-- Dördüncü parti `8ceb20f` (C12 G4, kalıcı cleanup işareti, dilim 4c): tam verify `verify-d1` exit 0 (372/2457, 317 sn) → REQUEST_REVIEW 2137.
-  PASS'te yalnız `8ceb20f` push.
+- Dördüncü parti (C12 G4, kalıcı cleanup işareti, dilim 4c): `8ceb20f` → Astra 2139 REVISE (3 P2) → FIX-2139 (`0a6407f`) + owner kararı
+  (`ask`'e dönüş grant istemez) birleşti; yeni aday tam verify → yeniden inceleme → PASS'te yalnız o sha push; ardından canlı geçiş (owner
+  kararı: tek seferde, main uzlaştırmasıyla).
+- Terminal ajan döngüsü analizi (Fable, owner sabah oturumu): `proof/TERM-LOOP-UX-2026-09-27/`.
   Canlı yeniden başlatma (ledger v40 → v41 yedekli, protokol v15) owner iznindedir.
 - Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
 

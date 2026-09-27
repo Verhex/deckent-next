@@ -741,7 +741,8 @@ grace and then released, and the timeout or a cancellation releases them at once
 held); the agent shell tool puts that note in the model's result and the owner's stream (Astra 2124). Protocol v15 also carries the value as an optional `cleanup` field on the
 `tool.finished` event and on the agent tool outcome — the host shell tool's outcome only, enforced at the single emission point in the
 agent-turn loop; the terminal's finished call line shows a short suffix for `group-ended`/`unverified` and nothing for `clean` or an absent
-field (CLEANUP-MARK; closes Astra 2124 open item 1, owner 2026-09-27). This is a process-group
+field (CLEANUP-MARK; closes Astra 2124 open item 1, owner 2026-09-27); the line reserves its elapsed/status/cleanup tail and shortens
+the command text instead, and below the room for the tool name the tail takes its own wrapped line (Astra 2139 R3). This is a process-group
 contract, not a sandbox: a descendant that left the group (setsid, a daemon) is not observed and can outlive the call. Output streams
 in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 16 KiB (`HOST_SHELL_RESULT_MAX_BYTES`; a quarter head, the
 rest tail), cut on UTF-8 boundaries — a character split across two pipe reads is carried to the next read, never replaced by U+FFFD
@@ -868,15 +869,17 @@ No actor field: the socket peer is the principal and only that exact issuer + su
 scope leaves them; unless `ask`, it joins the caller's entry of that mode or a new `m-<hash>` entry); every other entry and the role
 `bindings` are kept. `PermissionModeApplication` (engine/core/policy) owns the transition: conditional on the effective
 `policy+bindings` revision (`PERMISSION_MODE_CONFLICT`), a company `permission-mode`/`set` grant whose resource id is the target
-mode (deny/no grant → `POLICY_DENIED`, require-approval → `POLICY_APPROVAL_UNSUPPORTED`; `ask` needs the grant too), v1 policy →
+mode (deny/no grant → `POLICY_DENIED`, require-approval → `POLICY_APPROVAL_UNSUPPORTED`); tightening to `ask` needs no set grant (owner 2026-09-27: the grant/deny rules
+are not consulted for `ask`, a company deny cannot keep a person in a relaxed mode, the scope boundary still applies; audited as
+`decision {effect: 'allow', ruleId: null}` — a grant always names its rule, so a null rule means no grant was required), v1 policy →
 `PERMISSION_MODE_UNSUPPORTED`. Every decision writes a sealed `permission-mode-change` audit event (audit subject union extension;
 ledger v41 unchanged): `requested`, `previous`, `decision {effect, ruleId}`, `bindingsRevision {before, after|null}`; an allowed
 change is recorded before the file changes (no record, no change; an unrecordable refusal is still a refusal) — so an `allow`
 record's `after` revision is intent, not proof: a rename failure or a replacement detected by the identity check (typed conflict)
 leaves a record whose revision never reached the file. `FilePolicySource.update`
 is the conditional store: per-file serialization in the service process, policy + bindings read under the usual guards, the new
-document written to a same-directory `O_CREAT|O_EXCL|O_NOFOLLOW` file with the original 0400/0600 mode, flushed, the target's
-identity (dev/ino/size/mtime/ctime) re-checked, then `rename` + directory fsync; the writer must be the trusted owner uid. The new
+document written to a same-directory `O_CREAT|O_EXCL|O_NOFOLLOW` file with the original 0400/0600 mode, flushed, the identities (dev/ino/size/mtime/ctime) of both authority files re-checked — the bindings target and the policy file that
+authorized the change and fixed the compared revision (Astra 2139 R1; either replaced → `PERMISSION_MODE_CONFLICT`, nothing replaced), then `rename` + directory fsync; the writer must be the trusted owner uid. The new
 bindings revision is `m-` + sha256(previous revision, new body) (chained, no ABA). A bindings v1 file becomes v2 on the first
 non-`ask` write. The terminal shows the mode as a droppable status-row segment (catalog text only; drop order notice → elapsed →
 mode → model → queue; hidden when unknown or unsupported), refreshed at open, after `/mode` and after each turn; `/mode` shows it
@@ -1261,7 +1264,9 @@ broker and effect contract. Non-blocking: a required approval answers `approval-
 allow settles once (no wait over the socket). The client validates and correlates every answer. MCP `execute_operation`,
 `compensate_operation`, `inspect_operation` use the runtime client; their hints are derived from the installation's reachable
 catalog (unified catalog restricted to configured target kinds): read-only iff every reachable operation reads, destructive iff
-any writes or is irreversible, open-world iff any exists; compensation uses the reachable compensation set; idempotent from the
+any writes or is irreversible, open-world iff any exists; compensation is bounded by the whole reachable catalog (Astra 2139 R2: the compensating operation resolves from the current catalog
+while the pairing comes from the original intent's pinned descriptor, so any reachable operation may be a pinned compensation;
+compensate hints ≡ execute hints); idempotent from the
 engine's commandId replay; inspect is a read-only ledger query. Approval tools and their live-session and four-eyes rules are
 unchanged (no MCP self-approval relaxation). CLI `deckent operation` stays on the direct path (no service fallback). A v14 envelope
 for these operations is dropped before dispatch (the client sees a transport failure; no dedicated version code).

@@ -5,11 +5,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 ## Unreleased
 
 - ADDED (T-L4 slice 4c, protocol v15): the permission mode in the terminal status row and `/mode` to show or set your own mode;
-  setting needs a company `permission-mode`/`set` grant, is audited and replaces bindings.json atomically.
+  relaxing (`auto-edit`/`full-auto`) needs a company `permission-mode`/`set` grant, returning to `ask` needs none; the write is
+  conditional on both policy and bindings files, audited and replaces bindings.json atomically.
 - ADDED (terminal, protocol v15): the finished shell call line keeps a cleanup marker (`group-ended`, `unverified`) after the
-  live output is gone; `tool.finished` carries an optional `cleanup` field for shell calls.
+  live output is gone; `tool.finished` carries an optional `cleanup` field for shell calls; a long command is shortened so the marker stays visible.
 - ADDED (C12 G4, protocol v15): catalog operations on the runtime service (`executeOperation`, `compensateOperation`,
-  `inspectOperation`) and MCP `execute_operation`, `compensate_operation`, `inspect_operation` with hints derived from the catalog.
+  `inspectOperation`) and MCP `execute_operation`, `compensate_operation`, `inspect_operation` with hints derived from the catalog (compensation hints cover the whole reachable catalog).
 - FIX (MCP): list results are sent as text only; a validating MCP client no longer rejects `list_approvals`.
 - ADDED (T-L4 slice 4a): permission modes `ask | auto-edit | full-auto` (bindings v2 `modes`, policy v2 `modeEligible`); a mode
   relaxes only company-eligible approval cells, writes a sealed audit event before the effect, and never lowers deny or the floors.
