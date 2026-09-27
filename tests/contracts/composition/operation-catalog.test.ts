@@ -84,12 +84,28 @@ it('resolves a module-provided operation from the unified catalog: the same reso
 it('refuses the same id@version from two sources (config vs module) with a typed config issue and never lets the config definition win', async () => {
   // Today the config schema accepts this and the config descriptor silently shadows the module's.
   expect(issues({ catalog: [descriptor('test.post', 'memo')], targets: [target] })).toEqual(['OPERATION_CATALOG_CONFLICT']);
-  // A different version of a module operation is a distinct operation: no conflict (the module owns only what it declares).
-  expect(issues({ catalog: [{ ...descriptor('test.post', 'memo'), operation: { id: 'test.post', version: 2 } }], targets: [target] })).toEqual([]);
+  // A different version of a module operation is still inside the module's namespace: closed to config too (owner 2026-09-27
+  // decision 7 — A04-2 design note §2.7(b)'s open question is resolved against the config catalog, not just against exact ids).
+  expect(issues({ catalog: [{ ...descriptor('test.post', 'memo'), operation: { id: 'test.post', version: 2 } }], targets: [target] })).toEqual(['OPERATION_NAMESPACE_RESERVED']);
   // Loading such a configuration is the typed section refusal; nothing reaches the ledger or the target.
   const p = await project({ catalog: [descriptor('test.post', 'memo', { inputMaxBytes: 1 })], targets: [target] }, false);
   const before = allWrites.length;
   await expect(executeConfiguredOperation(p.dir, command('x', { id: 'test.post', version: 1 }), p.options)).rejects.toMatchObject({ code: 'CONFIG_VALIDATION', issues: [{ path: 'operations', reason: 'OPERATIONS_INVALID' }] });
+  expect(allWrites).toHaveLength(before);
+});
+
+it('closes a registered module\'s namespace to new config ids it never declared itself, through the real config validation and execution path (owner 2026-09-27 decision 7)', async () => {
+  // `test.other` and `test.sub.y` are new ids under the already-registered `test.memo` module's namespace (`test`); the module never
+  // declared either itself, so today (before decision 7) neither the exact-id checks nor the plain conflict check would catch them.
+  expect(issues({ catalog: [descriptor('test.other', 'memo')], targets: [target] })).toEqual(['OPERATION_NAMESPACE_RESERVED']);
+  expect(issues({ catalog: [descriptor('test.sub.y', 'memo')], targets: [target] })).toEqual(['OPERATION_NAMESPACE_RESERVED']);
+  // A sibling id outside any registered namespace is unaffected (the namespace closes only itself and below, never anything above it).
+  expect(issues({ catalog: [descriptor('outside.other', 'memo')], targets: [target] })).toEqual([]);
+  // Loading such a configuration is the typed section refusal; nothing reaches the ledger or the target.
+  const p = await project({ catalog: [descriptor('test.other', 'memo')], targets: [target] }, false);
+  const before = allWrites.length;
+  await expect(executeConfiguredOperation(p.dir, command('ns', { id: 'test.other', version: 1 }), p.options))
+    .rejects.toMatchObject({ code: 'CONFIG_VALIDATION', issues: [{ path: 'operations', reason: 'OPERATIONS_INVALID' }] });
   expect(allWrites).toHaveLength(before);
 });
 
@@ -119,8 +135,11 @@ it('unifies with provenance from the registry\'s own admission record: root modu
   expect(registry.operations().map(entry => [entry.provenance, entry.descriptor.operation.id])).toEqual([
     [{ source: 'core', module: 'core.shell@1' }, 'host.shell.run'], [{ source: 'core', module: 'core.ns@1' }, 'corens.op'],
     [{ source: 'module', module: 'test.memo@0.1.0' }, 'test.post'], [{ source: 'module', module: 'test.memo@0.1.0' }, 'test.cancel']]);
+  // These refusal-order checks are unaffected by namespace closure (every case here is caught earlier in the check order; none of
+  // these ids fall under `test` or `corens`), so the low-level calls below pass no namespaces — namespace closure itself is
+  // exercised by the dedicated test below, through `registry.catalog(...)` which computes it automatically.
   const refuse = (catalog: unknown[], kinds: string[], code: string, subject: string) =>
-    expect(() => unifyOperationCatalog(registry.operations(), catalog as never[], kinds)).toThrow(expect.objectContaining({ code, subject }));
+    expect(() => unifyOperationCatalog(registry.operations(), catalog as never[], kinds, [])).toThrow(expect.objectContaining({ code, subject }));
   // A namespaced root module is still Core: its target kind and id are reserved against config.
   refuse([], ['memo', 'ns-kind'], 'OPERATION_TARGET_KIND_RESERVED', 'ns-kind');
   refuse([{ ...descriptor('corens.op', 'memo'), operation: { id: 'corens.op', version: 3 } }], ['memo'], 'OPERATION_CORE_REDEFINED', 'corens.op@3');
@@ -131,7 +150,7 @@ it('unifies with provenance from the registry\'s own admission record: root modu
   refuse([descriptor('mine', 'memo'), descriptor('mine', 'memo')], ['memo'], 'OPERATION_CATALOG_CONFLICT', 'mine@1');
   // A module operation whose compensation is nowhere in the unified catalog is refused (config compensations were checked by config already).
   const dangling = AdapterRegistry.create([core('core.x', 'cx', [descriptor('cx.do', 'k', { compensation: { id: 'cx.undo', version: 1 } })])]);
-  expect(() => unifyOperationCatalog(dangling.operations(), [], [])).toThrow(expect.objectContaining({ code: 'OPERATION_COMPENSATION_UNKNOWN', subject: 'cx.do@1' }));
+  expect(() => unifyOperationCatalog(dangling.operations(), [], [], [])).toThrow(expect.objectContaining({ code: 'OPERATION_COMPENSATION_UNKNOWN', subject: 'cx.do@1' }));
   // The unified catalog resolves every source through one port; unknown refs are null.
   const catalog = registry.catalog([descriptor('mine', 'memo')], ['memo']);
   expect(catalog.entries().map(entry => `${entry.provenance.source}:${entry.descriptor.operation.id}`)).toEqual(['core:host.shell.run', 'core:corens.op', 'module:test.post', 'module:test.cancel', 'config:mine']);
@@ -146,4 +165,18 @@ it('unifies with provenance from the registry\'s own admission record: root modu
     expect(() => AdapterRegistry.create([coreLike()]).register(overlay(namespace, `${namespace}.a`))).toThrow(expect.objectContaining({ code: 'REGISTRY_NAMESPACE_SHADOWED' }));
   }
   function coreLike() { return core('core.ops', null, [descriptor('workspace.file.write', 'workspace-file'), descriptor('host.shell.run', 'host-shell')]); }
+});
+
+it('closes a registered module\'s namespace, and everything under it, to the config catalog even for ids the module never declared; the namespace itself grants nothing without a registered module (owner 2026-09-27 decision 7)', () => {
+  const acmeModule: AdapterModuleRegistration = { manifest: { schemaVersion: 1, module: { id: 'acme.mod', version: '1', tier: 'enterprise', namespace: 'acme' },
+    requires: { coreApi: { min: CORE_API_VERSION, max: CORE_API_VERSION } }, provides: { targetAdapters: [], operations: [] }, signature: null }, factories: {} };
+  const withModule = AdapterRegistry.create([acmeModule]);
+  const refuse = (id: string) => expect(() => withModule.catalog([descriptor(id, 'memo')], ['memo']))
+    .toThrow(expect.objectContaining({ code: 'OPERATION_NAMESPACE_RESERVED', subject: `${id}@1` }));
+  refuse('acme.x'); // a new id directly under the namespace; `acme.mod` never declared it
+  refuse('acme.sub.y'); // and below: a nested sub-namespace is territory too
+  // Without any module registered for `acme`, the identical config resolves normally: the namespace itself grants nothing to close.
+  const withoutModule = AdapterRegistry.create([]);
+  const openCatalog = withoutModule.catalog([descriptor('acme.x', 'memo'), descriptor('acme.sub.y', 'memo')], ['memo']);
+  expect(openCatalog.entries().map(entry => entry.descriptor.operation.id).sort()).toEqual(['acme.sub.y', 'acme.x']);
 });

@@ -35,13 +35,16 @@ async function fixture(options: { readonly responseMaxBytes?: number } = {}) {
       targets: [{ adapter: 'http-conditional', options: { kind: 'records', baseUrl: server.baseUrl, timeoutMs: 2000, responseMaxBytes: 65536, idempotencyLookup: true } }] } }));
   registerProviderConfig(); // as every composed entry does before loading configuration
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
-  const policy = (grants: 'gated' | 'allow' | 'inspect-only') => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1,
+  // `s` only: `foreign` is declared and pinned by the one test that needs it, and only after that test's own service is already
+  // running (decision 6, H34 S3 Q1, owner 2026-09-27 evening — a foreign-pinned scope the trusted policy already declares at start
+  // refuses the start itself; declaring it here for every test would refuse every fixture() call before the service ever starts).
+  const policy = (grants: 'gated' | 'allow' | 'inspect-only', scopes: readonly string[] = ['s']) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1,
     revision: `ops-${grants}`, restrictions: [], grants: [
-      { id: 'operations', effect: 'allow', actions: grants === 'inspect-only' ? ['inspect'] : ['execute', 'compensate', 'inspect'], scopes: ['s', 'foreign'], principals,
+      { id: 'operations', effect: 'allow', actions: grants === 'inspect-only' ? ['inspect'] : ['execute', 'compensate', 'inspect'], scopes, principals,
         resource: { kind: 'operation', ids: 'all' } },
-      { id: 'approvals', effect: 'allow', actions: 'all', scopes: ['s', 'foreign'], principals, resource: { kind: 'approval', ids: 'all' } },
-      ...(grants === 'gated' ? [{ id: 'gate', effect: 'require-approval', actions: ['execute'], scopes: ['s', 'foreign'], principals,
-        resource: { kind: 'operation', ids: ['post-order'] } }] : []),
+      { id: 'approvals', effect: 'allow', actions: 'all', scopes, principals, resource: { kind: 'approval', ids: 'all' } },
+      ...(grants === 'gated' ? [{ id: 'gate', effect: 'require-approval', actions: ['execute'], scopes,
+        resource: { kind: 'operation', ids: ['post-order'] }, principals }] : []),
     ] }), { mode: 0o600 });
   await policy('gated');
   server.records.set('PO-1', 1);
@@ -62,11 +65,9 @@ async function fixture(options: { readonly responseMaxBytes?: number } = {}) {
       db.prepare("INSERT INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,'start')").run(scope, company);
     } finally { db.close(); }
   };
-  // Pinned to another company before the service start registers the policy's scopes for this installation's company.
-  pin('foreign', 'other-company');
   const service = await startTestRuntimeService(project, env);
   const client = createConfiguredRuntimeClient(project, { env });
-  return { server, project, env, policy, command, rows, service, client, ledger: opened.path };
+  return { server, project, env, policy, command, rows, pin, service, client, ledger: opened.path, layout: opened.layout };
 }
 const decide = (client: ReturnType<typeof createConfiguredRuntimeClient>, approvalId: string, commandId: string, decision: 'allow' | 'deny') =>
   client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }) as Promise<{ status: string }>;
@@ -116,8 +117,11 @@ it('refuses a denied request, a policy without a grant and another company\'s sc
     const before = f.rows('approvals').length;
     await expect(f.client.executeOperation(f.command('no-grant'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(f.rows('approvals')).toHaveLength(before); expect(f.server.operations).toHaveLength(0);
-    // A scope pinned to another company is indistinguishable from an unknown one: the code only, no parameters on the wire.
-    await f.policy('allow');
+    // A scope pinned to another company is indistinguishable from an unknown one: the code only, no parameters on the wire. Declared
+    // and pinned only now, with the service already running: a scope that grows foreign after a clean start is the ordinary
+    // per-request fail-closed path every port already covers (decision 6 above refuses only an already-foreign scope AT START).
+    await f.policy('allow', ['s', 'foreign']);
+    f.pin('foreign', 'other-company');
     const foreign = await f.client.executeOperation(f.command('foreign', { scopeId: 'foreign' })).then(() => null, (error: { code?: string; params?: unknown }) => error);
     expect(foreign).toMatchObject({ code: 'SCOPE_UNKNOWN' }); expect(Object.keys(foreign?.params ?? {})).toEqual([]);
     expect(`${String((foreign as unknown as Error).message)} ${JSON.stringify(foreign)}`).not.toContain('other-company');

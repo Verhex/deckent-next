@@ -125,6 +125,12 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SERVICE_SHUTDOWN_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.SERVICE_SHUTDOWN_NOT_ADMITTED', p, l) }) },
   SERVICE_SHUTDOWN_OUTCOME_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.SERVICE_SHUTDOWN_OUTCOME_CONFLICT', p, l) }) },
   RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE', p, l) }) },
+  // H34 S3 Q1 (owner 2026-09-27 evening decision 6): `runtime serve` refuses to start while one of its own scopes is already pinned
+  // to another company (config/ledger mismatch; same 'config' category, exit 78, as CONFIG_VERSION_UNSUPPORTED/LAYOUT_VERSION_UNSUPPORTED
+  // and the INSTALLATION_PROFILE_* siblings above — the operator's remedy is their own company.id or ledger, not a transport retry).
+  // Locale key not yet present (locale files are lead-owned, common; same temporary pattern as POLICY_APPROVAL_UNSUPPORTED /
+  // INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED before their keys were added). See i18n-delta.json for the suggested en/tr text.
+  RUNTIME_SERVICE_SCOPE_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'RUNTIME_SERVICE_SCOPE_FOREIGN' }, l) }) },
   RUN_WORKSPACE_CUSTODY_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_WORKSPACE_CUSTODY_CONFLICT', p, l) }) },
   RUN_WORKSPACE_CUSTODY_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_WORKSPACE_CUSTODY_CORRUPT', p, l) }) },
   WORKSPACE_CUSTODY_UNCONVERTIBLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_CUSTODY_UNCONVERTIBLE', p, l) }) },

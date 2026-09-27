@@ -45,10 +45,16 @@ export class AdapterRegistry {
     return this.modules.flatMap(module => module.manifest.provides.operations.map(descriptor => Object.freeze({ descriptor,
       provenance: Object.freeze({ source: module.root ? 'core' as const : 'module' as const, module: `${module.manifest.module.id}@${module.manifest.module.version}` }) })));
   }
+  /** Every registered module's namespace (root or overlay; `null` — the root/unprefixed case — excluded): closes that namespace and
+   * everything under it to the config catalog (owner 2026-09-27 decision 7), even for an id the module never declared itself. */
+  private moduleNamespaces(): readonly string[] {
+    return this.modules.map(module => module.manifest.module.namespace).filter((namespace): namespace is string => namespace !== null);
+  }
   /** Unifies the registered operations with a validated config catalog (typed `OperationCatalogError` on conflict, Core redefinition,
-   * reserved target kind or unknown compensation). Config validation and the composition resolver both go through this one function. */
+   * reserved target kind, a reserved module namespace or unknown compensation). Config validation and the composition resolver both
+   * go through this one function. */
   catalog(configCatalog: readonly OperationDescriptor[], configTargetKinds: readonly string[]): UnifiedOperationCatalog {
-    const unified = unifyOperationCatalog(this.operations(), configCatalog, configTargetKinds);
+    const unified = unifyOperationCatalog(this.operations(), configCatalog, configTargetKinds, this.moduleNamespaces());
     const entries = Object.freeze([...unified.values()]);
     return Object.freeze({ entries: () => entries, async resolve(operation: OperationRef) { return unified.get(`${operation.id}@${operation.version}`)?.descriptor ?? null; } });
   }
