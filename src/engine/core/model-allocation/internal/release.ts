@@ -8,12 +8,21 @@ import { parseModelAllocation, type ModelAllocation } from './checkpoint.js';
 export interface ModelAllocationSlotRelease {
   readonly allocations: number;
   readonly released: number;
-  /** Counters no rule explains (below the open claims, or above open + settled unknown calls): reported, never rewritten. */
+  /** Open calls of an ended owner settled `unknown` (FIX-2143-SLOTS); each freed its own slot, counted here, not in `released`. */
+  readonly settled: number;
+  /** Allocations whose records do not verify, or whose counter no rule explains (below the open claims, or above open + settled unknown
+   * calls): reported and left exactly as they are (Astra 2143 R1). */
   readonly inconsistent: readonly { readonly scopeId: string; readonly allocationId: string }[];
 }
+/** What only the holder of endpoint custody can assert at start: which send owners have ended, and the settlement time. */
+export interface ModelAllocationStartCustody {
+  readonly atMs: number;
+  endedOwner(ownerId: string): boolean;
+}
 export interface ModelAllocationSlotReleaseStore {
-  /** Start reconciliation under endpoint custody: frees slots an earlier build kept for settled `unknown` calls. */
-  releaseSettledSlots(): Promise<ModelAllocationSlotRelease>;
+  /** Start reconciliation under endpoint custody, from records verified in the same transaction: settles the open calls of ended owners
+   * `unknown` and frees slots an earlier build kept for settled `unknown` calls. Never writes to an allocation that does not verify. */
+  releaseSettledSlots(custody: ModelAllocationStartCustody): Promise<ModelAllocationSlotRelease>;
 }
 /**
  * Pure plan for one allocation from its retained invocation states. An earlier build kept a slot for each settled `unknown` call, so

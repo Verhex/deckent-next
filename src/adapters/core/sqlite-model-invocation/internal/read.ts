@@ -33,29 +33,27 @@ export function decodeInvocationRecord(row: InvocationRow | undefined, scopeId: 
     return record;
   } catch { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
 }
-export function invocationRow(db: DatabaseSync, scopeId: string, invocationId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record,
+/** One invocation row with every joined record the decoder verifies (content, purge, control, cancellation). */
+const invocationRowSelect = `SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record,
       c.purge_command_id,p.record AS purge_record,p.scope_id AS purge_scope_id,
       p.command_id AS purge_id,p.invocation_id AS purge_invocation_id,${invocationControlSelect}
     FROM model_invocations i LEFT JOIN model_invocation_contents c
     ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
     LEFT JOIN model_invocation_content_purges p ON p.scope_id=c.scope_id AND p.command_id=c.purge_command_id
     LEFT JOIN model_invocation_controls k ON k.scope_id=i.scope_id AND k.invocation_id=i.invocation_id
-    LEFT JOIN model_invocation_cancellations a ON a.scope_id=i.scope_id AND a.invocation_id=i.invocation_id
-    WHERE i.scope_id=? AND i.invocation_id=?`)
-    .get(scopeId, invocationId) as InvocationRow | undefined;
+    LEFT JOIN model_invocation_cancellations a ON a.scope_id=i.scope_id AND a.invocation_id=i.invocation_id`;
+export function invocationRow(db: DatabaseSync, scopeId: string, invocationId: string): InvocationRow | undefined {
+  return db.prepare(`${invocationRowSelect} WHERE i.scope_id=? AND i.invocation_id=?`).get(scopeId, invocationId) as InvocationRow | undefined;
 }
 export function invocationCommandRow(db: DatabaseSync, scopeId: string, commandId: string): InvocationRow | undefined {
-  return db.prepare(`SELECT i.scope_id,i.command_id,i.invocation_id,i.allocation_id,i.state,i.record,c.record AS content_record,
-      c.purge_command_id,p.record AS purge_record,p.scope_id AS purge_scope_id,
-      p.command_id AS purge_id,p.invocation_id AS purge_invocation_id,${invocationControlSelect}
-    FROM model_invocations i LEFT JOIN model_invocation_contents c
-    ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id
-    LEFT JOIN model_invocation_content_purges p ON p.scope_id=c.scope_id AND p.command_id=c.purge_command_id
-    LEFT JOIN model_invocation_controls k ON k.scope_id=i.scope_id AND k.invocation_id=i.invocation_id
-    LEFT JOIN model_invocation_cancellations a ON a.scope_id=i.scope_id AND a.invocation_id=i.invocation_id
-    WHERE i.scope_id=? AND i.command_id=?`)
-    .get(scopeId, commandId) as InvocationRow | undefined;
+  return db.prepare(`${invocationRowSelect} WHERE i.scope_id=? AND i.command_id=?`).get(scopeId, commandId) as InvocationRow | undefined;
+}
+/** Visits every retained invocation of one allocation, each decoded and verified (Astra 2143 R1: repair trusts no bare column). */
+export function visitAllocationInvocations(db: DatabaseSync, scopeId: string, allocationId: string,
+  visit: (record: ModelInvocationRecord) => void): void {
+  for (const row of db.prepare(`${invocationRowSelect} WHERE i.scope_id=? AND i.allocation_id=?`).iterate(scopeId, allocationId)) {
+    visit(decodeInvocationRecord(row as InvocationRow, scopeId, invocationIdentity(row['invocation_id']), 'invocation_id')!);
+  }
 }
 export function loadInvocationRecord(db: DatabaseSync, scopeInput: unknown, invocationInput: unknown): ModelInvocationRecord | null {
   const scopeId = invocationIdentity(scopeInput), invocationId = invocationIdentity(invocationInput);

@@ -3,4 +3,4 @@ export type { ModelAllocation, ModelAllocationCheckpoint } from './internal/chec
 export { verifyModelAllocationIntegrity, validateModelAllocationPageSize, MODEL_ALLOCATION_INTEGRITY_PAGE_MAX } from './internal/integrity.js';
 export type { ModelAllocationIntegrityQuery, ModelAllocationIntegrityPage, ModelAllocationIntegrityReader } from './internal/integrity.js';
 export { planModelAllocationSlotRelease } from './internal/release.js';
-export type { ModelAllocationSlotRelease, ModelAllocationSlotReleaseStore } from './internal/release.js';
+export type { ModelAllocationSlotRelease, ModelAllocationSlotReleaseStore, ModelAllocationStartCustody } from './internal/release.js';

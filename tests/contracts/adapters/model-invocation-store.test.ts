@@ -345,6 +345,8 @@ it('admits any number of calls for an allocation without a lifetime total while 
   await expect(store.claim(admission(capped, 'command-capped', 'invocation-capped'))).rejects.toThrow('MODEL_INVOCATION_ALLOCATION_CONFLICT');
 });
 
+/** Start repair custody in which no owner is proven ended: only an earlier build's surplus can be released. */
+const noEndedOwner = { atMs: 20, endedOwner: () => false };
 /** Rewrites the allocation counter as a build before INFLIGHT-FIX left it (a settled `unknown` kept its slot), with a valid checkpoint. */
 function forceInFlight(path: string, inFlight: number) {
   const db = new DatabaseSync(path);
@@ -375,10 +377,10 @@ it('releases slots an earlier build kept for settled unknown calls, never an ope
   const repair = await openSqliteModelInvocationStore(base.path, options, 'forbid');
   try {
     await expect(repair.claim(admission(base, 'blocked', 'blocked-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
-    expect(await repair.releaseSettledSlots()).toEqual({ allocations: 1, released: 1, inconsistent: [] });
+    expect(await repair.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 1, settled: 0, inconsistent: [] });
     expect(counters(base.path)).toEqual({ lifetime_calls: 2, in_flight: 1, revision: stuckRevision + 1 });
     // Idempotent: nothing more to release, no write.
-    expect(await repair.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [] });
+    expect(await repair.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 0, settled: 0, inconsistent: [] });
     expect(counters(base.path)).toEqual({ lifetime_calls: 2, in_flight: 1, revision: stuckRevision + 1 });
     // The released slot admits one call; the open claim still holds its own, so the limit stays enforced.
     expect(await repair.claim(admission(base, 'after', 'after-id'))).toMatchObject({ replayed: false });
@@ -397,7 +399,7 @@ it('releases slots an earlier build kept for settled unknown calls, never an ope
   await seed.claim(admission(damaged, 'open', 'open-id')); seed.close();
   const damagedRevision = forceInFlight(damaged.path, 0);
   const check = await openSqliteModelInvocationStore(damaged.path, options, 'forbid');
-  try { expect(await check.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
+  try { expect(await check.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 0, settled: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
   finally { check.close(); }
   expect(counters(damaged.path)).toEqual({ lifetime_calls: 1, in_flight: 0, revision: damagedRevision });
   // Nor is a counter above open + unknown (a definitive response never held a slot under any rule).
@@ -407,7 +409,97 @@ it('releases slots an earlier build kept for settled unknown calls, never an ope
   await excessSeed.recordResponse(answered.record.receipt.claim, { schemaVersion: 1, native: { id: 'r' }, usage: null }, 11); excessSeed.close();
   const excessRevision = forceInFlight(excess.path, 1);
   const excessCheck = await openSqliteModelInvocationStore(excess.path, options, 'forbid');
-  try { expect(await excessCheck.releaseSettledSlots()).toEqual({ allocations: 1, released: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
+  try { expect(await excessCheck.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 0, settled: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] }); }
   finally { excessCheck.close(); }
   expect(counters(excess.path)).toEqual({ lifetime_calls: 1, in_flight: 1, revision: excessRevision });
+});
+
+const sql = (path: string, statement: string) => { const db = new DatabaseSync(path); try { db.exec(statement); } finally { db.close(); } };
+const inconsistent = { allocations: 1, released: 0, settled: 0, inconsistent: [{ scopeId: 'scope', allocationId: 'allocation' }] };
+
+// Astra 2143 R1 (independent negative, ported as a permanent test): the start repair trusts only records the decoder verified in the same
+// transaction; a damaged row never becomes capacity, even when every owner is treated as ended.
+it('Astra2142: start repair must not release a claimed receipt whose denormalized state says unknown', async () => {
+  const base = await fixture(null, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  try {
+    await store.claim(admission(base, 'open', 'open-id'));
+    sql(base.path, "UPDATE model_invocations SET state='unknown' WHERE invocation_id='open-id'");
+    await expect(store.loadReceipt('scope', 'open')).rejects.toThrow('MODEL_INVOCATION_CORRUPT');
+    const before = counters(base.path);
+    expect(await store.releaseSettledSlots({ atMs: 20, endedOwner: () => true })).toEqual(inconsistent);
+    expect(counters(base.path)).toEqual(before);
+    await expect(store.claim(admission(base, 'second', 'second-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  } finally { store.close(); }
+});
+
+it('leaves the checkpoint untouched when a row hides an open claim or moved to another allocation, and still repairs a sound ledger', async () => {
+  // A settled unknown (slot already free) and one open claim (inFlight 1): any unverified reading that misses the claim frees its slot.
+  const seed = async () => {
+    const base = await fixture(8, 1), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+    const old = await store.claim(admission(base, 'old', 'old-id'));
+    await store.permitSend(old.record.receipt.claim, 'sender', 10);
+    await store.recordUnknown(old.record.receipt.claim, 'transport-error', 11);
+    await store.claim(admission(base, 'open', 'open-id')); store.close();
+    return base;
+  };
+  for (const damage of ["UPDATE model_invocations SET state='responded' WHERE invocation_id='open-id'",
+    "UPDATE model_invocations SET allocation_id='other' WHERE invocation_id='open-id'"]) {
+    const base = await seed(); sql(base.path, damage);
+    const before = counters(base.path), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+    try {
+      expect(await store.releaseSettledSlots({ atMs: 20, endedOwner: () => true })).toEqual(inconsistent);
+      expect(counters(base.path)).toEqual(before);
+      await expect(store.claim(admission(base, 'next', 'next-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+    } finally { store.close(); }
+  }
+  // The same sound mix with an earlier build's surplus (maxInFlight 2) is repaired once; a second repair changes nothing.
+  const sound = await fixture(8, 2), store = await openSqliteModelInvocationStore(sound.path, options, 'forbid');
+  const old = await store.claim(admission(sound, 'old', 'old-id'));
+  await store.permitSend(old.record.receipt.claim, 'sender', 10);
+  await store.recordUnknown(old.record.receipt.claim, 'transport-error', 11);
+  await store.claim(admission(sound, 'open', 'open-id')); store.close();
+  const revision = forceInFlight(sound.path, 2), repair = await openSqliteModelInvocationStore(sound.path, options, 'forbid');
+  try {
+    expect(await repair.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 1, settled: 0, inconsistent: [] });
+    expect(await repair.releaseSettledSlots(noEndedOwner)).toEqual({ allocations: 1, released: 0, settled: 0, inconsistent: [] });
+    expect(counters(sound.path)).toEqual({ lifetime_calls: 2, in_flight: 1, revision: revision + 1 });
+  } finally { repair.close(); }
+});
+
+// Owner 2026-09-28 (FIX-2143-SLOTS): an open claim whose permitted owner is proven ended settles `unknown` at start and frees its slot; a
+// claim without a permitted owner, or owned by anyone not proven ended, is never touched.
+it('settles only the open claims of an ended owner as unknown, once, alongside an earlier build surplus', async () => {
+  const base = await fixture(8, 4), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const old = await store.claim(admission(base, 'old', 'old-id'));
+  await store.permitSend(old.record.receipt.claim, 'sender', 10);
+  await store.recordUnknown(old.record.receipt.claim, 'transport-error', 11);
+  const dead = await store.claim(admission(base, 'dead', 'dead-id'));
+  await store.permitSend(dead.record.receipt.claim, 'dead-service', 12);
+  const foreign = await store.claim(admission(base, 'foreign', 'foreign-id'));
+  await store.permitSend(foreign.record.receipt.claim, 'live-process', 12);
+  await store.claim(admission(base, 'pending', 'pending-id')); store.close();
+  // An earlier build also kept the settled unknown's slot: 3 open claims + 1 surplus.
+  const revision = forceInFlight(base.path, 4), repair = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+  const custody = { atMs: 30, endedOwner: (ownerId: string) => ownerId === 'dead-service' };
+  try {
+    expect(await repair.releaseSettledSlots(custody)).toEqual({ allocations: 1, released: 1, settled: 1, inconsistent: [] });
+    expect(counters(base.path)).toEqual({ lifetime_calls: 4, in_flight: 2, revision: revision + 2 });
+    expect((await repair.loadReceipt('scope', 'dead'))?.receipt.outcome).toEqual({ schemaVersion: 4, state: 'unknown', reason: 'transport-error',
+      evidence: null, content: null, observedAtMs: 30 });
+    expect((await repair.loadReceipt('scope', 'foreign'))?.receipt.outcome).toBeNull();
+    expect((await repair.loadReceipt('scope', 'pending'))?.receipt.outcome).toBeNull();
+    // Nothing more to settle or release, and no write.
+    expect(await repair.releaseSettledSlots(custody)).toEqual({ allocations: 1, released: 0, settled: 0, inconsistent: [] });
+    expect(counters(base.path)).toEqual({ lifetime_calls: 4, in_flight: 2, revision: revision + 2 });
+    // A late send result of the ended owner cannot overwrite the settlement.
+    await expect(repair.recordResponse(dead.record.receipt.claim, { schemaVersion: 1, native: { id: 'late' }, usage: null }, 31))
+      .rejects.toThrow('MODEL_INVOCATION_COMMAND_CONFLICT');
+    // The two freed slots admit two calls; the open claims keep theirs, so the limit holds.
+    expect(await repair.claim(admission(base, 'next-1', 'next-1-id'))).toMatchObject({ replayed: false });
+    expect(await repair.claim(admission(base, 'next-2', 'next-2-id'))).toMatchObject({ replayed: false });
+    await expect(repair.claim(admission(base, 'over', 'over-id'))).rejects.toThrow('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  } finally { repair.close(); }
+  const integrity = await openSqliteModelAllocationIntegrityReader(base.path, { busyTimeoutMs: options.busyTimeoutMs });
+  try { await expect(verifyModelAllocationIntegrity(integrity, 'scope', 'allocation', 10)).resolves.toMatchObject({ status: 'consistent', lifetimeCalls: 6, inFlight: 4 }); }
+  finally { integrity.close(); }
 });

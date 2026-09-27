@@ -1143,7 +1143,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       stuckRevision = stuck.revision;
     } finally { db.close(); }
     await f.start();
-    expect(f.released).toEqual([{ allocations: 1, released: 2, inconsistent: [] }]);
+    expect(f.released).toEqual([{ allocations: 1, released: 2, settled: 0, inconsistent: [] }]);
     expect(f.rows(`SELECT a.lifetime_calls,a.in_flight,c.revision FROM model_invocation_allocations a JOIN model_invocation_allocation_checkpoints c
       ON c.scope_id=a.scope_id AND c.allocation_id=a.allocation_id`)).toEqual([{ lifetime_calls: 2, in_flight: 0, revision: stuckRevision + 1 }]);
     expect(await f.client().chatTurn(ask('turn-after-repair'), () => undefined)).toMatchObject({ finish: 'stop', answer: 'after repair' });
