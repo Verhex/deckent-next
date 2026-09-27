@@ -415,7 +415,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   that takes an argument completes to `/name ` and waits, a fully typed name runs as typed; Tab completes; Esc closes until
   the text changes; Enter without suggestions sends the text), `?` shortcuts, and an `@file` picker (T-L5, protocol v15: typing
   inside an `@token` opens candidates from the runtime service, debounced 60 ms with earlier lookups aborted; a single candidate is
-  offered, never typed for the user; Esc closes it for that text and a late answer never reopens it; Enter/Tab insert `@path `); it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
+  offered, never typed for the user; Esc closes it for that text and a late answer never reopens it; Enter/Tab insert the picked path in the form the
+  submit parser reads back exactly: `@path ` for a plain name, `@"path" ` when the name has whitespace, trailing sentence punctuation,
+  a leading `@` or `"` (only `\"` and `\\` are escapes; Astra 2134 R3); Enter on a typed-out name sends the line only when it is already
+  in that form; a quoted query (`@"my f`) looks names with spaces up); it emits `submit`/`cancel`/`exit` intents only. Idle Ctrl+C
   clears a draft or arms exit (second press within 2 s exits); Ctrl+D exits on an empty idle line; while busy
   Esc/Ctrl+C cancel the turn. History and `@` candidates/attachments are ports; the surface reads no files. History persistence is the
   `terminal-history` adapter: private per-project `state/terminal-history.jsonl` (0600, no-follow, append-only, last 500
@@ -646,7 +649,10 @@ symlink followed, regular single-link files, UTF-8-boundary prefix, NUL = binary
 come from a per-project index walked at most every 10 s (single flight, ≤ 50 000 files; a measured walk took 170–460 ms on 1.3k–2.6k
 files, so a per-key walk was rejected); ranking: file name before path, exact (with or without extension) > prefix > substring >
 subsequence, then fewer segments, shorter path. The attach path always resolves fresh, so a stale candidate that disappeared or became
-denied is refused. On submit the draft's `@path` tokens outside paste chips (at most 8, no repeats) are attached: the user message is
+denied is refused. On submit the draft's mentions outside paste chips (at most 8, no repeats, exact paths) are attached; one tokenizer owns
+lookup, completion and submit (`@` at text start or after whitespace, never `@@` or an email; `@"…"` keeps every character; a bare
+`@path` runs to whitespace and drops trailing sentence punctuation; an unclosed `@"` reads as bare and never swallows later mentions;
+a quoted mention reaching into a paste chip is dropped): the user message is
 the typed text plus one labelled block per file (`--- attached file <path> (…) ---` … `--- end of <path> ---`, model-facing protocol
 text), ≤ 32 KiB per file and ≤ 128 KiB per message; the ledger shows the typed text and one notice per file. Content is part of the
 user message, so the chatTurn request digest, session snapshots and compaction cover it; no ledger change. The client rejects an
