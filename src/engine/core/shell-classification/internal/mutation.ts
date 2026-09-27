@@ -82,8 +82,11 @@ async function classifyStage(stage: ShellStage, reads: ShellPathContext, writes:
 }
 
 /**
- * Whether a command is in the narrow mutating set: every stage of every pipeline a recognized narrow program with checked paths, and
- * no pipe between stages. `always-ask` names the floor that no mode lowers; `unrecognized` is any other modifying command (it asks).
+ * Whether a command is in the narrow mutating set: exactly one simple command — one pipeline of one stage, no `&&`, `;`, `||`, newline or
+ * pipe — that is a recognized narrow program with checked paths. Its paths are checked on the file system as it is before the command
+ * runs, which is what the program then meets only when no earlier part of the same command ran first (Astra 2133: `mkdir out && cp
+ * package.json out` passed as an absent copy target, then the copy wrote `out/package.json` on the write floor). `always-ask` names the
+ * floor that no mode lowers (decided over every part of any command first); `unrecognized` is any other modifying command (it asks).
  */
 export async function classifyShellMutation(command: string, reads: ShellPathContext, writes: ShellWritePathContext,
   dialect: ShellDialect = 'posix'): Promise<ShellMutationVerdict> {
@@ -99,12 +102,10 @@ export async function classifyShellMutation(command: string, reads: ShellPathCon
     const floor = name === undefined ? null : alwaysAsk((PROGRAM_ALIASES[name] ?? name).toLowerCase());
     if (floor) return floor;
   }
-  if (scan.pipelines.some(pipeline => pipeline.length !== 1)) return verdict('unrecognized', 'NOT_NARROW', '|');
-  for (const stage of stages) {
-    const outcome = await classifyStage(stage, reads, writes);
-    if (outcome.tier !== 'narrow') return outcome;
-  }
-  return verdict('narrow', 'NARROW');
+  if (scan.pipelines.length !== 1) return verdict('unrecognized', 'NOT_NARROW', ';');
+  const [only, ...piped] = scan.pipelines[0]!;
+  if (only === undefined || piped.length > 0) return verdict('unrecognized', 'NOT_NARROW', '|');
+  return classifyStage(only, reads, writes);
 }
 
 /** The permission tier of a shell command (what the mode decision sees as the call's cell); worst wins, destructive first. */

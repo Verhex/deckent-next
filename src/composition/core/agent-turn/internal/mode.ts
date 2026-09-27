@@ -21,6 +21,15 @@ export const permissionModeEventId = (scopeId: string, turnId: string, execution
   sha256(`permission-mode:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
 type Stored = { readonly cell: AgentToolCallCell; readonly decision: AgentToolCallDecision } | { readonly planError: string };
+type Relaxed = AgentToolCallDecision & { readonly relaxation: NonNullable<AgentToolCallDecision['relaxation']> };
+/**
+ * Whether a decision taken at an effect admission is the one the audit event recorded (Astra 2133): allow, on the same effective policy
+ * revision, lowered by the same mode for the same cell through the same company rules and person entry. Anything else — another mode,
+ * a revision changed by any edit, or a plain allow — is not what was audited, so the effect is not admitted (nothing is re-audited).
+ */
+const isAuditedDecision = (audited: Relaxed, again: AgentToolCallDecision) => again.decision === 'allow' && again.revision === audited.revision
+  && again.relaxation !== null && again.relaxation.mode === audited.relaxation.mode && again.relaxation.cell === audited.relaxation.cell
+  && again.relaxation.company === audited.relaxation.company && again.relaxation.person === audited.relaxation.person;
 
 /**
  * The permission decision of one turn's tool calls (T-L4 slice 4a): the one pure `decideAgentToolCall` over a fresh policy + bindings
@@ -28,7 +37,8 @@ type Stored = { readonly cell: AgentToolCallCell; readonly decision: AgentToolCa
  * the call is planned (the plan is the cell) and the whole decision — strict policy, floor raise, mode lowering — is kept for the
  * call, so `prepare` repeats it and never re-raises a lowered call. At the effect a call the owner was not asked for is decided again:
  * a mode relaxation writes its sealed `permission-mode` audit event before the effect (no event, nothing runs) and the effect gate
- * re-decides on every admission; a decision that was silent without a mode is counted. Owner-approved calls keep the C12 gate as is.
+ * re-decides on every admission and admits only that audited decision; a decision that was silent without a mode is counted.
+ * Owner-approved calls keep the C12 gate as is.
  */
 export function createAgentCallDecisions(input: { readonly context: Context; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly edits: ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
@@ -116,10 +126,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
             const terminal = context.record && (context.record.state === 'settled' || context.record.state === 'refused');
             if (!terminal) {
               if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
-              // The same decision again on the policy as it is now: a deny since wins, a lost relaxation asks (nothing runs here).
+              // The same decision again on the policy as it is now: a deny since wins; anything but the audited relaxation (a lost one,
+              // another mode or revision, a plain allow) asks, and nothing runs here.
               const again = await decide(tool, kept.cell);
               if (!again || again.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
-              if (again.decision !== 'allow') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+              if (!isAuditedDecision({ ...fresh, relaxation }, again)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               return inner.admit(descriptor, 'allow', command, principal, context);
             }
             return inner.admit(descriptor, decision, command, principal, context);
