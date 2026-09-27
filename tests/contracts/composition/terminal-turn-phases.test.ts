@@ -9,7 +9,7 @@ import type { AgentTurnMessage } from '#domain/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { cancelRuntimeChatTurn, runRuntimeChatTurn, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-import { assertTerminalChatReady, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { assertTerminalChatReady, streamTerminalAgentTurn, terminalCompactionExpected } from '#composition/core/terminal-chat/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
@@ -94,7 +94,7 @@ async function runtime(options: { windowTokens?: number; count?: (messages: unkn
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady })) deltas.push(delta);
     return deltas;
   };
-  return { calls, turn };
+  return { calls, turn, project, env };
 }
 const talk = (pairs: number, answerBytes = 0): AgentTurnMessage[] => [{ role: 'system', content: 'SYS' }, ...Array.from({ length: pairs * 2 }, (_, i) => i % 2
   ? { role: 'assistant' as const, content: `answer ${i} ${'b'.repeat(answerBytes)}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
@@ -143,5 +143,26 @@ describe('summarizing is derived on the client exactly when the service compacts
     const g = await runtime({ maxCompletionTokens: 128 });
     expect(marks(await g.turn(history))).toEqual([{ compacting: false, compacted: false }]);
     expect(g.calls.summary).toBe(0);
+  }, 30_000);
+});
+
+// COMPOSITION-BUDGET: the service and the terminal read one admission formula (engine `agentTurnAdmission`), not a mirrored copy.
+// The parity test above cannot see a drift of that one source (both sides move together), so each side is pinned on its own here:
+// changing that safety reserve turns both of these red, which a client-side copy would not.
+describe('one admission formula for the service and the terminal (engine agentTurnAdmission)', () => {
+  it('service: 74 000 of 100 000 prompt tokens are summarized only because the whole reserve (128 + 2 048) is kept free', async () => {
+    const f = await runtime({ windowTokens: 100_000, count: messages => messages.length > 12 ? 74_000 : 900 });
+    const deltas = await f.turn(talk(8));
+    expect(f.calls.summary).toBe(1);
+    expect(deltas.some(delta => delta.kind === 'compacted')).toBe(true);
+  }, 30_000);
+
+  it('terminal: the admission it derives from the configuration is the same formula, whatever the service does', async () => {
+    const f = await runtime({ windowTokens: 100_000, count: () => 900 });
+    const admission = await assertTerminalChatReady(f.project, { env: f.env });
+    expect(admission).toEqual({ outputReserveTokens: 128, safetyReserveTokens: 2_048, requestMaxBytes: 262_144, requestReserveBytes: 128 * 4 + 32_768 });
+    const history = talk(8);
+    expect(terminalCompactionExpected(history, { promptTokens: 74_000, windowTokens: 100_000 }, admission)).toBe(true);
+    expect(terminalCompactionExpected(history, { promptTokens: 72_000, windowTokens: 100_000 }, admission)).toBe(false);
   }, 30_000);
 });

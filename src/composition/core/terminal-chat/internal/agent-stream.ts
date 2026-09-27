@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
+import type { AgentTurnAdmission } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import type { TurnDelta } from '#surfaces/index.js';
-import { terminalCompactionExpected, type TerminalTurnAdmission } from './turn-phase.js';
-import { describeAgentToolCallTarget, summarizeAgentToolResult } from './tool-line.js';
+import { describeAgentToolCallTarget, summarizeAgentToolResult, type TurnDelta } from '#surfaces/index.js';
+import { terminalCompactionExpected } from './turn-phase.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */
 export interface TerminalAgentTurnPorts {
@@ -12,7 +12,7 @@ export interface TerminalAgentTurnPorts {
   cancelChatTurn(projectRoot: string, command: ChatTurnCancellation, options: ConfigLoadOptions): Promise<unknown>;
   /** Local configuration check before contacting the service (a missing `terminal.chat` is named, not a transport error); it may
    * return the service's admission from the same configuration, which lets the stream name the summarizing phase (TL-A). */
-  preflight?(projectRoot: string, options: ConfigLoadOptions): Promise<TerminalTurnAdmission | void>;
+  preflight?(projectRoot: string, options: ConfigLoadOptions): Promise<AgentTurnAdmission | void>;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
