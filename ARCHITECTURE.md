@@ -641,6 +641,10 @@ so; a completed summary is kept. Reasoning streams as a dim, sanitized (`termina
 scrollback nor added to history; `/reasoning [on|off]` toggles the preview for the session (default on). Limits: against a service of
 another build or configuration the mark can be wrong until `compacted` or the first model delta; the admission formula is mirrored on
 the client (guarded by the parity test; a shared domain function is the follow-up).
+**Tool lines and read limits (TL-B, 2026-09-28).** The terminal derives a display target (grep/glob pattern first) and a finished-call
+result summary ("12 matches", "243/269 lines, more available") client-side from `message` events already on the wire; the engine's
+`describeAgentCall` — the C12 approval `resource` — is unchanged byte for byte. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
+1 KiB–1 MiB, chat schema 1 unchanged); `grep` accepts `context` (0–5) and `maxHits` (≤ 200), `context=0` byte-identical to before.
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable) with the ledger and terminal-session paths,

@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CHANGED (TL-B): tool lines show the grep/glob pattern and a result summary; read results default to 64 KiB
+  (`terminal.chat.readResultMaxBytes`); `grep` accepts `context` and `maxHits`.
 - ADDED (TL-A): visible turn phases ("model is preparing a response · Ns", "summarizing earlier messages · Ns"), an "Esc cancels"
   hint, a cancel footer naming the stopped part, and a dim reasoning preview toggled with `/reasoning`.
 - SECURITY (TL-C): agent read tools and edit/shell path classification deny the layout's approvals and approval-preview

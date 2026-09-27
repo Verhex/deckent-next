@@ -140,7 +140,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.
   const thinkingSwitch = declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY);
-  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout) }) : null;
+  // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
+  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
   const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
   const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,

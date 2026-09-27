@@ -12,6 +12,7 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
     cancelledDuring: { compaction: t('terminal.render.cancelledDuring.compaction', {}, locale), model: t('terminal.render.cancelledDuring.model', {}, locale),
       tool: t('terminal.render.cancelledDuring.tool', {}, locale) },
     compactionCancelled: t('terminal.render.compactionCancelled', {}, locale), cancelHint: t('terminal.render.cancelHint', {}, locale),
+    toolSummary: { lines: t('terminal.render.toolSummary.lines', {}, locale), linesMore: t('terminal.render.toolSummary.linesMore', {}, locale), headings: t('terminal.render.toolSummary.headings', {}, locale), headingsMore: t('terminal.render.toolSummary.headingsMore', {}, locale), matches: t('terminal.render.toolSummary.matches', {}, locale), matchesMore: t('terminal.render.toolSummary.matchesMore', {}, locale), entries: t('terminal.render.toolSummary.entries', {}, locale) },
     thought: t('terminal.render.thought', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
     tokens: t('terminal.render.tokens', {}, locale), reasoningTokens: t('terminal.render.reasoningTokens', {}, locale),
     truncated: t('terminal.render.truncated', {}, locale), cancelled: t('terminal.render.cancelled', {}, locale),

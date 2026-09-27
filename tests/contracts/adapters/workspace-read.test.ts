@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles, WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
+import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
+  WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { agentToolSpecSchema } from '#domain/index.js';
 
 const roots: string[] = [];
@@ -31,7 +32,7 @@ it('reads the owner-case file (1.25 MB markdown, 10 KB lines) through bounded vi
   const tools = await createWorkspaceReadTools(root);
   const plain = await tools.execute('read_file', { path: 'docs/MASTER-PLAN.md' });
   expect(plain.status).toBe('ok');
-  expect(Buffer.byteLength(plain.text)).toBeLessThanOrEqual(16_384);
+  expect(Buffer.byteLength(plain.text)).toBeLessThanOrEqual(DEFAULT_WORKSPACE_READ_LIMITS.maxResultBytes);
   expect(meta(plain.text)).toMatch(/^\[deckent\] read_file: mode=range totalLines=\d+ range=1-\d+ returned=\d+ hasMore=true nextStartLine=\d+/);
   const outline = await tools.execute('read_file', { path: 'docs/MASTER-PLAN.md', mode: 'outline' });
   expect(meta(outline.text)).toMatch(/mode=outline bytes=\d+ totalLines=\d+ longestLine=L\d+:10244B .* headings=125/);
@@ -190,4 +191,45 @@ it('matches globs without backtracking, so a hostile pattern cannot stall the se
   expect(performance.now() - started).toBeLessThan(1000);
   expect(ticks).toBeGreaterThanOrEqual(0);
   expect((await tools.execute('glob', { pattern: '*'.repeat(600) })).text).toContain('argument-too-long');
+});
+
+// D3 (TL-B, analysis §5/§8 D3, owner): 16 KiB forced typical 15-20 KB source files into a second round every time; the
+// default rises to 64 KiB, and `terminal.chat.readResultMaxBytes` (composition, not tested here) can still narrow it.
+it('reads an 18-60 KB file whole in one call under the new 64 KiB default (owner: fewer rounds)', async () => {
+  expect(DEFAULT_WORKSPACE_READ_LIMITS.maxResultBytes).toBe(65_536);
+  const body = Array.from({ length: 900 }, (_, i) => `line ${i} of a typical source file with some real content here`).join('\n') + '\n';
+  expect(Buffer.byteLength(body)).toBeGreaterThan(18_000); expect(Buffer.byteLength(body)).toBeLessThan(60_000);
+  const { root } = await workspace({ 'src/big.ts': body });
+  const tools = await createWorkspaceReadTools(root);
+  const result = await tools.execute('read_file', { path: 'src/big.ts' });
+  expect(result.status).toBe('ok');
+  expect(meta(result.text)).toMatch(/hasMore=false/);
+  expect(result.text).toContain('line 899 of a typical source file');
+  // A narrower configured limit (as `readResultMaxBytes` would set) still splits the same file.
+  const narrow = await createWorkspaceReadTools(root, { limits: { maxResultBytes: 4096 } });
+  expect(meta((await narrow.execute('read_file', { path: 'src/big.ts' })).text)).toMatch(/hasMore=true/);
+});
+
+// D3: grep's `context` (0-5) and `maxHits` mirror read_file's `context`/`maxMatches` naming so the model does not have
+// to guess which read tool accepts which field (analysis §5: "grep · invalid arguments" from this exact asymmetry).
+it('accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap), unchanged at context=0 (default)', async () => {
+  const { root } = await workspace({ 'many.txt': Array.from({ length: 10 }, (_, i) => `needle ${i}`).join('\n') + '\n' });
+  const tools = await createWorkspaceReadTools(root);
+  const plain = await tools.execute('grep', { pattern: 'needle' });
+  expect(plain.text.split('\n')).toEqual(['many.txt:1:needle 0', 'many.txt:2:needle 1', 'many.txt:3:needle 2', 'many.txt:4:needle 3', 'many.txt:5:needle 4',
+    'many.txt:6:needle 5', 'many.txt:7:needle 6', 'many.txt:8:needle 7', 'many.txt:9:needle 8', 'many.txt:10:needle 9']);
+  const capped = await tools.execute('grep', { pattern: 'needle', maxHits: 3 });
+  expect(capped.text.split('\n')).toEqual(['many.txt:1:needle 0', 'many.txt:2:needle 1', 'many.txt:3:needle 2', '[deckent] grep: truncated (3 hits cap); narrow with path or glob']);
+  const { root: sparse } = await workspace({ 'wide.txt': Array.from({ length: 12 }, (_, i) => i === 2 || i === 9 ? `needle here` : `line ${i}`).join('\n') + '\n' });
+  const sparseTools = await createWorkspaceReadTools(sparse);
+  const withContext = await sparseTools.execute('grep', { pattern: 'needle', context: 1 });
+  expect(withContext.text).toBe(['wide.txt:2-line 1', 'wide.txt:3:needle here', 'wide.txt:4-line 3', '--',
+    'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10'].join('\n'));
+  // The card's own acceptance values (D3): grep {context:2, maxHits:5}.
+  const wide = await sparseTools.execute('grep', { pattern: 'needle', context: 2, maxHits: 5 });
+  expect(wide.text).toBe(['wide.txt:1-line 0', 'wide.txt:2-line 1', 'wide.txt:3:needle here', 'wide.txt:4-line 3', 'wide.txt:5-line 4', '--',
+    'wide.txt:8-line 7', 'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10', 'wide.txt:12-line 11'].join('\n'));
+  // Out-of-range values clamp instead of erroring (matching read_file's context/maxMatches convention).
+  const clamped = await sparseTools.execute('grep', { pattern: 'needle', context: 99, maxHits: 0 });
+  expect(clamped.text).not.toContain('undefined'); expect(clamped.status).toBe('ok');
 });

@@ -1,4 +1,4 @@
-import type { TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import type { ToolResultSummary, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './stream-segmenter.js';
 
 /**
@@ -18,8 +18,10 @@ export type FooterUnit = Readonly<{ kind: 'footer'; elapsedMs: number; promptTok
   reasoningTokens: number | null; finish: TurnFinish; note?: string | null; context?: ContextView; cancelledDuring?: TurnStage }>;
 type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). `cleanup` (Astra 2124) only ever
- * arrives on a host shell call; the row shows a suffix for `group-ended`/`unverified` and nothing for `clean` or absent. */
-export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number; cleanup?: ToolDelta['cleanup'] }>;
+ * arrives on a host shell call; the row shows a suffix for `group-ended`/`unverified` and nothing for `clean` or absent.
+ * `summary` (TL-B D2) only ever arrives on a finished read-class call whose own result text matched a known shape. */
+export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number;
+  cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
 export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
 /** Characters of a running call's streamed output kept for the live region. */
@@ -178,7 +180,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
         [...pending, ...text]);
     }
     const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target: safeTarget(delta.target), status: delta.status ?? 'error',
-      ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)), ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}) });
+      ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)),
+      ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(delta.summary !== undefined ? { summary: delta.summary } : {}) });
     return step(Object.freeze({ ...base, activeTool: null }), [...pending, ...text, unit]);
   }
   if (delta.kind === 'reasoning') {

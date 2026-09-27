@@ -1,5 +1,6 @@
 import { Box, Text, useAnimation, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import type { ToolResultSummary } from '#surfaces/core/terminal-kit/index.js';
 import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';
@@ -18,6 +19,10 @@ export type AssistantRenderLabels = Readonly<{
    * absent field show nothing. Optional until the catalog carries `terminal.render.toolCleanup.*` (see `i18n-delta.json`); the
    * row falls back to short, language-neutral text meanwhile (the TERM-INTERACTIVE `@file` pattern). */
   toolCleanup?: Readonly<Record<Exclude<NonNullable<ToolUnit['cleanup']>, 'clean'>, string>>;
+  /** Result summary words for a finished read-class call (TL-B D2): `{shown}`/`{total}`/`{count}` placeholders. Optional
+   * until the catalog carries `terminal.render.toolSummary.*` (see `i18n-delta.json`); the row falls back to short,
+   * language-neutral text meanwhile (the same devolution `toolCleanup` used before its catalog keys were wired). */
+  toolSummary?: Readonly<Record<'lines' | 'linesMore' | 'headings' | 'headingsMore' | 'matches' | 'matchesMore' | 'entries', string>>;
   /** `{percent}` of `{window}` tokens; `{approx}` is `~` when the prompt is an upper bound, not the provider's count. */
   context: string;
   /** `{count}` earlier messages were replaced by a summary to fit the context window. */
@@ -44,8 +49,22 @@ const NEUTRAL_WAITING: NonNullable<AssistantRenderLabels['waiting']> = { model: 
 const NEUTRAL_CANCELLED_DURING: NonNullable<AssistantRenderLabels['cancelledDuring']> = { compaction: 'cancelled (summarizing)',
   model: 'cancelled (model response)', tool: 'cancelled (tool call)' };
 const NEUTRAL_COMPACTION_CANCELLED = 'Summarizing was cancelled before it finished: the history is unchanged and the next turn summarizes it again.';
+// Until the catalog carries `terminal.render.toolSummary.*` the finished line falls back to this short English text.
+const NEUTRAL_TOOL_SUMMARY: NonNullable<AssistantRenderLabels['toolSummary']> = { lines: '{shown}/{total} lines', linesMore: '{shown}/{total} lines, more available',
+  headings: '{shown}/{total} headings', headingsMore: '{shown}/{total} headings, more available', matches: '{count} matches', matchesMore: '{count}+ matches',
+  entries: '{count} entries' };
 const seconds = (ms: number, digits = 1) => (ms / 1000).toFixed(digits);
 const tokenText = (count: number, approximate: boolean) => `${approximate ? '~' : ''}${count}`;
+/** The tool line's result summary text (TL-B D2), or `null` when the finished call carries none. */
+function toolSummaryText(summary: ToolResultSummary, labels: AssistantRenderLabels): string {
+  const words = labels.toolSummary ?? NEUTRAL_TOOL_SUMMARY;
+  switch (summary.kind) {
+    case 'lines': return fillTemplate(summary.more ? words.linesMore : words.lines, { shown: summary.shown, total: summary.total });
+    case 'headings': return fillTemplate(summary.more ? words.headingsMore : words.headings, { shown: summary.shown, total: summary.total });
+    case 'matches': return fillTemplate(summary.more ? words.matchesMore : words.matches, { count: summary.count });
+    case 'entries': return fillTemplate(words.entries, { count: summary.count });
+  }
+}
 
 function useBodyWidth(): number {
   const { columns } = useWindowSize();
@@ -80,8 +99,9 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
     const failed = unit.status !== 'ok' && unit.status !== 'duplicate';
     // Astra 2124: a durable suffix for a shell call whose cleanup was not `clean`; `clean` or no field shows nothing.
     const cleanupWord = unit.cleanup && unit.cleanup !== 'clean' ? (labels.toolCleanup ?? NEUTRAL_TOOL_CLEANUP)[unit.cleanup] : null;
-    const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]]),
-      ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
+    // TL-B D2: the result summary ("12 matches", "243/269 lines") sits right after the elapsed time, before any status word.
+    const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.summary ? [toolSummaryText(unit.summary, labels)] : []),
+      ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]]), ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
     // Astra 2139 R3: the tail (elapsed, status, cleanup) keeps its place; a long command is shortened instead. When not even the tool
     // name fits beside the tail, the tail takes its own wrapped line under the (truncated) command.
     const tone = failed ? palette.error : palette.muted;

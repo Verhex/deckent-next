@@ -17,12 +17,20 @@ export interface WorkspaceReadLimits {
   /** Largest file read or scanned whole (bytes), up to 256 MiB. */
   readonly maxFileBytes: number;
 }
-export const DEFAULT_WORKSPACE_READ_LIMITS: WorkspaceReadLimits = Object.freeze({ maxResultBytes: 16_384, maxFileBytes: 16 * 1024 * 1024 });
-const MAX_LIST_ENTRIES = 500, MAX_GLOB_MATCHES = 500, MAX_GREP_HITS = 200, GREP_BYTES_PER_LINE = 2048, MAX_SKIP_NOTES = 32;
+// 64 KiB (owner, TL-B D3, TERM-LOOP-UX analysis §5/§8): 16 KiB forced every 15-20 KB source file into a second round.
+export const DEFAULT_WORKSPACE_READ_LIMITS: WorkspaceReadLimits = Object.freeze({ maxResultBytes: 65_536, maxFileBytes: 16 * 1024 * 1024 });
+const MAX_LIST_ENTRIES = 500, MAX_GLOB_MATCHES = 500, MAX_GREP_HITS = 200, GREP_BYTES_PER_LINE = 2048, MAX_SKIP_NOTES = 32, GREP_MAX_CONTEXT = 5;
 const MAX_PATH_ARG_BYTES = 4096, MAX_PATTERN_ARG_BYTES = 2048, MAX_GLOB_ARG_BYTES = 512;
 
 const str = (description: string) => ({ type: 'string', description });
 const int = (description: string) => ({ type: 'integer', minimum: 0, description });
+/** Clamps a model-supplied integer argument into range; anything absent or unparsable falls back rather than erroring
+ * (read_file's `context`/`maxMatches` set the precedent: the cap is informational in the schema, enforced here). */
+function boundedIntArg(raw: unknown, fallback: number, min: number, max: number): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (raw === undefined || raw === null || !Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
 export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze([
   { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a workspace file (prefer this over shell tools for reading). Every result starts with a "[deckent] read_file:" line that says what was returned and how to continue. mode "outline": headings with line numbers and size/longest-line statistics (take this first on big files); startLine/endLine: numbered lines, long lines elided with an exact re-read marker; pattern: grep-style matches with optional context.',
     inputSchema: { type: 'object', required: ['path'], properties: { path: str('Workspace-relative path.'), mode: { type: 'string', enum: ['content', 'outline', 'search'] },
@@ -31,9 +39,10 @@ export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze
       literal: { type: 'boolean' }, ignoreCase: { type: 'boolean' }, context: int('Context lines around matches (max 10).'), maxMatches: int('Max matches (max 500).') } } },
   { name: 'list_dir', version: 1, toolClass: 'read', description: 'List a workspace directory; directories end with "/".',
     inputSchema: { type: 'object', properties: { path: str('Workspace-relative directory; default the workspace root.') } } },
-  { name: 'grep', version: 1, toolClass: 'read', description: 'Search workspace files with a regular expression; returns path:line:text hits. Long lines are elided, never missed; skipped files and unscanned directories are reported.',
+  { name: 'grep', version: 1, toolClass: 'read', description: 'Search workspace files with a regular expression; returns path:line:text hits, or path:line-text context lines around them when requested. Long lines are elided, never missed; skipped files and unscanned directories are reported.',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Regular expression.'), path: str('Directory or file to search; default the workspace root.'),
-      glob: str('Only files whose workspace-relative path matches this glob.'), ignoreCase: { type: 'boolean' } } } },
+      glob: str('Only files whose workspace-relative path matches this glob.'), ignoreCase: { type: 'boolean' },
+      context: int('Context lines around each hit (max 5).'), maxHits: int('Hit cap for this call (max 200).') } } },
   { name: 'glob', version: 1, toolClass: 'read', description: 'Find workspace files by glob ("**" any directories, "*" within a name).',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Glob relative to path.'), path: str('Directory; default the workspace root.') } } },
 ] as const satisfies readonly AgentToolSpec[]);
@@ -128,6 +137,10 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     const target = await scope.resolve(args['path'], true);
     if (!target.ok) return fail('grep', `${target.error} path=${quote(args['path'] ?? '.')}`);
     const only = typeof args['glob'] === 'string' && args['glob'] ? createGlobMatcher(args['glob']) : null;
+    // D3 (owner): grep gains read_file's `context`/cap naming; context=0 (the default) keeps the exact old one-line-per-hit
+    // shape (no separators), so every existing caller and result is unaffected.
+    const context = boundedIntArg(args['context'], 0, 0, GREP_MAX_CONTEXT);
+    const maxHits = boundedIntArg(args['maxHits'], MAX_GREP_HITS, 1, MAX_GREP_HITS);
     const hits: string[] = [], skipped: string[] = [];
     let scanned = 0, hitCapped = false;
     const runner = createRegexRunner(signal);
@@ -135,9 +148,15 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       const lines = splitLines(text);
       const matches = await runner.match(re.source, re.flags, lines);
       scanned++;
+      let lastEmitted = 0, firstBlockOfFile = true;
       for (const index of matches) {
-        if (hits.length >= MAX_GREP_HITS) { hitCapped = true; return false; }
-        hits.push(`${rel}:${index + 1}:${boundLine(lines[index]!, index + 1, 0, GREP_BYTES_PER_LINE).text}`);
+        if (hits.length >= maxHits) { hitCapped = true; return false; }
+        if (context === 0) { hits.push(`${rel}:${index + 1}:${boundLine(lines[index]!, index + 1, 0, GREP_BYTES_PER_LINE).text}`); continue; }
+        const from = Math.max(index - context, lastEmitted), to = Math.min(lines.length - 1, index + context);
+        const block: string[] = [];
+        if (!firstBlockOfFile && from > lastEmitted) block.push('--');
+        for (let j = from; j <= to; j++) block.push(`${rel}:${j + 1}${j === index ? ':' : '-'}${boundLine(lines[j]!, j + 1, 0, GREP_BYTES_PER_LINE).text}`);
+        hits.push(block.join('\n')); lastEmitted = to + 1; firstBlockOfFile = false;
       }
       return true;
     };
@@ -159,7 +178,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
         }, signal));
       }
       if (signal?.aborted) return cancelled('grep');
-      const notes = [...(hitCapped ? [`truncated (${MAX_GREP_HITS} hits cap); narrow with path or glob`] : []), ...(incomplete ? [incomplete] : []),
+      const notes = [...(hitCapped ? [`truncated (${maxHits} hits cap); narrow with path or glob`] : []), ...(incomplete ? [incomplete] : []),
         ...skipped.slice(0, MAX_SKIP_NOTES).map(entry => `skipped ${entry}`), ...(skipped.length > MAX_SKIP_NOTES ? [`${skipped.length - MAX_SKIP_NOTES} more skipped file(s)`] : [])];
       const partial = skipped.length > 0 || incomplete !== null;
       const trailer = hits.length === 0
