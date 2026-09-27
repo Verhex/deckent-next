@@ -42,6 +42,11 @@ durum raporu `deckent-refactor-work/STATUS-REFAKTOR-DURUM-2026-09-26.md` ve `pro
   owner kuralına göre ağırlıksız (`proof/OWNER-DECISIONS-2026-09-27/jev-r2-results.md`).
 - Açık şeritler: H34 S1 (Opus, `lane/h34-s1`, ledger v39), I40-b (Codex, `lane/i40b`), A04-1 (Fable, `lane/a04-1`), FIX-RA, FIX-RB.
   C12 Q8 tipli ret S1 sonrası (`src/engine/core/policy/**` çakışması). Ledger sırası H34 v39, C12 v40.
+- **2026-09-27 sabah — parti @ `5a25b10`:** tam verify exit 0 (native 25, vitest 339 / 2.262, host 56, smoke) → REQUEST_REVIEW **2125**
+  (2119/2124 düzeltmeleri, H34 S1 + 2122 düzeltmesi, A04-1, hook). Astra PASS: 2104, 2105, 2107, 2108; 2120 kapsamlı PASS (I40, D-3, belgeler).
+  Push: Astra 2125 PASS + owner izni → yalnız `5a25b10`. Sonra canlı yeniden başlatma (ledger v38→v39 yedekli) + `grant-edit-shell.mjs` (owner).
+  Sıradaki şeritler: H34 S2 (bindings/policy v2 + dört-göz), C12 G1/G2 (v40) + Q8 tipli ret, A04-2 birleşik katalog, ajan araç onayı zamanı (I40),
+  dilim 4 izin modları (Astra PASS + push sonrası). Owner temizliği: `/tmp/tmp.gFyiECWkqp`.
 - L7 dogfood harnessi: başlamadı (L5 test koşarken Docker çakışması riski; tam verify saatinin dışında).
 
 ## Owner kararları 2026-09-26 (PLAN "Önemli açık bulgular" başında)
