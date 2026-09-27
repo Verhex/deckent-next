@@ -5,7 +5,7 @@ export type { RuntimeServiceDeadline, RuntimeServiceLifecycleOptions, RuntimeSer
 export { RUNTIME_SERVICE_SCHEMA_VERSION, RuntimeServiceProtocolError, classifyRuntimeServiceOperation, parseRuntimeServiceResponse, runtimeServiceResultCapacity, runtimeServiceOperationSchema,
   runtimeServiceRequestSchema, runtimeServiceResponseSchema, runtimeServiceDescriptionInputSchema, runtimeServiceDeliverySchema,
   RUNTIME_SERVICE_STREAM_FRAME_DELTAS, runtimeServiceStreamFrameSchema, isRuntimeServiceStreamingOperation,
-  RUNTIME_SERVICE_EVENT_FRAME_EVENTS, runtimeServiceEventFrameSchema, isRuntimeServiceTurnOperation,
+  RUNTIME_SERVICE_EVENT_FRAME_EVENTS, runtimeServiceEventFrameSchema, isRuntimeServiceTurnOperation, isRuntimeServiceWorkspaceFileOperation,
   RUNTIME_SERVICE_LIFECYCLE_VERSIONS, runtimeServiceLifecycleRequestSchema, parseRuntimeServiceLifecycleResponse, runtimeServiceErrorParams } from './internal/service-protocol.js';
 export type { RuntimeServiceDelivery, RuntimeServiceOperation, RuntimeServiceRequest, RuntimeServiceResponse, RuntimeServiceStreamFrame, RuntimeServiceEventFrame,
   RuntimeServiceLifecycleRequest, RuntimeServiceLifecycleVersion } from './internal/service-protocol.js';

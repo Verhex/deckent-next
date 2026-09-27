@@ -27,12 +27,15 @@ export interface ComposerProps {
   readonly busy: boolean;
   /** False while another component owns the keyboard (e.g. an open decision card); keys and pastes are then not consumed. */
   readonly active?: boolean;
-  readonly onSubmit: (text: string) => void;
+  /** `mentions`: the draft's `@path` tokens outside paste chips (attached by the owner through the service, never read here). */
+  readonly onSubmit: (text: string, mentions: readonly string[]) => void;
   readonly onCancel: () => void;
   readonly onExit: () => void;
   /** Persistent history; load/append failures never block input (history is a convenience, not a submit precondition). */
   readonly history?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
+  /** Quiet time after the last key before `mentions` is asked (default 60 ms); earlier lookups are aborted. */
+  readonly mentionDelayMs?: number;
   /** 'marker' draws `|` before the caret for terminals where inverse video is suppressed (no colour tier). */
   readonly caret?: 'inverse' | 'marker';
   readonly now?: () => number;
@@ -40,6 +43,7 @@ export interface ComposerProps {
 }
 
 const MENU_ROWS = 6;
+const MENTION_DELAY_MS = 60;
 const ignore = () => undefined;
 
 function CaretRow({ text, at, marker }: { readonly text: string; readonly at: number; readonly marker: boolean }): ReactNode {
@@ -81,6 +85,7 @@ export function Composer(props: ComposerProps): ReactNode {
   const latest = useRef(props);
   latest.current = props;
   const lookup = useRef<AbortController | null>(null);
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clock = () => (latest.current.now ?? Date.now)();
 
   const dispatch = useCallback((key: ComposerKey): void => {
@@ -94,19 +99,25 @@ export function Composer(props: ComposerProps): ReactNode {
       if (intent.type === 'cancel') onCancel();
       else if (intent.type === 'submit') {
         void (async () => history?.append(intent.entry))().catch(ignore);
-        onSubmit(intent.text);
+        onSubmit(intent.text, intent.mentions);
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
+        if (lookupTimer.current) clearTimeout(lookupTimer.current);
         const controller = new AbortController();
         lookup.current = controller;
-        mentions(intent.query, controller.signal).then(items => {
-          if (!controller.signal.aborted) dispatch({ type: 'mentions', start: intent.start, query: intent.query, items });
-        }, ignore);
+        const ask = () => {
+          lookupTimer.current = null;
+          mentions(intent.query, controller.signal).then(items => {
+            if (!controller.signal.aborted) dispatch({ type: 'mentions', start: intent.start, query: intent.query, items });
+          }, ignore);
+        };
+        const delay = latest.current.mentionDelayMs ?? MENTION_DELAY_MS;
+        if (delay > 0) lookupTimer.current = setTimeout(ask, delay); else ask();
       }
     }
   }, []);
 
-  useEffect(() => () => lookup.current?.abort(), []);
+  useEffect(() => () => { lookup.current?.abort(); if (lookupTimer.current) clearTimeout(lookupTimer.current); }, []);
   useEffect(() => {
     let live = true;
     props.history?.load().then(entries => { if (live) dispatch({ type: 'history', entries }); }, ignore);

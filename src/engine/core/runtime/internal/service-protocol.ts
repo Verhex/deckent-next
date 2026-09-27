@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { agentTurnStreamEventSchema, identitySchema, modelInvocationDeltaSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
-  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand } from '#domain/index.js';
+  parseModelInvocationPurgeCommand, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 14 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 15 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -17,14 +17,19 @@ export function runtimeServiceErrorParams(params: Readonly<Record<string, unknow
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
-  'invokeModelStream', 'chatTurn', 'cancelChatTurn']);
+  'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
 const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
-  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn';
+  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
+  || isRuntimeServiceWorkspaceFileOperation(operation);
+/** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
+export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
+  return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
+}
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
 export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
@@ -43,6 +48,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'cancelModelInvocation') parseModelInvocationCancellationCommand(value.input);
       else if (value.operation === 'chatTurn') parseChatTurnCommand(value.input);
       else if (value.operation === 'cancelChatTurn') parseChatTurnCancellation(value.input);
+      else if (value.operation === 'findWorkspaceFiles') parseWorkspaceFileQuery(value.input);
+      else if (value.operation === 'attachWorkspaceFile') parseWorkspaceAttachmentRequest(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {
@@ -94,9 +101,9 @@ export class RuntimeServiceProtocolError extends Error {
  * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 13] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 14] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(13)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(14)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

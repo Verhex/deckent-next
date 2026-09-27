@@ -85,3 +85,81 @@ describe('slash palette keys through the real workline', () => {
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });
+
+// Owner report 2026-09-27: "@ does not reference files". Candidates and content come from ports (the service in production).
+const FILES = ['README.md', 'src/app.ts', 'src/a.ts', 'src/cli/main.ts', 'docs/only.md'];
+function filePorts() {
+  const queries: string[] = [], attached: Array<{ text: string; paths: readonly string[] }> = [], sent: string[] = [];
+  const mentions = async (query: string) => { queries.push(query); return FILES.filter(path => path.toLowerCase().includes(query.toLowerCase())); };
+  const attachMentions = async (text: string, paths: readonly string[]) => {
+    attached.push({ text, paths });
+    return { content: `${text}\n\n${paths.map(path => `--- attached file ${path} ---\nBODY(${path})\n--- end of ${path} ---`).join('\n\n')}`,
+      notes: paths.map(path => path === '.env' ? { path, status: 'refused' as const, reason: 'path-denied' }
+        : { path, status: 'attached' as const, bytes: 20, totalBytes: 20, truncated: false }) };
+  };
+  const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+    sent.push(messages.at(-1)!.content);
+    yield { kind: 'text' as const, text: 'ok' };
+    yield { kind: 'done' as const, finish: 'stop' as const, note: null };
+  };
+  return { queries, attached, sent, props: { mentions, attachMentions, streamTurn: streamTurn as never, mentionDelayMs: 0 } };
+}
+
+describe('@file picker keys through the real workline', () => {
+  it('typing @ opens the picker from the port; arrows and Enter insert the chosen path; a single match is offered, not typed', async () => {
+    const ports = filePorts();
+    const view = await open(ports.props);
+    await view.type('look @sr');
+    await until(() => view.stdout.text.includes('> @src/app.ts') && view.stdout.text.includes('  @src/a.ts'), 'picker with candidates');
+    expect(ports.queries).toContain('sr');
+    await view.type(DOWN);
+    await until(() => view.stdout.text.includes('> @src/a.ts'), 'second candidate highlighted');
+    await view.type('\r');
+    await until(() => view.stdout.text.includes('> look @src/a.ts |'), 'path inserted');
+    expect(ports.sent).toEqual([]);
+    const mark = view.stdout.text.length;
+    await view.type('and @onl');
+    await until(() => view.after(mark).includes('> @docs/only.md'), 'single candidate offered');
+    await settle(20);
+    expect(view.after(mark)).toContain('> look @src/a.ts and @onl|');
+    await view.type('\t');
+    await until(() => view.stdout.text.includes('> look @src/a.ts and @docs/only.md |'), 'tab inserts');
+  });
+
+  it('Esc closes the picker for good (a late answer does not reopen it) and Enter then sends the text', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const ports = filePorts();
+    const view = await open({ ...ports.props, mentions: async (query: string) => { await gate; return ports.props.mentions(query); } });
+    await view.type('see @RE');
+    await settle(20);
+    await view.type(ESC);
+    release();
+    await settle(60);
+    expect(view.stdout.text).not.toContain('> @README.md');
+    await view.type('\r');
+    await until(() => ports.sent.length === 1, 'sent');
+  });
+
+  it('on submit the mentioned files are attached through the port: the model gets the labelled content, the ledger the typed text and one notice per file', async () => {
+    const ports = filePorts();
+    const view = await open(ports.props);
+    view.stdin.write('[paste]');
+    await view.type('explain @src/a.ts, @.env and @src/a.ts\r');
+    await until(() => ports.sent.length === 1, 'turn sent');
+    expect(ports.attached).toEqual([{ text: '[paste]explain @src/a.ts, @.env and @src/a.ts', paths: ['src/a.ts', '.env'] }]);
+    expect(ports.sent[0]).toContain('--- attached file src/a.ts ---\nBODY(src/a.ts)');
+    await until(() => view.stdout.text.includes('@src/a.ts · 20 B') && view.stdout.text.includes('@.env · path-denied'), 'attachment notices');
+  });
+
+  it('never treats an @name inside pasted content as a file to attach', async () => {
+    const ports = filePorts();
+    const view = await open(ports.props);
+    view.stdin.write('\u001b[200~line1 @src/a.ts\nline2\nline3\nline4\u001b[201~');
+    await settle(30);
+    await view.type(' see @README.md\r');
+    await until(() => ports.sent.length === 1, 'turn sent');
+    expect(ports.attached.map(entry => entry.paths)).toEqual([['README.md']]);
+    expect(ports.sent[0]).toContain('line1 @src/a.ts');
+  });
+});

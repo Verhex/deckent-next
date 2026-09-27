@@ -1,5 +1,5 @@
 import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ModelInvocationCancellationCommand, ModelInvocationCommand,
-  ModelInvocationDeltaSink, ModelInvocationQuery, ModelInvocationPurgeCommand } from '#domain/index.js';
+  ModelInvocationDeltaSink, ModelInvocationQuery, ModelInvocationPurgeCommand, WorkspaceAttachmentRequest, WorkspaceFileQuery } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -34,4 +34,12 @@ export function runRuntimeChatTurn(projectRoot: string, input: ChatTurnCommand, 
 /** Cancels the caller's own running turn at once. */
 export function cancelRuntimeChatTurn(projectRoot: string, input: ChatTurnCancellation, options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).cancelChatTurn(input);
+}
+/** v15 composer `@file` candidates from the runtime service's scoped read port. */
+export function findRuntimeWorkspaceFiles(projectRoot: string, input: WorkspaceFileQuery, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).findWorkspaceFiles(input, signal);
+}
+/** v15 composer `@file` content: bounded, or a typed refusal. */
+export function attachRuntimeWorkspaceFile(projectRoot: string, input: WorkspaceAttachmentRequest, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  return createConfiguredRuntimeClient(projectRoot, options).attachWorkspaceFile(input, signal);
 }

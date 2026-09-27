@@ -18,7 +18,8 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createRuntimeChatTurnHost, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
+import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
+import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
@@ -102,6 +103,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
   const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal);
+  const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
     onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
     onError: (command, error) => observer.onModelCancellationError?.(command, error),
@@ -142,6 +144,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)
           : request.operation === 'chatTurn' || request.operation === 'cancelChatTurn'
           ? executeConfiguredRuntimeChatTurnOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost, turn)
+          : request.operation === 'findWorkspaceFiles' || request.operation === 'attachWorkspaceFile'
+          ? executeConfiguredRuntimeWorkspaceFileOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, workspaceFiles, turnStop.signal)
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {

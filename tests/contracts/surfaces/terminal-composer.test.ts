@@ -215,16 +215,27 @@ describe('composer completion, shortcuts panel and mentions', () => {
     expect([closedByTyping.shortcuts, closedByTyping.text]).toEqual([false, 'x']);
   });
 
-  it('detects @mention tokens and completes from port results for the same token only', () => {
+  it('detects @mention tokens, looks each edit up, and offers port results for the latest query of the same token only', () => {
     expect(mentionAt('see @src/ma', 11)).toEqual({ start: 4, query: 'src/ma' });
     expect(mentionAt('mail a@b.c', 10)).toBeNull();
     expect(mentionAt('@@literal', 9)).toBeNull();
-    const { state, intents } = run([...typed('see @sr'), K.tab]);
-    expect(intents).toEqual([{ type: 'mention', start: 4, query: 'sr' }]);
-    expect(run([{ type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts'] }], state).state.text).toBe('see @src/a.ts ');
+    // Typing inside the token asks for candidates on every edit (the view debounces); text outside a token never does.
+    const { state, intents } = run(typed('see @sr'));
+    expect(intents).toEqual([{ type: 'mention', start: 4, query: '' }, { type: 'mention', start: 4, query: 's' }, { type: 'mention', start: 4, query: 'sr' }]);
+    // A single candidate is offered in the picker, never typed into the draft under the user's fingers (owner 2026-09-27).
+    const single = run([{ type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts'] }], state).state;
+    expect([single.text, composerMenu(single)?.items]).toEqual(['see @sr', ['src/a.ts']]);
+    expect(run([K.submit], single).state.text).toBe('see @src/a.ts ');
     const menu = run([{ type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts', 'src/b.ts'] }, K.down, K.tab], state).state;
     expect(menu.text).toBe('see @src/b.ts ');
-    expect(run([...typed('c'), { type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts'] }], state).state.text).toBe('see @src');
+    // A stale answer (older query) is ignored; Esc closes the picker and a late answer for that text does not reopen it.
+    expect(composerMenu(run([...typed('c'), { type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts'] }], state).state)).toBeNull();
+    const closed = run([K.esc, { type: 'mentions', start: 4, query: 'sr', items: ['src/a.ts'] }], state).state;
+    expect(composerMenu(closed)).toBeNull();
+    expect(run(typed('c'), closed).intents).toEqual([{ type: 'mention', start: 4, query: 'src' }]);
+    // A path typed out in full is sent by Enter; the submit carries the draft's mentions (outside paste chips).
+    const typedOut = run([...typed(' ok'), { type: 'mentions', start: 4, query: 'sr', items: [] }], draft('see @src/a.ts'));
+    expect(run([K.submit], typedOut.state).intents).toEqual([expect.objectContaining({ type: 'submit', text: 'see @src/a.ts ok', mentions: ['src/a.ts'] })]);
   });
 });
 
@@ -380,9 +391,11 @@ describe('composer rendered by Ink (no colour tier)', () => {
     const queries: string[] = [];
     const view = mount({ busy: true, mentions: async query => { queries.push(query); return ['src/app.ts']; } });
     await view.type('open @sr');
+    await until(() => view.stdout.text.includes('> @src/app.ts'), 'picker offers the candidate');
     await view.keys('\t');
     await until(() => view.stdout.text.includes('> open @src/app.ts |'), 'mention completed');
-    expect(queries).toEqual(['sr']);
+    // Debounced: fast typing asks once for the settled query.
+    expect(queries.at(-1)).toBe('sr');
     await view.keys('\u001b');
     await until(() => view.calls.cancel === 1, 'esc cancels while busy');
   });

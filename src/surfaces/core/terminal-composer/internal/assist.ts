@@ -86,5 +86,16 @@ export function mentionAt(text: string, cursor: number): MentionToken | null {
   return null;
 }
 
+/**
+ * The `@path` mentions of a submitted draft, in order and without repeats. Chip spans are blanked first: an `@name` inside pasted
+ * content is text, not a request to attach a file. Trailing sentence punctuation is not part of a path.
+ */
+export function mentionPaths(text: string, pastes: readonly PasteChip[] = []): readonly string[] {
+  let visible = text;
+  for (const span of chipSpans(text, pastes).reverse()) visible = visible.slice(0, span.start) + ' '.repeat(span.end - span.start) + visible.slice(span.end);
+  const paths = [...visible.matchAll(/(?:^|\s)@([^\s@]\S*)/gu)].map(match => match[1]!.replace(/[.,;:!?)\]}'"`]+$/u, '')).filter(path => path.length > 0);
+  return [...new Set(paths)];
+}
+
 /** Completion candidates for a mention; the composer never reads the filesystem itself. */
 export type ComposerMentionPort = (query: string, signal: AbortSignal) => Promise<readonly string[]>;

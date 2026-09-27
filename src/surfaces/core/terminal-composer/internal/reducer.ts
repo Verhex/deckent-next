@@ -4,7 +4,7 @@
  * cursor-model, input-history, paste-composer, interrupt-policy, at-ref) without its disk or filesystem access.
  */
 import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
-import { chipFor, chipSpans, cleanText, expandChips, mentionAt, PASTE_COLLAPSE, shouldCollapse, slashMatches, type PasteChip, type PastePolicy } from './assist.js';
+import { chipFor, chipSpans, cleanText, expandChips, mentionAt, mentionPaths, PASTE_COLLAPSE, shouldCollapse, slashMatches, type PasteChip, type PastePolicy } from './assist.js';
 import { lineEnd, lineStart, nextBoundary, previousBoundary, snapToCluster, verticalOffset, wordLeft, wordRight } from './text.js';
 
 export const COMPOSER_LIMITS = Object.freeze({ historyEntries: 500, exitWindowMs: 2000 });
@@ -31,12 +31,14 @@ export interface ComposerState extends Draft {
   /** Draft text at which the slash popup was closed with Esc; it reopens once the text changes. */
   readonly dismissed: string | null;
   readonly mentions: { readonly start: number; readonly items: readonly string[] } | null;
+  /** Draft text at which the file picker was closed with Esc; it reopens (and looks up again) once the text changes. */
+  readonly mentionDismissed: string | null;
   readonly shortcuts: boolean;
   readonly armedAt: number | null;
 }
 
 export const EMPTY_COMPOSER: ComposerState = Object.freeze({ text: '', cursor: 0, pastes: [], killed: '', history: [], browsing: null,
-  search: null, selected: 0, dismissed: null, mentions: null, shortcuts: false, armedAt: null });
+  search: null, selected: 0, dismissed: null, mentions: null, mentionDismissed: null, shortcuts: false, armedAt: null });
 
 export type ComposerMove = 'left' | 'right' | 'wordLeft' | 'wordRight' | 'home' | 'end' | 'up' | 'down';
 export type ComposerDelete = 'back' | 'forward' | 'wordBack' | 'spaceWordBack' | 'wordForward' | 'toStart' | 'toEnd';
@@ -50,7 +52,8 @@ export type ComposerKey =
   | { readonly type: 'history'; readonly entries: readonly ComposerHistoryEntry[] };
 
 export type ComposerIntent =
-  | { readonly type: 'submit'; readonly text: string; readonly entry: ComposerHistoryEntry }
+  /** `mentions`: the `@path` tokens of the draft outside paste chips; the owner attaches them through the service. */
+  | { readonly type: 'submit'; readonly text: string; readonly entry: ComposerHistoryEntry; readonly mentions: readonly string[] }
   | { readonly type: 'cancel' | 'exit' }
   | { readonly type: 'mention'; readonly start: number; readonly query: string };
 
@@ -77,7 +80,10 @@ const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLo
  */
 function edit(state: ComposerState, from: number, to: number, insert = '', kill = false): ComposerState {
   const text = state.text.slice(0, from) + insert + state.text.slice(to);
-  return { ...state, text, cursor: snapToCluster(text, from + insert.length), selected: 0, dismissed: null, mentions: null,
+  const cursor = snapToCluster(text, from + insert.length);
+  // Typing inside the same `@token` keeps the open picker until the new candidates arrive (no flicker per key).
+  const mentions = state.mentions && mentionAt(text, cursor)?.start === state.mentions.start ? state.mentions : null;
+  return { ...state, text, cursor, selected: 0, dismissed: null, mentions,
     killed: kill && to > from ? state.text.slice(from, to) : state.killed };
 }
 
@@ -99,7 +105,7 @@ function paste(state: ComposerState, raw: string, context: ComposerContext): Com
 }
 
 function load(state: ComposerState, draft: Draft, browsing: ComposerState['browsing']): ComposerState {
-  return { ...state, text: draft.text, pastes: draft.pastes, cursor: draft.cursor, browsing, selected: 0, dismissed: null, mentions: null };
+  return { ...state, text: draft.text, pastes: draft.pastes, cursor: draft.cursor, browsing, selected: 0, dismissed: null, mentions: null, mentionDismissed: null };
 }
 
 function browse(state: ComposerState, direction: -1 | 1): ComposerState {
@@ -151,7 +157,8 @@ function submit(state: ComposerState): ComposerStep {
   if (!text.trim()) return step(state);
   const entry: ComposerHistoryEntry = { text, pastes: pastes.filter(paste => text.includes(paste.chip)) };
   const history = state.history.at(-1)?.text === text ? state.history : [...state.history, entry].slice(-COMPOSER_LIMITS.historyEntries);
-  return step({ ...EMPTY_COMPOSER, history, killed: state.killed }, { type: 'submit', text: expandChips(text, pastes).trim(), entry });
+  return step({ ...EMPTY_COMPOSER, history, killed: state.killed }, { type: 'submit', text: expandChips(text, pastes).trim(), entry,
+    mentions: mentionPaths(text, pastes) });
 }
 
 export function searchMatches(state: ComposerState): readonly ComposerHistoryEntry[] {
@@ -211,7 +218,9 @@ function menuKey(state: ComposerState, key: ComposerKey, menu: ComposerMenu): Co
   if (key.type === 'move' && (key.to === 'up' || key.to === 'down')) {
     return step({ ...state, selected: (menu.selected + (key.to === 'up' ? count - 1 : 1)) % count });
   }
-  if (key.type === 'escape') return step(menu.kind === 'slash' ? { ...state, dismissed: state.text } : { ...state, mentions: null });
+  if (key.type === 'escape') return step(menu.kind === 'slash' ? { ...state, dismissed: state.text } : { ...state, mentions: null, mentionDismissed: state.text });
+  // A path typed out in full is already a reference: Enter sends the line (Tab still completes it with a trailing space).
+  if (menu.kind === 'mention' && key.type === 'submit' && mentionAt(state.text, state.cursor)?.query === menu.items[menu.selected]) return null;
   if (menu.kind === 'mention' && (key.type === 'tab' || key.type === 'submit')) return step(completeMention(state, menu.start, menu.items[menu.selected]!));
   if (menu.kind === 'slash' && key.type === 'tab') return step(edit(state, 0, state.text.length, `/${menu.items[menu.selected]!.name} `));
   if (menu.kind === 'slash' && key.type === 'submit') return runSlash(state, menu.items[menu.selected]!);
@@ -228,10 +237,20 @@ function runSlash(state: ComposerState, command: SlashCommand): ComposerStep {
   return submit(edit(state, 0, state.text.length, `/${command.name}`));
 }
 
+/** Candidates for the token under the caret. Only the latest query counts; a single candidate is offered, never typed for the user. */
 function mentionResult(state: ComposerState, key: Extract<ComposerKey, { type: 'mentions' }>): ComposerState {
   const token = mentionAt(state.text, state.cursor);
-  if (token?.start !== key.start || token.query !== key.query || key.items.length === 0) return state;
-  return key.items.length === 1 ? completeMention(state, key.start, key.items[0]!) : { ...state, mentions: { start: key.start, items: key.items }, selected: 0 };
+  if (token?.start !== key.start || token.query !== key.query || state.mentionDismissed === state.text) return state;
+  return { ...state, mentions: { start: key.start, items: key.items }, selected: 0 };
+}
+
+/** After an edit, the `@token` under the caret is looked up (the view debounces); a picker closed with Esc stays closed for this text. */
+function withMentionLookup(result: ComposerStep): ComposerStep {
+  const { state } = result;
+  if (state.search || result.intents.some(intent => intent.type === 'submit')) return result;
+  const token = mentionAt(state.text, state.cursor);
+  if (!token || state.mentionDismissed === state.text) return result;
+  return { state, intents: [...result.intents, { type: 'mention', ...token }] };
 }
 
 function textKey(state: ComposerState, text: string, context: ComposerContext): ComposerStep {
@@ -265,15 +284,18 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   const handled = menu && !walking && menuKey(state, key, menu);
   if (handled) return handled;
   switch (key.type) {
-    case 'text': return textKey(state, key.text, context);
+    case 'text': return withMentionLookup(textKey(state, key.text, context));
     case 'paste': return step(paste(state, key.text, context));
     case 'submit': return submit(state);
     case 'newline': return step(insert(state, '\n'));
     case 'move': return step(move(state, key.to));
-    case 'delete': return step(remove(state, key.span));
-    case 'yank': return step(insert(state, state.killed));
+    case 'delete': return withMentionLookup(step(remove(state, key.span)));
+    case 'yank': return withMentionLookup(step(insert(state, state.killed)));
     case 'search': return step({ ...state, search: { query: '', skip: 0, saved: state } });
-    case 'escape': return context.busy ? step(state, { type: 'cancel' }) : step(state);
+    case 'escape':
+      if (context.busy) return step(state, { type: 'cancel' });
+      // Esc before the candidates arrived also closes the picker: a late answer must not open it.
+      return step(mentionAt(state.text, state.cursor) ? { ...state, mentions: null, mentionDismissed: state.text } : state);
     case 'eof':
       if (state.text) return step(remove(state, 'forward'));
       return context.busy ? step(state) : step(state, { type: 'exit' });

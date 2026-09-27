@@ -6,7 +6,7 @@ import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfi
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
-import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
+import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { main as runCli } from '#surfaces/index.js';
@@ -17,7 +17,7 @@ import { readInstallationProfileFile } from '#adapters/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
-import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -51,6 +51,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     // T-L3: the interactive terminal's turns are agent turns in the runtime service (tools when the model declares them).
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady }),
+    // T-L5 `@file` over runtime protocol v15: the service lists and reads workspace files; the terminal never does.
+    findTerminalMentions: (projectRoot, input, options, signal) => findTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
+      { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
+    attachTerminalMentions: (projectRoot, input, options, signal) => attachTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
+      { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
     inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount,
