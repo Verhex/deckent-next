@@ -55,7 +55,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   installation is the hosting/trust boundary, company isolation is enforced in scoped data decisions,
   not a separate filesystem root. Default is one company. Enterprise maps customer identity,
   RBAC/RLS and governance into these contracts. Company-aware Core policy precedes M2; IdP/SIEM
-  adapters belong to M4. Current tenant-named config/identity fields await a separate code migration.
+  adapters belong to M4. The retired tenant fields and file-isolation helpers are gone (H34 S4): company is a data scope,
+  config schema 3, layout registry 3, doctor JSON 2; older versions are refused with a typed error, never converted.
 - Development is in deckent-next. Public deckent receives only the completed Core distribution. Proprietary
   Enterprise sources/packages remain separately controlled from their first implementation, consume public Core
   APIs and are excluded from public source, history and package artifacts. Core installs without Enterprise.
@@ -357,7 +358,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   adapter `http-conditional-effect` (ETag/If-Match, Idempotency-Key, idempotency lookup; loopback http or https, no
   credentials yet), SDK `execute|compensate|inspectConfiguredOperation`, CLI `deckent operation`. A required approval goes
   through the operation approval broker (C12 G1/G2, below). Not claimed: any ERP adapter, credentials, MCP tool, registry
-  resolution of targets (A04-1 done, see below; unified catalog A04-2), migration of the five existing flows.
+  resolution of targets (A04-1/A04-2 done, see below), migration of the five existing flows.
 - **C11-1 REVISE (Astra 2041, Jev 2bfd2ee9, 2026-09-24).** The target never sees the caller's key: the intent stores a wire
   key derived from scope, target kind+id, operation id@version and caller key, so two scopes or operations reusing a key
   cannot settle each other's records. The intent also pins a target binding (descriptor digest + the adapter's endpoint
@@ -681,7 +682,7 @@ a split character) under a first-line marker naming what is not shown and the sh
 owner-only (0600, exclusive, not redacted: it must be exactly the change approved), in the managed `approvalPreviews` directory while
 the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's identity is the turn, the call's position (round,
 index), the arguments and the planned version (Astra 2113: the version alone collided after writes B, A, B and reported a write that
-did not happen); the approval gate admits a `require-approval` decision only for that command, once (consumed by the run it admits). Not excluded: another writer between the final
+did not happen); the effect's approval gate (C12 G3) admits only from the durable `agent-tool-call` record of exactly the executed call: a sealed (MAC) `allow`, subject and action digest rebuilt from the executed call (turn, round, index, tool@version, resource, arguments digest), requested by the effect principal, decided on the request it names, inside its expiry at the claim (judged by the requesting process, I40-c B). It applies whenever the owner was asked — tool decision, write floor or operation decision. The claimed intent pins `approval {approvalId, actionDigest}` (its consumption); later passes verify the pin without a window; a settled record replays. In-turn state is only a pointer to the record and the per-turn one-approval-one-command map; it never admits. Not excluded: another writer between the final
 version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
 **Read-only shell classification (T-L4 slice 3a, Jev d6909e28).** `engine/core/shell-classification` is pure: a POSIX `sh -c`
 scanner (pipelines of stages; redirection only to /dev/null or between stdout/stderr; substitutions, expansions, subshells, braces,
@@ -731,7 +732,7 @@ approval preview shows the exact command, its risk tier and reason, and that it 
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
 record, so an uncertain run never makes the shell busy; its effect identity is the turn, the call's position (model round, index in
 the response) and the arguments digest — a replay of the same call is the same effect, a later identical command is another; the
-provider's call id is not identity (providers reuse it; Astra 2113); an owner approval is consumed by the run it admits. A shell keeps no idempotency record: exited is the effect (any exit code), a
+provider's call id is not identity (providers reuse it; Astra 2113); an owner approval admits the run only through the same durable-record gate as edits (C12 G3) and is pinned in the run's intent. A shell keeps no idempotency record: exited is the effect (any exit code), a
 cancelled or timed-out run is `unknown` (the result says what it changed is unknown) and is never re-run, a run that could not start is
 refused. Turn cancellation reaches the running command (group killed). Output streams as `tool.output` while the turn channel has
 room (a new channel `room()`); past half of it the display stops with one visible marker, and the streamed display is drained before
@@ -1155,11 +1156,7 @@ taken over only when it is at most `now − MAX_WALL_SKEW_MS`, in the atomic cla
 retry waits retryDelayMs + 5 s, including a process's own). Config write-lock waits and in-process failure backoff are monotonic;
 lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
 Remaining raw-`Date.now` comparisons across
-processes (record-only timestamps) are listed in the I40 review and are not yet on this contract. Agent tool approvals (I40-c):
-request and turn timestamps read the trusted clock; the deciding process refuses with `APPROVAL_EXPIRED` when
-`wallMs + MAX_WALL_SKEW_MS >= expiresAt` (a decision in the last ≤ 5 s may be refused early; the TTL is never extended); the
-consumer applies expiry with its own floored wall clock and a monotonic TTL from creation, and re-checks after asynchronous policy
-evaluation. A single expiry authority (only the requesting process judges expiry) is a separate owner decision.
+processes (record-only timestamps) are listed in the I40 review and are not yet on this contract. Agent tool approvals (I40-c B, owner 2026-09-27): request and turn timestamps read the trusted clock, and only the requesting process determines expiry, using its floored wall clock and the monotonic TTL anchored at request creation. The deciding application authenticates, authorizes, seals and persists the decision without independently expiring tool-call requests; a record already expired is still refused. The producer checks expiry while waiting, after asynchronous policy work and immediately before the effect claim. A recorded allow is decision history, not evidence of execution nor an extension. The record schema permits `decidedAt >= expiresAt` only for `agent-tool-call` subjects (createdAt lower bound and task/operation expiry bounds unchanged); an older build refuses such a record with `APPROVAL_INTEGRITY`, and mixed reading is prevented because the same batch moves the ledger to v41, which older builds refuse.
 This Linux local witness
 is not remote bearer authentication; `token-verified` remains an extension port, not a shipped verifier.
 
@@ -1175,7 +1172,10 @@ resubmit once (owner Q2). Ledger v40 adds `operation` to the approvals subject C
 v40). Released runtime protocol v14 is kept: requests below v15 never receive operation-subject approvals (list omits them,
 inspect answers `APPROVAL_MISSING`); they are listed and decided through SDK `configuredApproval` or CLI `approval decide` until
 G4 (v15). Authorization points outside the catalog answer `require-approval` with typed `POLICY_APPROVAL_UNSUPPORTED` (still a
-refusal; owner Q8), and cancellation recovery and its classifiers treat it and `SCOPE_UNKNOWN` as denials, never as a crashed page.
+refusal; owner Q8), and cancellation recovery and its classifiers treat it and `SCOPE_UNKNOWN` as denials, never as a crashed page. Installation's two require-approval points (pool grant, shutdown grant) use their own `INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED` (config, exit 78; owner 2026-09-27), like their `INSTALLATION_PROFILE_*` siblings; `init preview` is proven with the compiled CLI, `init apply` shares the same preparation call (inspection only).
+C12 G3: agent edit/shell effects verify their `agent-tool-call` record at the effect (same pin-in-intent consumption); the terminal flow, protocol v14 and ledger v40 are unchanged by G3. Refusals are typed tool results (`APPROVAL_REQUIRED`, `_DENIED`, `_EXPIRED`, `_CONFLICT`, `_MISSING`, `_INTEGRITY`), nothing written or run.
+
+**General Core audit port, first slice (AUDIT-PORT, ledger v41; owner 2026-09-27 q4/q5).** Silent decisions Core makes get a durable, sealed audit record through one port: `domain/core/audit` (event v1: `eventId`, `scopeId`, principal issuer/subject, policy revision, caller-supplied `atMs`, typed `subject` — first kind `permission-mode`: mode, cell, tool, turn/round/index/call, derived company and person grant ids, `require-approval → allow`, and a bounded summary: workspace-relative path or the first 200 characters of the shell head plus `argsDigest`; never the raw command or file content), `engine/core/audit` (`AuditStore` port, `sealAuditRecord`/`verifyAuditRecord` on the approval MAC line — `audit-record:1` over event + scope-local sequence + keyId — and `AuditApplication`: `record` returns only after the store wrote the sealed record, committed by the store or inside the caller's open transaction; any failure is typed `AUDIT_UNAVAILABLE`/`AUDIT_INVALID`/`AUDIT_CONFLICT` and the caller applies no effect — "no audit, no effect"; `list` verifies every seal, row identity and sequence continuity within one scope; `count`/`counters` are q5 summary totals) and `adapters/core/audit-store` on the shared ledger. Ledger v41 adds `audit_events` (PK scope+sequence, UNIQUE scope+event id; `BEFORE UPDATE`/`BEFORE DELETE` triggers abort with `AUDIT_APPEND_ONLY`, so append-only is a database guarantee) and `audit_counters` (mutable summaries, no seal). The service-start upgrade backs up v40 (0600) and migrates in one transaction; a v40 build refuses a v41 ledger (`ATTEMPT_STORE_VERSION`). Not yet: a SIEM/export adapter reading the port, sealed counters, retention.
 
 **Roles, bindings and four-eyes (H34 S2, policy v2).** Policy documents are v1 or v2; v2 adds `roles` (role → permission rules) and
 `separationOfDuties` (`requester-cannot-approve` over scopes). Role membership lives in a separate `bindings` layout resource
@@ -1184,8 +1184,9 @@ merges both into one effective document (revision = policy + bindings), so every
 scope → deny/restriction → require-approval → allow → NO_GRANT; role rules are derived per request for that principal only (exact
 issuer + subject); a role is never a call parameter; a binding grants membership in a pinned scope but never declares or pins one.
 v1 parsing is unchanged (bindings are not read); an older reader refuses v2. Four-eyes is enforced in `ApprovalApplication.decide`
-on `allow` only (the requester's own allow → `APPROVAL_DENIED`). Roles cannot target `task` rules yet (Run reservation reads
-explicit task rules; typed `POLICY_INVALID`). Adding the `bindings` resource changes every installation's layout revision:
+on `allow` only (the requester's own allow → `APPROVAL_DENIED`). Roles may target `task` rules (2026-09-27): Run reservation wires
+the task-admission filter whenever any explicit or role-derived task rule exists in the effective document (`policyGatesTaskAdmission`);
+the per-principal decision stays exact, the wiring check is document-wide (unrelated principals may see the approval journal opened). Adding the `bindings` resource changes every installation's layout revision:
 admitted but unexecuted Runs from before the update get `RUN_STORE_CONFLICT` at execution (same as earlier resource additions).
 Scope access mode is stated at every call (Astra 2126 R1): queries pass `read` and never pin a scope; only write admissions pin.
 The sealed adapter registry holds immutable snapshots of factories and manifests (Astra 2126 R2).
@@ -1200,8 +1201,8 @@ declares one. Once pinned a scope never moves: another `company.id` answers `SCO
 trusted grant → `POLICY_DENIED` before any ledger access. One composition function (`scoped-request`) serves CLI/SDK/MCP, the runtime
 socket peer path, inventory and governed shutdown. Config `company.id` (default `default`, `^[a-z0-9][a-z0-9-]{0,62}$`) is shown by
 `doctor --json` as `company.companyId`. `runtime serve` pins the configured company and the installation's own scopes at start; the
-v38 → v39 upgrade (0600 backup first, one transaction) pins scopes already in the ledger; a v38 build refuses a v39 ledger. Not yet:
-company-aware authorization at every port and role bindings (S2/S3), tenant removal (S4).
+v38 → v39 upgrade (0600 backup first, one transaction) pins scopes already in the ledger; a v38 build refuses a v39 ledger. Company-aware
+authorization at every port (H34 S3): the membership rule is the one company check; every port's first policy check (`principal.scopeIds`, reason `SCOPE`) consumes its result. Where one installation reads another's records (a `next-project` worker source), the target resolves the scope for its own company and the bridge refuses unless that equals the request's company (`assertRequestCompany`, before any target record is read). A `SCOPE_UNKNOWN` refusal carries an internal typed reason (`COMPANY` | `UNREGISTERED`) on `PolicyAuthorizationError`; surfaces carry the code only, so another company's scope stays indistinguishable from an unknown one. Role bindings never reach a scope pinned to another company; governed shutdown and runtime loops re-enter the same membership per admission/page. H34 S4 removed the retired scope fields: config schema 3, layout registry 3, doctor JSON 2 (config 2 → `CONFIG_VERSION_UNSUPPORTED`, an older layout snapshot → `LAYOUT_VERSION_UNSUPPORTED`; no conversion or alias); the vocabulary gate forbids the retired word everywhere except the HARVEST record. The layout revision changes, so Runs admitted before the update are not claimed compatible. Not yet: `runtime serve` still starts when its own scopes are pinned to another company (its loops and shutdown then fail closed); run-progression lists runs of foreign-pinned scopes each poll.
 
 **Operation target adapter registry (A04-1).** Operation targets resolve through a registry, not a literal: `domain/core/adapter-registry`
 (manifest v1: `module {id, version, tier, namespace|null}`, `requires.coreApi {min,max}` against `CORE_API_VERSION` 1,
@@ -1210,8 +1211,10 @@ entries at construction own the root namespace, overlays register under their ow
 registration). Tier and namespace claims grant nothing; a namespace may not equal, nest under or over another or a root id; duplicate
 `id@version` and adapter ids are refused; a manifest may add operations but never redefine one (owner Q5, adds-only); a non-null
 signature is refused until verification exists (A04-3, owner Q7). Config shape is unchanged (`operations.targets[].adapter` is a
-registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: unified catalog (A04-2), module
+registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: module
 loading, signature verification and a separately distributed Enterprise package (A04-3), public SDK export of module registration.
+
+**Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation` and SDK share `executeConfiguredOperation`. The Core ids close the `workspace`, `workspace.file` and `host` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside an overlay namespace are allowed (open question).
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
 it never adopts the old directory or declares its writer dead. Git delivery has its own policy action

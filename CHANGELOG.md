@@ -4,7 +4,23 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
-- FIX (I40-c): agent tool approvals use the trusted clock; a decision too close to expiry is refused early, expiry never extended.
+- BREAKING (H34 S4): the retired tenant fields are removed; config schema 3, layout registry 3, doctor JSON 2. Config 2 is
+  refused with `CONFIG_VERSION_UNSUPPORTED` and an older layout snapshot with `LAYOUT_VERSION_UNSUPPORTED`; no conversion.
+- ADDED (audit): general Core audit port with a sealed, append-only `audit_events` table and `audit_counters`; ledger v41 with a
+  backed-up migration; a v40 build refuses a v41 ledger.
+- ADDED (A04-2): one operation catalog for every producer; Core code operations, registered module operations and the config
+  catalog unify through the adapter registry, with typed refusals for conflicts, Core redefinition, reserved target kinds and
+  dangling module compensations. Existing `operations` configs are unchanged.
+- CHANGED (H34 S3): company-aware authorization at every port; a `next-project` worker source configured for another company is
+  reported `denied` (its dispatch records were returned before).
+- CHANGED (C12 G3): agent file edits and shell runs verify their durable, sealed tool-call approval at the effect and pin it in
+  the intent; refusals are typed tool results and nothing is written or run.
+- CHANGED (I40-c B): only the requesting process judges agent tool approval expiry; a decision is no longer refused early by the
+  deciding process. Older builds refuse such a record, and the v41 ledger keeps them from reading it.
+- CHANGED: policy roles may carry `task` rules; Run reservation sees role-derived task rules.
+- FIX (installation): the require-approval refusal for pool and shutdown grants uses `INSTALLATION_PROFILE_APPROVAL_UNSUPPORTED`
+  (config, exit 78) instead of `POLICY_APPROVAL_UNSUPPORTED` (exit 1).
+- FIX (I40-c): agent tool approvals use the trusted clock; expiry is never extended.
 - FIX (Astra 2128/2129): v14 approval lists exclude operation subjects during page selection; the operation approval window is
   re-checked right before the first intent claim.
 - ADDED (C12 G1/G2): operations that require approval open an approval request and return `approval-pending`; the same command
