@@ -13,7 +13,8 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist', 'apps'],
     pool: 'forks',
-    maxWorkers: Number(process.env.VITEST_MAX_FORKS ?? 2),
+    // Full suite: 4 workers (owner 2026-09-27; measured 10.9 GB peak, 297 s verify). Lanes' targeted runs set VITEST_MAX_FORKS=2.
+    maxWorkers: Number(process.env.VITEST_MAX_FORKS ?? 4),
     testTimeout: 30_000,
   },
 });

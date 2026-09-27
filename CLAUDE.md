@@ -37,7 +37,7 @@
 - Include real gains/losses, contrary evidence and both abstention choices; advice is not acceptance.
 - Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure.
 - Run `npm run verify` before landing; no build during an active test suite.
-- Local tests stay within 16 GB, normally `VITEST_MAX_FORKS=2`; this is not a product concurrency limit.
+- Local tests stay within 16 GB: full verify uses 4 workers (default), targeted/lane runs `VITEST_MAX_FORKS=2`; not a product limit.
 - Commit only with owner authorization; publish/push needs its own authorization.
 - Refresh the memory manifest after authorized edits: `node scripts/lint-core-memory.mjs --write`.
 - Keep both `AGENTS.md` and `CLAUDE.md` at or below 70 lines.
