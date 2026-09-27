@@ -2,6 +2,7 @@ export { cancelPeerConfiguredChatTurn, CHAT_TURN_SAFETY_RESERVE_TOKENS, chatTurn
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';
-export { agentShellEffectCommandId } from './internal/shell.js';
+export { agentShellEffectCommandId, createShellWriteContext } from './internal/shell.js';
 export { agentFileEffectCommandId } from './internal/edits.js';
+export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTERS } from './internal/mode.js';
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, sweepFullPreviews } from './internal/preview.js';

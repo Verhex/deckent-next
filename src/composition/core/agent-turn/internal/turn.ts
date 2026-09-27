@@ -15,6 +15,7 @@ import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfig
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createAgentFileEdits } from './edits.js';
+import { createAgentCallDecisions } from './mode.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, and service stop. */
@@ -144,6 +145,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
 
   const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
+  // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
+  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits, shell, approvals });
 
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
@@ -182,25 +185,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           finish: typeof message.finish === 'string' ? message.finish : 'unknown',
           usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : null };
       },
-      async authorize(tool, args) {
-        const decision = await toolAuthority.decide(tool, command.scopeId, context.principal);
-        const operationOf = tool.toolClass === 'edit' ? edits : tool.toolClass === 'shell' ? shell : null;
-        if (decision === 'deny' || !operationOf || !args) return decision;
-        // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds.
-        const operation = await operationOf.authority();
-        if (operation === 'deny') return 'deny';
-        return decision === 'allow' && operation === 'allow' ? 'allow' : 'require-approval';
-      },
+      // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
+      // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
+      authorize: (tool, args) => decisions.authorize(tool, args),
       async prepare(tool, args) {
-        if (tool.toolClass === 'shell' && shell) {
-          // Classified on the command: only a read-only command of bounded reach may run without asking (Jev 82858581).
-          const planned = await shell.plan(tool.name, args);
-          return planned.ok ? { ok: true, requireApproval: shell.asks(tool.name, args) } : { ok: false, text: planned.text };
-        }
-        if (tool.toolClass !== 'edit' || !edits) return { ok: true };
-        const planned = await edits.plan(tool.name, args);
-        // The write floor raises allow to require-approval for high-risk paths in every mode (contract §5), on the resolved path.
-        return planned.ok ? { ok: true, requireApproval: edits.floored(tool.name, args) } : { ok: false, text: `[deckent] ${tool.name}: error=${planned.error}` };
+        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && edits)) return decisions.prepare(tool, args);
+        return { ok: true };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
@@ -267,10 +257,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
         if ((tool.toolClass === 'edit' && edits) || (tool.toolClass === 'shell' && shell)) {
-          const { gate, close } = approvals.gate(tool, args, execution);
-          try {
-            return tool.toolClass === 'edit' ? await edits!.apply(tool.name, args, execution, gate) : await shell!.apply(tool.name, args, toolSignal, callId, execution, gate);
-          } finally { await close(); }
+          return decisions.execute(tool, args, execution, callId, gate => tool.toolClass === 'edit'
+            ? edits!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate));
         }
         return workspace.execute(tool.name, args, toolSignal);
       },

@@ -29,3 +29,16 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
   return allowed ? Object.freeze({ decision: 'allow', revision: policy.revision, reason: 'GRANTED', ruleId: allowed.id })
     : Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'NO_GRANT' });
 }
+
+/**
+ * Whether a `require-approval` decision may be lowered by a permission mode (T-L4 slice 4a): the ids of **every** matching
+ * `require-approval` rule when all of them are marked `modeEligible` (company data, policy v2), else null. Evaluated in the same
+ * order as `evaluatePolicy`, so a deny, a restriction, an allow or a missing grant is never eligible, and an allow rule never adds
+ * eligibility to a require-approval it does not own.
+ */
+export function modeEligibleApproval(input: unknown, requestInput: unknown): readonly string[] | null {
+  if (evaluatePolicy(input, requestInput).decision !== 'require-approval') return null;
+  const policy = policySchema.parse(input), request = policyRequestSchema.parse(requestInput);
+  const required = principalGrants(policy, request.principal).filter(rule => rule.effect === 'require-approval' && matches(rule, request));
+  return required.length > 0 && required.every(rule => rule.modeEligible === true) ? Object.freeze(required.map(rule => rule.id)) : null;
+}
