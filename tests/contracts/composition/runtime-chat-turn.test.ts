@@ -28,9 +28,11 @@ afterEach(async () => {
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
-const modelWith = (tokenCount: boolean) => ({ id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
-  capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, ...(tokenCount ? [{ id: 'token-count', version: 1, state: 'supported' }] : [])] }] });
-const catalogWith = (tokenCount: boolean) => ({ schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: [modelWith(tokenCount)] }] });
+const modelWith = (tokenCount: boolean, thinkingSwitch = false) => ({ id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
+  capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }, ...(tokenCount ? [{ id: 'token-count', version: 1, state: 'supported' }] : []),
+    ...(thinkingSwitch ? [{ id: 'chat-template-enable-thinking', version: 1, state: 'supported' }] : [])] }] });
+const catalogWith = (tokenCount: boolean, thinkingSwitch = false) => ({ schemaVersion: 1 as const, revision: 'catalog-1',
+  providers: [{ id: 'local-openai', version: 1, models: [modelWith(tokenCount, thinkingSwitch)] }] });
 const tariff = { kind: 'operator-static', version: 1, currency: 'USD', inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } as const;
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
@@ -38,12 +40,14 @@ const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
 type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
 async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
-  count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[] } = {}) {
-  const model = modelWith(options.tokenize === true), catalog = catalogWith(options.tokenize === true);
+  count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
+  /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
+  thinkingSwitch?: boolean; dataInside?: boolean } = {}) {
+  const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
-  const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
-  await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
-    mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
+  const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
+  await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }), mkdir(home, { mode: 0o700 })]);
+  await mkdir(data, { mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
   const state = { requests: [] as Record<string, unknown>[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
@@ -261,8 +265,74 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.replacedMessages).toBe(9); expect(compacted.messages).toHaveLength(9);
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
-    expect(sent[0]).toEqual({ role: 'system', content: 'SYS' }); expect(sent).toHaveLength(10);
+    // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v1\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
+    expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
+    // The summary call never carries the switch when the model does not declare it (TL-C D8).
+    expect(f.state.requests[0]!['chat_template_kwargs']).toBeUndefined();
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
+  }, 30_000);
+
+  // TL-C (D4): the model-facing system prompt is the service's, in code, versioned; the client's catalog text follows it.
+  it('sends one system message: the service segment with the workspace layout and tool rules, then the client prompt, with no contradiction (D4)', async () => {
+    const f = await runtime({ dataInside: true }); await f.start();
+    f.state.script = [{ content: 'Hello.' }, { content: 'Again.' }];
+    // The shortened catalog prompt proposed in i18n-delta.json (the lead applies it to the locale files).
+    const clientPrompt = 'You are the Deckent operator terminal assistant. Reply in English.';
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-prompt', messages: [{ role: 'system', content: clientPrompt },
+      { role: 'user', content: 'hello' }] }, event => events.push(event));
+    const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
+    expect(sent.map(message => message.role)).toEqual(['system', 'user']);
+    const system = sent[0]!.content;
+    expect(system.startsWith('[Deckent runtime instructions v1]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system).toContain(`Project root: ${f.project}`);
+    expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).toContain('.deckent/live-data/state/terminal-sessions');
+    expect(system).toContain('.deckent/config.json');
+    expect(system).toContain('Read tools: read_file, list_dir, grep, glob'); expect(system).toContain('Edit tools: edit_file, write_file');
+    expect(system).toContain('Shell tool: run_shell'); expect(system).toContain('hasMore=true'); expect(system).toMatch(/one short line/);
+    // The old catalog sentence contradicted the declared tools; neither the segment nor the proposed client text says it.
+    expect(system).not.toMatch(/cannot (run|approve|change)|can't (run|approve|change)/i);
+    // The segment is service-side only: nothing the client keeps (message events, saved history) carries it.
+    expect(events.some(event => event.kind === 'message' && event.message.content.includes('Deckent runtime instructions'))).toBe(false);
+    // Without a client system message the segment is the whole system message.
+    await f.client().chatTurn(ask('turn-prompt-2'), () => undefined);
+    const bare = f.state.requests[1]!['messages'] as { role: string; content: string }[];
+    expect(bare[0]).toEqual({ role: 'system', content: system.slice(0, -(clientPrompt.length + 2)) });
+  }, 30_000);
+
+  it('refuses the approval and preview directories of a data root inside the project to the agent tools, and still reads other files there (D4)', async () => {
+    const f = await runtime({ dataInside: true });
+    await mkdir(join(f.data, 'approvals'), { recursive: true, mode: 0o700 }); await mkdir(join(f.data, 'state', 'approval-previews'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
+    await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
+    await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/approval-previews/diff.txt"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/approvals/held.txt"}' } },
+      { toolCall: { name: 'grep', arguments: '{"pattern":"owner-only","path":".deckent/live-data"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/notes.txt"}' } }, { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    expect(await f.client().chatTurn(ask('turn-deny', 'read the approvals'), event => events.push(event))).toMatchObject({ finish: 'stop', answer: 'Done.' });
+    const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+    expect(results).toHaveLength(4);
+    expect(results[0]).toContain('error=path-denied'); expect(results[1]).toContain('error=path-denied');
+    expect(results.join('\n')).not.toContain('owner-only'.concat(' full diff')); expect(results.join('\n')).not.toContain('owner-only approval record');
+    expect(results[3]).toContain('ordinary data file');
+  }, 30_000);
+
+  // TL-C (D8): the compaction call runs without thinking when (and only when) the catalog declares the switch.
+  it('turns thinking off for the compaction call of a model that declares the switch, never for a round (D8)', async () => {
+    const f = await runtime({ tokenize: true, windowTokens: 100_000, count: body => body.messages.length > 12 ? 90_000 : 900, thinkingSwitch: true }); await f.start();
+    f.state.script = [{ summary: '{"objective":"o","findings":[],"decisions":[],"unresolved":[],"nextActions":[],"inspectedAreas":[]}' }, { content: 'Still a.' }];
+    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 16 }, (_, i) => i % 2
+      ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
+    { role: 'user' as const, content: 'what now?' }];
+    expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-think', messages: history }, () => undefined)).toMatchObject({ finish: 'stop' });
+    expect(f.state.requests).toHaveLength(2);
+    expect(f.state.requests[0]).toMatchObject({ stream: false, chat_template_kwargs: { enable_thinking: false } });
+    expect(f.state.requests[1]!['chat_template_kwargs']).toBeUndefined();
   }, 30_000);
 
   // Astra 2091 R1: with no provider count and no configured window, the service input bound (262144 here) is the compaction pressure,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { planAgentCompaction, renderAgentCompaction, runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { AGENT_TURN_NO_PROGRESS_NOTE, planAgentCompaction, renderAgentCompaction, runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
 const readFile: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a file.',
@@ -334,4 +334,47 @@ it("carries the outcome's cleanup on tool.finished only for the shell tool, drop
   const readFinished = finished.find(event => event.kind === 'tool.finished' && event.callId === 'c2');
   expect(readFinished).toMatchObject({ name: 'read_file', status: 'ok' });
   expect(readFinished).not.toHaveProperty('cleanup');
+});
+
+// TL-C (D7): a second consecutive round that made no progress gets one engine note; the turn goes on, there is no limit.
+it('adds one [deckent] note after the second consecutive no-progress round and keeps the turn going (no counter, no limit)', async () => {
+  const notes = (messages: readonly AgentTurnMessage[]) => messages.filter(message => message.role === 'user' && message.content === AGENT_TURN_NO_PROGRESS_NOTE);
+  const seen: number[] = [];
+  const p = ports([
+    answer('', [call('c1', 'read_file', '{bad')]),
+    messages => { seen.push(notes(messages).length); return answer('', [call('c2', 'no_such_tool', {})]); },
+    messages => { seen.push(notes(messages).length); expect(messages.at(-1)).toEqual({ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE });
+      return answer('', [call('c3', 'read_file', { path: 'a' }), call('c4', 'read_file', { path: 'a' }), call('c5', 'grep', '{"x":1}')]); },
+    // c3 ran (progress): the streak is reset; the next two no-progress rounds form a new streak.
+    messages => { seen.push(notes(messages).length); return answer('', [call('c6', 'read_file', { path: 'a' })]); },
+    messages => { seen.push(notes(messages).length); return answer('', [call('c7', 'read_file', '[]')]); },
+    messages => { seen.push(notes(messages).length); return answer('', [call('c8', 'read_file', '[]')]); },
+    messages => { seen.push(notes(messages).length); return answer('done'); }]);
+  const { result, events } = await run(p);
+  expect(result).toMatchObject({ finish: 'stop', rounds: 7, note: null, answer: 'done' });
+  // Round 2 saw no note (one no-progress round is not a streak); round 3 saw it; the third no-progress round of a streak adds none.
+  expect(seen).toEqual([0, 1, 1, 1, 2, 2]);
+  expect(AGENT_TURN_NO_PROGRESS_NOTE.startsWith('[deckent] ')).toBe(true); expect(AGENT_TURN_NO_PROGRESS_NOTE).not.toContain('\n');
+  // The note is part of the client's history, in order, like every appended message.
+  const appended = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
+  expect(appended.filter(message => message.role === 'user')).toEqual([{ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE }, { role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE }]);
+});
+
+it('never counts a denied call, a round with text, or a cancelled turn as no progress', async () => {
+  const decision: AgentTurnPorts['authorize'] = async tool => tool.name === 'grep' ? 'deny' : 'allow';
+  const p = ports([answer('', [call('c1', 'read_file', '{bad')]), answer('', [call('c2', 'grep', { pattern: 'x' })]),
+    answer('', [call('c3', 'read_file', '{bad')]), answer('Trying another way.', [call('c4', 'read_file', '{bad')]),
+    answer('', [call('c5', 'read_file', '{bad')]), answer('done')], { decision });
+  const { result, events } = await run(p);
+  expect(result).toMatchObject({ finish: 'stop', rounds: 6 });
+  expect(events.some(event => event.kind === 'message' && event.message.role === 'user')).toBe(false);
+  // A turn cancelled right after a second no-progress round appends no note.
+  const controller = new AbortController();
+  const cancelled = ports([answer('', [call('c1', 'read_file', '{bad')]), answer('', [call('c2', 'no_such_tool', {})]), answer('never')]);
+  // The cancel lands after the second round's call settled as an error, before the note would be appended.
+  cancelled.value.settled = async settled => { if (settled.round === 2) controller.abort(); };
+  const stopped = await run(cancelled, controller.signal);
+  expect(stopped.result).toMatchObject({ finish: 'cancelled' }); expect(cancelled.invoked).toEqual([1, 2]);
+  expect(stopped.events.filter(event => event.kind === 'tool.finished').map(event => event.kind === 'tool.finished' && event.status)).toEqual(['invalid-arguments', 'error']);
+  expect(stopped.events.some(event => event.kind === 'message' && event.message.role === 'user')).toBe(false);
 });
