@@ -10,12 +10,15 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { describeMcpInference } from './inference-query.js';
+import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
   registerProviderConfig(); const config = await loadConfig(root, { heal: false });
   const locale = resolveLocale(undefined, process.env, config.language);
   const runtime = createConfiguredRuntimeClient(root);
-  return serveStdio(() => createMcpServer({ ...runtime, inspectDeclaredModels: () => inspectDeclaredModels(root),
+  // Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog.
+  const operationCatalog = await describeConfiguredOperationTools(root);
+  return serveStdio(() => createMcpServer({ ...runtime, operationCatalog, inspectDeclaredModels: () => inspectDeclaredModels(root),
     inspectModelBinding: reference => inspectModelBinding(root, reference),
     inspectToolchainCurrency: () => inspectConfiguredToolchainCurrency(root),
     updateToolchains: input => updateConfiguredToolchains(root, input),

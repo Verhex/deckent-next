@@ -1,4 +1,4 @@
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
+import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
@@ -14,6 +14,9 @@ import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandIn
   type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
+import { runtimeOperationInspectionSchema, runtimeOperationOutcomeSchema, runtimeOperationQuerySchema, type RuntimeOperationQuery } from '#engine/index.js';
+import { effectCommandSchema, EffectError, type EffectCommand, type EffectRecord } from '#domain/index.js';
+import type { EffectOutcome } from '#engine/index.js';
 import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
   type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
@@ -39,6 +42,10 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   findWorkspaceFiles(query: WorkspaceFileQuery, signal?: AbortSignal): Promise<WorkspaceFileMatches>;
   /** v15 composer `@file`: one file's bounded content, or a typed refusal. */
   attachWorkspaceFile(request: WorkspaceAttachmentRequest, signal?: AbortSignal): Promise<WorkspaceAttachment>;
+  /** v15 catalog operations (C12 G4): settled, or approval-pending (nothing sent; resubmit the same command after a decision). */
+  executeOperation(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<EffectOutcome>;
+  compensateOperation(command: EffectCommand, delivery?: RuntimeServiceDelivery): Promise<EffectOutcome>;
+  inspectOperation(query: RuntimeOperationQuery, delivery?: RuntimeServiceDelivery): Promise<Readonly<{ schemaVersion: 1; record: EffectRecord | null }>>;
 }>;
 
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
@@ -67,6 +74,36 @@ function workspaceFileMethods(call: RuntimeCall) {
   };
 }
 
+/** v15 catalog operation methods: both ends validate; an answer for another command, scope or operation is not trusted. */
+function effectOperationMethods(call: RuntimeCall) {
+  const submit = async (operation: 'executeOperation' | 'compensateOperation', input: EffectCommand, delivery?: RuntimeServiceDelivery) => {
+    try {
+      const parsed = effectCommandSchema.safeParse(input);
+      if (!parsed.success) throw new EffectError('EFFECT_INVALID');
+      const result = runtimeOperationOutcomeSchema.safeParse(await call(operation, parsed.data, delivery));
+      if (!result.success || result.data.commandId !== parsed.data.commandId || result.data.scopeId !== parsed.data.scopeId
+        || JSON.stringify(result.data.operation) !== JSON.stringify(parsed.data.operation)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+      return result.data as EffectOutcome;
+    } catch (error) { throw queryFailure(error); }
+  };
+  return {
+    executeOperation: (input: EffectCommand, delivery?: RuntimeServiceDelivery) => submit('executeOperation', input, delivery),
+    compensateOperation: (input: EffectCommand, delivery?: RuntimeServiceDelivery) => submit('compensateOperation', input, delivery),
+    async inspectOperation(input: RuntimeOperationQuery, delivery?: RuntimeServiceDelivery) {
+      try {
+        const parsed = runtimeOperationQuerySchema.safeParse(input);
+        if (!parsed.success) throw new EffectError('EFFECT_INVALID');
+        const result = runtimeOperationInspectionSchema.safeParse(await call('inspectOperation', parsed.data, delivery));
+        const command = result.success ? result.data.record?.intent.command : undefined;
+        if (!result.success || (command && (command.scopeId !== parsed.data.scopeId || command.commandId !== parsed.data.commandId))) {
+          throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        }
+        return result.data;
+      } catch (error) { throw queryFailure(error); }
+    },
+  };
+}
+
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
@@ -84,6 +121,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
+        || isRuntimeServiceEffectOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -121,7 +159,8 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
-    && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile').map(operation =>
+    && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile'
+    && !isRuntimeServiceEffectOperation(operation)).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
@@ -143,6 +182,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       } catch (error) { throw queryFailure(error); }
     },
     ...workspaceFileMethods(call),
+    ...effectOperationMethods(call),
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);

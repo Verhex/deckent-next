@@ -1,1 +1,2 @@
-export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from './internal/operations.js';
+export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation, submitPeerOperation, inspectPeerOperation,
+  describeConfiguredOperationTools } from './internal/operations.js';

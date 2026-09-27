@@ -7,6 +7,13 @@ import { ModelInvocationStoreError, type ModelInvocationDelivery, type RuntimeSe
 export function completeToolResult(result: CallToolResult): CallToolResult {
   return { ...result, resultType: 'complete', _meta: { [SERVER_INFO_META_KEY]: { name: PACKAGE_NAME, version: PACKAGE_VERSION } } };
 }
+/** A tool's JSON value as text, duplicated as structuredContent only when it is a JSON object (protocol requirement): a list result
+ * (list_approvals) travels as text only, never as an array a validating client rejects. */
+export function jsonToolResult(value: unknown): CallToolResult {
+  const encoded = JSON.stringify(value), structured = JSON.parse(encoded) as unknown;
+  return completeToolResult({ content: [{ type: 'text', text: encoded }],
+    ...(structured !== null && typeof structured === 'object' && !Array.isArray(structured) ? { structuredContent: structured as Record<string, unknown> } : {}) });
+}
 function wireBytes(id: RequestId, result: CallToolResult): bigint {
   return BigInt(Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n', 'utf8'));
 }

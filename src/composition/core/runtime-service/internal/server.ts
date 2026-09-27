@@ -8,7 +8,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority } from '#adapters/index.js';
-import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
+import { ModelInvocationControllers, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -20,6 +20,7 @@ import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
 import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
+import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
@@ -146,6 +147,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           ? executeConfiguredRuntimeChatTurnOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost, turn)
           : request.operation === 'findWorkspaceFiles' || request.operation === 'attachWorkspaceFile'
           ? executeConfiguredRuntimeWorkspaceFileOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, workspaceFiles, turnStop.signal)
+          : isRuntimeServiceEffectOperation(request.operation)
+          ? executeConfiguredRuntimeEffectOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {
