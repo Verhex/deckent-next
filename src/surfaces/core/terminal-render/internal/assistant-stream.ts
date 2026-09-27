@@ -11,8 +11,11 @@ export type TurnFinish = Extract<TurnDelta, { kind: 'done' }>['finish'];
 export type AnswerUnit = Readonly<{ kind: Segment['kind']; markdown: string; lead: boolean }>;
 export type ReasoningUnit = Readonly<{ kind: 'reasoning'; tokens: number; approximate: boolean; elapsedMs: number }>;
 export type ContextView = Readonly<{ promptTokens: number; windowTokens: number | null; quality: Extract<TurnDelta, { kind: 'context' }>['quality'] }>;
+/** The part of a turn that was running (TL-A): summarizing older messages, the model's answer, or a tool call. */
+export type TurnStage = 'compaction' | 'model' | 'tool';
+/** `cancelledDuring` (TL-A D5): only a cancelled turn carries it, derived here because the engine's note never reaches the surface on Esc. */
 export type FooterUnit = Readonly<{ kind: 'footer'; elapsedMs: number; promptTokens: number | null; completionTokens: number | null;
-  reasoningTokens: number | null; finish: TurnFinish; note?: string | null; context?: ContextView }>;
+  reasoningTokens: number | null; finish: TurnFinish; note?: string | null; context?: ContextView; cancelledDuring?: TurnStage }>;
 type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
 /** One finished agent tool call: a single visible line (legacy defect: silent tool rounds). `cleanup` (Astra 2124) only ever
  * arrives on a host shell call; the row shows a suffix for `group-ended`/`unverified` and nothing for `clean` or absent. */
@@ -44,6 +47,12 @@ export function terminalSafeText(text: string): string {
 export type CompactionUnit = Readonly<{ kind: 'compaction'; replacedMessages: number }>;
 export type AssistantUnit = AnswerUnit | ReasoningUnit | ToolUnit | CompactionUnit | FooterUnit;
 export type Narration = Readonly<{ tokens: number; approximate: boolean; startedAtMs: number }>;
+/** A silent wait of the turn (TL-A D1): the model preparing its answer (measurement, prompt processing) or the service summarizing. */
+export type WaitingView = Readonly<{ kind: 'model' | 'compaction'; sinceMs: number }>;
+/** Raw reasoning kept for the preview (TL-A D6); it is sanitized only when shown, so a sequence split across deltas is still removed. */
+export const REASONING_PREVIEW_CHARS = 2_048;
+/** Lines of the reasoning preview under the narration. */
+export const REASONING_PREVIEW_LINES = 2;
 
 type Usage = Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>;
 export type AssistantStreamState = Readonly<{
@@ -59,6 +68,11 @@ export type AssistantStreamState = Readonly<{
   activeTool: ActiveTool | null;
   /** The latest round's measured prompt against the window (T-L5). */
   context: ContextView | null;
+  /** What a `waiting` phase waits for, and since when (TL-A D1). */
+  waitingFor: WaitingView['kind'];
+  waitingSinceMs: number;
+  /** The current round's reasoning tail, unsanitized and bounded (TL-A D6). */
+  reasoningTail: string;
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -69,6 +83,10 @@ export type AssistantStreamStep = Readonly<{
   footer: FooterUnit | null;
   /** The tool call running now, for the live region; null otherwise. */
   activeTool: ActiveTool | null;
+  /** The silent wait shown in the live region, when nothing else is running (TL-A D1). */
+  waiting: WaitingView | null;
+  /** Last lines of the reasoning while it streams, sanitized; empty once the answer or a tool call starts (TL-A D6). */
+  reasoningPreview: readonly string[];
 }>;
 
 /** Roughly four characters per token until the provider reports reasoning usage. */
@@ -76,7 +94,27 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 
 export function startAssistantStream(nowMs: number): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
-    earlierCompletionTokens: 0, activeTool: null, context: null });
+    earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '' });
+}
+
+/** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
+export function openAssistantStream(nowMs: number): AssistantStreamStep {
+  return step(startAssistantStream(nowMs), []);
+}
+
+/** The last non-empty lines of reasoning text, sanitized like any untrusted output (TL-A D6). */
+export function reasoningPreviewLines(raw: string, lines = REASONING_PREVIEW_LINES): string[] {
+  return terminalSafeText(raw).split('\n').map(line => line.replace(/\s+/gu, ' ').trim()).filter(line => line.length > 0).slice(-lines);
+}
+
+function waitingOf(state: AssistantStreamState): WaitingView | null {
+  return state.phase === 'waiting' && state.activeTool === null ? Object.freeze({ kind: state.waitingFor, sinceMs: state.waitingSinceMs }) : null;
+}
+
+/** The part of the turn running now (TL-A D5): a tool call, a summary still being written, or else the model. */
+function stageOf(state: AssistantStreamState): TurnStage {
+  if (state.activeTool) return 'tool';
+  return state.phase === 'waiting' && state.waitingFor === 'compaction' ? 'compaction' : 'model';
 }
 
 function reasoningSummary(state: AssistantStreamState, nowMs: number): ReasoningUnit {
@@ -97,7 +135,8 @@ export function narrationOf(state: AssistantStreamState): Narration | null {
 
 function step(state: AssistantStreamState, staticUnits: readonly AssistantUnit[], footer: FooterUnit | null = null): AssistantStreamStep {
   return Object.freeze({ state, staticUnits: Object.freeze([...staticUnits]), liveTail: segmenterTail(state.segmenter), narration: narrationOf(state), footer,
-    activeTool: state.activeTool });
+    activeTool: state.activeTool, waiting: waitingOf(state),
+    reasoningPreview: Object.freeze(state.phase === 'reasoning' ? reasoningPreviewLines(state.reasoningTail) : []) });
 }
 
 /** A tool call's display target comes from the model's arguments (a path, pattern or command line): shown sanitized, on one line. */
@@ -112,9 +151,14 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     return step(Object.freeze({ ...state, activeTool: Object.freeze({ ...active, output }) }), []);
   }
   if (delta.kind === 'message' || delta.kind === 'approval') return step(state, []);
-  if (delta.kind === 'compacted') return step(state, [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
+  // The summary landed: the round is prepared again, counted from now.
+  if (delta.kind === 'compacted') {
+    return step(Object.freeze({ ...state, waitingFor: 'model' as const, waitingSinceMs: nowMs }), [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
+  }
   if (delta.kind === 'context') {
-    return step(Object.freeze({ ...state, context: Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality }) }), []);
+    const view = Object.freeze({ promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality });
+    // A measurement after which the service summarizes starts that wait; a plain one is part of preparing the round.
+    return step(Object.freeze({ ...state, context: view, ...(delta.compacting ? { waitingFor: 'compaction' as const, waitingSinceMs: nowMs } : {}) }), []);
   }
   if (delta.kind === 'usage') {
     // Each round reports its own usage: the prompt is the latest context, completions add up over the turn.
@@ -127,7 +171,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const pending = state.phase === 'reasoning' ? [reasoningSummary(state, nowMs)] : [];
     const flushed = flushSegmenter(state.segmenter);
     const text = answerUnits(flushed.segments, state.answered);
-    const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, answered: state.answered || text.length > 0 };
+    const base = { ...state, phase: 'waiting' as const, segmenter: flushed.state, reasoningChars: 0, reasoningStartedAtMs: null, reasoningTail: '',
+      answered: state.answered || text.length > 0, waitingFor: 'model' as const, waitingSinceMs: nowMs };
     if (delta.phase === 'started') {
       return step(Object.freeze({ ...base, activeTool: Object.freeze({ callId: delta.callId, name: delta.name, target: safeTarget(delta.target), startedAtMs: nowMs, output: '' }) }),
         [...pending, ...text]);
@@ -138,7 +183,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };
-    return step(Object.freeze({ ...state, ...reasoning, reasoningChars: state.reasoningChars + delta.text.length }), []);
+    return step(Object.freeze({ ...state, ...reasoning, reasoningChars: state.reasoningChars + delta.text.length,
+      reasoningTail: `${state.reasoningTail}${delta.text}`.slice(-REASONING_PREVIEW_CHARS) }), []);
   }
   const summary = state.phase === 'reasoning' ? [reasoningSummary(state, nowMs)] : [];
   if (delta.kind === 'text') {
@@ -151,7 +197,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
   const usage = state.usage;
   const footer: FooterUnit = Object.freeze({ kind: 'footer', elapsedMs: Math.max(0, nowMs - state.startedAtMs), promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage ? state.earlierCompletionTokens + usage.completionTokens : null, reasoningTokens: usage?.reasoningTokens ?? null, finish: delta.finish,
-    ...(delta.note ? { note: delta.note } : {}), ...(state.context ? { context: state.context } : {}) });
+    ...(delta.note ? { note: delta.note } : {}), ...(state.context ? { context: state.context } : {}),
+    ...(delta.finish === 'cancelled' ? { cancelledDuring: stageOf(state) } : {}) });
   const done = Object.freeze({ ...state, phase: 'done' as const, segmenter: flushed.state, answered: true, activeTool: null });
   return step(done, [...summary, ...answerUnits(flushed.segments, state.answered)], footer);
 }

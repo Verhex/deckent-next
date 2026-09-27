@@ -5,6 +5,7 @@ import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/ind
 import { readTerminalChatConfig, registerProviderConfig } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength } from './extract-text.js';
+import { terminalTurnAdmission, type TerminalTurnAdmission } from './turn-phase.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 
@@ -91,9 +92,14 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
   return text;
 }
 
-/** The same configuration check the plain turn makes, before an agent turn contacts the service. */
-export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}): Promise<void> {
+/**
+ * The same configuration check the plain turn makes, before an agent turn contacts the service; returns the service's admission from
+ * that configuration, so the stream can name the summarizing phase (TL-A).
+ */
+export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalTurnAdmission> {
   const plan = await describeTerminalChat(projectRoot, options);
   if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   if (plan.status === 'model-not-declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  const config = await loadConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
+  return terminalTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes);
 }

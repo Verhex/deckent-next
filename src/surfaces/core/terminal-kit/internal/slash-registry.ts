@@ -23,6 +23,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'resume', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
   { name: 'new', descriptionKey: 'terminal.slash.new' },
   { name: 'mode', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
+  // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
+  { name: 'reasoning', descriptionKey: 'terminal.slash.reasoning' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },

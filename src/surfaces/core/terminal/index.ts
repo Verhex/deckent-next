@@ -1,4 +1,5 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
+export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
 export { runModeCommand, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary } from './internal/workline-sessions.js';
