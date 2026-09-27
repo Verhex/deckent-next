@@ -82,6 +82,20 @@ it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, 
   } finally { store.close(); }
 });
 
+it('refuses to upgrade over a foreign same-name audit table of another shape: typed error after the v40 backup, ledger stays at v40', async () => {
+  const { path, backups } = await ledger('dn-audit-foreign-');
+  const db = new DatabaseSync(path);
+  db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE audit_events(id INTEGER PRIMARY KEY, payload TEXT);`);
+  db.close();
+  await expect(upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T12:00:00.000Z'))).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+  expect(version(path)).toBe(40);
+  expect(version(join(backups, 'ledger-v40-2026-09-27T12-00-00-000Z.db'))).toBe(40); // the consistent copy precedes the failed migration
+  expect(rows(path, "SELECT name FROM sqlite_schema WHERE type='trigger' AND tbl_name='audit_events'")).toEqual([]);
+  // The migration transaction rolled back, so a plain open still refuses (forbid) and the foreign table is untouched.
+  expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+  expect(rows(path, "SELECT name FROM pragma_table_info('audit_events') ORDER BY cid").map(row => row.name)).toEqual(['id', 'payload']);
+});
+
 it('refuses a ledger newer than this build (an older build meets v41 the same way) on writer opens and the read-only registry lookup', async () => {
   const { path } = await ledger('dn-audit-newer-');
   const db = new DatabaseSync(path); db.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1};`); db.close();
