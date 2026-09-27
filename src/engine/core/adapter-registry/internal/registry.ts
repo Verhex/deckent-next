@@ -12,6 +12,10 @@ export interface AdapterModuleRegistration { readonly manifest: AdapterModuleMan
 export interface ResolvedTargetAdapter { readonly manifest: AdapterModuleManifest; readonly adapterId: string; readonly version: number; readonly factory: TargetAdapterFactory }
 export interface ConfiguredTarget { readonly adapter: string; readonly options?: unknown }
 
+const snapshot = (factory: TargetAdapterFactory): TargetAdapterFactory => {
+  const { optionsSchema, create } = factory;
+  return Object.freeze({ optionsSchema, create: (options: unknown) => create.call(factory, options) });
+};
 /** Versioned registry of target adapter modules. Modules passed to `create` are Core entries (root namespace); everything
  * registered afterwards is an overlay admitted by the manifest rules. `seal()` closes registration once a configuration was
  * validated against it, so a validated config never changes meaning afterwards. Registration never grants authority: policy
@@ -44,6 +48,9 @@ export class AdapterRegistry {
     }
     return { resolve: kind => targets.get(kind) ?? null };
   }
+  /** Admission keeps registry-owned state only: the manifest is the validated (deep-frozen) parse, never the registrant's object, and
+   * each factory is a frozen snapshot of its `optionsSchema` and `create` taken now, so reassigning the registrant's fields after
+   * sealing cannot change what a validated config resolves to (Astra 2126 R2). State closed over by `create` is not sandboxed here. */
   private admit(registration: AdapterModuleRegistration, root: boolean) {
     const manifest = admitModuleManifest(this.modules.map(module => module.manifest), registration.manifest, root);
     const declared = manifest.provides.targetAdapters.map(adapter => adapter.adapterId);
@@ -51,9 +58,10 @@ export class AdapterRegistry {
     if (declared.length !== provided.length || declared.some(id => typeof registration.factories[id]?.create !== 'function' || !registration.factories[id]?.optionsSchema)) {
       throw new RegistryError('REGISTRY_FACTORY_MISMATCH');
     }
-    this.modules.push(Object.freeze({ manifest, factories: Object.freeze({ ...registration.factories }) }));
+    const factories = Object.freeze(Object.fromEntries(declared.map(id => [id, snapshot(registration.factories[id]!)])));
+    this.modules.push(Object.freeze({ manifest, factories }));
     for (const adapter of manifest.provides.targetAdapters) {
-      this.adapters.set(adapter.adapterId, Object.freeze({ manifest, adapterId: adapter.adapterId, version: adapter.version, factory: registration.factories[adapter.adapterId]! }));
+      this.adapters.set(adapter.adapterId, Object.freeze({ manifest, adapterId: adapter.adapterId, version: adapter.version, factory: factories[adapter.adapterId]! }));
     }
   }
 }

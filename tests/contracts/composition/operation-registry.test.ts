@@ -111,3 +111,26 @@ it('keeps the adds-only rule and duplicate id@version as distinct checks that fi
     operations: [descriptor('test.post', 'memo') as never] } })))).toThrow(expect.objectContaining({ code: 'REGISTRY_NAMESPACE_SHADOWED' }));
   expect(adapterModuleManifestSchema.safeParse({ ...manifest(), schemaVersion: 2 }).success).toBe(false);
 });
+
+it('holds immutable snapshots once sealed: mutating a registrant factory or a returned manifest changes neither resolution nor the declared adapters (Astra 2126 R2)', () => {
+  const identity = (label: string): EffectTarget => ({ kind: 'record', identity: () => label, observe: async () => ({ version: null }), apply: async () => ({ version: null }), lookup: async () => null });
+  const factory = { optionsSchema, create: () => identity('original') };
+  const registry = AdapterRegistry.create([{ manifest: manifest({ id: 'core.records', tier: 'core', namespace: null }, { provides: { targetAdapters: [{ adapterId: 'records', version: 1 }], operations: [] } }), factories: { records: factory } }]);
+  const config = [{ adapter: 'records', options: { kind: 'record' } }];
+  registry.seal();
+  expect(registry.targets(config).resolve('record')?.identity()).toBe('original');
+  factory.create = () => identity('replacement'); factory.optionsSchema = z.object({ kind: z.string(), extra: z.string() }).strict() as never;
+  expect(registry.targets(config).resolve('record')?.identity()).toBe('original');
+  const view = registry.adapter('records')!;
+  expect(() => (view as { factory: { create: unknown } }).factory.create = () => identity('again')).toThrow();
+  expect(() => (view.manifest.provides.targetAdapters as unknown[]).splice(0)).toThrow();
+  expect(() => (view.manifest.provides.operations as unknown[]).push({})).toThrow();
+  expect(() => ((view.manifest.module as { namespace: string | null }).namespace = 'x')).toThrow();
+  expect(registry.manifests()[0]?.provides.targetAdapters).toHaveLength(1);
+  expect(registry.adapter('records')?.factory.create({ kind: 'record' }).identity()).toBe('original');
+  // The registrant's own manifest object stays theirs; the registry keeps its own validated copy.
+  const own = manifest({ id: 'own.m', namespace: 'own' }, { provides: { targetAdapters: [{ adapterId: 'own.a', version: 1 }], operations: [] } });
+  const open = AdapterRegistry.create([]); open.register({ manifest: own, factories: { 'own.a': factory } });
+  (own.provides.targetAdapters as { adapterId: string }[]).push({ adapterId: 'own.b', version: 1 } as never);
+  expect(open.manifests()[0]?.provides.targetAdapters.map(a => a.adapterId)).toEqual(['own.a']);
+});
