@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRun } from '../../../src/index.js';
+import { createRun, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
@@ -13,7 +13,7 @@ import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(exitCode: number, acceptedExitCodes = [0]) {
+async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'private output') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-evaluation-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const configPath = join(project, '.deckent/config.json'); const registry = fixtureDockerRegistry(['purchase']);
@@ -25,7 +25,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0]) {
   const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
-    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } }] : []),
+    ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } }] : []),
   ] }), { mode: 0o600 });
   await policy(true);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'purchase', dependencies: [], acceptanceCriteria: ['exit'] }],
@@ -39,7 +39,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0]) {
   const request = { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] }; const claim = { owner: 'fixture-worker', request };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   const artifactRoot = await prepareProductDirectory(opened.layout, 'artifacts'); const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 65536 });
-  const envelope = { schemaVersion: 1, identity, completeness: 'complete', stdout: 'private output', stderr: '' };
+  const envelope = { schemaVersion: 1, identity, completeness: 'complete', stdout, stderr: '' };
   const receipt = await artifacts.put('s', Buffer.from(JSON.stringify(envelope))); await store.retainDispatchOutput(claim, receipt);
   await store.finishDispatch(claim, { handle: 'fixture-handle', exitCode, interrupted: false }); store.close();
   const command = { schemaVersion: 1 as const, commandId: 'evaluation', identity, expectedRevision: 2 };
@@ -72,4 +72,17 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
     expect(await evaluateConfiguredTask(f.project, f.command, f.options)).toEqual(first);
     await f.policy(false); await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
+});
+
+
+it('shows a sealed final report through configured custody while task acceptance still rejects a failed process', async () => {
+  const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1,
+    summary: 'All done according to the worker', changedFiles: ['note.txt'], checks: [{ command: 'npm test', outcome: 'passed' }], openIssues: [] } };
+  const f = await fixture(7, [0], JSON.stringify(report) + '\n');
+  const transcript = await inspectConfiguredWorkerTranscript(f.project, f.command.identity, f.options);
+  expect(transcript).toMatchObject({ schemaVersion: 2, finalReport: report });
+  const result = await evaluateConfiguredTask(f.project, f.command, f.options);
+  expect(result.evaluation.run.tasks[0]!.phase).toBe('failed');
+  await f.policy(false);
+  await expect(inspectConfiguredWorkerTranscript(f.project, f.command.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });

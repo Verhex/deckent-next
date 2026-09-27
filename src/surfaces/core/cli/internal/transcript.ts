@@ -1,7 +1,7 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase } from '#domain/index.js';
+import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult } from '#domain/index.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
-  schemaVersion: 1; identity: AttemptIdentity; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
+  schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
   summary: WorkerEventSummary | null; events: readonly WorkerEvent[] }>>;
 const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
@@ -15,7 +15,8 @@ export function phaseLabel(phase: WorkerPhase, locale: Locale) {
 const TOOL_PHASE: Record<string, WorkerPhase> = { read: 'reading', edit: 'editing', write: 'editing', shell: 'running', search: 'searching', network: 'fetching', agent: 'delegating', other: 'running' };
 /** Human-readable transcript: header, usage and a step timeline. Worker-reported evidence, not acceptance. */
 export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscriptHandler>>, locale: Locale): string {
-  if (!data.sealed || !data.summary) return t('cli.task.transcript.none', {}, locale);
+  if (!data.sealed || !data.summary) return [t('cli.task.transcript.none', {}, locale),
+    ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), JSON.stringify(data.finalReport, null, 2)] : [])].join('\n');
   const s = data.summary;
   const lines = [
     t('cli.task.transcript.header', { provider: s.provider ?? '—', model: s.model ?? '—', turns: s.turns ?? '—', seconds: seconds(s.durationMs),
@@ -37,5 +38,6 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
   }
   if (data.sealed?.projection === 'partial') lines.push(t('cli.task.transcript.projectionPartial', {}, locale));
   lines.push(t('cli.task.transcript.notice', {}, locale));
+  if (data.finalReport) lines.push(JSON.stringify(data.finalReport, null, 2));
   return lines.join('\n');
 }
