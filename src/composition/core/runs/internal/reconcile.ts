@@ -13,7 +13,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function reconcileConfiguredAttempt(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     const actor = await authenticate(verifier, undefined, identity.scopeId);

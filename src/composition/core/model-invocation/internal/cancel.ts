@@ -13,7 +13,7 @@ export async function cancelPeerConfiguredModelInvocation(projectRoot: string, i
     const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);
     if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
     const command = parsed.data;
-    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer), clock = new SystemTrustedClock();
+    const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write'), clock = new SystemTrustedClock();
     return await new ModelInvocationCancellationApplication({ async verify() { return context.principal; } },
       new ModelInvocationPolicyAuthorization(context.policy),
       async () => openSqliteModelInvocationStore(await context.path(), context.config.storage.sqlite, 'forbid'),

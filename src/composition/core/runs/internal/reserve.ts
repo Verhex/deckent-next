@@ -11,7 +11,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function reserveConfiguredRunTasks(projectRoot: string, input: RunReservationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = runReservationCommandSchema.parse(input);
-    const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, layout, principal, path, document } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } };
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const pinnedSource = { load: async () => assertApprovalPolicyCurrent(document, await source.load()) };

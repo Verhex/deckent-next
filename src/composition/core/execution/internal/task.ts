@@ -15,7 +15,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));

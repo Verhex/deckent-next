@@ -14,7 +14,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 export async function recoverConfiguredCancellations(projectRoot: string, input: CancellationRecoveryCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = cancellationRecoveryCommandSchema.parse(input);
-    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } };
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const scope = new DispatchInventoryPolicyAuthorization(source);

@@ -11,7 +11,7 @@ import { createRecordedCancellationDelivery } from './cancellation-runtime.js';
 export async function deliverConfiguredRunCancellation(projectRoot: string, input: RunCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = runCommandSchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } }; const authorization = new RunPolicyAuthorization({ async load() { return document; } });
     const actor = await authenticate(verifier, undefined, command.scopeId);
     await authorization.authorize('cancel', command, actor);

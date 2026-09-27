@@ -6,16 +6,16 @@ import { PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
 /** One fresh local config/identity/policy snapshot per request. The only ledger access here is the scope registry, after a trusted
- * grant exists (H34 S1: fail-closed membership): a lookup, plus — for `write` access (the default) — the insert-only pin of a
- * declared scope at its first admission. Read-only callers pass `read`. The caller's application still authenticates/authorizes
- * before invoking the deferred ledger locator.
+ * grant exists (H34 S1: fail-closed membership): a lookup, plus — for `write` access only — the insert-only pin of a
+ * declared scope at its first admission. Every caller states its mode; queries pass `read` and never write (Astra 2126 R1).
+ * The caller's application still authenticates/authorizes before invoking the deferred ledger locator.
  */
-export async function loadConfiguredScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess = 'write') {
+export async function loadConfiguredScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) {
   return loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity(), access);
 }
 /** Runtime peer verification precedes config/policy access. Scope membership still belongs to current policy. */
 export async function loadConfiguredPeerScopeContext(projectRoot: string, scopeId: string,
-  options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess = 'write') {
+  options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) {
   return loadScopeContext(projectRoot, scopeId, options, verifyLocalPeerIdentity(peer), access);
 }
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions,

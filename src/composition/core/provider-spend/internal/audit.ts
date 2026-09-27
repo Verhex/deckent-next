@@ -10,12 +10,12 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 
 export async function auditConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAuditCommand,
   maxResultBytes: number, options: ConfigLoadOptions = {}) {
-  return audit(input, maxResultBytes, scopeId => loadConfiguredScopeContext(projectRoot, scopeId, options));
+  return audit(input, maxResultBytes, scopeId => loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'));
 }
 /** Explicit runtime command, authenticated by the kernel peer; no provider call or financial correction. */
 export async function auditPeerConfiguredProviderSpendAccount(projectRoot: string, input: ProviderSpendAuditCommand,
   peer: LocalPeerIdentity, maxResultBytes: number, options: ConfigLoadOptions = {}) {
-  return audit(input, maxResultBytes, scopeId => loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer));
+  return audit(input, maxResultBytes, scopeId => loadConfiguredPeerScopeContext(projectRoot, scopeId, options, peer, 'write'));
 }
 async function audit(input: ProviderSpendAuditCommand, maxResultBytes: number,
   loadContext: (scopeId: string) => ReturnType<typeof loadConfiguredScopeContext>) {

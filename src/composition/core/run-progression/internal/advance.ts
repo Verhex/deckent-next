@@ -16,10 +16,10 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
   options: ConfigLoadOptions = {}, admitExecution: (work: () => Promise<void>) => Promise<void> = work => work(), maxReservations?: number) {
   try {
     const query = runQuerySchema.parse(input);
-    const initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options);
+    const initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write');
     const turn = new RunProgressionTurn({
       async read(request) {
-        const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options);
+        const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
         const verifier = { async verify() { return principal; } };
         const authorization = new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
         await authorization.authorize('inspect', request, await authenticate(verifier, undefined, request.scopeId));
@@ -50,7 +50,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
         }
       },
       async evaluationRecorded(identity, revision) {
-        const { config, principal, layout, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options);
+        const { config, principal, layout, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
         const authorization = new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
         await authorization.authorize('inspect', query, await authenticate({ async verify() { return principal; } }, undefined, identity.scopeId));
         const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');

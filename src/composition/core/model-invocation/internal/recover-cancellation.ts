@@ -11,7 +11,7 @@ export async function recoverConfiguredModelCancellations(projectRoot: string, i
   controllers: ModelInvocationControllers, expectedLayoutIdentity: string, options: ConfigLoadOptions = {}) {
   try {
     const command = modelInvocationCancellationRecoveryCommandSchema.parse(input);
-    const context = await loadInvocationContext(projectRoot, command.scopeId, options);
+    const context = await loadInvocationContext(projectRoot, command.scopeId, options, 'write');
     const config = context.config;
     if (!config.cancellationRuntime?.scopeIds.includes(command.scopeId) || !config.cancellation
       || JSON.stringify(config.productLayout) !== expectedLayoutIdentity) {

@@ -8,7 +8,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try {
     const command = runAdmissionSchema.parse(input);
-    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options);
+    const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const store = {
       async loadRunReceipt(scopeId: string, commandId: string) {
         const reader = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });

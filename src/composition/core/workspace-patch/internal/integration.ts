@@ -15,7 +15,7 @@ async function application(root: string, c: Awaited<ReturnType<typeof workspaceP
 }
 export async function checkConfiguredWorkspaceIntegration(root: string, identity: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
-    const c = await workspacePatchContext(root, identity, options, false);
+    const c = await workspacePatchContext(root, identity, options, false, 'read');
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
     try { return await (await application(root, c, store)).check(identity); } finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
@@ -23,7 +23,7 @@ export async function checkConfiguredWorkspaceIntegration(root: string, identity
 export async function prepareConfiguredWorkspaceIntegration(root: string, input: IntegrationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = integrationCommandSchema.parse(input);
-    const c = await workspacePatchContext(root, command.identity, options, false);
+    const c = await workspacePatchContext(root, command.identity, options, false, 'write');
     await c.authorization.authorizeIdentity('prepare-integration', command.identity, c.principal);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try { return await (await application(root, c, store)).prepare(command, store); } finally { store.close(); }
@@ -33,7 +33,7 @@ export async function prepareConfiguredWorkspaceIntegration(root: string, input:
 export async function inspectConfiguredWorkspaceIntegration(root: string, input: IntegrationQuery, options: ConfigLoadOptions = {}) {
   try {
     const query = integrationQuerySchema.parse(input);
-    const c = await workspacePatchContext(root, query.identity, options, false);
+    const c = await workspacePatchContext(root, query.identity, options, false, 'read');
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
     try { return await new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).inspect(query); }
     finally { store.close(); }

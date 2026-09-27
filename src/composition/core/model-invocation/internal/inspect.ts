@@ -6,12 +6,12 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 
 export async function inspectConfiguredModelInvocation(projectRoot: string, input: ModelInvocationQuery, options: ConfigLoadOptions = {}) {
-  return inspect(input, scopeId => loadInvocationContext(projectRoot, scopeId, options));
+  return inspect(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'read'));
 }
 /** Internal runtime wiring only; actual socket peer evidence is supplied out of band. */
 export async function inspectPeerConfiguredModelInvocation(projectRoot: string, input: ModelInvocationQuery,
   peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery) {
-  return inspect(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer), delivery);
+  return inspect(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'read'), delivery);
 }
 async function inspect(input: ModelInvocationQuery, loadContext: (scopeId: string) => ReturnType<typeof loadInvocationContext>,
   delivery?: ModelInvocationDelivery) {
