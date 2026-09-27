@@ -73,27 +73,77 @@ export interface MentionToken {
   readonly query: string;
 }
 
-/** `@path` under the caret: the `@` starts a word (emails and `@@` never match) and the caret is inside that word. */
-export function mentionAt(text: string, cursor: number): MentionToken | null {
-  for (let index = cursor - 1; index >= 0; index--) {
-    const char = text[index]!;
-    if (char === '@') {
-      if ((index > 0 && !/\s/u.test(text[index - 1]!)) || text[index + 1] === '@') return null;
-      return { start: index, query: text.slice(index + 1, cursor) };
-    }
-    if (/\s/u.test(char)) return null;
+/**
+ * One mention in draft text. Syntax (Astra 2134 R3): an `@` at the start of the text or after whitespace, not followed by another
+ * `@` (`@@` and emails never match). `@"path"` runs to the closing quote and keeps every character in between; `\"` and `\\` are
+ * its only escapes. A bare `@path` runs to whitespace and drops trailing sentence punctuation. An unclosed `@"` is read as a bare
+ * mention (`open` marks it) and never swallows the mentions after it.
+ */
+interface MentionSpan {
+  readonly start: number;
+  /** End of the written token: after the closing quote, or after the bare word. */
+  readonly end: number;
+  readonly path: string;
+  readonly quoted: boolean;
+  /** An unclosed `@"`: while typing, everything after the quote up to the caret is the query. */
+  readonly open: boolean;
+}
+
+const QUOTED = /@"((?:[^"\\]|\\[\s\S])*)"/uy;
+const BARE = /@(\S*)/uy;
+const SENTENCE_END = /[.,;:!?)\]}'"`]+$/u;
+const unquote = (body: string) => body.replace(/\\(["\\])/gu, '$1');
+
+function scanMentions(text: string): MentionSpan[] {
+  const spans: MentionSpan[] = [];
+  for (let index = text.indexOf('@'); index >= 0; index = text.indexOf('@', Math.max(index + 1, spans.at(-1)?.end ?? 0))) {
+    if ((index > 0 && !/\s/u.test(text[index - 1]!)) || text[index + 1] === '@') continue;
+    QUOTED.lastIndex = index;
+    const quoted = text[index + 1] === '"' ? QUOTED.exec(text) : null;
+    if (quoted) { spans.push({ start: index, end: index + quoted[0].length, path: unquote(quoted[1]!), quoted: true, open: false }); continue; }
+    BARE.lastIndex = index;
+    const word = BARE.exec(text)![1]!;
+    spans.push({ start: index, end: index + 1 + word.length, path: word.replace(SENTENCE_END, ''), quoted: false, open: text[index + 1] === '"' });
   }
-  return null;
+  return spans;
+}
+
+/** The mention under the caret: the latest one whose written token (or unclosed quote) holds the caret. */
+export function mentionAt(text: string, cursor: number): MentionToken | null {
+  let found: MentionSpan | null = null;
+  for (const span of scanMentions(text)) {
+    if (span.start >= cursor) break;
+    const inside = span.quoted ? cursor >= span.start + 2 && cursor < span.end : span.open ? cursor >= span.start + 2 : cursor <= span.end;
+    if (inside) found = span;
+  }
+  if (!found) return null;
+  return { start: found.start, query: found.quoted || found.open ? unquote(text.slice(found.start + 2, cursor)) : text.slice(found.start + 1, cursor) };
+}
+
+/** End of the closed `@"..."` that holds the caret, if any: a completion there replaces the whole quoted token. */
+export function quotedMentionEnd(text: string, cursor: number): number | null {
+  const span = scanMentions(text).find(item => item.quoted && item.start + 2 <= cursor && cursor < item.end);
+  return span ? span.end : null;
+}
+
+/** How the picker writes a path: bare when the bare form reads back as exactly this path, otherwise quoted with `"` and `\` escaped. */
+export function mentionText(path: string): string {
+  const bare = `@${path}`;
+  const spans = path.startsWith('"') ? [] : scanMentions(bare);
+  return spans.length === 1 && spans[0]!.path === path && spans[0]!.end === bare.length ? bare : `@"${path.replace(/["\\]/gu, '\\$&')}"`;
 }
 
 /**
- * The `@path` mentions of a submitted draft, in order and without repeats. Chip spans are blanked first: an `@name` inside pasted
- * content is text, not a request to attach a file. Trailing sentence punctuation is not part of a path.
+ * The `@path` mentions of a submitted draft, in order and without repeats. Chip spans are blanked first and a quoted mention that
+ * reaches into a chip is dropped: an `@name` inside pasted content is text, not a request to attach a file.
  */
 export function mentionPaths(text: string, pastes: readonly PasteChip[] = []): readonly string[] {
+  const chips = chipSpans(text, pastes);
   let visible = text;
-  for (const span of chipSpans(text, pastes).reverse()) visible = visible.slice(0, span.start) + ' '.repeat(span.end - span.start) + visible.slice(span.end);
-  const paths = [...visible.matchAll(/(?:^|\s)@([^\s@]\S*)/gu)].map(match => match[1]!.replace(/[.,;:!?)\]}'"`]+$/u, '')).filter(path => path.length > 0);
+  for (const span of [...chips].reverse()) visible = visible.slice(0, span.start) + ' '.repeat(span.end - span.start) + visible.slice(span.end);
+  const paths = scanMentions(visible)
+    .filter(span => span.path.length > 0 && !chips.some(chip => span.start < chip.end && chip.start < span.end))
+    .map(span => span.path);
   return [...new Set(paths)];
 }
 
