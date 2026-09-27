@@ -7,7 +7,7 @@ export type { TaskReadiness } from './internal/readiness.js';
 export { criterionDefinitionSchema } from './internal/criteria.js';
 export type { CriterionDefinition } from './internal/criteria.js';
 export { CRITERION_TEXT_LIMITS } from './internal/criteria.js';
-export { CRITERION_ENCODING_VERSION, encodeCriterionDefinition } from './internal/criterion-encoding.js';
+export { CRITERION_ENCODING_VERSION, encodeCriterionDefinition, encodeDeckentJson } from './internal/criterion-encoding.js';
 
 export { branchInputSchema, branchDecisionSchema, resolveAdmissionBranch, assertAdmissionBranch } from './internal/branch.js';
 export type { BranchDecision } from './internal/branch.js';

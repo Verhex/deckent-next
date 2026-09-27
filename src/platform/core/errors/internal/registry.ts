@@ -169,6 +169,12 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   ADOPTION_TARGET_MOVED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_MOVED', p, l) }) },
   ADOPTION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_CONFLICT', p, l) }) },
   ADOPTION_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_CORRUPT', p, l) }) },
+  // B06-2b: text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
+  ADOPTION_VERIFICATION_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_FAILED' }, l) }) },
+  ADOPTION_VERIFICATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_PENDING' }, l) }) },
+  ADOPTION_VERIFICATION_UNSETTLED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_UNSETTLED' }, l) }) },
+  ADOPTION_VERIFICATION_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_CANCELLED' }, l) }) },
+  ADOPTION_VERIFICATION_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_MISMATCH' }, l) }) },
   PATCH_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSUPPORTED', p, l) }) },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_LIMIT', p, l) }) },
   PATCH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSAFE', p, l) }) },

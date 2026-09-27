@@ -1,16 +1,19 @@
 /**
- * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v40: the v41
- * audit tables and their append-only triggers removed); `DOWNGRADE_TO_V39_LEDGER_SQL` also reverses the v40 approvals rebuild to the
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v41: v42 changed
+ * only the adoption record contract, so the version alone goes back — exact for a ledger without v2 adoption records, which a test
+ * writes in the v1 form itself); `DOWNGRADE_TO_V40_LEDGER_SQL` also removes the v41 audit tables and their append-only triggers;
+ * `DOWNGRADE_TO_V39_LEDGER_SQL` also reverses the v40 approvals rebuild to the
  * two-value subject CHECK (an operation approval row makes it fail, as it must); `DOWNGRADE_TO_V38_LEDGER_SQL` also removes the v39
  * scope registry and companies tables; `DOWNGRADE_TO_V37_LEDGER_SQL` also rebuilds the v38 operation-keyed approvals table back to
  * task-only columns (a tool-call approval row makes it fail); `DOWNGRADE_TO_V36_LEDGER_SQL` also removes the v37 agent turn tables;
  * `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL again, the
  * checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 40;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `DROP TRIGGER audit_events_no_update; DROP TRIGGER audit_events_no_delete;
+export const PREVIOUS_LEDGER_VERSION = 41;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = 'PRAGMA user_version=41;';
+export const DOWNGRADE_TO_V40_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TRIGGER audit_events_no_update; DROP TRIGGER audit_events_no_delete;
   DROP TABLE audit_counters; DROP TABLE audit_events; PRAGMA user_version=40;`;
-export const DOWNGRADE_TO_V39_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE approvals_v39(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call')),
+export const DOWNGRADE_TO_V39_LEDGER_SQL = `${DOWNGRADE_TO_V40_LEDGER_SQL} CREATE TABLE approvals_v39(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call')),
     run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
   INSERT INTO approvals_v39 SELECT scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current FROM approvals;

@@ -29,7 +29,7 @@ async function delivered() {
     expect(result.evaluation.run.tasks[0]!.phase).toBe('accepted');
   };
   const adopt = (commandId: string, extra: Record<string, unknown> = {}) => adoptConfiguredWorkspaceIntegration(f.project,
-    { schemaVersion: 1, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target, ...extra } as never, f.options);
+    { schemaVersion: 2, commandId, identity: f.identity, deliveryCommandId: 'delivery', targetRef: target, ...extra } as never, f.options);
   const rollback = (commandId: string, adoptionCommandId: string) => rollbackConfiguredWorkspaceIntegration(f.project,
     { schemaVersion: 1, commandId, identity: f.identity, adoptionCommandId }, f.options);
   const tip = () => f.git('rev-parse', target);
@@ -48,8 +48,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const [sdk, cli] = await Promise.all([f.adopt('adopt'), f.cli('integration-adopt',
       ['--command-id', 'adopt', '--delivery-command-id', 'delivery', '--target', target]) as unknown as ReturnType<typeof f.adopt>]);
     expect(cli).toEqual(sdk);
-    expect(sdk).toMatchObject({ status: 'adopted', targetRef: target, fromCommit: f.base, toCommit: f.plan.commit, sequence: 1,
-      basis: 'task-acceptance', verification: 'not-verified', application: 'branch-reference' });
+    expect(sdk).toMatchObject({ schemaVersion: 2, status: 'adopted', targetRef: target, fromCommit: f.base, toCommit: f.plan.commit, sequence: 1,
+      basis: 'task-acceptance', verification: { status: 'not-verified' }, application: 'branch-reference' });
     expect(await f.tip()).toBe(f.plan.commit);
     expect(await f.git('rev-parse', 'HEAD')).toBe(head); expect(await readFile(join(f.project, '.git/index'))).toEqual(index);
     expect(await f.git('--no-optional-locks', 'status', '--porcelain')).toBe(status); expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('before\n');

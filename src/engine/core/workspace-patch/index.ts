@@ -13,3 +13,5 @@ export { pinRunToDelivery } from './internal/delivery-run.js';
 export type { DeliveryRunPinRequest } from './internal/delivery-run.js';
 export { WorkspaceAdoptionApplication, WorkspaceAdoptionError, requireDelivered, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, integrationAdoptionIntentSchema, adoptionTargetRefSchema } from './internal/adoption.js';
 export type { IntegrationAdoptionCommand, IntegrationRollbackCommand, IntegrationAdoptionIntent, IntegrationAdoptionRecord, IntegrationAdoptionStore, IntegrationAdoptionTarget, AdoptionTargetObservation, AdoptionFence, WorkspaceAdoptionErrorCode } from './internal/adoption.js';
+export { adoptionVerificationSchema, adoptionVerificationPhaseOutcome, executionProfileFingerprint, verifyDeliveredCommit } from './internal/verification.js';
+export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerificationStore, AdoptionVerificationRequest } from './internal/verification.js';

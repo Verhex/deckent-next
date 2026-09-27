@@ -1,12 +1,13 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { GitIntegrationAdoption, GitIntegrationDelivery, LocalOsSessionAuthority, openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
+import { GitIntegrationAdoption, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore,
+  validateDockerSupervisorProfile } from '#adapters/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema,
+import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema,
   type IntegrationAdoptionCommand, type IntegrationRollbackCommand } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
-/** Local SDK/CLI producer; target allow-list, paths, principal, session and Git options never come from the wire. */
+/** Local SDK/CLI producer; target allow-list, paths, principal, session, Git options and the verification registry never come from the wire. */
 async function withAdoption<T>(root: string, identity: AttemptIdentity, options: ConfigLoadOptions, action: 'adopt-integration' | 'rollback-integration',
   use: (application: WorkspaceAdoptionApplication) => Promise<T>): Promise<T> {
   try {
@@ -18,8 +19,11 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try {
+      const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),
-        c.config.execution.adoption.targets, sessions, c.authorization, clock));
+        c.config.execution.adoption.targets, sessions, c.authorization, clock, { registry: c.config.admission?.registry ?? null,
+          authorizeRun: (scopeId, runId, principal) => runs.authorize('inspect', { scopeId, runId }, principal),
+          source: new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)) }));
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }
