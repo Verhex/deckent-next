@@ -9,7 +9,7 @@ import * as platform from '#platform/index.js';
 import * as modelInvocation from '#composition/core/model-invocation/index.js';
 import * as providerCatalog from '#composition/core/provider-catalog/index.js';
 import { runPeerConfiguredChatTurn, createRuntimeChatTurnHost } from '#composition/core/agent-turn/index.js';
-import type { AgentTurnStreamEvent } from '#domain/index.js';
+import { approvalRecordSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { ApprovalApplication, awaitAgentToolApproval, requestAgentToolApproval, requestTaskApproval } from '#engine/index.js';
 import { createHmacIntegrity, MAX_WALL_SKEW_MS, SystemTrustedClock, type TrustedClock } from '#platform/index.js';
@@ -39,51 +39,90 @@ async function fixture() {
   return { journal, record, command, application };
 }
 
-describe('I40-c accepted A: conservative decision time, exact consumption time', () => {
-  it.each([
-    { label: '> allowance remaining', now: 14999, allow: true },
-    { label: 'exact allowance boundary', now: 15000, allow: false },
-    { label: 'last millisecond', now: 19999, allow: false },
-    { label: 'exact expiry', now: 20000, allow: false },
-    { label: 'past expiry (reverse allowance must not extend it)', now: 20001, allow: false },
-    { label: 'decision clock lags producer by full allowance at producer expiry', now: 20000 - MAX_WALL_SKEW_MS, allow: false },
-  ])('$label', async ({ now, allow }) => {
+describe('I40-c B: only the producer determines tool approval expiry', () => {
+  it.each([14999, 15000, 19999])('records a decision at producer wall=%i with the decider 5 seconds ahead', async producerNow => {
     const f = await fixture();
     try {
-      const application = await f.application(new SystemTrustedClock(() => now));
-      const result = application.decide(f.command);
-      if (allow) {
-        await expect(result).resolves.toMatchObject({ status: 'decided', decision: { decision: 'allow', decidedAt: now } });
-        expect(f.journal.store.receipt('scope', 'decision')).not.toBeNull();
-        // Another process can be behind the decision timestamp and still consume inside its own expiry.
-        expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort(new SystemTrustedClock(() => now - 1000)), new AbortController().signal)).toBe('allow');
-      } else {
-        await expect(result).rejects.toThrow('APPROVAL_EXPIRED');
-        expect(f.journal.store.load('scope', f.record.request.approvalId)?.status).toBe('expired');
-        expect(f.journal.store.receipt('scope', 'decision')).toBeNull();
-      }
-      expect(f.journal.store.load('scope', f.record.request.approvalId)?.request.expiresAt).toBe(20000);
+      const now = producerNow + MAX_WALL_SKEW_MS;
+      const app = await f.application(new SystemTrustedClock(() => now));
+      const decided = await app.decide(f.command);
+      expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow', decidedAt: now } });
+      expect(f.journal.store.receipt('scope', 'decision')?.record).toEqual(decided);
+      const producer: TrustedClock = { sample: () => ({ wallMs: producerNow, monotonicMs: producerNow - 10000 }) };
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, producer, new AbortController().signal, 250,
+        { wallMs: 10000, monotonicMs: 0 })).toBe('allow');
+      expect(decided.request.expiresAt).toBe(20000);
     } finally { f.journal.close(); }
   });
 
-  it('rechecks the conservative boundary after asynchronous policy/session work', async () => {
-    const f = await fixture(); let now = 14999, checks = 0;
+  it('records a late decision but the producer refuses to consume it, including a receipt replay', async () => {
+    const f = await fixture();
     try {
-      const app = await f.application(new SystemTrustedClock(() => now), () => { if (++checks === 2) now = 15000; });
+      const app = await f.application(new SystemTrustedClock(() => 25000));
+      const decided = await app.decide(f.command);
+      expect(decided.decision?.decidedAt).toBe(25000);
+      const clock: TrustedClock = { sample: () => ({ wallMs: 20000, monotonicMs: 10000 }) };
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, clock, new AbortController().signal, 250,
+        { wallMs: 10000, monotonicMs: 0 })).toBe('expired');
+      expect(await app.decide(f.command)).toEqual(decided);
+      expect(f.journal.store.load('scope', f.record.request.approvalId)).toEqual(decided);
+    } finally { f.journal.close(); }
+  });
+
+  it('refuses a request already expired by the producer even when the deciding clock lags', async () => {
+    const f = await fixture();
+    try {
+      const producer: TrustedClock = { sample: () => ({ wallMs: 20000, monotonicMs: 10000 }) };
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, producer, new AbortController().signal)).toBe('expired');
+      const app = await f.application(new SystemTrustedClock(() => 15000));
       await expect(app.decide(f.command)).rejects.toThrow('APPROVAL_EXPIRED');
-      expect(checks).toBe(2);
-      expect(f.journal.store.load('scope', f.record.request.approvalId)?.status).toBe('expired');
       expect(f.journal.store.receipt('scope', 'decision')).toBeNull();
     } finally { f.journal.close(); }
   });
 
-  it('leaves the task-approval exact expiry contract unchanged', async () => {
+  it('does not make an expiry decision after asynchronous policy/session work either', async () => {
+    const f = await fixture(); let now = 14999, checks = 0;
+    try {
+      const app = await f.application(new SystemTrustedClock(() => now), () => { if (++checks === 2) now = 20000; });
+      await expect(app.decide(f.command)).resolves.toMatchObject({ status: 'decided', decision: { decidedAt: 20000 } });
+      expect(checks).toBe(2);
+      expect(f.journal.store.receipt('scope', 'decision')).not.toBeNull();
+    } finally { f.journal.close(); }
+  });
+
+  it.each([19999, 20000, 20001])('leaves the task-approval exact expiry contract unchanged at %i', async now => {
     const f = await fixture();
     try {
       const task = requestTaskApproval(f.journal.store, integrity, { scopeId: 'scope', requester, runId: 'run', taskId: 'task',
         policyRevision: 'policy', summary: 'Task', actionDigest: 'b'.repeat(64), createdAt: 10000, expiresAt: 20000 });
+      const app = await f.application(new SystemTrustedClock(() => now));
+      const result = app.decide({ ...f.command, approvalId: task.request.approvalId });
+      if (now < 20000) await expect(result).resolves.toMatchObject({ status: 'decided' });
+      else {
+        await expect(result).rejects.toThrow('APPROVAL_EXPIRED');
+        expect(f.journal.store.load('scope', task.request.approvalId)?.status).toBe('expired');
+        expect(f.journal.store.receipt('scope', f.command.commandId)).toBeNull();
+      }
+    } finally { f.journal.close(); }
+  });
+
+  it('keeps the record expiry bound for task and operation subjects, and the creation bound for tools', async () => {
+    const f = await fixture();
+    try {
       const app = await f.application(new SystemTrustedClock(() => 19999));
-      await expect(app.decide({ ...f.command, approvalId: task.request.approvalId })).resolves.toMatchObject({ status: 'decided' });
+      const decided = await app.decide(f.command);
+      const subjects = [
+        { kind: 'task', runId: 'run', taskId: 'task' },
+        { kind: 'operation', operation: { id: 'post-order', version: 1 }, target: { kind: 'records', id: 'PO-1' },
+          commandId: 'operation', inputDigest: 'b'.repeat(64), targetBinding: 'c'.repeat(64), expectedVersion: null, compensates: null },
+      ];
+      for (const subject of subjects) {
+        const request = { ...decided.request, schemaVersion: 2, subject };
+        for (const decidedAt of [19999, 20000, 20001]) {
+          expect(approvalRecordSchema.safeParse({ ...decided, request, decision: { ...decided.decision, decidedAt } }).success).toBe(decidedAt < 20000);
+        }
+      }
+      expect(approvalRecordSchema.safeParse({ ...decided, decision: { ...decided.decision, decidedAt: 9999 } }).success).toBe(false);
     } finally { f.journal.close(); }
   });
 

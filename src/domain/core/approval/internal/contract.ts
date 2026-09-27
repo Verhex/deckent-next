@@ -49,7 +49,7 @@ export const approvalRecordSchema = z.object({ request: approvalRequestSchema, r
   if ((v.status === 'pending' && (v.revision !== 0 || v.decision !== null))
     || (v.status !== 'pending' && v.revision !== 1)
     || (v.status === 'expired' && v.decision !== null)
-    || (v.status === 'decided' && (!v.decision || v.decision.decidedAt < v.request.createdAt || v.decision.decidedAt >= v.request.expiresAt))) {
+    || (v.status === 'decided' && (!v.decision || v.decision.decidedAt < v.request.createdAt || (approvalSubject(v.request).kind !== 'agent-tool-call' && v.decision.decidedAt >= v.request.expiresAt)))) {
     c.addIssue({ code: z.ZodIssueCode.custom, message: 'APPROVAL_CORRUPT' });
   }
 }).readonly();

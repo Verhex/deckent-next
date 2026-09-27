@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { effectRecordSchema, type ApprovalSubject, type EffectCommand, type EffectRecord, type OperationDescriptor } from '#domain/index.js';
-import { ApprovalApplication, EffectApplication, OperationPolicyAuthorization, agentToolCallActionDigest, agentToolCallApprovalGate, requestAgentToolApproval,
+import { ApprovalApplication, EffectApplication, OperationPolicyAuthorization, agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApproval, requestAgentToolApproval,
   type AgentToolCallAdmission, type EffectApprovalContext } from '#engine/index.js';
 import { MAX_WALL_SKEW_MS, createHmacIntegrity, type IntegrityAuthority } from '#platform/index.js';
 
@@ -85,6 +85,7 @@ it('admits an edit or shell effect only from a sealed allow of exactly this call
       .rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
     const lapsed = f.request(subjectAt(2), 1_000);
     f.time.wallMs = 3_000; f.time.monotonicMs = 3_000;
+    expect(await awaitAgentToolApproval(f.journal.store, integrity, lapsed.record, f.clock, new AbortController().signal, 250, lapsed.pointer.started)).toBe('expired');
     await expect(f.decide(lapsed.pointer.approvalId, 'allow')).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
     await expect(f.gate({ subject: subjectAt(2), approval: lapsed.pointer }).admit(descriptor, 'allow', command('cmd-lapsed'), f.principal, context()))
       .rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });

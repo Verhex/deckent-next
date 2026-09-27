@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
   separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
-import { sha256, MAX_WALL_SKEW_MS, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
+import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
@@ -37,9 +37,9 @@ export class ApprovalApplication {
     return policy;
   }
   private expired(record: ApprovalRecord, now: number) {
-    // I40-c A: uncertainty can only reject early, never extend an agent tool-call authorization.
-    const allowance = approvalSubject(record.request).kind === 'agent-tool-call' ? MAX_WALL_SKEW_MS : 0;
-    if (record.status !== 'pending' || now + allowance < record.request.expiresAt) return record;
+    // I40-c B: only the producing turn judges tool-call expiry, through its wall clock and monotonic TTL.
+    // A decision is durable history; the producer still checks expiry before consuming it at the effect claim.
+    if (approvalSubject(record.request).kind === 'agent-tool-call' || record.status !== 'pending' || now < record.request.expiresAt) return record;
     return expireApproval(this.store, this.integrity, record);
   }
   async inspect(input: unknown, credential?: unknown) {
