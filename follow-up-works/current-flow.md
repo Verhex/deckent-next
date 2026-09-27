@@ -3,14 +3,16 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde (`b596eee` ve öncesi), kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `b596eee` (Astra 2131 PASS, tam verify 4 çalışan). Canlı servis `b4e77dc` build'iyle çalışıyor (ledger v40, protokol v14).
+- `origin/main` = `357aeeb` (üçüncü parti; Astra 2136 PASS, tam verify `verify-4` 364/2418; push 2026-09-27). Yerel main checkout `c02a894`'te
+  kalır (canlı servis onun dist'ini kullanıyor; Astra'nın commit'lenmemiş inceleme notları orada) — owner ile uzlaştırılır. Canlı servis `b4e77dc` build'iyle çalışıyor (ledger v40, protokol v14).
   Kabuk/düzenleme izni için owner betiği `grant-edit-shell.mjs` henüz çalıştırılmadı. DOGFOOD OFF.
 - Entegrasyon `integrate/2026-09-27` (worktree `/home/alperen/deckent-next-integrate`) üçüncü parti: H34 S3, H34 S4 (config 3 / layout 3 /
   doctor 2), A04-2, C12 G3, roller `task` kuralı, audit portu (ledger v41), I40-c B, kurulum çıkış 78, TERM-INTERACTIVE (slash Enter,
   `@file`, **protokol v15**), dilim 4a izin modları. Belge deltaları uygulandı (ARCHITECTURE/PLAN/CHANGELOG/COMPLETED-PLAN).
 - Astra 2132 → 2133 ANALYSIS + 2134 REVISE (R1 P1 bileşik dar komutla yazma tabanı aşımı, R2 P2 audit edilen kararla kabul eşleşmesi,
   R3 P2 `@file` seçilen yol kimliği): düzeltmeler FIX-2133 (`e047075`) ve FIX-2134-R3 (`5538033`) partiye birleşti; kanıt `.deckent/host/reviews/astra-2132/`.
-- Sıradaki: tam verify (4 çalışan) → Astra yeniden inceleme → PASS'te yalnız incelenen sha push (owner 2026-09-27 izni).
+- Dördüncü parti `8ceb20f` (C12 G4, kalıcı cleanup işareti, dilim 4c): tam verify `verify-d1` exit 0 (372/2457, 317 sn) → REQUEST_REVIEW 2137.
+  PASS'te yalnız `8ceb20f` push.
   Canlı yeniden başlatma (ledger v40 → v41 yedekli, protokol v15) owner iznindedir.
 - Dördüncü parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`): C12 G4 + kalıcı cleanup işareti birleşti; SLICE4C şeridi çalışıyor.
 
