@@ -5,13 +5,13 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect } from 'vitest';
 import { applyInstallation, createConfiguredRuntimeClient, inspectInstallation } from '../../../src/index.js';
 import { hashInstallationProfilePayload } from '#engine/index.js';
 import { DockerSupervisor } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
-import { installationProfile } from '../support/installation-profile.js';
+import { installationProfile } from './installation-profile.js';
 
 const exec = promisify(execFile), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 const roots: string[] = [];
@@ -42,9 +42,9 @@ function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } }); return profile;
 }
 
-type ContentionRuntime = Awaited<ReturnType<typeof openConfiguredExecution>>;
-type ContentionLease = Awaited<ReturnType<ContentionRuntime['workspaces']['openRecorded']>>;
-type ContentionIdentity = Parameters<ContentionRuntime['store']['loadBoundDispatch']>[0];
+export type ContentionRuntime = Awaited<ReturnType<typeof openConfiguredExecution>>;
+export type ContentionLease = Awaited<ReturnType<ContentionRuntime['workspaces']['openRecorded']>>;
+export type ContentionIdentity = Parameters<ContentionRuntime['store']['loadBoundDispatch']>[0];
 /** Recovers held contention workers from the exact run's recorded dispatches (not from test callbacks) and releases their barrier. */
 async function releaseContentionWorkers(runtime: ContentionRuntime): Promise<ContentionIdentity[]> {
   const held = (await runtime.store.listDispatches({ schemaVersion: 1, scopeId: 'scope-1', after: null, limit: 10 })).entries
@@ -55,20 +55,20 @@ async function releaseContentionWorkers(runtime: ContentionRuntime): Promise<Con
   }
   return held.map(entry => entry.identity);
 }
-type ContentionRecord = Awaited<ReturnType<ContentionRuntime['store']['loadBoundDispatch']>>;
+export type ContentionRecord = Awaited<ReturnType<ContentionRuntime['store']['loadBoundDispatch']>>;
 /** The real custody operations cleanup crosses; a test replaces one to inject a fault at that boundary. */
-type CleanupBoundary = {
+export type CleanupBoundary = {
   loadBoundDispatch: (runtime: ContentionRuntime, identity: ContentionIdentity) => Promise<ContentionRecord>;
   restoreProfile: (record: NonNullable<ContentionRecord>, identity: ContentionIdentity) => ReturnType<typeof DockerSupervisor.restoreProfile>;
   releaseWorkspace: (runtime: ContentionRuntime, lease: NonNullable<ContentionLease>) => Promise<void>;
 };
-const cleanupBoundary: CleanupBoundary = {
+export const cleanupBoundary: CleanupBoundary = {
   loadBoundDispatch: (runtime, identity) => runtime.store.loadBoundDispatch(identity),
   restoreProfile: record => DockerSupervisor.restoreProfile(record.profile),
   releaseWorkspace: (runtime, lease) => runtime.workspaces.release({ schemaVersion: 1, identity: lease.identity, baseCommit: lease.baseCommit }),
 };
 /** The barrier release is not proof the worker exited: the supervisor's own cancel (kill if running, then inspect) precedes removal. */
-async function stopWorker(supervisor: Awaited<ReturnType<typeof DockerSupervisor.restoreProfile>>, request: NonNullable<ContentionRecord>['request']) {
+export async function stopWorker(supervisor: Awaited<ReturnType<typeof DockerSupervisor.restoreProfile>>, request: NonNullable<ContentionRecord>['request']) {
   await supervisor.cancel(request); await supervisor.release(request);
 }
 /** Releases one attempt's worker and workspace. Every stage runs independently; a rejected read is an error, never absence. */
@@ -91,7 +91,7 @@ async function cleanupContention(runtime: ContentionRuntime, boundary: CleanupBo
   return errors;
 }
 /** Witness faults: before-dispatch and after-arrival leave the identity unknown (sweep path); after-found leaves it known. */
-type ContentionFault = 'before-dispatch' | 'after-arrival' | 'after-found';
+export type ContentionFault = 'before-dispatch' | 'after-arrival' | 'after-found';
 /** Barrier witness: the automatically started worker proves it holds the slot before the manual request, and is released only after the refusal. */
 async function witnessContention(client: Client, runtime: ContentionRuntime,
   runtimeClient: ReturnType<typeof createConfiguredRuntimeClient>, found: (value: { identity: ContentionIdentity; lease: ContentionLease }) => void, fault?: ContentionFault) {
@@ -121,7 +121,7 @@ async function witnessContention(client: Client, runtime: ContentionRuntime,
   return { record: await runtime.store.loadBoundDispatch(identity) };
 }
 
-async function installedScenario(mode: string, observed: { root?: string; identity?: ContentionIdentity } = {}, fault?: ContentionFault,
+export async function installedScenario(mode: string, observed: { root?: string; identity?: ContentionIdentity } = {}, fault?: ContentionFault,
   boundary: CleanupBoundary = cleanupBoundary) {
   const conditional = mode === 'conditional', approvals = mode === 'approval', contention = mode === 'contention';
   const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
@@ -279,16 +279,16 @@ async function installedScenario(mode: string, observed: { root?: string; identi
 }
 
 /** One exit: the primary failure and every cleanup failure are reported; cleanup errors never become a leak-free success. */
-function settleScenario(primary: { error: unknown } | undefined, cleanupErrors: readonly unknown[]): void {
+export function settleScenario(primary: { error: unknown } | undefined, cleanupErrors: readonly unknown[]): void {
   if (primary && cleanupErrors.length) throw new AggregateError([primary.error, ...cleanupErrors], 'SCENARIO_AND_CLEANUP_FAILED');
   if (primary) throw primary.error;
   if (cleanupErrors.length) throw new AggregateError([...cleanupErrors], 'CONTENTION_CLEANUP_FAILED');
 }
 
-type DockerCommand = (args: readonly string[]) => Promise<{ stdout: string }>;
-const dockerCommand: DockerCommand = args => exec('/usr/bin/docker', [...args]);
+export type DockerCommand = (args: readonly string[]) => Promise<{ stdout: string }>;
+export const dockerCommand: DockerCommand = args => exec('/usr/bin/docker', [...args]);
 /** Running containers (docker ps), or every container with `all` (ps -a). An inspect failure counts as absence only when the container verifiably vanished. */
-async function fixtureContainers(root: string, docker: DockerCommand = dockerCommand, all = false): Promise<string[]> {
+export async function fixtureContainers(root: string, docker: DockerCommand = dockerCommand, all = false): Promise<string[]> {
   const list = all ? ['ps', '-a', '-q', '--no-trunc'] : ['ps', '-q', '--no-trunc'];
   const ids = (await docker(list)).stdout.split('\n').filter(Boolean);
   const owned: string[] = [];
@@ -304,60 +304,3 @@ async function fixtureContainers(root: string, docker: DockerCommand = dockerCom
   }
   return owned;
 }
-
-it('the cleanup oracle fails on cleanup errors and on uninspectable running containers', async () => {
-  expect(() => settleScenario(undefined, [new Error('INJECTED_CLEANUP_FAULT')])).toThrow('CONTENTION_CLEANUP_FAILED');
-  const combined = (() => { try { settleScenario({ error: new Error('PRIMARY') }, [new Error('INJECTED_CLEANUP_FAULT')]); } catch (error) { return error as AggregateError; } })();
-  expect(combined?.message).toBe('SCENARIO_AND_CLEANUP_FAILED'); expect(combined?.errors.map(error => (error as Error).message)).toEqual(['PRIMARY', 'INJECTED_CLEANUP_FAULT']);
-  expect(() => settleScenario({ error: new Error('PRIMARY') }, [])).toThrow('PRIMARY');
-  expect(() => settleScenario(undefined, [])).not.toThrow();
-  const fake = (running: string[], inspectable: Record<string, string>): DockerCommand => async args => {
-    if (args[0] === 'ps') return { stdout: (args.includes('--filter') ? running.filter(id => args.at(-1) === `id=${id}`) : running).join('\n') };
-    const mounts = inspectable[String(args.at(-1))]; if (mounts === undefined) throw new Error('inspect failed'); return { stdout: mounts };
-  };
-  await expect(fixtureContainers('/tmp/root-a', fake(['c1'], {}))).rejects.toThrow('FIXTURE_CONTAINER_UNINSPECTABLE:c1');
-  const vanishing: DockerCommand = async args => args[0] === 'ps' ? { stdout: args.includes('--filter') ? '' : 'c1' } : Promise.reject(new Error('gone'));
-  await expect(fixtureContainers('/tmp/root-a', vanishing)).resolves.toEqual([]);
-  await expect(fixtureContainers('/tmp/root-a', fake(['c1', 'c2'], { c1: '/tmp/root-a/data ', c2: '/other ' }))).resolves.toEqual(['c1']);
-});
-
-it.skipIf(process.platform !== 'linux').each(['plain', 'conditional', 'approval', 'contention'])('runs installed mode=%s across SDK, CLI and MCP through the configured service', async mode => {
-  await installedScenario(mode);
-}, 60_000);
-
-it.skipIf(process.platform !== 'linux').each(['before-dispatch', 'after-arrival'] as const)('contention cleanup leaves no fixture worker when the witness fails %s', async fault => {
-  const observed: { root?: string } = {};
-  await expect(installedScenario('contention', observed, fault)).rejects.toThrow(`INJECTED_WITNESS_FAULT_${fault.toUpperCase().replace('-', '_')}`);
-  expect(observed.root).toBeDefined();
-  expect(await fixtureContainers(observed.root!, dockerCommand, true)).toEqual([]);
-}, 60_000);
-
-it.skipIf(process.platform !== 'linux').each(['custody-read', 'restore'] as const)('known-identity cleanup keeps the primary, reports a %s fault and still releases the workspace', async stage => {
-  const observed: { root?: string; identity?: ContentionIdentity } = {};
-  const known = (identity: ContentionIdentity) => identity.attemptId === observed.identity?.attemptId;
-  const withheld: NonNullable<ContentionRecord>[] = [], released: string[] = [];
-  // The fault replaces the known attempt's real operation; its real record is kept only to compensate after the assertions.
-  const boundary: CleanupBoundary = {
-    loadBoundDispatch: async (runtime, identity) => {
-      const record = await cleanupBoundary.loadBoundDispatch(runtime, identity);
-      if (stage === 'custody-read' && known(identity)) { if (record) withheld.push(record); throw new Error('INJECTED_CLEANUP_FAULT_CUSTODY_READ'); }
-      return record;
-    },
-    restoreProfile: (record, identity) => {
-      if (stage === 'restore' && known(identity)) { withheld.push(record); return Promise.reject(new Error('INJECTED_CLEANUP_FAULT_RESTORE')); }
-      return cleanupBoundary.restoreProfile(record, identity);
-    },
-    releaseWorkspace: async (runtime, lease) => { released.push(lease.identity.attemptId); await cleanupBoundary.releaseWorkspace(runtime, lease); },
-  };
-  const failure = await installedScenario('contention', observed, 'after-found', boundary).then(() => undefined, (error: unknown) => error);
-  try {
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).message).toBe('SCENARIO_AND_CLEANUP_FAILED');
-    expect((failure as AggregateError).errors.map(error => (error as Error).message))
-      .toEqual(['INJECTED_WITNESS_FAULT_AFTER_FOUND', `INJECTED_CLEANUP_FAULT_${stage.toUpperCase().replace('-', '_')}`]);
-    expect(observed.identity).toBeDefined(); expect(released).toEqual([observed.identity!.attemptId]); expect(withheld).toHaveLength(1);
-  } finally {
-    for (const record of withheld) await stopWorker(await DockerSupervisor.restoreProfile(record.profile), record.request);
-  }
-  expect(await fixtureContainers(observed.root!, dockerCommand, true)).toEqual([]);
-}, 60_000);
