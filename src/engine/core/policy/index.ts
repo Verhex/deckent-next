@@ -12,3 +12,5 @@ export { ModelActivationPolicyAuthorization } from './internal/model-activation.
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
 export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';
 export { AgentToolPolicyAuthorization } from './internal/agent-tool.js';
+export { decideAgentToolCall } from './internal/permission-mode.js';
+export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from './internal/permission-mode.js';

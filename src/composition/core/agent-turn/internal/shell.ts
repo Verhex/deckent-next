@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, classifyReadOnlyShellCommand, classifyShellRisk,
-  type EffectApprovalGate, type ShellRiskClassification } from '#engine/index.js';
+import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, classifyReadOnlyShellCommand, classifyShellMutation, classifyShellRisk,
+  shellPermissionTier, type EffectApprovalGate, type ShellPathVerdict, type ShellPermissionTier, type ShellRiskClassification,
+  type ShellWritePathContext } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { createLocalPeerSession, createShellPathContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget,
-  openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type TerminalShellConfig,
-  type WorkspaceScope } from '#adapters/index.js';
+import { ABSENT_FILE_VERSION, createLocalPeerSession, createShellPathContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
+  HostShellTarget, isWriteApprovalFloored, openSqliteAttemptStore, readWritableFile, resolveWritable, type HostShellResult, type LocalPeerIdentity,
+  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { boundApprovalPreview } from './preview.js';
 
@@ -31,14 +32,35 @@ function cleanupNote(cleanup: HostShellResult['cleanup']): string | null {
   return cleanup === 'group-ended' ? '[deckent] cleanup: processes the command left running in its process group were ended; '
     + 'a process that left the group is not observed.' : null;
 }
-type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly silent: boolean }
+type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier }
   | { readonly ok: false; readonly text: string };
 
 /**
- * The agent's host shell in one turn (T-L4 slice 3c, Jev 82858581). A command is classified before authority is asked: only a
- * read-only command of bounded reach (risk `none`: explicit, checked paths) may run without asking, and only where policy allows;
- * traversal and repository-object reads (`low`), anything that modifies, and the destructive table ask the owner in every mode
- * (slice 4 may relax `modify`, never the destructive floor). Every run is a C11 effect of Core `host.shell.run` on the `host-shell`
+ * Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the
+ * workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it
+ * would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source
+ * of `mv`). Anything else makes the command not narrow — it then asks, as before.
+ */
+export function createShellWriteContext(scope: WorkspaceScope): ShellWritePathContext {
+  return {
+    async checkWrite(word, kind): Promise<ShellPathVerdict> {
+      const refuse = (reasonCode: 'PATH_OUTSIDE_ROOT' | 'PATH_PROTECTED' | 'PATH_UNRESOLVED'): ShellPathVerdict => ({ ok: false, reasonCode, detail: word.text });
+      const target = await resolveWritable(scope, word.text);
+      if (!target.ok) return refuse(target.error === 'outside-workspace' ? 'PATH_OUTSIDE_ROOT' : target.error === 'denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED');
+      if (isWriteApprovalFloored(target.rel) || (kind === 'new-directory' && isWriteApprovalFloored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
+      const current = await readWritableFile(scope, target).catch(() => null);
+      if (!current?.ok) return refuse('PATH_UNRESOLVED');
+      const absent = current.version === ABSENT_FILE_VERSION;
+      return (kind === 'new-directory' && !absent) || (kind === 'existing-file' && absent) ? refuse('PATH_UNRESOLVED') : { ok: true };
+    },
+  };
+}
+
+/**
+ * The agent's host shell in one turn (T-L4 slice 3c, Jev 82858581). A command is classified into a permission tier: only a
+ * read-only command of bounded reach (risk `none`: explicit, checked paths) runs without asking under allow; traversal and
+ * repository-object reads (`low`), the destructive table, the always-ask floor and any other modification ask in every mode; the
+ * narrow mutating set asks unless the turn's decision lowers a company-eligible require-approval in full-auto (slice 4a). Every run is a C11 effect of Core `host.shell.run` on the `host-shell`
  * target — session, operation policy, intent before spawn, an uncertain run reported as such and never repeated. Streamed output
  * goes to the turn only while the channel has room; beyond that it is skipped with one visible marker (the result is unaffected).
  */
@@ -51,9 +73,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
-    const readOnly = await classifyReadOnlyShellCommand(command, createShellPathContext(scope));
+    const paths = createShellPathContext(scope);
+    const readOnly = await classifyReadOnlyShellCommand(command, paths);
     const risk = classifyShellRisk(command, readOnly);
-    const planned: ShellPlan = { ok: true, command, risk, silent: risk.risk === 'safe-read' && readOnly.risk === 'none' };
+    // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
+    const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
+      : await classifyShellMutation(command, paths, createShellWriteContext(scope));
+    const planned: ShellPlan = { ok: true, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
     plans.set(key(tool, args), planned);
     return planned;
   };
@@ -65,13 +91,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   return {
     plan,
-    /** The owner is asked unless the planned command is read-only with bounded reach. */
-    asks(tool: string, args: Record<string, unknown>): boolean { const planned = plans.get(key(tool, args)); return !(planned?.ok && planned.silent); },
-    /** The operation policy's decision for running a command at all, asked before the owner so a denied run is never offered. */
-    async authority(): Promise<'allow' | 'deny' | 'require-approval'> {
-      try { return await new OperationPolicyAuthorization(context.policy).authorize('execute', scopeId, HOST_SHELL_RUN_OPERATION.operation, context.principal); }
-      catch { return 'deny'; }
-    },
+    /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
+    tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
     /** The approval card: the exact command, its risk and why, and what running it means. */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));

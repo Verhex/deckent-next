@@ -39,11 +39,8 @@ export function createAgentFileEdits(input: { readonly scope: WorkspaceScope; re
       const planned = plans.get(key(tool, args));
       return planned?.ok === true && isWriteApprovalFloored(planned.rel);
     },
-    /** The operation policy's decision for the write itself, asked before the owner so a write the policy denies is never offered. */
-    async authority(): Promise<'allow' | 'deny' | 'require-approval'> {
-      try { return await new OperationPolicyAuthorization(context.policy).authorize('execute', scopeId, WORKSPACE_FILE_WRITE_OPERATION.operation, context.principal); }
-      catch { return 'deny'; }
-    },
+    /** The planned call's resolved workspace-relative path (what an audit event names), or null when it was not planned. */
+    target(tool: string, args: Record<string, unknown>): string | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.rel : null; },
     plan,
     /** The approval card's preview: the line counts first (always visible on the card), then the planned diff. */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
