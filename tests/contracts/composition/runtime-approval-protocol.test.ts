@@ -73,3 +73,26 @@ it('never sends an operation-subject approval record to a released v14 client: l
     expect(await client.listApprovals(query)).toHaveLength(2);
   } finally { await stopTestRuntimeService(service); }
 });
+
+it('pages a released v14 client over visible approvals only: a page never comes back empty because of a hidden operation approval (Astra 2128)', async () => {
+  const f = await fixture();
+  const service = await startTestRuntimeService(f.project, f.env);
+  try {
+    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the SDK page of one is the operation approval; the v14 page of one
+    // must be the next visible record (tool-call), not an empty page whose cursor the client can never learn.
+    const query = { schemaVersion: 1, scopeId: 's', afterId: 'n', limit: 1 };
+    const sdk = await configuredApproval(f.project, 'list', query, { env: f.env }) as { request: { approvalId: string } }[];
+    expect(sdk.map(record => record.request.approvalId)).toEqual(['operation']);
+    const page = await client.listApprovals(query) as { request: { approvalId: string } }[];
+    expect(page.map(record => record.request.approvalId)).toEqual(['tool-call']);
+    // Walking the whole scope one record at a time visits every visible approval exactly once and ends on an empty page.
+    const walked: string[] = []; let afterId: string | null = null;
+    for (;;) {
+      const next = await client.listApprovals({ ...query, afterId }) as { request: { approvalId: string } }[];
+      if (!next.length) break;
+      walked.push(...next.map(record => record.request.approvalId)); afterId = next.at(-1)!.request.approvalId;
+    }
+    expect(walked).toEqual([f.task.request.approvalId, 'tool-call'].sort());
+  } finally { await stopTestRuntimeService(service); }
+});
