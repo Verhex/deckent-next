@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelInvocationPurgeCommand, ModelInvocationQuery } from '#domain/index.js';
 import { parseProviderSpendReservation, providerSpendQuoteDigest, type ModelInvocationCancellationResult, type ModelInvocationInspection, type ModelInvocationPurgeResult, type ModelInvocationResult, type ModelInvocationDelivery } from '#engine/index.js';
 

@@ -1,7 +1,7 @@
 import { InMemoryTransport, type JSONRPCMessage } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
 import { mcpToolDeliveryCapacityForProbe } from '#adapters/index.js';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 // SESSION-RESULT-LIMIT-2026-09-28 review: composition's doctor/activation audit cannot reach surfaces/core/mcp
 // directly (guards the real perf regression tests/contracts/composition/sdk-import-graph.test.ts proves), so it

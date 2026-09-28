@@ -4,5 +4,5 @@ export { runCommand } from './internal/run.js';
 export { readGraphInput } from './internal/graph-input.js';
 export { toolchainsCommand } from './internal/toolchains.js';
 export { mcpCommand, type McpServersInspectHandler } from './internal/mcp.js';
-export { runtimeBuildSkew, workSurfaceLabels } from './internal/terminal.js';
+export { runtimeBuildSkew, workSurfaceLabels } from './internal/work-labels.js';
 export { createWorklineLedgerPorts } from './internal/terminal-ledger.js';

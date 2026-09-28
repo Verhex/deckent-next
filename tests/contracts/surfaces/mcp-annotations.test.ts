@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
-import { createMcpServer, type McpApplications } from '#surfaces/index.js';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 
 /** D03-mcp-idempotent (D-3): each tool's idempotentHint must follow real replay/effect evidence
  * (engine/adapters commandId-keyed receipts, or an identity-keyed dispatch guard). destructiveHint and
