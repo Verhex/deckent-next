@@ -146,10 +146,11 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2') {
     .admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'catalog-1', expectedBinding: binding });
   const grant = (id: string, effect: string, actions: string[], kind: string, ids: string[] | 'all', extra: Record<string, unknown> = {}) =>
     ({ id, effect, actions, scopes: ['scope'], principals: [me], resource: { kind, ids }, ...extra });
+  const eligible = policy === 'v1' ? {} : { modeEligible: true };
   const grants = [
     grant('invoke', 'allow', ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], 'model-invocation', [modelInvocationTargetId(reference)]),
     grant('scope', 'allow', ['inspect'], 'scope', ['scope']), grant('decide', 'allow', ['inspect', 'decide'], 'approval', 'all'),
-    grant('edit-tools', 'require-approval', ['invoke'], 'agent-tool', ['edit_file', 'write_file'], { modeEligible: true }),
+    grant('edit-tools', 'require-approval', ['invoke'], 'agent-tool', ['edit_file', 'write_file'], eligible),
     grant('file-write', 'allow', ['execute'], 'operation', ['workspace.file.write']),
     ...policy === 'v2' ? [grant('mode-set', 'allow', ['set'], 'permission-mode', ['ask', 'auto-edit', 'full-auto'])] : []];
   await writeFile(join(data, 'policy.json'), JSON.stringify(policy === 'v1' ? { schemaVersion: 1, revision: 'p1', restrictions: [], grants }
@@ -197,7 +198,8 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
 
 // MODE-UX (G3): what the person needs to do next is on the screen — never a bare "denied", never a call the service can only refuse.
 describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real pseudo-terminal (MODE-UX G3)', () => {
-  const modeLines = (output: string) => stripVTControlCharacters(output);
+  // The terminal wraps long notices at the window width: compare on the text with whitespace runs collapsed.
+  const modeLines = (output: string) => stripVTControlCharacters(output).replace(/\s+/gu, ' ');
   const changes = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().filter(row => (row as { kind: string }).kind === 'permission-mode-change');
 
   it('shows the current mode with what it changes and the modes to try', async () => {
