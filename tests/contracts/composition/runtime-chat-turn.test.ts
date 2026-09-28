@@ -301,27 +301,19 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
   }, 30_000);
 
-  // TERM-FEEDBACK-1 (live turn 975da614): the recorded summary answer (every list field one string) compacts and the turn goes on; an
-  // answer with no readable summary compacts with Deckent's labelled mechanical excerpt and the turn's note says so.
+  // TERM-FEEDBACK-1 (live turn 975da614): the recorded summary answer (list fields as strings) compacts and the turn goes on; an unreadable
+  // answer compacts with Deckent's labelled mechanical excerpt and the turn's note says so.
   it('continues the turn with the live summary answer, and with a labelled mechanical excerpt when the answer is unreadable', async () => {
     const live = JSON.parse(await readFile(join(import.meta.dirname, '../../fixtures/agent-turn/compaction-response-975da614.json'), 'utf8')) as { content: string };
-    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 16 }, (_, i) => i % 2
-      ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
-    { role: 'user' as const, content: 'go on' }];
-    for (const [turnId, summary] of [['turn-live-summary', live.content], ['turn-unreadable-summary', 'I summarized it for you.']] as const) {
+    const history = [...Array.from({ length: 16 }, (_, i) => i % 2 ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] }
+      : { role: 'user' as const, content: `question ${i}` }), { role: 'user' as const, content: 'go on' }];
+    for (const [summary, note, kept] of [[live.content, null, 'arch.json: tier order'], ['I summarized it.', engine.AGENT_TURN_MECHANICAL_COMPACTION_NOTE, 'not written by the model']] as const) {
       const f = await runtime({ tokenize: true, windowTokens: 100_000, count: body => body.messages.length > 12 ? 90_000 : 900 }); await f.start();
       f.state.script = [{ summary }, { content: 'Going on.' }];
       const events: AgentTurnStreamEvent[] = [];
-      const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: history }, event => events.push(event));
-      expect(result).toMatchObject({ finish: 'stop', answer: 'Going on.' });
-      const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>;
-      if (summary === live.content) {
-        expect(result.note).toBeNull();
-        expect(compacted.messages[0]!.content).toContain('Summary (model-written):'); expect(compacted.messages[0]!.content).toContain('arch.json: tier order');
-      } else {
-        expect(result.note).toBe(engine.AGENT_TURN_MECHANICAL_COMPACTION_NOTE);
-        expect(compacted.messages[0]!.content).toContain('not written by the model'); expect(compacted.messages[0]!.content).toContain('[assistant] answer 1');
-      }
+      expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-summary', messages: history }, event => events.push(event)))
+        .toMatchObject({ finish: 'stop', answer: 'Going on.', note });
+      expect(events.flatMap(event => event.kind === 'compacted' ? [event.messages[0]!.content] : [])).toEqual([expect.stringContaining(kept)]);
     }
   }, 60_000);
 
@@ -360,18 +352,27 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
     await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
     await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    // TERM-FEEDBACK-1: another saved conversation of the same scope; the ledger is the fixture's own.
+    await mkdir(join(f.data, 'state', 'terminal-sessions'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'state', 'terminal-sessions', 'other.json'), '{"messages":[{"role":"user","content":"owner-only other conversation"}]}', { mode: 0o600 });
     await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/approval-previews/diff.txt"}' } },
       { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/approvals/held.txt"}' } },
       { toolCall: { name: 'grep', arguments: '{"pattern":"owner-only","path":".deckent/live-data"}' } },
-      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/notes.txt"}' } }, { content: 'Done.' }];
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/notes.txt"}' } },
+      { toolCall: { name: 'list_dir', arguments: '{"path":".deckent/live-data/state/terminal-sessions"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/terminal-sessions/other.json"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/ledger.db"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/config.json"}' } }, { content: 'Done.' }];
     const events: AgentTurnStreamEvent[] = [];
     expect(await f.client().chatTurn(ask('turn-deny', 'read the approvals'), event => events.push(event))).toMatchObject({ finish: 'stop', answer: 'Done.' });
     const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
-    expect(results).toHaveLength(4);
+    expect(results).toHaveLength(8);
     expect(results[0]).toContain('error=path-denied'); expect(results[1]).toContain('error=path-denied');
     expect(results.join('\n')).not.toContain('owner-only'.concat(' full diff')); expect(results.join('\n')).not.toContain('owner-only approval record');
-    expect(results[3]).toContain('ordinary data file');
+    expect(results.join('\n')).not.toContain('owner-only other conversation');
+    expect(results[3]).toContain('ordinary data file'); expect(results[7]).toContain('"provider_catalog"');
+    for (const index of [4, 5, 6]) expect(results[index]).toContain('error=path-denied');
   }, 30_000);
 
   // TL-C (D8): the compaction call runs without thinking when (and only when) the catalog declares the switch.
@@ -1343,14 +1344,18 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
     await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
     await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
     await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    // TERM-FEEDBACK-1: a saved conversation is product state too (explicit limit: the owner no longer attaches one with `@`).
+    await mkdir(join(f.data, 'state', 'terminal-sessions'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'state', 'terminal-sessions', 'other.json'), '{}', { mode: 0o600 });
     await f.start();
-    const held = '.deckent/live-data/approvals/held.txt', diff = '.deckent/live-data/state/approval-previews/diff.txt';
-    for (const query of ['', 'held', 'diff', 'approval', 'live-data']) {
+    const held = '.deckent/live-data/approvals/held.txt', diff = '.deckent/live-data/state/approval-previews/diff.txt', session = '.deckent/live-data/state/terminal-sessions/other.json';
+    for (const query of ['', 'held', 'diff', 'approval', 'live-data', 'other', 'sessions']) {
       const found = await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query, limit: 50 });
-      expect(found.paths).not.toContain(held); expect(found.paths).not.toContain(diff);
+      expect(found.paths).not.toContain(held); expect(found.paths).not.toContain(diff); expect(found.paths).not.toContain(session);
+      expect(found.paths.some(path => path.startsWith('.deckent/live-data/state/') || path === '.deckent/live-data/policy.json')).toBe(false);
     }
     expect((await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query: 'notes', limit: 50 })).paths).toContain('.deckent/live-data/notes.txt');
-    for (const path of [held, diff]) {
+    for (const path of [held, diff, session]) {
       expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path, maxBytes: 1024 })).toEqual({ schemaVersion: 1, path, status: 'refused', reason: 'path-denied' });
     }
     expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path: '.deckent/live-data/notes.txt', maxBytes: 1024 }))
