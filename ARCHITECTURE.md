@@ -1679,8 +1679,7 @@ relaxable in full-auto only) and `mcp-floor` (pin `alwaysAsk` or pinned `destruc
 the decision; after sending, timeout/cancel/crash is `unknown` and never resent; answers are cut at `resultMaxBytes` and pass
 `redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
 `{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). `deckent mcp servers list` reads configuration; `inspect <id>`
-starts the server under its realm, lists, verifies and closes it (never `tools/call`). A `host`-realm server runs with the owner's
-rights and is outside the agent tools' product-state floor (the owner chooses that realm explicitly). Not yet: installing/pinning from
+starts the server under its realm, lists, verifies and closes it (never `tools/call`). Not yet: installing/pinning from
 the terminal or `/policy` (POLICY-ADMIN), MCP HTTP servers, resources/prompts, MRTR input requests from servers (no
 elicitation/sampling/roots handler is registered; behaviour with an `input_required` server is untested), `subscriptions/listen`/
 listChanged (the list is re-read each turn), paginated `tools/list` (SDK 2.1.0 `listTools()` returns the first page; 2.2.0 follows
