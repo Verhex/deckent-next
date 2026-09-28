@@ -1465,6 +1465,33 @@ backs up v41 (0600) and, in one transaction, rewrites every exact v1 adopt recor
 (still `ADOPTION_CORRUPT` if unreadable). A v41 build refuses a v42 ledger (`ATTEMPT_STORE_VERSION`, proven with the real `de2f30f`
 build; rows written by that build migrate and an interrupted one settles afterwards). Not yet: config precondition (`execution.adoption.verification`), CLI flags and verified text, criteria policy, audit subject.
 
+**Adoption verification precondition (B06-2c, config schema 3, no ledger/protocol change).** Config `execution.adoption.verification`
+(`null` default | `{kind, required, criteria[1..16]}`, each criterion `{evaluator:{id,version}, parameters}`) is the installation's bar. The one
+owner is `verifyAdoption` (engine `workspace-patch/verification.ts`), after Task acceptance and before the target check: no verification Run
+named → `ADOPTION_NOT_VERIFIED` when `required`, otherwise `not-verified` as before; a named Run must be of the configured kind
+(`ADOPTION_VERIFICATION_MISMATCH`) and, after the B06-2b identity/profile checks and **before its phase**, meet every required criterion with
+one of its task's acceptance criteria of the same evaluator that is not weaker under the Run's pinned evaluator implementation
+(`ADOPTION_VERIFICATION_CRITERIA_WEAKER`). "Not weaker" is evaluator code in `capabilities/evaluation-evidence` (`criterionWithin`;
+`process-exit@1`: accepted exit codes ⊆ the bar's); an implementation without a rule fails closed — Enterprise evaluators add theirs under
+their implementation identity. Without the section B06-2b behavior is unchanged (caller kind, no bar). A settled adoption replays from its
+record even if `required` was switched on later (B06-1 replay contract). The applied bar is not written into the adoption record (the
+verification block already carries kind, profile and criteria fingerprints; recording the bar would be an intent v3 = ledger change).
+CLI: `task integration-adopt … --verification-run <run>` takes the kind from config (`ADOPTION_VERIFICATION_NOT_CONFIGURED`, category
+config, when absent; the engine re-checks it); `run create … --delivery-command-id <id>` admits a delivery-pinned Run through the local
+composition path (`createConfiguredDeliveryRun`, not a runtime-service operation; protocol unchanged). Not yet: an `adoption-verification` audit subject, CLI `--wait`.
+
+**Read-only dependency binds (B06-2c, owner 2026-09-27 evening (4)).** A Docker task profile may declare `readOnlyMounts`
+(`[{source, target}]`, ≤ 8) — profile data, pinned with the Run and part of its profile fingerprint. `source` is relative to the trusted
+project root (normalized; no `..`/`.`/empty, `.git` or `.deckent` segment); composition resolves it before any dispatch and refuses
+(`EXECUTION_PROFILE_INVALID`) a path that is not a real directory (any link on its path), or that contains or lies inside the product layout
+root or any layout resource. `target` is an absolute normalized container path outside `/workspace`, `/tmp`, `/deckent`, `/run`, `/proc`,
+`/sys`, `/dev` (a bind can never overlay the delivered tree, which must stay exactly the verified commit). The supervisor re-checks the
+source at launch (real directory, outside the workspaces root) and always adds `readonly`; there is no writable form. `--network none`,
+`--read-only`, cap-drop, user and `/workspace` are unchanged. Supervisor option `readOnlyMounts` is additive (adapter version 2, like
+`inputs`/`connection`); a build without it refuses such a dispatch profile (`SUPERVISOR_PROFILE_INVALID`). Customer installations use a
+verification image with its dependencies instead (owner); host-prepared dependencies may drift from the delivered lockfile (stale deps can
+fail or, in principle, mask a lockfile change — known limit).
+
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 
 Cancellation is durable intent plus a deterministic terminal transition owned by the run reducer. `cancelRun`

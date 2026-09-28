@@ -57,9 +57,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}) };
     const render = (data: Awaited<ReturnType<TaskIntegrationAdoptHandler>>) => {
       const params = { ref: data.targetRef, from: data.fromCommit, to: data.toCommit, sequence: data.sequence };
-      // B06-2c: the "not verification" adopted text would be false here. Until the lead lands `cli.task.integration.adoptedVerified`
-      // (proof B06-2C-2026-09-28/i18n-delta.json), a verified adoption renders its typed result.
-      if (data.status === 'adopted' && data.verification.status === 'verified') return JSON.stringify(data, null, 2);
+      if (data.status === 'adopted' && data.verification.status === 'verified') return t('cli.task.integration.adoptedVerified', { ...params, run: data.verification.runId, kind: data.verification.kind, attempt: data.verification.attemptId }, locale);
       return data.status === 'adopted' ? t('cli.task.integration.adopted', params, locale) : t('cli.task.integration.rolledBack', params, locale);
     };
     if (action === 'integration-adopt') {

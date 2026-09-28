@@ -234,7 +234,8 @@
         "src/composition/core/inference-metrics",
         "src/adapters/core/runtime-launcher",
         "src/platform/core/errors",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/runs"
       ],
       "plan": "SURFACES"
     },
@@ -1328,7 +1329,8 @@
         "src/engine/core/dispatch",
         "src/platform/core/clock",
         "src/adapters/core/local-principal",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "ISOLATION"
     },
