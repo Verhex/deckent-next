@@ -7,6 +7,7 @@ import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './o
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
+import { assertReadOnlyMountSource } from './mounts.js';
 type Inspection = { Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
@@ -127,6 +128,12 @@ export class DockerSupervisor implements ExecutionSupervisor {
       names.add(input.name);
       inputMounts.push('--mount', `type=bind,src=${input.path},dst=/deckent/inputs/${input.name},readonly`);
     }
+    // Dependency binds (B06-2c) are re-checked at launch (real directory, outside the workspaces) and always read-only.
+    const readOnlyMounts: string[] = [];
+    for (const mount of o.readOnlyMounts ?? []) {
+      await assertReadOnlyMountSource(mount.source, [root]);
+      readOnlyMounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`);
+    }
     const connectionMounts = o.connection ? await dockerConnectionMounts(o.connection, o.uid) : [];
     const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : request.argv;
     try {
@@ -136,7 +143,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
         '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
         '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
-        ...inputMounts, ...connectionMounts, '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
+        ...inputMounts, ...readOnlyMounts, ...connectionMounts, '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
     } catch {
       const existing = await this.inspect(handle, digest);
       if (existing) return this.result(handle, existing);

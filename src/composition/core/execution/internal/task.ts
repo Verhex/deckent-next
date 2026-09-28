@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink } from '#adapters/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -33,6 +33,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
       if (os.uid <= 0 || os.gid < 0) throw ErrorRegistry.createError('EXECUTION_HOST_UNSUPPORTED');
       const workspaceRoot = await prepareProductDirectory(layout, 'workspaces');
+      const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
+        ...Object.values(layout.resources)]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       const inputs = [];
       const count = run?.graph.tasks.find(task => task.id === identity.taskId)?.inputs?.length ?? 0;
@@ -67,7 +69,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         deadlineMs: profile.options.deadlineMs, ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
       try {
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
-        ...(inputs.length ? { inputs } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
+        ...(inputs.length ? { inputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
       for (const { source } of declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };

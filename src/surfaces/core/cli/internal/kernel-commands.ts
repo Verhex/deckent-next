@@ -1,5 +1,5 @@
 import type { WorkerObservationHandler } from './workers.js';
-import type { RunAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
+import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
@@ -70,6 +70,7 @@ export interface CommandContext extends ModelCommandContext {
   applyInstallation?: InstallationApplyHandler;
   resumeInstallation?: InstallationResumeHandler;
   createRun?: RunAdmissionHandler;
+  createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
   inspectRun?: RunQueryHandler;
   deliverRunCancellation?: RunCancellationDeliveryHandler;

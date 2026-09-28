@@ -8,3 +8,5 @@ export { validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileE
 export { probeDockerImageAvailability, DockerImageProbeError } from './internal/image.js';
 export type { DockerImageAvailabilityProbeInput, DockerImageAvailability, DockerImageProbeErrorCode } from './internal/image.js';
 export { collectDockerOutputFiles, dockerOutputFilesSchema } from './internal/output-files.js';
+export { resolveDockerReadOnlyMounts, dockerReadOnlyMountsSchema } from './internal/mounts.js';
+export type { DockerReadOnlyMount } from './internal/mounts.js';
