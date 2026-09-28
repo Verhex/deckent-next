@@ -39,10 +39,10 @@ export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze
       literal: { type: 'boolean' }, ignoreCase: { type: 'boolean' }, context: int('Context lines around matches (max 10).'), maxMatches: int('Max matches (max 500).') } } },
   { name: 'list_dir', version: 1, toolClass: 'read', description: 'List a workspace directory; directories end with "/".',
     inputSchema: { type: 'object', properties: { path: str('Workspace-relative directory; default the workspace root.') } } },
-  { name: 'grep', version: 1, toolClass: 'read', description: 'Search workspace files with a regular expression; returns path:line:text hits, or path:line-text context lines around them when requested. Long lines are elided, never missed; skipped files and unscanned directories are reported.',
+  { name: 'grep', version: 1, toolClass: 'read', description: 'Search workspace files with a regular expression; returns path:line:text hits, or path:line-text context lines around them when requested. Long lines are elided, never missed; skipped files and unscanned directories are reported. A result with hits ends with "[deckent] grep: matches=N" (N hit lines returned; "N+" when more exist).',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Regular expression.'), path: str('Directory or file to search; default the workspace root.'),
       glob: str('Only files whose workspace-relative path matches this glob.'), ignoreCase: { type: 'boolean' },
-      context: int('Context lines around each hit (max 5).'), maxHits: int('Hit cap for this call (max 200).') } } },
+      context: int('Context lines around each hit (max 5).'), maxHits: int('Cap on hits that open a context window (max 200); hits inside an opened window are also shown.') } } },
   { name: 'glob', version: 1, toolClass: 'read', description: 'Find workspace files by glob ("**" any directories, "*" within a name).',
     inputSchema: { type: 'object', required: ['pattern'], properties: { pattern: str('Glob relative to path.'), path: str('Directory; default the workspace root.') } } },
 ] as const satisfies readonly AgentToolSpec[]);
@@ -56,17 +56,26 @@ function capped(outcome: AgentToolOutcome, maxBytes: number): AgentToolOutcome {
   const marker = `\n[deckent] result cut at the ${maxBytes}-byte cap (${bytes} bytes); narrow the request`;
   return { status: outcome.status, text: sliceUtf8(Buffer.from(outcome.text, 'utf8'), maxBytes - Buffer.byteLength(marker, 'utf8')) + marker };
 }
-/** Joins rows until the byte budget; a cut is always stated with how to narrow. */
-function rowsWithin(rows: readonly string[], trailer: readonly string[], maxBytes: number, narrow: string): string {
-  const tail = trailer.join('\n'), reserve = Buffer.byteLength(tail, 'utf8') + 160, out: string[] = [];
+/** Rows that fit the byte budget before the trailer; a cut is always stated with how to narrow. `kept` counts the rows returned. */
+function fitRows(rows: readonly string[], trailer: readonly string[], maxBytes: number, narrow: string, extraReserve = 0) {
+  const reserve = Buffer.byteLength(trailer.join('\n'), 'utf8') + 160 + extraReserve, out: string[] = [];
   let used = 0;
   for (const row of rows) {
     const bytes = Buffer.byteLength(row, 'utf8') + 1;
-    if (used + bytes > maxBytes - reserve) { out.push(`[deckent] truncated at ${out.length} of ${rows.length} rows (result byte cap); ${narrow}`); break; }
+    if (used + bytes > maxBytes - reserve) return { lines: [...out, `[deckent] truncated at ${out.length} of ${rows.length} rows (result byte cap); ${narrow}`], kept: out.length };
     out.push(row); used += bytes;
   }
-  return [...out, ...(tail ? [tail] : [])].join('\n');
+  return { lines: out, kept: out.length };
 }
+/** Joins rows until the byte budget; a cut is always stated with how to narrow. */
+function rowsWithin(rows: readonly string[], trailer: readonly string[], maxBytes: number, narrow: string): string {
+  const tail = trailer.join('\n');
+  return [...fitRows(rows, trailer, maxBytes, narrow).lines, ...(tail ? [tail] : [])].join('\n');
+}
+/** grep's exact count, always its last line when it returned hits (Astra 2145 R2): the hit rows cannot be parsed back reliably (a
+ * workspace path may contain ':'), so the terminal reads only this line. Bounded: at most 200 windows × 11 lines. */
+const GREP_COUNT_RESERVE = 48;
+const grepCountLine = (shown: number, more: boolean) => `[deckent] grep: matches=${shown}${more ? '+' : ''}`;
 function argumentProblem(args: Record<string, unknown>): string | null {
   for (const key of ['path'] as const) if (typeof args[key] === 'string' && Buffer.byteLength(args[key], 'utf8') > MAX_PATH_ARG_BYTES) return `argument-too-long name=${key} limit=${MAX_PATH_ARG_BYTES}`;
   for (const key of ['pattern', 'glob'] as const) if (typeof args[key] === 'string' && Buffer.byteLength(args[key], 'utf8') > MAX_PATTERN_ARG_BYTES) return `argument-too-long name=${key} limit=${MAX_PATTERN_ARG_BYTES}`;
@@ -141,7 +150,9 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     // shape (no separators), so every existing caller and result is unaffected.
     const context = boundedIntArg(args['context'], 0, 0, GREP_MAX_CONTEXT);
     const maxHits = boundedIntArg(args['maxHits'], MAX_GREP_HITS, 1, MAX_GREP_HITS);
-    const hits: string[] = [], skipped: string[] = [];
+    // One row per seed hit (its whole context window when context > 0) and, per row, the ':'-marked hit lines it holds. `maxHits`
+    // caps seed hits (windows opened); hits inside an opened window are shown and counted too (Astra 2145 R2).
+    const hits: string[] = [], hitLines: number[] = [], skipped: string[] = [];
     let scanned = 0, hitCapped = false;
     const runner = createRegexRunner(signal);
     const scanText = async (rel: string, text: string) => {
@@ -155,15 +166,19 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       let lastEmitted = 0, firstBlockOfFile = true;
       for (const index of matches) {
         if (hits.length >= maxHits) { hitCapped = true; return false; }
-        if (context === 0) { hits.push(`${rel}:${index + 1}:${boundLine(lines[index]!, index + 1, 0, GREP_BYTES_PER_LINE).text}`); continue; }
+        if (context === 0) { hits.push(`${rel}:${index + 1}:${boundLine(lines[index]!, index + 1, 0, GREP_BYTES_PER_LINE).text}`); hitLines.push(1); continue; }
         const from = Math.max(index - context, lastEmitted), to = Math.min(lines.length - 1, index + context);
         // This match's whole window already printed inside an earlier, still-open block (its own line included,
         // correctly marked ':' there via matchSet) — nothing new to emit, and pushing would add an empty row.
         if (from > to) continue;
         const block: string[] = [];
+        let marked = 0;
         if (!firstBlockOfFile && from > lastEmitted) block.push('--');
-        for (let j = from; j <= to; j++) block.push(`${rel}:${j + 1}${matchSet!.has(j) ? ':' : '-'}${boundLine(lines[j]!, j + 1, 0, GREP_BYTES_PER_LINE).text}`);
-        hits.push(block.join('\n')); lastEmitted = to + 1; firstBlockOfFile = false;
+        for (let j = from; j <= to; j++) {
+          const hit = matchSet!.has(j); if (hit) marked++;
+          block.push(`${rel}:${j + 1}${hit ? ':' : '-'}${boundLine(lines[j]!, j + 1, 0, GREP_BYTES_PER_LINE).text}`);
+        }
+        hits.push(block.join('\n')); hitLines.push(marked); lastEmitted = to + 1; firstBlockOfFile = false;
       }
       return true;
     };
@@ -188,10 +203,16 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
       const notes = [...(hitCapped ? [`truncated (${maxHits} hits cap); narrow with path or glob`] : []), ...(incomplete ? [incomplete] : []),
         ...skipped.slice(0, MAX_SKIP_NOTES).map(entry => `skipped ${entry}`), ...(skipped.length > MAX_SKIP_NOTES ? [`${skipped.length - MAX_SKIP_NOTES} more skipped file(s)`] : [])];
       const partial = skipped.length > 0 || incomplete !== null;
-      const trailer = hits.length === 0
-        ? [partial ? `[deckent] grep: no matches in ${scanned} scanned file(s); the search was not complete` : `[deckent] grep: no matches in ${scanned} scanned file(s)`, ...(notes.length ? [`[deckent] grep: ${notes.join('; ')}`] : [])]
-        : notes.length ? [`[deckent] grep: ${notes.join('; ')}`] : [];
-      return { status: 'ok', text: rowsWithin(hits, trailer, limits.maxResultBytes, 'narrow with path or glob') };
+      if (hits.length === 0) {
+        const trailer = [partial ? `[deckent] grep: no matches in ${scanned} scanned file(s); the search was not complete` : `[deckent] grep: no matches in ${scanned} scanned file(s)`, ...(notes.length ? [`[deckent] grep: ${notes.join('; ')}`] : [])];
+        return { status: 'ok', text: rowsWithin(hits, trailer, limits.maxResultBytes, 'narrow with path or glob') };
+      }
+      // Counted after the byte cap: N is the hit lines this result returns, and a cut row makes it `N+`.
+      const notesLine = notes.length ? [`[deckent] grep: ${notes.join('; ')}`] : [];
+      const fitted = fitRows(hits, notesLine, limits.maxResultBytes, 'narrow with path or glob', GREP_COUNT_RESERVE);
+      const shown = hitLines.slice(0, fitted.kept).reduce((sum, count) => sum + count, 0);
+      const more = hitCapped || partial || fitted.kept < hits.length;
+      return { status: 'ok', text: [...fitted.lines, ...notesLine, grepCountLine(shown, more)].join('\n') };
     } catch (error) {
       if (error instanceof RegexCancelled) return cancelled('grep');
       throw error;

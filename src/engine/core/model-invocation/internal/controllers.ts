@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { z } from 'zod';
 import { identitySchema, modelInvocationClaimSchema, parseModelInvocationControlRecord,
   type ModelInvocationClaim, type ModelInvocationControlRecord } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
@@ -51,15 +52,21 @@ export class ModelInvocationControllers {
 }
 
 /**
- * The send owner a runtime-service instance records on the calls it permits (FIX-2143-SLOTS). Only the service host mints it, so an open
- * call carrying it belongs to a service instance; any other owner (a host-less direct call, a build before this one) never matches.
+ * The send owner a runtime-service instance records on the calls it permits: `runtime-service:<custodyId>:<instanceId>`, where
+ * `custodyId` names the endpoint custody the instance holds (the guard socket's digest; FIX-2143-SLOTS, Astra 2145 R1). Only the
+ * service host mints it. Custody of one endpoint proves only that no instance is alive on THAT endpoint (the runtime socket is a
+ * configurable layout resource; a second endpoint may share the ledger), so an owner is proven ended only by a start holding the very
+ * custody the owner names.
  */
 const RUNTIME_SERVICE_OWNER = 'runtime-service:';
-export function runtimeServiceModelOwnerId(instanceId: string): string {
-  return identitySchema.parse(`${RUNTIME_SERVICE_OWNER}${identitySchema.parse(instanceId)}`);
+const custodyIdSchema = identitySchema.pipe(z.string().regex(/^[0-9a-f]{64}$/));
+export function runtimeServiceModelOwnerId(custodyId: string, instanceId: string): string {
+  return identitySchema.parse(`${RUNTIME_SERVICE_OWNER}${custodyIdSchema.parse(custodyId)}:${identitySchema.parse(instanceId)}`);
 }
-/** True only for an owner minted by `runtimeServiceModelOwnerId`. Whether that instance has ended is decided by endpoint custody. */
-export function isRuntimeServiceModelOwnerId(ownerId: string): boolean {
-  return typeof ownerId === 'string' && ownerId.startsWith(RUNTIME_SERVICE_OWNER) && identitySchema.safeParse(ownerId).success
-    && ownerId.length > RUNTIME_SERVICE_OWNER.length;
+/** The start-time proof for the custody held now: true only for an owner minted under this exact `custodyId`. Any other owner (another
+ * endpoint's instance, a host-less direct call, an earlier unpublished shape without custody) stays unproven, so its call keeps its slot. */
+export function endedRuntimeServiceModelOwner(custodyId: string): (ownerId: string) => boolean {
+  const prefix = `${RUNTIME_SERVICE_OWNER}${custodyIdSchema.parse(custodyId)}:`;
+  return ownerId => typeof ownerId === 'string' && ownerId.length > prefix.length && ownerId.startsWith(prefix)
+    && identitySchema.safeParse(ownerId).success;
 }
