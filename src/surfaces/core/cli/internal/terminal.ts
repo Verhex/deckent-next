@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline';
+import { mcpSlash } from './mcp.js';
 import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels,
@@ -278,6 +279,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
+    ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options) } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {

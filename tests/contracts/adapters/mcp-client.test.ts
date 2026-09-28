@@ -234,10 +234,21 @@ describe('MCP registry: scopes, precedence, expansion and the trust record', () 
     expect(await readMcpRegistryFile(personal, 'personal', '/p')).toMatchObject({ ok: true, user: { u: { command: 'u' } }, local: { l: { command: 'l' } } });
     expect(await readMcpTrust(root)).toEqual({ ok: true, state: { schemaVersion: 1, revision: 0, servers: [] } });
     const record = { scope: 'project' as const, name: 'fx', definitionDigest: 'a'.repeat(64), tools: [{ name: 'echo', digest: 'b'.repeat(64), alwaysAsk: false }],
-      approvedAtMs: 1, principal: { issuer: 'h', subject: '1' } };
+      decision: 'trusted' as const, reconnect: 0, approvedAtMs: 1, principal: { issuer: 'h', subject: '1' } };
     expect(await updateMcpTrust(root, () => [record])).toMatchObject({ revision: 1, servers: [record] });
     expect(statSync(join(root, 'mcp-trust.json')).mode & 0o777).toBe(0o600);
     chmodSync(join(root, 'mcp-trust.json'), 0o644);
     expect(await readMcpTrust(root)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+  });
+
+  it('concurrent trust writers never lose a record (the config write lock serializes read-change-write)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-trust-lock-')); roots.push(root);
+    const record = (name: string) => ({ scope: 'project' as const, name, definitionDigest: 'a'.repeat(64), tools: [], decision: 'trusted' as const, reconnect: 0, approvedAtMs: 1,
+      principal: { issuer: 'h', subject: '1' } });
+    const names = Array.from({ length: 24 }, (_, index) => `s${index}`);
+    await Promise.all(names.map(name => updateMcpTrust(root, state => [...state.servers, record(name)])));
+    const read = await readMcpTrust(root);
+    expect(read.ok && read.state.servers.map(entry => entry.name).sort()).toEqual([...names].sort());
+    expect(read.ok && read.state.revision).toBe(24);
   });
 });

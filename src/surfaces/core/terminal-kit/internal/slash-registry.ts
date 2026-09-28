@@ -27,6 +27,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'reasoning', descriptionKey: 'terminal.slash.reasoning' },
   // SCR-A: lists the conversation's scratch area (`/scratch path`, `/scratch clear` typed); runs at once from the palette.
   { name: 'scratch', descriptionKey: 'terminal.slash.scratch' },
+  // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
+  { name: 'mcp', descriptionKey: 'terminal.slash.mcp' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },

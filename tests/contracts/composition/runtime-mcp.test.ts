@@ -40,7 +40,7 @@ const approve = (project: string, env: Record<string, string>, name = 'fx', alwa
 /** Approval through the adapter with the harness's sandbox list (the composition command always uses the shipped providers). */
 const approveWithout = (f: { project: string; data: string; env: Record<string, string> }) => runMcpCommand({ verb: 'approve', name: 'fx', alwaysAsk: [] },
   { projectRoot: f.project, layout: resolveProductLayout({ projectRoot: f.project, root: f.data }), environment: f.env, secret: async () => undefined, sandboxes: [],
-    principal: { issuer: 'test', subject: '1' }, confirm: async () => true });
+    principal: { issuer: 'test', subject: '1' }, ask: async () => true, audit: async () => undefined });
 type Effect = 'allow' | 'require-approval' | 'deny';
 const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
   { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo', 'mcp__fx__slow'] } },
@@ -89,25 +89,39 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
   }, 60_000);
 
-  it('a server in the registry but not approved is never started nor offered; a changed entry needs approval again', async () => {
+  it('a project server nobody decided on asks on its first use: no to the launch card starts nothing; yes to both cards pins and offers it; a change asks again', async () => {
     const m = mcpFixture();
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
     registry(f.project, { fx: m.entry() });
-    f.state.script = [{ content: 'Nothing.' }, { content: 'Approved.' }, { content: 'Changed.' }];
-    await answered(f, 'turn-pending', null);
+    f.state.script = [{ content: 'Declined.' }, { content: 'Approved.' }, { content: 'Changed.' }, { content: 'Again.' }];
+    const declined = await answered(f, 'turn-pending', 'deny');
+    const [launch] = requested(declined.events);
+    expect(launch?.kind === 'approval.requested' && launch.summary).toBe('mcp_trust · mcp:fx · launch');
+    expect(launch?.kind === 'approval.requested' && launch.preview).toContain('MCP server fx (project scope');
+    expect(requested(declined.events)).toHaveLength(1);
     expect(toolNames(f.state.requests[0]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     expect(m.starts()).toEqual([]);
-    await approve(f.project, f.env);
-    await answered(f, 'turn-approved', null);
-    expect(toolNames(f.state.requests[1]!)).toContain('mcp__fx__echo');
+    const get = async () => ((await runConfiguredMcpCommand(f.project, { verb: 'get', name: 'fx' }, { env: f.env }, async () => null)) as { server: { status: string } }).server.status;
+    expect(await get()).toBe('declined');
+    // Declined is remembered: the next message does not ask; `/mcp approve fx` (reset) makes it ask again.
+    await answered(f, 'turn-quiet', 'allow');
+    expect(toolNames(f.state.requests[1]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
+    await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
+    const allowed = await answered(f, 'turn-approved', 'allow');
+    expect(requested(allowed.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch', 'mcp_trust · mcp:fx · tools']);
+    const [, tools] = requested(allowed.events);
+    expect(tools?.kind === 'approval.requested' && tools.preview).toContain('echo');
+    expect(toolNames(f.state.requests[2]!)).toContain('mcp__fx__echo');
+    expect(await get()).toBe('trusted');
     registry(f.project, { fx: m.entry({ args: [FIXTURE, '--mode', 'legacy', ...m.entry().args.slice(3)] }) });
-    const before = m.starts().length;
-    await answered(f, 'turn-changed', null);
-    expect(toolNames(f.state.requests[2]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
-    expect(m.starts().length).toBe(before);
-    const listed = await runConfiguredMcpCommand(f.project, { verb: 'get', name: 'fx' }, { env: f.env }, async () => false) as { server: { status: string } };
-    expect(listed.server.status).toBe('changed');
-  }, 60_000);
+    const changed = await answered(f, 'turn-changed', 'deny');
+    expect(requested(changed.events)).toHaveLength(1);
+    expect(toolNames(f.state.requests[3]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
+    expect(await get()).toBe('declined');
+    // Every decision is a sealed audit event of the project's ledger.
+    const audits = f.rows('SELECT record FROM audit_events ORDER BY sequence').map(row => (JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } }).event.subject);
+    expect(audits.filter(subject => subject['kind'] === 'mcp-trust').map(subject => subject['action'])).toEqual(['decline', 'reset', 'trust', 'decline']);
+  }, 90_000);
 
   it('a denied card sends nothing; a company deny answers denied-by-policy without a card and sends nothing', async () => {
     const m = mcpFixture();
@@ -158,9 +172,12 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     registry(caged.project, { fx: m.entry({ realm: 'require-sandbox' }) });
     await expect(approveWithout(caged)).rejects.toMatchObject({ code: 'MCP_SANDBOX_UNAVAILABLE' });
     expect(m.starts()).toEqual([]);
+    // The first-use launch card still asks; yes cannot start it (no sandbox): no tools card, nothing recorded, nothing offered.
     caged.state.script = [{ content: 'Nothing.' }];
-    await answered(caged, 'turn-caged', null);
+    const cagedTurn = await answered(caged, 'turn-caged', 'allow');
+    expect(requested(cagedTurn.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch']);
     expect(toolNames(caged.state.requests[0]!).filter(name => name.startsWith('mcp__'))).toEqual([]);
+    expect(m.starts()).toEqual([]);
     const hosted = await runtime({ extraGrants: mcpGrants(), sandboxes: () => [] }); await hosted.start();
     registry(hosted.project, { fx: m.entry({ realm: 'prefer-sandbox' }) });
     await expect(approveWithout(hosted)).resolves.toMatchObject({ approved: true });
@@ -220,7 +237,7 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     registry(auto.project, { fx: m.entry() }); await approve(auto.project, env, 'fx', ['drop']);
     const lowered = await auto.call('mcp__fx__echo', { text: 'auto' });
     expect(lowered).toMatchObject({ card: false, status: 'ok' });
-    const [record] = auto.audit();
+    const [record] = auto.audit().filter(entry => entry.event.subject['kind'] === 'permission-mode');
     expect(record?.event.subject).toMatchObject({ kind: 'permission-mode', mode: 'full-auto', cell: 'mcp-call', tool: { name: 'mcp__fx__echo', version: 1 },
       summary: { kind: 'mcp', tool: 'mcp:fx/echo' } });
     const floored = await auto.call('mcp__fx__drop', {});

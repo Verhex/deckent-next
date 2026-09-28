@@ -25,7 +25,7 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   const json = (result: ReturnType<typeof run>) => { expect(result.code, result.err).toBe(0); return JSON.parse(result.out) as Record<string, unknown>; };
   const started = () => readFileSync(log, 'utf8').split('\n').filter(line => line.includes('"start"')).length;
   expect(json(run('add', '--scope', 'project', '--realm', 'host', 'fx', '--', process.execPath, FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log)))
-    .toMatchObject({ added: { name: 'fx', scope: 'project', file: join(project, '.deckent', 'mcp.json') }, approval: 'pending' });
+    .toMatchObject({ added: { name: 'fx', scope: 'project', file: join(project, '.deckent', 'mcp.json') }, trust: 'pending' });
   expect(json(run('list', '--json'))).toMatchObject({ servers: [{ name: 'fx', scope: 'project', status: 'pending-approval', health: 'not-started' }] });
   expect(started()).toBe(0);
   const refused = run('approve', 'fx');
@@ -34,7 +34,12 @@ it.skipIf(process.platform !== 'linux')('add, list, approve, get and remove thro
   expect(json(run('list', '--json'))).toMatchObject({ servers: [{ name: 'fx', status: 'trusted', health: 'connected', era: 'legacy' }] });
   expect(json(run('get', 'fx', '--json'))).toMatchObject({ server: { name: 'fx', trust: { tools: [{ name: 'echo' }] } } });
   expect(json(run('remove', 'fx', '--json'))).toMatchObject({ removed: { name: 'fx', scope: 'project' } });
+  // A personal add is its trust decision: without a terminal it needs --yes (nothing is written before).
+  const personal = run('add', '--realm', 'host', 'lx', '--', process.execPath, FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log);
+  expect(personal.code).not.toBe(0); expect(personal.err + personal.out).toContain('MCP_APPROVAL_NEEDS_TERMINAL');
+  expect(json(run('add', '--yes', '--realm', 'host', 'lx', '--json', '--', process.execPath, FIXTURE, '--mode', 'legacy', '--tools', tools, '--log', log)))
+    .toMatchObject({ added: { name: 'lx', scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
   const gone = run('get', 'fx');
   expect(gone.code).not.toBe(0); expect(gone.err + gone.out).toContain('MCP_SERVER_UNKNOWN');
-  expect(JSON.parse(readFileSync(join(project, '.deckent', 'integrations', 'mcp-trust.json'), 'utf8'))).toMatchObject({ servers: [] });
+  expect(JSON.parse(readFileSync(join(project, '.deckent', 'integrations', 'mcp-trust.json'), 'utf8'))).toMatchObject({ servers: [{ name: 'lx', scope: 'local', decision: 'trusted' }] });
 }, 120_000);

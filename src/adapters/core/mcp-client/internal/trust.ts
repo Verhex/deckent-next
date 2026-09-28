@@ -2,12 +2,15 @@ import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { withConfigWriteLock } from '#platform/index.js';
 import { MCP_SCOPES } from './registry.js';
 
 /**
  * MCP trust and tool pins as product state (MCP-CLIENT): the registry files say which servers exist; this record says which exact server
- * definitions the owner approved and which tool definitions were pinned then. It lives in the data root's `integrations` directory (no layout
- * or ledger schema change), private (0600) and replaced atomically; the agent tools and both sandboxes never reach the data root.
+ * definitions the owner trusted (or declined) and which tool definitions were pinned then. Project and local trust live in the data root's
+ * `integrations` directory (no layout or ledger schema change); user trust lives beside the personal registry in the Deckent global root, so it
+ * holds in every project (owner 2026-09-28). Private (0600), replaced atomically under the cross-process config write lock; the agent tools
+ * and both sandboxes never reach either place.
  */
 export const MCP_TRUST_FILE = 'mcp-trust.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -15,6 +18,10 @@ const scope = z.enum(MCP_SCOPES);
 export const mcpTrustRecordSchema = z.object({
   scope, name: z.string().regex(/^[a-z][a-z0-9]{0,15}$/u), definitionDigest: digest,
   tools: z.array(z.object({ name: z.string().min(1).max(128), digest, alwaysAsk: z.boolean() }).strict()).max(512),
+  /** `trusted`: offered; `declined`: the owner said no for this definition (not asked again until it changes or is reset). */
+  decision: z.enum(['trusted', 'declined']),
+  /** Bumped by `/mcp reconnect`: the service replaces the running process on its next use. */
+  reconnect: z.number().int().nonnegative(),
   approvedAtMs: z.number().int().nonnegative(), principal: z.object({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }).strict(),
 }).strict();
 export type McpTrustRecord = z.infer<typeof mcpTrustRecordSchema>;
@@ -37,14 +44,17 @@ export async function readMcpTrust(directory: string): Promise<{ readonly ok: tr
 export const findMcpTrust = (state: McpTrustState, scopeName: McpTrustRecord['scope'], name: string) =>
   state.servers.find(record => record.scope === scopeName && record.name === name) ?? null;
 
-/** Replaces the record through `change` (read, change, write a private temporary, rename); an unreadable record is never overwritten. */
+/** Replaces the record through `change` inside the config write lock of the file (read, change, write a private temporary, rename); an
+ * unreadable record is never overwritten, and two writers never lose each other's change. */
 export async function updateMcpTrust(directory: string, change: (state: McpTrustState) => McpTrustState['servers']): Promise<McpTrustState> {
-  const current = await readMcpTrust(directory);
-  if (!current.ok) throw Object.assign(new Error(current.reason), { code: 'MCP_TRUST_STORE_UNAVAILABLE' });
-  const next = fileSchema.parse({ schemaVersion: 1, revision: current.state.revision + 1, servers: change(current.state) });
-  const temporary = join(directory, `.${MCP_TRUST_FILE}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
-  const handle = await open(temporary, 'wx', 0o600);
-  try { await handle.writeFile(`${JSON.stringify(next, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
-  try { await rename(temporary, join(directory, MCP_TRUST_FILE)); } catch (error) { await rm(temporary, { force: true }); throw error; }
-  return next;
+  return withConfigWriteLock(join(directory, MCP_TRUST_FILE), async () => {
+    const current = await readMcpTrust(directory);
+    if (!current.ok) throw Object.assign(new Error(current.reason), { code: 'MCP_TRUST_STORE_UNAVAILABLE' });
+    const next = fileSchema.parse({ schemaVersion: 1, revision: current.state.revision + 1, servers: change(current.state) });
+    const temporary = join(directory, `.${MCP_TRUST_FILE}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
+    const handle = await open(temporary, 'wx', 0o600);
+    try { await handle.writeFile(`${JSON.stringify(next, null, 2)}\n`); await handle.sync(); } finally { await handle.close(); }
+    try { await rename(temporary, join(directory, MCP_TRUST_FILE)); } catch (error) { await rm(temporary, { force: true }); throw error; }
+    return next;
+  }, 10_000);
 }
