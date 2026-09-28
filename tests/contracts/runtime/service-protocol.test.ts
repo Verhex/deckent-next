@@ -7,7 +7,7 @@ const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decide
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode'] as const;
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const binding = { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) };
 const invocation = {
@@ -40,6 +40,19 @@ describe('runtime service protocol', () => {
     expect(classifyRuntimeServiceOperation('inspectProviderSpendAccount')).toBe('control');
     expect(classifyRuntimeServiceOperation('auditProviderSpendAccount')).toBe('control');
     expect(runtimeServiceOperationSchema.options).toEqual(operations);
+  });
+
+  it('carries the v16 scratch operations (SCR-A): bounded delivery, strict input of scope and session, never in v15', () => {
+    const query = { schemaVersion: 1, scopeId: 'scope-1', sessionId: 'session-1' };
+    for (const operation of ['inspectScratch', 'clearScratch'] as const) {
+      const request = { schemaVersion: 16, requestId: 'request-1', operation, input: query, delivery: { maxResultBytes: 4096 } };
+      expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+      expect(classifyRuntimeServiceOperation(operation)).toBe('control');
+      for (const invalid of [{ ...request, delivery: undefined }, { ...request, schemaVersion: 15 }, { ...request, input: { ...query, sessionId: '' } },
+        { ...request, input: { ...query, principal: 'someone' } }, { ...request, input: { schemaVersion: 1, scopeId: 'scope-1' } }]) {
+        expect(runtimeServiceRequestSchema.safeParse(invalid).success).toBe(false);
+      }
+    }
   });
 
   it('streams an invocation with bounded delivery and strict ordered delta frames', () => {

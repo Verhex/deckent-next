@@ -1,8 +1,9 @@
 import { readdirSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
-import type { ShellPathContext, ShellPathVerdict, ShellReasonCode, ShellWord } from '#engine/index.js';
+import type { ShellPathContext, ShellPathVerdict, ShellReasonCode, ShellWord, ShellWritePathContext } from '#engine/index.js';
 import type { WorkspacePathError, WorkspaceScope } from '#adapters/core/workspace-read/index.js';
+import { ABSENT_FILE_VERSION, isWriteApprovalFloored, readWritableFile, resolveWritable } from '#adapters/core/workspace-write/index.js';
 
 /** Default per-argument bound of shell glob expansion (legacy DEFAULT_MAX_GLOB_MATCHES); over it the command is not read-only. */
 export const SHELL_GLOB_MAX_MATCHES = 10_000;
@@ -115,8 +116,23 @@ const fromScope = (error: WorkspacePathError): ShellReasonCode =>
  * that leave the root and return (the final real path is what the shell reads); the verdict is taken before the command runs, so a
  * later swap is not excluded.
  */
-export function createShellPathContext(scope: WorkspaceScope, maxGlobMatches = SHELL_GLOB_MAX_MATCHES): ShellPathContext & { readonly examined: readonly string[] } {
+export function createShellPathContext(project: WorkspaceScope, maxGlobMatches = SHELL_GLOB_MAX_MATCHES,
+  roots: readonly WorkspaceScope[] = []): ShellPathContext & { readonly examined: readonly string[] } {
   const examined: string[] = [];
+  const contexts = [project, ...roots].map(scope => shellPathCheck(scope, maxGlobMatches, examined));
+  return {
+    examined,
+    // An absolute path inside a second root (SCR-A: the conversation's scratch area) is checked against that root's own scope.
+    check: (word, readsContent, lexicalOnly = false) => contexts[secondRoot(roots, word.text) + 1]!(word, readsContent, lexicalOnly),
+  };
+}
+
+/** Index of the second root that lexically holds an absolute `path` (-1: none, the project scope decides). */
+export function secondRoot(roots: readonly WorkspaceScope[], path: string): number {
+  return path.startsWith('/') ? roots.findIndex(root => path === root.root || path.startsWith(`${root.root}/`)) : -1;
+}
+
+function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, examined: string[]): ShellPathContext['check'] {
   const fail = (reasonCode: ShellReasonCode, word: ShellWord): Refused => ({ ok: false, reasonCode, detail: word.text });
   const resolved = async (rel: string, word: ShellWord): Promise<ShellPathVerdict> => {
     const found = await scope.resolve(rel === '' ? '.' : rel, true);
@@ -132,43 +148,65 @@ export function createShellPathContext(scope: WorkspaceScope, maxGlobMatches = S
     if (scope.denied(rel)) return fail('PATH_PROTECTED', word);
     return { ok: true, abs: real, rel };
   };
+  return async (word, _readsContent, lexicalOnly = false) => {
+    const raw = word.text;
+    if (raw === '-' || raw.length === 0) return { ok: true };
+    if (word.tilde) return fail('PATH_OUTSIDE_ROOT', word);
+    // Only unquoted glob characters expand: the literal prefix directory is checked first, then every match.
+    const globAt = word.glob ? raw.search(GLOB_CHARS) : -1;
+    let prefix = globAt >= 0 ? raw.slice(0, globAt) : raw;
+    if (globAt >= 0) prefix = prefix.slice(0, prefix.lastIndexOf('/') + 1);
+    const abs = posix.resolve(scope.root, prefix.length > 0 ? prefix : '.');
+    const rel = posix.relative(scope.root, abs);
+    if (rel.startsWith('..') || posix.isAbsolute(rel)) return fail('PATH_OUTSIDE_ROOT', word);
+    examined.push(rel === '' ? '.' : rel);
+    if (scope.denied(rel)) return fail('PATH_PROTECTED', word);
+    if (lexicalOnly) return { ok: true };
+    const parent = PARENT_SEGMENT.test(prefix);
+    if (globAt < 0) {
+      if (!parent) return resolved(rel, word);
+      const target = await opened(raw, word);
+      return target.ok ? resolved(target.rel, word) : target;
+    }
+    // With a `..` in the literal prefix, sh lists the directory the kernel opens: that one is checked and expanded.
+    const dir = parent ? await opened(prefix, word) : { ok: true as const, abs, rel };
+    if (!dir.ok) return dir;
+    const base = await resolved(dir.rel, word);
+    if (!base.ok) return base;
+    const matches = expandGlob(dir.abs, raw.slice(prefix.length), maxGlobMatches);
+    if (matches === 'unsupported') return fail('GLOB_UNSUPPORTED', word);
+    if (matches === null || matches.length === 0) return fail('GLOB_EXPANSION', word);
+    for (const match of matches) {
+      const matchRel = posix.relative(scope.root, match);
+      if (scope.denied(matchRel)) return fail('PATH_PROTECTED', word);
+      const verdict = await resolved(matchRel, word);
+      if (!verdict.ok) return verdict;
+    }
+    return { ok: true };
+  };
+}
+
+/**
+ * Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the
+ * workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it
+ * would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source
+ * of `mv`). Anything else makes the command not narrow — it then asks, as before. An absolute path inside a second root (SCR-A: the
+ * conversation's scratch area) is checked the same way against that root's scope.
+ */
+export function createShellWriteContext(project: WorkspaceScope, roots: readonly WorkspaceScope[] = []): ShellWritePathContext {
   return {
-    examined,
-    async check(word, _readsContent, lexicalOnly = false) {
-      const raw = word.text;
-      if (raw === '-' || raw.length === 0) return { ok: true };
-      if (word.tilde) return fail('PATH_OUTSIDE_ROOT', word);
-      // Only unquoted glob characters expand: the literal prefix directory is checked first, then every match.
-      const globAt = word.glob ? raw.search(GLOB_CHARS) : -1;
-      let prefix = globAt >= 0 ? raw.slice(0, globAt) : raw;
-      if (globAt >= 0) prefix = prefix.slice(0, prefix.lastIndexOf('/') + 1);
-      const abs = posix.resolve(scope.root, prefix.length > 0 ? prefix : '.');
-      const rel = posix.relative(scope.root, abs);
-      if (rel.startsWith('..') || posix.isAbsolute(rel)) return fail('PATH_OUTSIDE_ROOT', word);
-      examined.push(rel === '' ? '.' : rel);
-      if (scope.denied(rel)) return fail('PATH_PROTECTED', word);
-      if (lexicalOnly) return { ok: true };
-      const parent = PARENT_SEGMENT.test(prefix);
-      if (globAt < 0) {
-        if (!parent) return resolved(rel, word);
-        const target = await opened(raw, word);
-        return target.ok ? resolved(target.rel, word) : target;
-      }
-      // With a `..` in the literal prefix, sh lists the directory the kernel opens: that one is checked and expanded.
-      const dir = parent ? await opened(prefix, word) : { ok: true as const, abs, rel };
-      if (!dir.ok) return dir;
-      const base = await resolved(dir.rel, word);
-      if (!base.ok) return base;
-      const matches = expandGlob(dir.abs, raw.slice(prefix.length), maxGlobMatches);
-      if (matches === 'unsupported') return fail('GLOB_UNSUPPORTED', word);
-      if (matches === null || matches.length === 0) return fail('GLOB_EXPANSION', word);
-      for (const match of matches) {
-        const matchRel = posix.relative(scope.root, match);
-        if (scope.denied(matchRel)) return fail('PATH_PROTECTED', word);
-        const verdict = await resolved(matchRel, word);
-        if (!verdict.ok) return verdict;
-      }
-      return { ok: true };
+    async checkWrite(word, kind): Promise<ShellPathVerdict> {
+      const scope = roots[secondRoot(roots, word.text)] ?? project;
+      const refuse = (reasonCode: 'PATH_OUTSIDE_ROOT' | 'PATH_PROTECTED' | 'PATH_UNRESOLVED'): ShellPathVerdict => ({ ok: false, reasonCode, detail: word.text });
+      const target = await resolveWritable(scope, word.text);
+      if (!target.ok) return refuse(target.error === 'outside-workspace' ? 'PATH_OUTSIDE_ROOT' : target.error === 'denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED');
+      if (isWriteApprovalFloored(target.rel) || (kind === 'new-directory' && isWriteApprovalFloored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
+      // An existing directory, link or multi-link file is refused here (`not-a-file`, `is-link`, `hard-linked`): `cp`/`mv` onto a
+      // directory would write `target/basename(source)`, a path this check never saw (Astra 2133), so a directory target is not narrow.
+      const current = await readWritableFile(scope, target).catch(() => null);
+      if (!current?.ok) return refuse('PATH_UNRESOLVED');
+      const absent = current.version === ABSENT_FILE_VERSION;
+      return (kind === 'new-directory' && !absent) || (kind === 'existing-file' && absent) ? refuse('PATH_UNRESOLVED') : { ok: true };
     },
   };
 }

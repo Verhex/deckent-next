@@ -21,4 +21,5 @@ export function registerProviderConfig(): void {
 export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
 export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
-export { readTerminalChatConfig, readTerminalConfig, readTerminalShellConfig, terminalConfigSchema, type TerminalChatConfig, type TerminalShellConfig } from './terminal.js';
+export { readTerminalChatConfig, readTerminalConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, type TerminalChatConfig, type TerminalScratchConfig,
+  type TerminalShellConfig } from './terminal.js';

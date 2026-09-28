@@ -1,4 +1,5 @@
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
+import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, isRuntimeServiceScratchOperation,
+  type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
@@ -15,7 +16,8 @@ import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandIn
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
 import { PermissionModeError, runtimeOperationInspectionSchema, runtimeOperationOutcomeSchema, runtimeOperationQuerySchema, type RuntimeOperationQuery } from '#engine/index.js';
-import { effectCommandSchema, EffectError, type EffectCommand, type EffectRecord } from '#domain/index.js';
+import { effectCommandSchema, EffectError, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema, type EffectCommand, type EffectRecord, type ScratchClearance,
+  type ScratchQuery, type ScratchView } from '#domain/index.js';
 import { permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeViewSchema, type PermissionModeChange,
   type PermissionModeCommand, type PermissionModeQuery, type PermissionModeView } from '#domain/index.js';
 import type { EffectOutcome } from '#engine/index.js';
@@ -52,6 +54,9 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   inspectPermissionMode(query: PermissionModeQuery, signal?: AbortSignal): Promise<PermissionModeView>;
   /** v15: sets the caller's own mode, conditional on `expectedRevision` (typed `PERMISSION_MODE_CONFLICT` when it moved). */
   setPermissionMode(command: PermissionModeCommand, signal?: AbortSignal): Promise<PermissionModeChange>;
+  /** v16 (SCR-A `/scratch`): the caller's own scratch area of one conversation — its files, or emptied (the directory stays). */
+  inspectScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchView>;
+  clearScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchClearance>;
 }>;
 
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
@@ -134,6 +139,22 @@ function permissionModeMethods(call: RuntimeCall) {
   };
 }
 
+/** v16 `/scratch` methods: both ends validate the shapes. */
+function scratchMethods(call: RuntimeCall) {
+  const scratch = async <T>(operation: 'inspectScratch' | 'clearScratch', schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
+    input: ScratchQuery, signal?: AbortSignal): Promise<T> => {
+    try {
+      const parsed = scratchQuerySchema.safeParse(input);
+      if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
+      const result = schema.safeParse(await call(operation, parsed.data, undefined, signal));
+      if (!result.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+      return result.data;
+    } catch (error) { throw queryFailure(error); }
+  };
+  return { inspectScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchView>('inspectScratch', scratchViewSchema, input, signal),
+    clearScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchClearance>('clearScratch', scratchClearanceSchema, input, signal) };
+}
+
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
@@ -151,7 +172,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
-        || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
+        || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation) || isRuntimeServiceScratchOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -190,7 +211,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
     && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile'
-    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation)).map(operation =>
+    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation) && !isRuntimeServiceScratchOperation(operation)).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
@@ -214,6 +235,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     ...workspaceFileMethods(call),
     ...effectOperationMethods(call),
     ...permissionModeMethods(call),
+    ...scratchMethods(call),
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);

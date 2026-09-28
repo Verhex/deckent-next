@@ -1,13 +1,14 @@
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
-import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, runtimeServiceErrorParams } from '#engine/index.js';
+import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, runtimeServiceErrorParams } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
-  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority } from '#adapters/index.js';
+  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig,
+  startScratchSweeper, sweepScratch, type ScratchSweepResult } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -19,7 +20,7 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
+import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, scratchResource, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
@@ -40,6 +41,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   /** Open model calls of an ended service instance settled `unknown`, and slots an earlier build kept for settled `unknown` calls,
    * released at this start (INFLIGHT-FIX, FIX-2143-SLOTS); allocations whose records do not verify are reported untouched. */
   onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
+  /** Scratch areas unused past retention removed at start and by the running service's periodic sweep (SCR-A S4). */
+  onScratchSwept?(result: ScratchSweepResult): void | Promise<void>;
 }
 
 /** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
@@ -103,6 +106,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   await registerConfiguredScopesAtStart(config);
   await interruptAgentTurnsAtStart(config, observer);
+  // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held).
+  const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);
+  const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), { has: () => false }) : null;
+  if (swept && (swept.removedSessions || swept.unreadable)) await observer.onScratchSwept?.(swept);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
     onPage: (command, result) => observer.onReconciliationPage?.(command, result),
@@ -113,7 +120,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const modelHost = { ownerId: runtimeServiceModelOwnerId(instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
-  const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal);
+  const scratchActivity = createScratchActivity(), chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity);
+  startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
+    onSweep: result => { void observer.onScratchSwept?.(result); } });
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
     onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
@@ -155,7 +164,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)
           : request.operation === 'chatTurn' || request.operation === 'cancelChatTurn'
           ? executeConfiguredRuntimeChatTurnOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost, turn)
-          : request.operation === 'findWorkspaceFiles' || request.operation === 'attachWorkspaceFile'
+          : request.operation === 'findWorkspaceFiles' || request.operation === 'attachWorkspaceFile' || isRuntimeServiceScratchOperation(request.operation)
           ? executeConfiguredRuntimeWorkspaceFileOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, workspaceFiles, turnStop.signal)
           : isRuntimeServiceEffectOperation(request.operation)
           ? executeConfiguredRuntimeEffectOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)

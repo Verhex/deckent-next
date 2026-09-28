@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, classifyReadOnlyShellCommand, classifyShellMutation, classifyShellRisk,
-  shellPermissionTier, type EffectApprovalGate, type ShellPathVerdict, type ShellPermissionTier, type ShellRiskClassification,
-  type ShellWritePathContext } from '#engine/index.js';
+  shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { ABSENT_FILE_VERSION, createLocalPeerSession, createShellPathContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
-  HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, isWriteApprovalFloored, openSqliteAttemptStore, readWritableFile, resolveWritable, type HostShellResult, type LocalPeerIdentity,
+import { createLocalPeerSession, createShellPathContext, createShellWriteContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
+  HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { boundApprovalPreview } from './preview.js';
@@ -36,29 +35,6 @@ type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: S
   | { readonly ok: false; readonly text: string };
 
 /**
- * Write targets of the narrow mutating tier (T-L4 slice 4a), over the same workspace scope and write floor as agent edits: inside the
- * workspace, not denied, parent a real directory inside, not on the write floor (a new directory is refused when anything under it
- * would be), and the target absent (new directory), absent or a single-link regular file (file), or such an existing file (the source
- * of `mv`). Anything else makes the command not narrow — it then asks, as before.
- */
-export function createShellWriteContext(scope: WorkspaceScope): ShellWritePathContext {
-  return {
-    async checkWrite(word, kind): Promise<ShellPathVerdict> {
-      const refuse = (reasonCode: 'PATH_OUTSIDE_ROOT' | 'PATH_PROTECTED' | 'PATH_UNRESOLVED'): ShellPathVerdict => ({ ok: false, reasonCode, detail: word.text });
-      const target = await resolveWritable(scope, word.text);
-      if (!target.ok) return refuse(target.error === 'outside-workspace' ? 'PATH_OUTSIDE_ROOT' : target.error === 'denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED');
-      if (isWriteApprovalFloored(target.rel) || (kind === 'new-directory' && isWriteApprovalFloored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
-      // An existing directory, link or multi-link file is refused here (`not-a-file`, `is-link`, `hard-linked`): `cp`/`mv` onto a
-      // directory would write `target/basename(source)`, a path this check never saw (Astra 2133), so a directory target is not narrow.
-      const current = await readWritableFile(scope, target).catch(() => null);
-      if (!current?.ok) return refuse('PATH_UNRESOLVED');
-      const absent = current.version === ABSENT_FILE_VERSION;
-      return (kind === 'new-directory' && !absent) || (kind === 'existing-file' && absent) ? refuse('PATH_UNRESOLVED') : { ok: true };
-    },
-  };
-}
-
-/**
  * The agent's host shell in one turn (T-L4 slice 3c, Jev 82858581). A command is classified into a permission tier: only a
  * read-only command of bounded reach (risk `none`: explicit, checked paths) runs without asking under allow; traversal and
  * repository-object reads (`low`), the destructive table, the always-ask floor and any other modification ask in every mode; the
@@ -67,8 +43,10 @@ export function createShellWriteContext(scope: WorkspaceScope): ShellWritePathCo
  * goes to the turn only while the channel has room; beyond that it is skipped with one visible marker (the result is unaffected).
  */
 export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer: LocalPeerIdentity; readonly config: TerminalShellConfig;
-  readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel }) {
-  const { scope, context, scopeId, turnId, channel } = input;
+  readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel;
+  /** SCR-A: the conversation's scratch area — the command's `TMPDIR`, and a second root its path checks accept. */
+  readonly scratch: { readonly scope: WorkspaceScope; readonly dir: string } | null }) {
+  const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
@@ -77,12 +55,12 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
     const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities());
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
-    const paths = createShellPathContext(scope);
+    const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
     const risk = classifyShellRisk(command, readOnly);
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
-      : await classifyShellMutation(command, paths, createShellWriteContext(scope));
+      : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots));
     const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
     plans.set(key(tool, args), planned);
     return planned;
@@ -136,7 +114,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput,
-        onResult: value => { result = value; } });
+        ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
         await new EffectApplication({ async resolve(ref) {

@@ -32,10 +32,10 @@ const MONOTONIC_CLOCK: HostShellClock = Object.freeze({ sample: () => ({ monoton
 
 export type { ShellRealmRequest as HostShellRequest, ShellRealmResult as HostShellResult } from '#domain/index.js';
 
-export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = []): Record<string, string> {
+export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = [], fixed: Readonly<Record<string, string>> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const name of [...HOST_SHELL_ENV_ALLOWLIST, ...extra]) { const value = source[name]; if (typeof value === 'string') env[name] = value; }
-  return { ...env, ...NON_INTERACTIVE };
+  return { ...env, ...fixed, ...NON_INTERACTIVE };
 }
 
 /** UTF-8 safe head of `buffer` within `max` bytes (`buffer` holds whole sequences). */
@@ -92,7 +92,7 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return new Promise(resolve => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv),
+      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;

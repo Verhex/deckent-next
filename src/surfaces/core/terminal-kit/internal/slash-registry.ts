@@ -25,6 +25,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'mode', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
   // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
   { name: 'reasoning', descriptionKey: 'terminal.slash.reasoning' },
+  // SCR-A: lists the conversation's scratch area (`/scratch path`, `/scratch clear` typed); runs at once from the palette.
+  { name: 'scratch', descriptionKey: 'terminal.slash.scratch' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },
