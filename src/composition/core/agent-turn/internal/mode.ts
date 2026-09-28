@@ -3,13 +3,14 @@ import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, ty
 import { AuditApplication, PolicyAuthorizationError, agentToolArgumentsDigest, decideAgentToolCall, type AgentToolCallCell, type AgentToolCallDecision,
   type EffectApprovalGate, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
-import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
+import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createAgentFileEdits } from './edits.js';
 import type { createAgentShell } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
+import type { createAgentMcp } from './mcp.js';
 
 type Execution = { readonly round: number; readonly index: number };
 type Context = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
@@ -44,14 +45,17 @@ const isAuditedDecision = (audited: Relaxed, again: AgentToolCallDecision) => ag
  */
 export function createAgentCallDecisions(input: { readonly context: Context; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly edits: (tool: string) => ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
-  readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null }) {
-  const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input;
+  readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null;
+  readonly mcp?: Awaited<ReturnType<typeof createAgentMcp>> }) {
+  const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input, mcp = input.mcp ?? null;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name;
+  const mcps = (tool: AgentToolSpec) => tool.toolClass === 'mcp';
   const stored = new Map<string, Stored>();
   const keyOf = (tool: AgentToolSpec, args: Record<string, unknown>) => agentToolArgumentsDigest(tool.name, args);
   // An edit tool no area serves still carries the project's write operation (never a one-sided decision).
   const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? edits(tool.name)?.operation ?? WORKSPACE_FILE_WRITE_OPERATION.operation
-    : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : fetches(tool) ? NETWORK_FETCH_OPERATION.operation : null;
+    : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : fetches(tool) ? NETWORK_FETCH_OPERATION.operation
+    : mcps(tool) ? MCP_TOOL_CALL_OPERATION.operation : null;
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
   const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown): Promise<AgentToolCallDecision | null> => {
@@ -63,6 +67,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     if (tool.toolClass === 'edit') { const area = edits(tool.name); return !area || area.target(tool.name, args) === null ? null : area.floored(tool.name, args) ? 'edit-floor' : 'edit'; }
     if (tool.toolClass === 'shell') { const tier = shell?.tier(tool.name, args) ?? null; return tier === null ? null : SHELL_CELLS[tier]; }
     if (fetches(tool)) return fetch?.cell(args) ?? null;
+    if (mcps(tool)) return mcp?.cell(tool.name) ?? null;
     return 'read';
   };
   const withAudit = async <T>(work: (audit: AuditApplication) => T): Promise<T> => {
@@ -84,7 +89,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const area = tool.toolClass === 'edit' ? edits(tool.name) : null;
       const planned = area ? await area.plan(tool.name, args).then(plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)
         : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args).then(plan => plan.ok ? null : plan.text)
-        : fetches(tool) && fetch ? (plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)(fetch.plan(args)) : `[deckent] ${tool.name}: error=unknown-tool`;
+        : fetches(tool) && fetch ? (plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)(fetch.plan(args))
+        : mcps(tool) && mcp ? mcp.plan(tool.name, args) : `[deckent] ${tool.name}: error=unknown-tool`;
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? `[deckent] ${tool.name}: error=failed` }); return 'require-approval'; }
       const decision = await decide(tool, cell, snapshot);
@@ -116,7 +122,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
         if (!relaxation) {
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
-          if (!fetches(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
+          if (!fetches(tool) && !mcps(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
           return await run(inner);
         }
         const argsDigest = agentToolArgumentsDigest(tool.name, args), path = edits(tool.name)?.target(tool.name, args) ?? null, command = String(args['command'] ?? '');
@@ -125,7 +131,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool: { name: tool.name, version: tool.version },
             call: { turnId, round: execution.round, index: execution.index, callId }, grants: { company: relaxation.company, person: relaxation.person },
             decision: { previous: 'require-approval', next: 'allow' },
-            summary: tool.toolClass === 'edit' ? { kind: 'edit', path: path ?? '' } : { kind: 'shell', head: command.slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest } } };
+            summary: tool.toolClass === 'edit' ? { kind: 'edit', path: path ?? '' } : mcps(tool) ? { kind: 'mcp', tool: (mcp?.display(tool.name) ?? tool.name).slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest }
+              : { kind: 'shell', head: command.slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest } } };
         // No audit, no relaxation: the event is durable before anything is written or spawned.
         try { await withAudit(audit => audit.record(event)); }
         catch { return { status: 'error', text: `[deckent] ${tool.name}: error=audit-unavailable (the permission mode's decision could not be recorded; nothing ran)` }; }

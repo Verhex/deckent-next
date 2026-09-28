@@ -191,6 +191,12 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       if (capabilities.bubblewrap !== 'available') return { ok: false, reason: `bubblewrap ${capabilities.bubblewrap}` };
       if (capabilities.userNamespace !== 'available') return { ok: false, reason: `user namespace ${capabilities.userNamespace}` };
       const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
-      return binary.ok ? { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null } : { ok: false, reason: binary.reason };
+      if (!binary.ok) return { ok: false, reason: binary.reason };
+      // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts.
+      const launch = async (environment: Readonly<Record<string, string | undefined>>) => {
+        const view = await resolveBubblewrapView(layout, environment, options);
+        return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view) } : { ok: false as const, reason: view.reason };
+      };
+      return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null, launch };
     } });
 }

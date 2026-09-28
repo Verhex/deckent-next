@@ -66,3 +66,4 @@ export * from '#adapters/core/host-shell/index.js';
 export * from '#adapters/core/shell-sandbox-bwrap/index.js';
 export * from '#adapters/core/scratch-store/index.js';
 export * from '#adapters/core/http-fetch/index.js';
+export * from '#adapters/core/mcp-client/index.js';

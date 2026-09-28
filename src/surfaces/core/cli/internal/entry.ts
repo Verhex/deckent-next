@@ -7,6 +7,7 @@ import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
 import { toolchainsCommand } from './toolchains.js';
+import { mcpCommand } from './mcp.js';
 import { operationCommand } from './operation.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { terminalCommand } from './terminal.js';
@@ -59,6 +60,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'toolchains') { await toolchainsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'mcp') { await mcpCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;

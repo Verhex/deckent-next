@@ -56,6 +56,7 @@ export interface CommandContext extends ModelCommandContext {
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
+  inspectMcpServers?: import('./mcp.js').McpServersInspectHandler;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;

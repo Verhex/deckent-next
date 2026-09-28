@@ -3,13 +3,14 @@ import { identitySchema, operationDescriptorSchema, OperationCatalogError } from
 import { AdapterRegistry, type AdapterModuleRegistration, type EffectTargets, type UnifiedOperationCatalog } from '#engine/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
 import { httpConditionalAdapterModule } from '#adapters/core/http-conditional-effect/index.js';
-import { coreHostShellModule, coreNetworkFetchModule, coreScratchWriteModule, coreWorkspaceWriteModule } from './core-operations.js';
+import { coreHostShellModule, coreMcpToolCallModule, coreNetworkFetchModule, coreScratchWriteModule, coreWorkspaceWriteModule } from './core-operations.js';
 
 /** Process-wide target adapter registry (same lifetime as the config-section registry it feeds). Core entries are passed at
  * construction (the generic HTTP adapter and the Core code operations of the workspace-file and host-shell targets); overlays register
  * through `registerOperationAdapterModule` until `registerOperationsConfig` seals it, so a configuration validated against the registry
  * never changes meaning afterwards. */
-const registry = AdapterRegistry.create([httpConditionalAdapterModule, coreWorkspaceWriteModule, coreHostShellModule, coreScratchWriteModule, coreNetworkFetchModule]);
+const registry = AdapterRegistry.create([httpConditionalAdapterModule, coreWorkspaceWriteModule, coreHostShellModule, coreScratchWriteModule, coreNetworkFetchModule,
+  coreMcpToolCallModule]);
 export function registerOperationAdapterModule(registration: AdapterModuleRegistration): void { registry.register(registration); }
 /** Operation catalog and effect targets are business policy data. Empty by default: no operation can run until an operator
  * declares it. `targets[].adapter` names a registry entry (Core `http-conditional` or a registered module adapter), never a literal. */
