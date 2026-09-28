@@ -743,12 +743,13 @@ other paths (`.env`, keys) keep asking and are then refused by the sandbox. Poli
 config names credentials only by reference and edits of it stay on the write floor. In a bubblewrap shell the runtime socket inside the
 project is masked too (no connection). The glob matcher tests a pattern's literal head first (20k paths, 97 patterns: 1617 ms without
 it, 199 ms with the shipped matcher; the old 28 patterns 197 ms). Open limits: the agent can no longer read or `@`-attach saved
-conversations, the ledger, logs or policy (owner reads them outside the agent); Landlock does not restrict connect() to a pathname
+conversations, the ledger, logs or policy (owner reads them outside the agent); Landlock (measured ABI 7; `LANDLOCK_ACCESS_FS_RESOLVE_UNIX` is ABI 9+, not measured) does not restrict connect() to a pathname
 socket, but the realm's seccomp filter refuses every `socket()` except AF_INET/AF_INET6 stream sockets (measured on ABI 7: a unix
-socket otherwise reached `/var/run/docker.sock`), so the runtime socket inside the project is unreachable in both realms., but the
-realm's seccomp filter refuses every `socket()` except AF_INET/AF_INET6 stream sockets (measured on ABI 7: a unix socket otherwise
-reached `/var/run/docker.sock`), so the runtime socket inside the project is unreachable in both realms.; a data root equal to the
-project root would also close same-named project files. History: previously a data root moved inside the project (`.deckent/live-data`)
+socket otherwise reached `/var/run/docker.sock`), so the runtime socket inside the project is unreachable in both realms; a data root equal to the
+project root would also close same-named project files. Product paths the deny language cannot name literally are refused at layout admission (Astra 2166): an effective project root,
+data root or bootstrap configuration path holding `*` or `?` is `LAYOUT_PATH_UNEXPRESSIBLE` (config reason `layout`; service start,
+installation preview and every turn resolve through the same function); brackets and braces stay accepted; the glob grammar
+(`GLOB_WILDCARD`, `globLiteralHead`, `hasGlobWildcard`) lives once in `platform/core/common`. History: previously a data root moved inside the project (`.deckent/live-data`)
 left approval records, the integrity key directory and whole pending diffs readable, and `state/approval-previews` was readable even in
 the default layout. `@file` candidates and attachments use the same `agentWorkspaceDeny(projectRoot, layout)` (OPEN-REASONING-FILE):
 approval records and pending diffs are neither listed nor attachable (`refused`/`path-denied`); the candidate index is cached per
