@@ -9,6 +9,7 @@ import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
 import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
+import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
 
 export type RuntimeServiceHandlerReply = RuntimeServiceResponse | Readonly<{
   response: RuntimeServiceResponse;
@@ -130,15 +131,19 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
 
 /** Installation custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the
  * kernel releases when the process dies. Hold it before any startup work that must not race a live service (ledger
- * backup/migration), then start the listener under the same custody (Astra 2054 R1). */
+ * backup/migration), then start the listener under the same custody (Astra 2054 R1).
+ * With `ledgerLock` (the runtime service always passes it; LEDGER-SINGLETON, owner 2026-09-28), the custody of that ledger is
+ * taken first and held and released together with the endpoint guard: a second service on another endpoint of the same ledger
+ * is refused before it holds anything. */
 export interface LocalRuntimeSocketGuard { start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>; release(): Promise<void> }
 
-export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions): Promise<LocalRuntimeSocketGuard> {
+export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions, ledgerLock?: string): Promise<LocalRuntimeSocketGuard> {
   const resolved = await resolveSocketOptions(options);
+  const ledger = ledgerLock === undefined ? null : acquireLedgerLock(ledgerLock);
   const guard = createServer({ allowHalfOpen: true }, socket => socket.destroy());
   try { await listen(guard, resolved.guardEndpoint); }
   catch (error) {
-    guard.close();
+    guard.close(); ledger?.release();
     if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ALREADY_RUNNING');
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
@@ -147,12 +152,12 @@ export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocket
     async start(handler: RuntimeServiceHandler) {
       if (state !== 'held') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
       state = 'started';
-      return await listenUnderGuard(resolved, guard, handler);
+      return await listenUnderGuard(resolved, guard, handler, ledger);
     },
     async release() {
       if (state !== 'held') return;
       state = 'released';
-      await close(guard).catch(() => undefined);
+      try { await close(guard).catch(() => undefined); } finally { ledger?.release(); }
     },
   });
 }
@@ -163,7 +168,7 @@ export async function startLocalRuntimeSocketServer(options: LocalRuntimeSocketO
 }
 
 async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, guard: Server,
-  handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer> {
+  handler: RuntimeServiceHandler, ledger: LedgerLock | null): Promise<LocalRuntimeSocketServer> {
   let endpoint: ReturnType<typeof listenWithPeerIdentity> | undefined;
   try {
     await removeOwnedSocket(resolved.endpoint, true);
@@ -174,7 +179,7 @@ async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, gua
     endpoint?.stopAccepting(); endpoint?.disconnectClients();
     try {
       if (endpoint) { await Promise.all([endpoint.drained, endpoint.settled]); endpoint.removeEndpoint(); }
-    } finally { await close(guard).catch(() => undefined); }
+    } finally { await close(guard).catch(() => undefined); ledger?.release(); }
     if (error instanceof LocalRuntimeSocketError) throw error;
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
@@ -193,8 +198,9 @@ async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, gua
     if (!stopped) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
     disposed = (async () => {
       await stopped;
+      // The ledger custody is released with the endpoint guard, after admitted work settled, never before.
       try { endpoint.removeEndpoint(); }
-      finally { await close(guard); }
+      finally { try { await close(guard); } finally { ledger?.release(); } }
     })();
     return await disposed;
   };

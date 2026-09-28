@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { access, mkdtemp, readdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, readdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -291,4 +291,19 @@ test('kernel connection witness accepts half-close and rejects full-close, wrong
     const closed = once(client, 'close'); client.destroy(); await closed;
     assert.equal(active(), false);
   } finally { client.destroy(); server?.destroy(); listener.close(); }
+}));
+
+test('ledger lock: one exclusive close-on-exec holder per file, typed refusal of unsafe files and arguments', () => fixture(async path => {
+  const lock = `${path}-lock`;
+  const fd = addon.lockFile(lock);
+  assert.equal(typeof fd, 'number');
+  try {
+    assert.equal(addon.lockFile(lock), null);
+    const flags = Number.parseInt(/^flags:\s+([0-7]+)$/m.exec(await readFile(`/proc/self/fdinfo/${fd}`, 'utf8'))[1], 8);
+    assert.equal(flags & 0o2000000, 0o2000000);
+  } finally { closeSync(fd); }
+  const again = addon.lockFile(lock); assert.equal(typeof again, 'number'); closeSync(again);
+  await writeFile(`${path}-shared`, '', { mode: 0o600 }); await chmod(`${path}-shared`, 0o644);
+  assert.throws(() => addon.lockFile(`${path}-shared`), { code: 'LOCAL_PEER_LOCK_UNSAFE' });
+  for (const bad of ['', 'relative', `${path}\0x`, 7]) assert.throws(() => addon.lockFile(bad), { code: 'LOCAL_PEER_ARGUMENTS' });
 }));

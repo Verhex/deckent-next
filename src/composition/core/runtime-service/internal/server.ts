@@ -5,7 +5,7 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig,
   startScratchSweeper, sweepScratch, type ScratchSweepResult } from '#adapters/index.js';
@@ -45,8 +45,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onScratchSwept?(result: ScratchSweepResult): void | Promise<void>;
 }
 
-/** An existing older ledger is backed up and migrated once, under endpoint custody and before the service accepts
- * connections (Jev 8bb2a0c7, Astra 2054 R1). */
+/** An existing older ledger is backed up and migrated once, under ledger and endpoint custody and before the service accepts
+ * connections (Jev 8bb2a0c7, Astra 2054 R1, LEDGER-SINGLETON). */
 async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -57,7 +57,7 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
 }
 
 /** Agent turns left running by a stopped service are closed as interrupted, never resumed. Like the upgrade, this runs only
- * under endpoint custody: a second start that fails to take the guard never closes a live service's turns. */
+ * under ledger custody: a second start (on any endpoint) that fails to take it never closes a live service's turns. */
 async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -93,9 +93,9 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
-  // Custody before the ledger is backed up or migrated: a live host of any build holds this guard, so a second start
-  // fails here and never touches the schema that host is using; custody is kept until the listener is up (Astra 2054 R1).
-  const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint));
+  // Ledger custody, then endpoint custody, before the ledger is backed up or migrated: one service per ledger whatever its endpoint
+  // (LEDGER-SINGLETON), so a second start fails here and never touches that host's schema; kept until the listener is up (Astra 2054 R1).
+  const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   try { return await startUnderCustody(projectRoot, observer, options, config, guard); }
   catch (error) { await guard.release(); throw error; }
 }
