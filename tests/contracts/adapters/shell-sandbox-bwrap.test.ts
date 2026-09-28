@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -12,9 +12,11 @@ import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView, BUB
 // S9 at the real boundary: the installed bubblewrap, a real bash, a real project with a `.git`, a real HOME with a secret, a scratch area.
 const capabilities = await probeShellCapabilities();
 const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
-const roots: string[] = [], servers: Server[] = [];
+const roots: string[] = [], servers: Server[] = [], locked: string[] = [];
+const DEEP = Array.from({ length: 34 }, () => 'd').join('/');
 afterEach(async () => {
   for (const server of servers.splice(0)) await new Promise<void>(done => server.close(() => done()));
+  for (const dir of locked.splice(0)) await chmod(dir, 0o700).catch(() => undefined);
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 const linux = (overrides: Partial<ShellCapabilities> = {}): ShellCapabilities => ({ platform: 'linux', bubblewrap: 'available', userNamespace: 'available',
@@ -28,21 +30,26 @@ async function fixture(options: { worktree?: boolean } = {}) {
   await Promise.all([mkdir(join(home, '.ssh'), { recursive: true, mode: 0o700 }), mkdir(join(home, 'tools', 'bin'), { recursive: true }),
     mkdir(join(home, 'tools', 'lib'), { recursive: true }), mkdir(scratch, { recursive: true, mode: 0o700 }), mkdir(join(main, 'src'), { recursive: true }),
     mkdir(join(main, 'secrets'), { recursive: true }), mkdir(join(main, '.deckent', 'host'), { recursive: true }), mkdir(join(main, '.brain'), { recursive: true }),
-    mkdir(join(main, 'node_modules', 'pkg'), { recursive: true })]);
+    mkdir(join(main, 'node_modules', 'pkg'), { recursive: true }), mkdir(join(home, 'tools2', 'bin'), { recursive: true }), mkdir(join(main, DEEP), { recursive: true }),
+    mkdir(join(main, 'locked'), { recursive: true })]);
   await Promise.all([writeFile(join(home, '.ssh', 'id_test'), 'SECRET-HOME-KEY\n', { mode: 0o600 }), writeFile(join(home, 'note.txt'), 'SECRET-HOME-NOTE\n'),
     writeFile(join(home, 'tools', 'bin', 'hello'), '#!/bin/sh\necho hello-from-tools; cat "$(dirname "$0")/../lib/data.txt"\n', { mode: 0o755 }),
     writeFile(join(home, 'tools', 'lib', 'data.txt'), 'lib-data\n'), writeFile(join(main, 'src', 'a.ts'), 'export const a = 1;\n'),
     writeFile(join(main, '.env'), 'SECRET-ENV=1\n'), writeFile(join(main, 'secrets', 'key.pem'), 'SECRET-PEM\n'),
     writeFile(join(main, '.deckent', 'host', 'channel.md'), 'SECRET-CHANNEL\n'), writeFile(join(main, '.brain', 'memory.db'), 'SECRET-BRAIN\n'),
-    writeFile(join(main, '.gitignore'), '.brain/\nnode_modules/\n'), writeFile(join(main, 'node_modules', 'pkg', '.npmrc'), 'not-masked-ignored-dir\n')]);
+    writeFile(join(main, '.gitignore'), '.brain/\nnode_modules/\n'), writeFile(join(main, 'node_modules', 'pkg', '.npmrc'), 'not-masked-ignored-dir\n'),
+    writeFile(join(main, DEEP, '.env'), 'SECRET-DEEP\n'), writeFile(join(main, 'locked', '.env'), 'SECRET-LOCKED\n'), writeFile(join(main, 'plain.txt'), 'plain\n')]);
   await symlink('.env', join(main, 'env-link'));
+  // Astra 2154: another name of the protected inode; a toolchain whose `lib` sibling is a link to HOME; a directory the walk cannot read.
+  await link(join(main, '.env'), join(main, 'alias.txt')); await symlink(home, join(home, 'tools2', 'lib'));
+  await chmod(join(main, 'locked'), 0o000); locked.push(join(main, 'locked'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: main, env: { ...process.env, HOME: home, GIT_AUTHOR_NAME: 'a', GIT_AUTHOR_EMAIL: 'a@x', GIT_COMMITTER_NAME: 'a',
     GIT_COMMITTER_EMAIL: 'a@x' }, stdio: 'pipe' });
   git('init', '-q', '-b', 'main'); git('add', 'src'); git('commit', '-q', '-m', 'init');
   if (options.worktree) git('worktree', 'add', '-q', project, '-b', 'lane');
   const scope = await createWorkspaceScope(project);
   const layout: ShellSandboxLayout = { project: scope, scratchDir: scratch };
-  const environment = { HOME: home, PATH: `${join(home, 'tools', 'bin')}:/usr/local/bin:/usr/bin:/bin`, LANG: 'C.UTF-8' };
+  const environment = { HOME: home, PATH: `${join(home, 'tools', 'bin')}:${join(home, 'tools2', 'bin')}:/usr/local/bin:/usr/bin:/bin`, LANG: 'C.UTF-8' };
   const sandbox = bubblewrapShellSandbox(layout);
   const usable = sandbox.usable(capabilities);
   const run = (command: string, extra: { signal?: AbortSignal; timeoutMs?: number } = {}) => {
@@ -114,14 +121,19 @@ describe('bubblewrap realm selection (S9)', () => {
     const view = await resolveBubblewrapView(f.layout, f.environment);
     if (!view.ok) throw new Error(view.reason);
     expect(view.view).toMatchObject({ projectRoot: f.scope.root, scratchDir: f.scratch, home: f.home });
-    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.scope.root, '.env'), join(f.scope.root, 'secrets', 'key.pem'), join(f.scope.root, '.brain', 'memory.db')]));
-    expect(view.view.maskedDirectories).toContain(join(f.scope.root, '.deckent', 'host'));
+    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.scope.root, '.env'), join(f.scope.root, 'secrets', 'key.pem'), join(f.scope.root, '.brain', 'memory.db'),
+      join(f.scope.root, 'alias.txt')]));
+    expect(view.view.maskedFiles).not.toContain(join(f.scope.root, 'plain.txt'));
+    // Astra 2154 R3: what the walk could not see is closed — the unreadable directory and the subtree beyond the depth bound are masked.
+    expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, '.deckent', 'host'), join(f.scope.root, 'locked'),
+      join(f.scope.root, Array.from({ length: 33 }, () => 'd').join('/'))]));
     expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
     const all = [...view.view.maskedFiles, ...view.view.maskedDirectories];
     expect(all).not.toContain(join(f.scope.root, 'env-link')); expect(all).not.toContain(join(f.scope.root, 'src', 'a.ts'));
     expect(all.some(path => path.includes('node_modules'))).toBe(false);
     expect(view.view.maskedFiles.some(path => path.endsWith('/node_modules/pkg/.npmrc'))).toBe(false);
-    expect(view.view.toolchainPaths).toEqual([join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib')]);
+    // Astra 2154 R1: `tools2/lib -> HOME` is not a canonical directory and is never a bind; the canonical `tools/lib` is.
+    expect(view.view.toolchainPaths).toEqual([join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib'), join(f.home, 'tools2', 'bin')]);
     expect(view.view.systemPaths).toContain('/usr'); expect(view.view.systemPaths.some(path => path.startsWith('/mnt') || path === '/run' || path === '/var')).toBe(false);
   });
   it('never binds HOME, an ancestor of HOME, the project or a non-program directory from PATH, only bin-like entries', async () => {
@@ -132,6 +144,10 @@ describe('bubblewrap realm selection (S9)', () => {
     const view = await resolveBubblewrapView(f.layout, { ...f.environment, PATH: entries.join(':') });
     if (!view.ok) throw new Error(view.reason);
     expect(view.view.toolchainPaths).toEqual([join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib'), join(f.home, '.local', 'bin')]);
+    const linked = await resolveBubblewrapView(f.layout, { ...f.environment, PATH: [join(f.home, 'tools2', 'bin'), join(f.home, 'tools2', 'lib', 'tools', 'bin')].join(':') });
+    if (!linked.ok) throw new Error(linked.reason);
+    // The entry behind the link resolves to the canonical `tools/bin` (admitted); the link itself and its `lib -> HOME` are never binds.
+    expect(linked.view.toolchainPaths).toEqual([join(f.home, 'tools2', 'bin'), join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib')]);
     const args = bubblewrapArguments(view.view);
     const bound = args.flatMap((arg, i) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? [args[i + 2]] : []);
     for (const path of [f.home, dirname(f.home), '/home', '/', join(f.home, '.local'), join(f.home, '.local', 'share'), dirname(f.scope.root)]) expect(bound).not.toContain(path);
@@ -167,6 +183,14 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     expect(result.output).toContain('hello-from-tools\nlib-data\n');
     expect(result.output).toMatch(/tool-write=1/u); expect(result.output).toMatch(/env-write=1/u);
     expect(result.output).toMatch(/id_test: No such file or directory/u);
+    expect(await readFile(join(f.project, '.env'), 'utf8')).toBe('SECRET-ENV=1\n');
+    // Astra 2154 R1/R2/R3 with the real bwrap: the linked alias, the HOME behind `tools2/lib`, the deep and the locked `.env` stay closed;
+    // a plain single-link file and the canonical toolchain stay open.
+    const astra = await f.run(`cat alias.txt 2>&1; echo x >> alias.txt 2>&1; echo "alias-write=$?"; cat plain.txt; cat ~/tools2/lib/note.txt 2>&1; ls ~/tools2/lib 2>&1;`
+      + ` cat ${DEEP}/.env 2>&1; chmod 700 locked 2>&1; cat locked/.env 2>&1; ls locked 2>&1 | wc -l`);
+    expect(astra.output).not.toContain('SECRET');
+    expect(astra.output).toMatch(/^cat: alias\.txt: Permission denied\n.*alias\.txt: Permission denied\nalias-write=1\nplain\n.*note\.txt: No such file or directory\n/u);
+    expect(astra.output).toMatch(/locked\/\.env: No such file or directory\n0\n$/u);
     expect(await readFile(join(f.project, '.env'), 'utf8')).toBe('SECRET-ENV=1\n');
     expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('project\n');
     expect(await readFile(join(f.scratch, 'made.txt'), 'utf8')).toBe('scratch\n');
