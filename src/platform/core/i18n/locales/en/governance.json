@@ -997,6 +997,6 @@
   "error.SESSION_INACTIVE": "The session is no longer active.",
   "error.INTEGRITY_KEY_UNAVAILABLE": "The local integrity key is unavailable or unsafe.",
   "error.PERMISSION_MODE_CONFLICT": "The policy or the bindings changed after your mode was read; nothing was written. Check /mode and try again.",
-  "error.PERMISSION_MODE_UNSUPPORTED": "Permission modes need a v2 policy with its bindings file; nothing was written.",
+  "error.PERMISSION_MODE_UNSUPPORTED": "Your policy is v1, so permission modes are off and edit/shell calls ask as policy says; nothing was written. To use /mode, move to a v2 policy with a bindings file (a fresh setup: `deckent init policy --scope <scope> --preview`, then `--apply`; it does not overwrite an existing policy.json). For auto-edit or full-auto, also add an allow grant: resource kind `permission-mode`, action `set`, ids [auto-edit, full-auto].",
   "error.PERMISSION_MODE_INVALID": "The permission mode request is not valid: the mode must be ask, auto-edit or full-auto."
 }

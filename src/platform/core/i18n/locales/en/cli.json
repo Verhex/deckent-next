@@ -866,7 +866,7 @@
   "terminal.mode.current": "Permission mode: {mode}",
   "terminal.mode.changed": "Permission mode: {previous} → {mode}",
   "terminal.mode.inert": " (no rule is mode-eligible in this scope, so the mode changes nothing here)",
-  "terminal.mode.unsupported": "Permission modes need a v2 policy; everyone asks here ({mode}).",
+  "terminal.mode.unsupported": "Permission modes are off: this policy is v1 ({mode}). /mode needs a v2 policy with a bindings file; see `deckent init policy --help`.",
   "terminal.mode.usage": "Usage: /mode [ask|auto-edit|full-auto]",
   "terminal.mention.attached": "Attached @{path} ({bytes} bytes)",
   "terminal.mention.truncated": "Attached @{path}: first {bytes} of {total} bytes",

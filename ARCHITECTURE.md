@@ -628,8 +628,17 @@ plain transcript, legacy JSON shape: objective, findings, decisions, unresolved,
 labelled `user` message: the model-written summary plus the earlier user messages verbatim (each ≤ 4000 characters, cut with length
 and digest) and the earlier tool calls, both copied from the history, never from the model; it is context only and grants no
 authority. The turn emits `compacted` (surface: one line "N earlier messages were summarized"), measures again and applies
-admission. A failed or unreadable summary keeps the history unchanged and closes the turn with a note; nothing more is sent. Open:
-no deterministic model-free fallback yet, and a newest exchange larger than the window cannot be compacted (admission then refuses).
+admission. The summary answer is normalized into the bounded shape before validation (TERM-FEEDBACK-1, live turn 975da614 answered every list
+field as one string): a string, scalars or objects become items, an absent list is empty, text longer than an item is split at a space
+(no text dropped), a count past the bound is named (`[N more items omitted by Deckent]`), a too long objective is cut with its length
+and digest; an answer without a string objective is unreadable. The `summarize` port distinguishes a summary, `unreadable` (the call
+answered, nothing usable) and `null` (the call failed). `unreadable` compacts with Deckent's mechanical excerpt, labelled not
+model-written (earlier assistant texts and tool results, each ≤ 400 characters with length and digest, newest within 12 000 characters;
+user messages and tool calls copied as before), and the turn's closure note says so (`AGENT_TURN_MECHANICAL_COMPACTION_NOTE`, shown in
+the footer). A failed call keeps the history unchanged and closes the turn with a note that says to send again or start a new
+conversation. Re-asking the model was not chosen: a second governed call would need another command id scheme and can fail again; the
+mechanical excerpt is deterministic, free and labelled. Open: the `compacted` event does not carry the summary kind (a protocol field
+would be a checkpoint), and a newest exchange larger than the window cannot be compacted (admission then refuses).
 **History lifecycle and bounded turn memory (Astra 2091 fix, Jev 4a702440).** The interactive workline's agent path sends the whole
 conversation (no message-count cut; `terminal.chat.historyMessages` now bounds only the plain line mode); the runtime owns its
 lifecycle. Compaction is also triggered when the exact serialized history exceeds 75% of the service input bound
@@ -702,9 +711,9 @@ with `[deckent] grep: matches=N` (`N` = `:`-marked hit lines actually returned, 
 than found: hit cap, byte-cap cut, skipped or unscanned files). The terminal's grep count comes only from that last line, or 0 from
 the "no matches" line (`+` when the search was not complete); without it (older result, other producer, final byte-cap cut) no
 summary is shown — hit rows are never parsed back, since a workspace path may contain `:` (Astra 2145 R2). Tool `version` unchanged.
-**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 4),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
-Deckent data root (workspace-relative when inside the project, else marked unreadable) with the ledger and terminal-session paths,
+Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
 decide every call (runs, waits for the operator, or is denied; a denial is final), declared-parameters-only, bounded-result
 continuation (`hasMore=true` → `nextStartLine`), same-argument read references, and one short progress line between tool rounds.
@@ -716,9 +725,20 @@ to `engine/core/agent-turn` (pure text; composition budget); v2 adds the scratch
 `run_shell` TMPDIR, retention). The request digest changes with it: a turn id replayed across the update is `AGENT_TURN_CONFLICT`.
 System prompt **v3** (FETCH): the network line (`fetch_url`, allowlisted hosts ≤ 32 named, what happens to other hosts) or `Network
 access: none`; every turn's request digest changes again.
-**Agent tool deny floor per layout (TL-C finding).** Agent read tools (and through the same scope, edit and shell path
-classification) deny the Core floor plus the layout's `approvals` and `approvalPreviews` directories when they lie inside the
-project; previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
+System prompt **v4** (TERM-FEEDBACK-1): one line naming the running model from the bound catalog definition (native id; provider and
+model reference with versions; "running inside Deckent"; answer identity questions with it), and the data-root line no longer points at
+the ledger and saved conversations: Deckent's own state and authority, keys and credential files are named protected (the tools and the
+shell refuse them); the configuration is named readable. Every turn's request digest changes again.
+**Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and shell path classification, the bubblewrap and Landlock deny views,
+`@file`) deny the Core floor plus every product resource of the layout that lies inside the project except the configuration
+(`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for resources added later; TERM-FEEDBACK-1: the owner's live session
+listed and read other saved conversations): each resource, anything under it, its sidecars (`rel*`: `ledger.db-wal`,
+`terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary (`.policy.json.<id>.tmp`). Policy and bindings are authority
+sources and stay closed; config names credentials only by reference and edits of it stay on the write floor. In a bubblewrap shell the
+runtime socket inside the project is masked too (no connection). The glob matcher tests a pattern's literal head first (20k paths, 97
+patterns: 1617 ms without it, 199 ms with the shipped matcher; the old 28 patterns 197 ms). Open limits: the agent can no longer read
+or `@`-attach saved conversations, the ledger, logs or policy (owner reads them outside the agent); Landlock does not restrict
+connect() to a pathname socket; a data root equal to the project root would also close same-named project files. History: previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
 and whole pending diffs readable, and `state/approval-previews` was readable even in the default layout. `@file` candidates and attachments use the same `agentWorkspaceDeny(projectRoot, layout)` (OPEN-REASONING-FILE): approval records
 and pending diffs are neither listed nor attachable (`refused`/`path-denied`); the candidate index is cached per project root and
 deny list.

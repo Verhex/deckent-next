@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX/SECURITY (TERM-FEEDBACK-1, owner live test 2026-09-28): compaction survives a summary answer in another shape and falls back
+  to a labelled mechanical excerpt; the system prompt (v4) names the running model; every product state resource of the layout (saved
+  conversations, ledger, logs, runtime socket, policy, …) except the configuration is refused to the agent tools, the shell and both
+  sandboxes; `/mode` on a v1 policy says what to do.
 - ADDED (S9/S11, owner 2026-09-28): sandboxed `run_shell` — under `prefer-sandbox` (default) / `require-sandbox` a command runs in
   bubblewrap when the host has it (no network, HOME hidden, deny floor masked, `.git` read-only, project + scratch writable, PID namespace
   ends every child), else in a Landlock + seccomp sandbox (no network at every ABI, `sandbox: degraded` below ABI 6); every result names

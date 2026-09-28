@@ -36,7 +36,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   R1 dizin önbelleği çocuk nlink/içerik değişimini görmüyordu (sıcak çağrı korunan yeni içeriği okudu), R2 nesne önbelleği anahtarında ctime/kimlik yoktu →
   `lane/bwrap` `4fdd645` birleşti: hüküm her çağrıda (`lstat`), yalnız hash önbelleği (anahtar dev/ino/size/mtime/ctime/beklenen kimlik). Bedel: bu depoda bwrap
   ~420 ms, Landlock ~310 ms/çağrı (hızlandırma ayrı dilim).
-- Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB ile birlikte).
+- TERM-FEEDBACK-1 birleşti (`ab8baf0` özetleme, `50bca7e` ürün durumu ajana/sandbox'a kapalı — bwrap'ta runtime soketine bağlanma açığını da kapatır, `946464b`
+  sistem istemi v4); Astra'ya ek bulgu olarak bildirildi (2160).
+- Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB + policy v2 şablonu ile).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 

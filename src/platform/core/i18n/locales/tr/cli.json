@@ -866,7 +866,7 @@
   "terminal.mode.current": "İzin modu: {mode}",
   "terminal.mode.changed": "İzin modu: {previous} → {mode}",
   "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
-  "terminal.mode.unsupported": "İzin modları v2 policy ister; burada herkes sorar ({mode}).",
+  "terminal.mode.unsupported": "İzin modları kapalı: bu policy v1 ({mode}). /mode, bindings dosyalı bir v2 policy ister; bkz. `deckent init policy --help`.",
   "terminal.mode.usage": "Kullanım: /mode [ask|auto-edit|full-auto]",
   "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
   "terminal.mention.truncated": "@{path} eklendi: {total} baytın ilk {bytes} baytı",
