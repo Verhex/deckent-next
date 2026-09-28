@@ -44,3 +44,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek; ret kodunda uç nokta/ledger ayrımı.
 - Dogfood hattı: canlı execution/adoption profili ve doğrulama config'i; Deckent verify'ının sandbox'ta ölçümü; tek komut döngü; operatör aktivasyonu.
 - Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` + biten şeritler, stash'ler.
+
+## Yedinci parti — tam otonom kabuk birleşti (2026-09-29)
+- `lane/shell-autonomy` `9679020` (ff): full-auto + gerçek sandbox + contained komut → sessiz; sıra: mod gevşetmesi önce, kalıcı onay son; kart onayı
+  olmayan her çağrıda yazım tabanı sandbox'ta salt-okunur; MCP bwrap görünümünde de. Açık (owner C1–C4): program tabanı sandbox'ta, audit v2 (realm),
+  `unrestricted` → owner 2026-09-29 kararıyla `full-access` modu (MODES-3 dilimi), onaylı çağrıda taban.
+- Owner 2026-09-29 mod kararı: `standart` / `full-auto` / `full-access` (proof/POLICY-ADMIN-DESIGN-2026-09-28/owner-decisions.md) — uygulama MODES-3 şeridinde (8. parti).

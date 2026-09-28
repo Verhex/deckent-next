@@ -900,6 +900,12 @@ final real path is what the shell reads), a swap between classification and exec
 traversal (`grep -r x .`, `rg x .`, `find . -type f`) and git object reads (`git show HEAD:.env`, `git log -p`, `git cat-file -p`)
 classify read-only with risk `low` although the shell then walks into denied files or prints objects no path check sees; slice 3c
 must not run `low` silently on this verdict alone. No tool uses it yet (slice 3c).
+`classifyShellContainment` (SHELL-AUTONOMY) is a second pure layer over the lenient risk scanner (command substitutions exposed):
+a command is contained unless a part runs a program-floor program (privilege, interpreter, eval-like wrapper, xargs, package manager,
+network tool, `env <program>`, `find -exec/-execdir/-ok/-okdir`; `tee` is not on it — it writes like a redirection), its program word is not a plain name (`$x`, `$(…)`, a path), it has a
+process substitution, a `case` construct or anything unparseable, or a word (redirection targets and `--opt=value` values included)
+names a protected path — the write floor or the product state — lexically, from the project root and with leading `./`/`../` dropped.
+It is an intent filter, not a boundary: the sandbox realm is the boundary (awk `system()`, `git -c`, `make` and similar are not seen).
 **Host shell execution (T-L4 slice 3b, Jev 52f9b6f9).** `adapters/core/host-shell` runs one command: `bash --noprofile --norc -c`
 (no rc-file side effects; legacy used `-lc`), stdin closed, cwd = workspace root, its own process group; environment = an allowlist
 copied from the service (PATH, HOME, USER, LOGNAME, LANG, LC_ALL/CTYPE/MESSAGES, TZ, TMPDIR, SHELL) plus operator-allowed names and
@@ -1039,7 +1045,7 @@ unscanned; a symbolic link on the chain refuses the set).
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
 only a read-only command of bounded reach (risk `none`) runs without asking, and only under allow; `low` (traversal, repository
-objects), modify and the destructive table ask the owner in every mode (slice 4 may relax modify, never the destructive floor). The
+objects), modify and the destructive table ask the owner in every mode (slice 4 may relax modify, never the destructive floor). In full-auto inside an enforced sandbox realm a contained command of any other tier but destructive runs without asking when the company rule is mode-eligible (SHELL-AUTONOMY); the realm, not the classifier, bounds it — paths outside the project are left to the realm (bubblewrap: private `/tmp` tmpfs, empty HOME; Landlock: writes outside the project and scratch area refused). The
 approval preview shows the exact command, its risk tier and reason, and where it runs (the realm's posture: bubblewrap, Landlock and its limits, or the host: not a sandbox). Every run is a C11 effect on the
 `host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn; the approval subject's
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
@@ -1207,6 +1213,27 @@ mode is not on the wire yet (status row and `/mode` join the v15 package). Versi
 bindings v2, is refused as a whole by a build before this slice (strict schemas) — fail closed, never a silent relaxation. Side effect: on an installation that never produced an approval, the first silent call creates the approval/audit
 integrity key through the counter path. Open (owner): read-only shell under an eligible rule still asks in full-auto (needs audit event v2);
 `rm` stays outside the narrow set; permanent exact resources are slice 4d.
+**Full-auto inside an enforced sandbox (SHELL-AUTONOMY, owner 2026-09-28 live test, lead decision).** The decision request carries,
+for a shell call, the planned realm's containment (`ShellRealmContainment`: `sandbox` = bubblewrap or Landlock at ABI ≥ 6, `degraded` =
+Landlock below 6, `host` = host mode or a `prefer-sandbox` fallback; typed on `ShellRealmResolution`, never parsed from the marker) and
+whether the command is contained (`classifyShellContainment`). In full-auto, in a `sandbox` realm, for a contained command, the cells
+`shell-read-none`, `shell-read-low`, `shell-other-modify` and `shell-always-ask` (the strict scanner's construct refusals: compound,
+expansion, redirection, subshell) are relaxable too, under the same rule as before (policy decision itself `require-approval`, every
+asking rule `modeEligible`, one mode entry); `shell-destructive`, the write floor, read tools and fetch never are; host, fallback and
+degraded realms, and ask/auto-edit, are unchanged. The relaxation is audited as the existing `shell-modify` cell (ledger/audit schema
+unchanged; the realm is not in the record — open, audit event v2). This reopens, for the sandbox realm only, the earlier open note
+"read-only shell under an eligible rule still asks in full-auto". A call the owner did not approve runs with `writeFloorReadOnly`: both
+sandbox realms keep the write floor's existing paths read-only (bubblewrap `--ro-bind` before the deny masks; Landlock `r` rules with
+the parent carved); an owner-approved call keeps them writable (the floor means "the owner approves", not "never"). The destructive
+table asks in every mode; an `unrestricted` mode (bindings v3) that could lower it only in an enforced sandbox is a design note, not built.
+The one decision orders its lowerings: the mode relaxation first (`relaxableFor(request)`: the static `RELAXABLE` cells, and in full-auto,
+in an enforced sandbox realm, for a contained command, the sandbox cells), the standing approval (PERSISTENT-APPROVALS G6) last — it lowers
+a standing cell only where no mode did. `shell-read-low` is both: in full-auto inside a sandbox it is lowered by the mode (a
+`permission-mode` audit event), on the host, a degraded sandbox, for a command that is not contained or in ask/auto-edit by the standing
+approval (a `standing-approval` event); the existing audit kinds already tell the two paths apart (no schema change). `standingWouldLower`
+takes the same request (shell field included), so no standing scope is offered where the mode already lowers the call. Every call the
+owner did not approve at its card — a mode relaxation, a standing approval, a decision silent without a mode — runs with
+`writeFloorReadOnly`; only an owner-approved call sees the write floor writable inside a sandbox.
 **Mode status and `/mode` (T-L4 slice 4c, owner q7, protocol v15).** Two v15 operations, current version only (a v14 envelope is
 refused; window stays [15,14]): `inspectPermissionMode {scopeId}` → `{supported, mode, revision, eligible}` over the request's
 policy + bindings snapshot (scope admission `read`; `eligible` = a mode-eligible require-approval rule can apply to this person here;
@@ -1788,6 +1815,8 @@ audit event written first. The turn asks first-use cards on the C12 approval pat
 `mcp_trust` (no approval schema change). `/mcp` lists servers and trust state and does approve (reset), reconnect (record counter; the
 service replaces the process on next use) and remove. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in legacy, auto and
 pinned-2026 modes (`mcp-eras-process.test.ts`).
+A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's existing paths read-only (third-party code that no card approves
+call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,
