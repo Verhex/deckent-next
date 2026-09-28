@@ -106,9 +106,11 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   await registerConfiguredScopesAtStart(config);
   await interruptAgentTurnsAtStart(config, observer, guard.custodyId);
-  // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held).
+  // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one
+  // scratch custody of this service: start sweep, periodic sweep and turns claim and hold areas through it (Astra 2149).
   const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);
-  const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), { has: () => false }) : null;
+  const scratchActivity = createScratchActivity();
+  const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), scratchActivity) : null;
   if (swept && (swept.removedSessions || swept.unreadable)) await observer.onScratchSwept?.(swept);
   const preparedRecovery = await prepareConfiguredCancellationRuntime(projectRoot, observer, options);
   const preparedReconciliation = config.reconciliationRuntime ? await prepareConfiguredReconciliationRuntime(projectRoot, {
@@ -120,9 +122,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
-  const scratchActivity = createScratchActivity(), chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity);
-  startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
-    onSweep: result => { void observer.onScratchSwept?.(result); } });
+  const chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity);
   const workspaceFiles = createRuntimeWorkspaceFileHost();
   const preparedModelCancellation = await prepareConfiguredModelCancellationRuntime(projectRoot, modelHost.controllers, {
     onPage: (command, result) => observer.onModelCancellationPage?.(command, result),
@@ -137,7 +137,11 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const remoteShutdowns = new Map<string, Promise<void>>();
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
-  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => { controller.abort(); turnStop.abort(); return recovery; }, {
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => {
+    // A scratch removal in flight ends before the endpoint and ledger custody are released (finalize runs after this settles).
+    controller.abort(); turnStop.abort();
+    return Promise.allSettled([recovery, scratchActivity.close()]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
+  }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
@@ -179,6 +183,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
   });
+  // Started once the listener is up: a start that fails before leaves no sweep running after its custody is released.
+  startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
+    onSweep: result => { void observer.onScratchSwept?.(result); } });
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;
   const done = new Promise<void>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
   void done.catch(() => undefined);

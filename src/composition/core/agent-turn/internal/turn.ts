@@ -22,7 +22,7 @@ import { createAgentCallDecisions } from './mode.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 
-/** Service-owned state of running turns: cancellation by the starting principal, service stop, and the scratch areas they hold (never swept). */
+/** Service-owned state of running turns: cancellation by the starting principal, service stop, and the scratch custody (areas they hold are never swept). */
 export interface RuntimeChatTurnHost {
   readonly model: RuntimeModelInvocationHost;
   readonly signal: AbortSignal;
@@ -97,47 +97,49 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
   // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area.
+  // The area is held from before it is opened until the turn ends (Astra 2149): every exit below releases it in `finally`.
   const scratch = workspace ? await openScratchSession(await prepareProductDirectory(context.layout, 'scratch'), scratchSessionKey({ scopeId: command.scopeId, principal: context.principal,
-    turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), { maxResultBytes: chat.readResultMaxBytes }) : null;
-  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS] : [];
-  const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
-  const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
-  const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
-    config: readTerminalShellConfig(config), scratch }) : null;
-  const principalKey = principalKeyOf(context.principal);
-  const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
-  // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
-  // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
-  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays } });
-  const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
-    binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
-    ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
-
-  // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
-  const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
-    .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
-    .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference))?.contextWindowTokens ?? null;
-  /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
-  const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
-    schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
-    scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-    nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
-      stream: true, stream_options: { include_usage: true }, ...roundThinking,
-      ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
-        parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
-
-  const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
-  // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals });
-
+    turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), host.scratch,
+    { maxResultBytes: chat.readResultMaxBytes }) : null;
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
   const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal]);
-  const store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
-  const registered = !host.running.has(key);
-  if (registered) host.running.set(key, { principalKey, controller: cancel });
-  const releaseScratch = scratch ? host.scratch.hold(scratch.key) : null;
+  let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false;
   try {
+    const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS] : [];
+    const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
+    const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
+    const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
+      config: readTerminalShellConfig(config), scratch }) : null;
+    const principalKey = principalKeyOf(context.principal);
+    const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
+    // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
+    // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
+    const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays } });
+    const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
+      binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
+      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
+
+    // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
+    const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
+      .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
+      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference))?.contextWindowTokens ?? null;
+    /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
+    const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
+      schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
+      scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+      nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
+        stream: true, stream_options: { include_usage: true }, ...roundThinking,
+        ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
+          parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
+
+    const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
+    // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals });
+
+    store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
+    registered = !host.running.has(key);
+    if (registered) host.running.set(key, { principalKey, controller: cancel });
     const ports: AgentTurnPorts = {
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
         await channel.drained();
@@ -260,8 +262,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
     if (registered) host.running.delete(key);
-    releaseScratch?.();
-    store.close();
+    scratch?.release();
+    store?.close();
   }
 }
 
