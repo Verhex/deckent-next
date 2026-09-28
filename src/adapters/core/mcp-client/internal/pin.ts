@@ -15,6 +15,8 @@ export interface McpClientServerSettings {
   readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host';
   /** Per-server call deadline (`timeoutMs` of the entry); the settings' default otherwise. */
   readonly timeoutMs?: number;
+  /** The command line as the registry entry writes it (`${VAR}` unexpanded): what cards show, so an expanded secret never reaches one. */
+  readonly label?: string;
   readonly tools: readonly { readonly name: string; readonly digest: string; readonly alwaysAsk: boolean }[];
 }
 export interface McpClientSettings {

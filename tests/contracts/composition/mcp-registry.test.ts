@@ -4,7 +4,8 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, probeShellCapabilities } from '#adapters/index.js';
+import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
+  openMcpAgentTools, probeShellCapabilities } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { agentWorkspaceDeny, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
@@ -25,7 +26,7 @@ function workspace() {
   const project = join(base, 'project'), home = join(base, 'home');
   mkdirSync(join(project, '.deckent'), { recursive: true }); mkdirSync(home, { mode: 0o700 });
   writeFileSync(join(project, '.deckent', 'config.json'), '{}\n');
-  const env = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
+  const env = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', MY_TOKEN: 's3cr3t-value-xyz' };
   const tools = join(base, 'tools.json');
   writeFileSync(tools, JSON.stringify([{ name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } }]));
   const server = (label: string) => {
@@ -84,10 +85,31 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
     expect(byName(listed)['sneaky']).toBeUndefined();
     expect(listed['problems']).toEqual([expect.objectContaining({ name: 'sneaky', scope: 'project', reason: 'invalid-entry' })]);
     // Any change of the approved entry (here one argument) asks again: nothing starts until approved.
-    writeFileSync(file, JSON.stringify({ mcpServers: { fx: { ...raw.mcpServers['fx'], args: [...(raw.mcpServers['fx']!['args'] as string[]), '--extra'] } } }));
+    writeFileSync(file, JSON.stringify({ mcpServers: { fx: { ...raw.mcpServers['fx'], args: [...(raw.mcpServers['fx']!['args'] as string[]), '--token', 'changed'] } } }));
     const started = fx.started();
     expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'changed', health: 'not-started' });
     expect(fx.started()).toBe(started);
+    await w.cli('approve', 'fx', '--yes');
+    expect(byName(await w.cli('list'))['fx']).toMatchObject({ status: 'trusted', health: 'connected' });
+    expect(fx.started()).toBeGreaterThan(started);
+  }, 60_000);
+
+  it('an expanded ${VAR} (a personal token in args) never shows on the approval card or the tool-call card; the definition stays the template', async () => {
+    const w = workspace(), fx = w.server('fx');
+    await w.cli('add', 'fx', ...fx.args, '--token', '${MY_TOKEN}');
+    const approved = await (async () => { const out: string[] = []; await mcpCommand(['mcp', 'approve', 'fx', '--yes', '--json'], { root: w.project, env: w.env,
+      stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: async (root, request, options, confirm) =>
+        runConfiguredMcpCommand(root, request as never, options, async card => { out.push(JSON.stringify(card)); return confirm(card); }) }); return out.join(''); })();
+    expect(approved).toContain('${MY_TOKEN}'); expect(approved).toContain('"name":"MY_TOKEN","set":true'); expect(approved).not.toContain('s3cr3t-value-xyz');
+    const view = await loadMcpRegistry({ projectRoot: w.project, layout: resolveProductLayout({ projectRoot: w.project }), environment: w.env, secret: async () => undefined });
+    const settings = mcpClientSettings(view, {})!;
+    expect(settings.servers[0]!.args).toContain('s3cr3t-value-xyz');
+    const controller = new AbortController(), pool = new McpClientPool(controller.signal);
+    try {
+      const tools = mcpTurnTools(await openMcpAgentTools(pool, settings, { cwd: w.project, environment: w.env, sandboxes: [] }));
+      const preview = tools.preview('mcp__fx__echo', {});
+      expect(preview).toContain('${MY_TOKEN}'); expect(preview).not.toContain('s3cr3t-value-xyz');
+    } finally { controller.abort(); await pool.close(); }
   }, 60_000);
 });
 

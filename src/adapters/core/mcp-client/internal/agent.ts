@@ -29,7 +29,7 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs }));
+        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs }));
     }
   }
   return offered;

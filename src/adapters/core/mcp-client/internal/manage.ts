@@ -52,7 +52,8 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
       : expanded.ok ? 'trusted' : 'invalid-launch';
     const reason = !trust.ok ? trust.reason : !expanded.ok ? expanded.reason : undefined;
     const launch = decided === 'trusted' && expanded.ok && record ? Object.freeze({ id: server.name, command: expanded.command, args: expanded.args, env: expanded.env,
-      realm: server.entry.realm ?? 'prefer-sandbox', ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools }) : null;
+      realm: server.entry.realm ?? 'prefer-sandbox', ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools,
+      label: [server.entry.command, ...(server.entry.args ?? [])].join(' ') }) : null;
     return Object.freeze({ name: server.name, scope: server.scope, file: server.file, shadows: server.shadows, definitionDigest: server.definitionDigest, entry: server.entry,
       status: decided, ...(reason ? { reason } : {}), trust: record, launch });
   }));
@@ -71,7 +72,9 @@ export type McpCommandRequest = { readonly verb: 'list' } | { readonly verb: 'ge
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Exclude<McpScope, 'managed'> }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] };
 export interface McpApprovalCard { readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string; readonly entry: McpServerEntry;
-  readonly command: string; readonly args: readonly string[]; readonly envNames: readonly string[]; readonly realm: string; readonly posture: string;
+  /** The command and arguments as written (`${VAR}` unexpanded) and which variables they reference, set or not: an expanded value never shows. */
+  readonly command: string; readonly args: readonly string[]; readonly variables: readonly { readonly name: string; readonly set: boolean }[];
+  readonly envNames: readonly string[]; readonly realm: string; readonly posture: string;
   readonly era: string; readonly protocolVersion: string | null; readonly note: string | null;
   readonly tools: readonly { readonly name: string; readonly digest: string; readonly description: string | null; readonly annotations: unknown; readonly alwaysAsk: boolean }[] }
 export interface McpCommandContext extends McpRegistryContext {
@@ -174,7 +177,9 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const live = state.tools.filter(tool => tool.digest !== null);
   for (const name of request.alwaysAsk) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', { name });
   const card: McpApprovalCard = { name: server.name, scope: server.scope, file: server.file, definitionDigest: server.definitionDigest, entry: server.entry,
-    command: expanded.command, args: expanded.args, envNames: Object.keys(expanded.env), realm: launch.realm, posture: state.posture, era: state.era,
+    command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(expanded.env), realm: launch.realm, posture: state.posture, era: state.era,
+    variables: [...new Set([server.entry.command, ...(server.entry.args ?? []), ...Object.values(server.entry.env ?? {})].flatMap(text => [...text.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)/gu)]
+      .map(match => match[1]!)))].map(name => ({ name, set: context.environment[name] !== undefined && context.environment[name] !== '' })),
     protocolVersion: state.protocolVersion, note: server.scope === 'project' ? 'project file: credential-shaped variables read as empty; secret references are refused' : null,
     tools: live.map(tool => ({ name: tool.name, digest: tool.digest!, description: tool.description ?? null, annotations: tool.annotations ?? null,
       alwaysAsk: request.alwaysAsk.includes(tool.name) })) };
