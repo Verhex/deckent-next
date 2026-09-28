@@ -11,7 +11,7 @@ export function scopedInvocationCredentialResolver(context: Awaited<ReturnType<t
   const revalidate = invocationEffectAuthority(context, profile);
   const guard = (signal?: AbortSignal) => { if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE'); };
   return async (reference: string, signal?: AbortSignal): Promise<string | undefined> => {
-    if (authentication.type !== 'bearer' || authentication.credentialRef !== reference
+    if (authentication.type === 'none' || authentication.credentialRef !== reference
       || !context.principal.scopeIds.includes(profile.scopeId)) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     await revalidate(signal);
     const env = options.env ?? process.env;
