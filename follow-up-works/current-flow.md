@@ -1,28 +1,31 @@
-# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-27 akşam, Opus 5.5 lead)
+# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-28, Opus 5.5 lead)
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `900f97d` (üçüncü parti `357aeeb` Astra 2136 PASS, dördüncü parti `900f97d` Astra 2141 PASS; tam verify 374/2468).
-- Canlı servis `900f97d` build'iyle (instance `fb3091bf…`), ledger v41 (yedek `backups/ledger-v40-2026-09-27T19-07-25-142Z.db`), protokol v15,
-  config şeması 3, doctor JSON 2. Canlı policy v1 → izin modları ve `/mode` etkin değil (herkes `ask`). Owner betiği `grant-edit-shell.mjs`
-  henüz çalıştırılmadı. DOGFOOD OFF.
-- Yerel main checkout `900f97d`'ye ileri sarıldı. Astra'nın main'deki commit'lenmemiş inceleme notları (2135/2140 sınırları) yama
-  `.deckent/host/reviews/astra-main-notes-2026-09-27.patch` + stash `astra-main-notes-2026-09-27` olarak saklandı; içerik PLAN/COMPLETED-PLAN'a işlendi.
-- Ana checkout'tan çalışan iki host MCP süreci (`next-entry.mjs mcp`) eski kodla bellekte çalışıyor; sorun çıkarsa host oturumunun MCP'si yeniden başlatılır.
-- Sonraki parti dalı `integrate/2026-09-27-d` (worktree `/home/alperen/deckent-next-integrate-d`), `900f97d` + belge commit'leri.
+- `origin/main` = `4346081` (Astra 2145 düzeltmeleri). Canlı servis bu build'le (instance `46d6473f…`), ledger v41, protokol v16 penceresi
+  [16, 15], layout registry 3. Qwen3.8 bağlaması v5 (`chat-template-enable-thinking`) canlıda etkin. Canlı policy v1 (herkes `ask`). DOGFOOD OFF.
+- Ana checkout'ta Astra/owner WIP'i (core-memory `MEMORY.md`, `law_local_verification.md`, manifest, `hemen-donulecek-is.md`) korunuyor;
+  canlı geçişte stash/yama ile saklanır, atılmaz.
 
-## Sonraki parti (`integrate/2026-09-27-d`, tam verify ve Astra incelemesi sırada)
-- B06-2a (Run teslim commit'ine sabit; replay kayıtlı custody'den), OWNER-EVE-SMALL (serve başlangıç reddi, modül ad alanı kapalı),
-  TL-A (görünür aşamalar, aşamalı iptal, düşünme ön izlemesi), TL-B (araç satırı deseni/özeti, 64 KiB okuma, grep context/maxHits),
-  TL-C (sistem istemi, ilerlemesiz round notu, özetlemede düşünme kapalı, yerleşime bağlı okuma yasağı — güvenlik), COMPOSITION-BUDGET
-  (kabul formülü engine'de tek kaynak), INFLIGHT-FIX (iptal edilen çağrı slotu bırakır; owner 2026-09-28, A3A güncellendi).
-- Canlı geçişte yapılacaklar (PASS sonrası): servis yeniden başlatma → takılı slot onarımı doğrulaması (`in_flight=0`); canlı katalog Qwen
-  modeline `chat-template-enable-thinking` eklenmesi (owner onayıyla); yerleşime bağlı okuma yasağının canlıda etkinleşmesi.
+## Beşinci parti (`integrate/2026-09-28-f`, worktree `/home/alperen/deckent-next-integrate-f`)
+- İçerik: B06-2b (ledger v42 benimseme intent v2 + v1→v2 göçü), B09-2 (yapılandırılmış worker raporu), B06-2c (doğrulama önkoşulu,
+  CLI, salt-okunur bağımlılık bind'i), TERM-PICKERS, S5 (`terminal.shell.realm` + yetenek yoklaması), SCR-A (scratch alanı, layout 4,
+  `/scratch`, sistem istemi v2), SCR-B (`init policy` ilk çalıştırma şablonu), COMP-BUDGET-2 (composition 4826/5000), Astra Jev bağlam
+  kalitesi uyarı denetimi (host tooling), LEDGER-SINGLETON (ledger başına tek servis), main `4346081` birleşmesi.
+- Birleştirmede lead düzeltmeleri: şablon araç/operasyon adları gerçek kataloğa sözleşme testiyle bağlandı (ters kanıt: ad bozulunca
+  kırmızı); Astra 2145 iki-soket testi artık ikinci servisin `LOCAL_RUNTIME_ALREADY_RUNNING` ile reddini bekliyor; S5 native yoklamasının
+  manifestine test betiği eklendi (`test:native` onu reddediyordu → tam verify düşerdi).
+- Hedefli kanıt: tsc 0, lint-arch 0 ihlal, native 26/26 + yoklama 1/1, birleşme testleri 157/157.
+- Sıradaki: tam verify (4 worker, Docker imajı) → Astra REQUEST_REVIEW → PASS'te tam sha push → canlı geçiş.
 
-## Owner kararı bekleyenler
-- `/reasoning off` ile tüm turlarda düşünmeyi kapatma protokol v16 ister (karar bekliyor); `@file` ekleme yolu yerleşime bağlı okuma
-  yasağını henüz kullanmıyor; çöken süreçten kalan `claimed` slot (ayrı kart).
-- B06-2a açıkları: `ADOPTION_NOT_DELIVERED` adı; CLI yolu (2c); sonraki dilim B06-2b (benimseme bağı + ledger v42).
-- Dilim 4a: full-auto'da salt-okunur kabuk (audit olay v2) ve `rm`; `lane/l5-i40` (birleşmemiş tanı testi).
-- Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` (+ bu akşam biten şeritler, stash'ler).
+## Canlı geçişte yapılacaklar (PASS sonrası)
+- Ledger v41 → v42 yedekli göç; layout 3 → 4 (`state/scratch`): geçişten önce kabul edilmiş Run'ların görevleri `RUN_STORE_CONFLICT`
+  ile reddedilir (owner kabulü). Scratch sessizliği için canlı policy'ye `scratch_*` araç ve `workspace.scratch.write` operasyon izinleri
+  (şablon ya da owner betiği); yoksa scratch çağrıları sorar. Ledger kilidi (`<ledger>-lock`) ilk başlangıçta oluşur.
+
+## Açık kalanlar
+- LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek (ayrı dilim); ret kodunda uç nokta/ledger ayrımı.
+- Terminal hattı: fetch (S6, S7, S10) → sandbox (S9 bubblewrap — owner `bwrap` kurar — ve S11 Landlock); dilim 4d, `/compact`, satır modu, plan aracı.
+- Dogfood hattı: canlı execution/adoption profili ve doğrulama config'i; Deckent verify'ının sandbox'ta ölçümü; tek komut döngü; operatör aktivasyonu.
+- Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` + biten şeritler, stash'ler.
