@@ -29,8 +29,26 @@ export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: 
 
 class Screen extends Writable {
   text = '';
-  readonly isTTY = true; readonly columns = 200; readonly rows = 60;
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.text += chunk.toString('utf8'); done(); }
+  /** Ink debug mode writes the whole view each time; this is the latest frame, not the scrollback. */
+  frame = '';
+  readonly isTTY = true; readonly rows = 60;
+  constructor(readonly columns = 200) { super(); }
+  override _write(chunk: Buffer, _encoding: string, done: () => void) {
+    const text = chunk.toString('utf8');
+    this.text += text;
+    // Bracketed-paste on/off is a separate write. It must not replace the latest screen.
+    if (!isPasteToggle(text)) this.frame = text;
+    done();
+  }
+}
+const PASTE_ON = '\u001b[?2004h', PASTE_OFF = '\u001b[?2004l';
+function isPasteToggle(text: string): boolean {
+  if (text.length === 0 || text.length % PASTE_ON.length !== 0) return false;
+  for (let index = 0; index < text.length; index += PASTE_ON.length) {
+    const piece = text.slice(index, index + PASTE_ON.length);
+    if (piece !== PASTE_ON && piece !== PASTE_OFF) return false;
+  }
+  return true;
 }
 export const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 export async function until(check: () => boolean, label: string, attempts = 500) {
@@ -38,8 +56,8 @@ export async function until(check: () => boolean, label: string, attempts = 500)
   throw new Error(`timed out waiting for ${label}`);
 }
 /** Mounts the real interactive workline on an in-memory TTY; the caller unmounts it. */
-export function mountWorkline(props: Partial<WorklineProps>) {
-  const stdout = new Screen();
+export function mountWorkline(props: Partial<WorklineProps>, columns = 200) {
+  const stdout = new Screen(columns);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels: WORKLINE_TEST_LABELS, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40, errorText: (error: unknown) => `ERR:${(error as Error).message}`,

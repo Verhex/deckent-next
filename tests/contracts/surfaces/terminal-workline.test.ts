@@ -168,7 +168,8 @@ describe('ledger buffer (Ink Static contract)', () => {
     // The whole history without the system prompt is saved after the turn, and the measured context is reported.
     expect(saved[0]!.messages).toEqual([{ role: 'user', content: 'first' }, { role: 'assistant', content: 'reply 1', toolCalls: [] }]);
     view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1500/6000 25% 2'), 'context line');
-    view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('SESSION 1 11111111 2 old question'), 'listing');
+    view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('> SESSION 1 11111111'), 'picker');
+    view.stdin.write('\u001b'); await settle(40);
     view.stdin.write('/resume 1\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
     view.stdin.write('continue\r'); await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'old question' },
