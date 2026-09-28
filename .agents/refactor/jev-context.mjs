@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { validateInput } from './jev.mjs';
+import { sufficiencyRisks } from './jev-quality.mjs';
 export const ensure = (value, code) => { if (!value) throw new Error(code); };
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const text = v => typeof v === 'string' && v.trim().length > 0;
@@ -73,7 +74,8 @@ export function prepare(c, policy, requestAt = new Date().toISOString()) {
   return { input, diagnostics: { evidenceCount: ids.length, observationTimes: { measured: measuredObservationTimes,
     unknown: ids.length - measuredObservationTimes, freshness: 'not-measured' }, optionCount: c.options.length,
     questionCount: Object.keys(questions).length, optionsWithoutEvidence: c.options.filter(o => !o.evidenceIds.length).map(o => o.id),
-    semanticQuality: 'not-measured', optionSetRejection: 'none_of_the_above', missingEvidenceOption: 'insufficient_information' } };
+    semanticQuality: 'not-measured', sufficiencyRisks: sufficiencyRisks(c),
+    optionSetRejection: 'none_of_the_above', missingEvidenceOption: 'insufficient_information' } };
 }
 
 export function validateFollowup(v, type, request) {
