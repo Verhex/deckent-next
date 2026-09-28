@@ -17,7 +17,7 @@ import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort, type ResumePickerItem } from './workline-sessions.js';
-import { ArrowPicker } from './arrow-picker.js';
+import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';

@@ -6,7 +6,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { truncateEnd, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { truncateEnd } from './text-width.js';
+import { useRenderGlyphs } from './glyphs.js';
 
 export const ARROW_PICKER_ROWS = 6;
 

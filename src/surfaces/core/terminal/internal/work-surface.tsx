@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowPicker } from './arrow-picker.js';
+import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import type { AgentToolApprovalSettlement } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
