@@ -578,7 +578,7 @@
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
   "config.field.toolchains": "Worker toolchain güncellik kontrolü: mod, registry uç noktası ve sorgu sınırları (salt okunur, güncelleme yapmaz)",
   "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",
-  "config.field.mcp": "Yerel MCP sunucusu sınırları (girdi, yanıt, eşzamanlılık) ve `clients` altında Deckent'in istemci olarak kullandığı, araçları sabitlenmiş yerel MCP sunucuları",
+  "config.field.mcp": "Yerel MCP girdi, yanıt ve eşzamanlılık sınırları",
   "config.field.cli": "Sınırlı Task grafı JSON girdisi dahil komut satırı girdi sınırları",
   "cli.run.reserve.heading": "Run {run} için {count} Attempt ayrıldı (komut {command})",
   "cli.run.reserve.identity": "Sonraki adım: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}",

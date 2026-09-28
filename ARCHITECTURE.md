@@ -1663,28 +1663,38 @@ loading, signature verification and a separately distributed Enterprise package 
 
 **Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
 
-**MCP client (MCP-CLIENT, owner 2026-09-28 S6 a).** Deckent is an MCP client of the owner's local stdio servers (`mcp.clients`, own
-`schemaVersion: 1` inside the platform `mcp` field; config schema version unchanged; variable names only, never values). The service
-owns one pool (`RuntimeChatTurnHost.mcp`): a server starts with the first turn that needs it, negotiates the era with SDK
-`versionNegotiation: auto` (2026-07-28 via `server/discover`, else the 2025-11-25 `initialize`; on stdio the SDK probes with a sibling
-process), is listed every turn and kept for the service's life; a crash restarts on next use at most `maxRestarts` times; service stop
-awaits closing all of them (stdin, then SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the
-shell (`prefer-sandbox` default: bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network,
-HOME hidden; `require-sandbox` refuses without it; `host` explicit; Landlock is not offered for MCP servers). Pin = owner-written
-`tools[{name, digest, alwaysAsk}]`; digest = sha256 over name, title, description, input/output schema, annotations; only pinned tools
-whose live definition matches are offered (`mcp__<server>__<tool>`; display and audit `mcp:<server>/<tool>`); a changed definition is
-withdrawn until re-pinned (no silent acceptance). A call is a C11 effect of `mcp.tool.call@1` on `mcp-tool` (input: server, tool,
-digest, arguments), decided by `decideAgentToolCall` over `agent-tool/invoke` ∧ `operation/execute`; cells `mcp-call` (raising;
-relaxable in full-auto only) and `mcp-floor` (pin `alwaysAsk` or pinned `destructiveHint: true`; never relaxed). Nothing is sent before
-the decision; after sending, timeout/cancel/crash is `unknown` and never resent; answers are cut at `resultMaxBytes` and pass
-`redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
-`{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). `deckent mcp servers list` reads configuration; `inspect <id>`
-starts the server under its realm, lists, verifies and closes it (never `tools/call`). Not yet: installing/pinning from
-the terminal or `/policy` (POLICY-ADMIN), MCP HTTP servers, resources/prompts, MRTR input requests from servers (no
-elicitation/sampling/roots handler is registered; behaviour with an `input_required` server is untested), `subscriptions/listen`/
-listChanged (the list is re-read each turn), paginated `tools/list` (SDK 2.1.0 `listTools()` returns the first page; 2.2.0 follows
-`nextCursor`), signed server bundles. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in
-legacy, auto and pinned-2026 modes (`mcp-eras-process.test.ts`).
+**MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
+local stdio servers, managed like Claude Code's scoped files (code.claude.com/docs/en/mcp, checked 2026-09-28: local/project/user,
+managed on top, `mcp add|add-json|list|get|remove`), never in configuration: project `<project>/.deckent/mcp.json` (shared;
+Claude-compatible `mcpServers`, plus Deckent `realm`/`timeoutMs`), personal `<Deckent global root>/mcp.json` (0600; top-level
+`mcpServers` = user, `projects.<real project path>.mcpServers` = local). The same name connects once from its highest scope, whole entry:
+managed > local > project > user; an invalid override blocks the name. The company policy is a read interface (`ManagedMcpPolicy`:
+servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads
+credential-shaped names as empty and may not use `$DECK:NAME` (personal files may). Trust and tool pins are product state
+(`<data root>/integrations/mcp-trust.json`, 0600, atomic; no layout or ledger schema change), bound to the entry's definition digest (stricter
+than Claude Code, which binds approval to the name and asks only for project servers): an unapproved or changed server is never started nor
+offered; `deckent mcp approve` starts it in its realm, shows the card (the registry template, never an expanded `${VAR}`) and pins its
+tools; every scope needs approval (no silent trust on first use). The agent's read floor protects `.deckent/mcp.json` (read tools, shell
+classification, bubblewrap mask, Landlock). The service owns one pool (`RuntimeChatTurnHost.mcp`): a server starts with the first turn that
+needs it, negotiates the era with SDK `versionNegotiation: auto` (2026-07-28 via `server/discover`, else the 2025-11-25 `initialize`; on
+stdio the SDK probes with a sibling process), is listed every turn and kept for the service's life; the client SDK loads with the first
+server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
+SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the shell (`prefer-sandbox` default:
+bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network, HOME hidden; `require-sandbox`
+refuses without it; `host` explicit; Landlock is not offered for MCP servers). Pin digest = sha256 over name, title, description,
+input/output schema, annotations; only pinned tools whose live definition matches are offered (`mcp__<server>__<tool>`; display and audit
+`mcp:<server>/<tool>`); a changed definition is withdrawn until re-approved. A call is a C11 effect of `mcp.tool.call@1` on `mcp-tool` (input:
+server, tool, digest, arguments), decided by `decideAgentToolCall` over `agent-tool/invoke` ∧ `operation/execute`; cells `mcp-call`
+(raising; relaxable in full-auto only) and `mcp-floor` (pin `alwaysAsk` or pinned `destructiveHint: true`; never relaxed). Nothing is sent
+before the decision; after sending, timeout/cancel/crash is `unknown` and never resent; answers are cut at the agent's tool-result limit and
+pass `redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
+`{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). CLI: `deckent mcp add|add-json|list|get|remove|approve` (`list`
+reports connected/drifted/failed for approved servers and "pending approval" without starting others; `get` never starts). Not yet:
+in-turn trust card (new C12 approval subject kind), terminal `/mcp`, company policy source (POLICY-ADMIN), http/sse/OAuth, MRTR input
+requests from servers (no elicitation/sampling/roots handler; an `input_required` server is untested), `subscriptions/listen`/listChanged
+(the list is re-read each turn), paginated `tools/list` (SDK 2.1.0 `listTools()` returns the first page; 2.2.0 follows `nextCursor`),
+signed server bundles. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in legacy, auto and
+pinned-2026 modes (`mcp-eras-process.test.ts`).
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,

@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { ErrorRegistry, emit, formatValue, resolveLocale } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, resolveLocale, t } from '#platform/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
@@ -52,7 +52,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     try { entry = JSON.parse(positionals[1]!); } catch { throw usage(); }
     request = { verb: 'add', scope: scope ?? 'local', name: name!, entry };
   } else throw usage();
-  const environment = context.env ?? process.env; context.onLocale?.(resolveLocale(language, environment));
+  const environment = context.env ?? process.env, locale = resolveLocale(language, environment); context.onLocale?.(locale);
   if (!context.runMcpCommand) throw usage();
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const confirm = async (card: unknown) => {
@@ -62,7 +62,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     if (!input?.isTTY) throw ErrorRegistry.createError('MCP_APPROVAL_NEEDS_TERMINAL');
     emit(card, { ...sinks, json: false, render: formatValue });
     const rl = createInterface({ input, output: process.stdout, terminal: true });
-    try { return await new Promise<boolean>(resolve => rl.question('Approve this MCP server and pin its tools? [y/N] ', answer => resolve(/^y(es)?$/iu.test(answer.trim())))); }
+    try { return await new Promise<boolean>(resolve => rl.question(t('cli.mcp.approvePrompt', {}, locale), answer => resolve(/^y(es)?$/iu.test(answer.trim())))); }
     finally { rl.close(); }
   };
   const result = await context.runMcpCommand(context.root ?? process.cwd(), request, { env: environment }, confirm);

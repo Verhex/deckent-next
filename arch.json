@@ -1141,7 +1141,8 @@
         "src/adapters/core/scratch-store",
         "src/adapters/core/http-fetch",
         "src/adapters/core/shell-sandbox-bwrap",
-        "src/adapters/core/mcp-client"
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/local-principal"
       ],
       "plan": "SURFACES"
     },
@@ -1714,7 +1715,9 @@
         "src/domain/core/primitives",
         "src/engine/core/effect",
         "src/platform/core/common",
-        "src/platform/core/config-fields"
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
       ],
       "plan": "SURFACES"
     }

@@ -4,12 +4,11 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
-- ADDED (MCP-CLIENT, owner 2026-09-28 S6 a): Deckent is an MCP client of the owner's local stdio servers — `mcp.clients` pins tools by
-  definition digest (a changed tool is withdrawn until re-pinned), both protocol eras (2026-07-28 `server/discover`, 2025-11-25
-  `initialize`), realm per server (bubblewrap by default, host explicit), every call a C11 effect of Core `mcp.tool.call@1` that asks by
-  default (full-auto may lower a company-eligible call after a sealed audit event; `alwaysAsk`/destructive tools always ask), unknown
-  outcomes never resent, bounded redacted answers; `deckent mcp servers list|inspect`. The `deckent-mcp` server is proven with 2025 and
-  2026 SDK clients.
+- ADDED (MCP-CLIENT, owner 2026-09-28 S6 a): Deckent is an MCP client of the owner's local stdio servers, registered in scoped files like
+  Claude Code (`.deckent/mcp.json` project, personal `mcp.json` user/local; managed > local > project > user), approved and tool-pinned in
+  product state (a changed entry or tool asks again), both protocol eras, realm per server, every call a C11 effect of Core
+  `mcp.tool.call@1` that asks by default; `deckent mcp add|add-json|list|get|remove|approve`. The agent cannot read or write the project
+  registry. The `deckent-mcp` server is proven with 2025 and 2026 SDK clients.
 - ADDED (POLICY-ADMIN P1–P3, Core): `policy.administer@1` catalog operation — typed grant/binding changes, conditional on the
   effective policy revision, always approved on a card, bounded by the decider's own authority, audited (`authority-change`) and archived;
   general operation paths refuse it (`OPERATION_SURFACE_RESTRICTED`). Authority writes (including `/mode`) now use one writer with a

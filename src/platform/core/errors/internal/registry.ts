@@ -160,6 +160,17 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },
   // POLICY-ADMIN I5-i: a generic producer refused an authority operation before any policy, ledger or target access.
   OPERATION_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.OPERATION_SURFACE_RESTRICTED', p, l) }) },
+  // MCP-CLIENT scoped registry and approval (`deckent mcp add|add-json|list|get|remove|approve`).
+  MCP_SERVER_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_UNKNOWN', p, l) }) },
+  MCP_SERVER_EXISTS: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_EXISTS', p, l) }) },
+  MCP_SERVER_SCOPE_AMBIGUOUS: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_SCOPE_AMBIGUOUS', p, l) }) },
+  MCP_SERVER_ENTRY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_SERVER_ENTRY_INVALID', p, l) }) },
+  MCP_SERVER_NAME_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NAME_INVALID', p, l) }) },
+  MCP_SANDBOX_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SANDBOX_UNAVAILABLE', p, l) }) },
+  MCP_SERVER_START_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SERVER_START_FAILED', p, l) }) },
+  MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
+  MCP_APPROVAL_NEEDS_TERMINAL: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_APPROVAL_NEEDS_TERMINAL', p, l) }) },
+  MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
   EFFECT_TARGET_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_UNAVAILABLE', p, l) }) },
   EFFECT_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_CORRUPT', p, l) }) },
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },

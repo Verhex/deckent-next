@@ -143,7 +143,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   if (request.verb === 'add') {
     if (!MCP_SERVER_NAME.test(request.name)) throw fail('MCP_SERVER_NAME_INVALID', { name: request.name });
     const entry = mcpServerEntrySchema.safeParse(request.entry);
-    if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name });
+    if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: (entry.error.issues[0]?.message ?? 'schema').slice(0, 200) });
     const path = fileOf(view, request.scope), raw = await rawFile(path), servers = serversOf(raw, request.scope, view.projectKey, true)!;
     if (Object.hasOwn(servers, request.name)) throw fail('MCP_SERVER_EXISTS', { name: request.name, scope: request.scope });
     servers[request.name] = entry.data;
