@@ -59,6 +59,8 @@ function readFileSummary(content: string): ToolResultSummary | null {
  * glob, list_dir) with `[deckent] `-prefixed notes only for skips/caps/errors — so a match count and a coarse "may be
  * incomplete" flag come from the shape of the text itself, without tools.ts adding a single new meta line for D2. */
 export function summarizeAgentToolResult(name: string, content: string): ToolResultSummary | null {
+  // S5: only the trusted leading metadata carries posture; command stdout cannot supply this prefix.
+  if (name === 'run_shell') return content.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' } : null;
   if (name === 'read_file') return readFileSummary(content);
   if (name === 'grep') {
     const count = countGrepHitLines(content);

@@ -8,7 +8,7 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC,
   registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
@@ -28,6 +28,7 @@ export interface RuntimeChatTurnHost {
   readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal): RuntimeChatTurnHost {
+  void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
   return Object.freeze({ model, signal, running: new Map() });
 }
 

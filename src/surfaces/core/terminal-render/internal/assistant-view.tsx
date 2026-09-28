@@ -18,6 +18,8 @@ export type AssistantRenderLabels = Readonly<{
   /** Suffix word for a finished host shell call whose `cleanup` (Astra 2124) was `group-ended` or `unverified`; `clean` or an
    * absent field show nothing. Optional until the catalog carries `terminal.render.toolCleanup.*` (see `i18n-delta.json`); the
    * row falls back to short, language-neutral text meanwhile (the TERM-INTERACTIVE `@file` pattern). */
+  /** S5 persistent host fallback suffix; catalog wiring is supplied in the lane i18n delta. */
+  toolSandboxNone?: string;
   toolCleanup?: Readonly<Record<Exclude<NonNullable<ToolUnit['cleanup']>, 'clean'>, string>>;
   /** Result summary words for a finished read-class call (TL-B D2): `{shown}`/`{total}`/`{count}` placeholders. Optional
    * until the catalog carries `terminal.render.toolSummary.*` (see `i18n-delta.json`); the row falls back to short,
@@ -63,6 +65,7 @@ function toolSummaryText(summary: ToolResultSummary, labels: AssistantRenderLabe
     case 'headings': return fillTemplate(summary.more ? words.headingsMore : words.headings, { shown: summary.shown, total: summary.total });
     case 'matches': return fillTemplate(summary.more ? words.matchesMore : words.matches, { count: summary.count });
     case 'entries': return fillTemplate(words.entries, { count: summary.count });
+    case 'sandbox-none': return labels.toolSandboxNone ?? 'sandbox: none';
   }
 }
 

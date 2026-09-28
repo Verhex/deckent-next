@@ -1,0 +1,10 @@
+{
+  "name": "deckent-shell-capabilities",
+  "private": true,
+  "type": "module",
+  "deckentNative": {
+    "platforms": ["linux"],
+    "artifacts": ["build/Release/shell-capabilities"]
+  },
+  "scripts": { "build": "node build.mjs" }
+}

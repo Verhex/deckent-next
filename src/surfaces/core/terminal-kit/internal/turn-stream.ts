@@ -15,7 +15,8 @@ export type ToolResultSummary =
   | { readonly kind: 'lines'; readonly shown: number; readonly total: number; readonly more: boolean }
   | { readonly kind: 'headings'; readonly shown: number; readonly total: number; readonly more: boolean }
   | { readonly kind: 'matches'; readonly count: number; readonly more: boolean }
-  | { readonly kind: 'entries'; readonly count: number };
+  | { readonly kind: 'entries'; readonly count: number }
+  | { readonly kind: 'sandbox-none' };
 
 /**
  * Surface-facing streaming turn contract (S-STREAM, Jev 1370d942). The producer (composition over the runtime protocol)
