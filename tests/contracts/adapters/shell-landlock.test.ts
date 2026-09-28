@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,8 +9,11 @@ import { buildLandlockRules, describeHostShellResult, hostShellRealm, landlockSh
 import { createWorkspaceScope } from '#adapters/index.js';
 import { summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';
 
-const roots: string[] = [];
-afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
+const roots: string[] = [], locked: string[] = [];
+afterEach(async () => {
+  for (const dir of locked.splice(0)) await chmod(dir, 0o700).catch(() => undefined);
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 const caps = (abi: number | null, bubblewrap: ShellCapabilities['bubblewrap'] = 'unavailable'): ShellCapabilities => ({ platform: 'linux', bubblewrap,
   userNamespace: 'available', landlock: abi === null ? { status: 'unavailable', abi: null } : { status: 'available', abi } });
 
@@ -54,6 +57,13 @@ describe('Landlock rule set (S11): carve around protected paths, .git read-only'
     const p = await project();
     const built = await buildLandlockRules({ project: p.scope, scratchDir: p.scratch }, { maxEntries: 5 });
     expect(built).toMatchObject({ ok: false, reason: expect.stringContaining('entries') });
+    // Astra 2154 R3 (Landlock side): beyond the depth bound the whole set is refused; an unreadable directory takes no rule (unreachable).
+    await mkdir(join(p.root, Array.from({ length: 34 }, () => 'd').join('/')), { recursive: true });
+    expect(await buildLandlockRules({ project: p.scope, scratchDir: p.scratch })).toMatchObject({ ok: false, reason: expect.stringContaining('deeper') });
+    await rm(join(p.root, 'd'), { recursive: true, force: true });
+    await mkdir(join(p.root, 'locked')); await writeFile(join(p.root, 'locked', '.env'), 'LOCKED_SECRET\n'); await chmod(join(p.root, 'locked'), 0o000); locked.push(join(p.root, 'locked'));
+    const carved = await buildLandlockRules({ project: p.scope, scratchDir: p.scratch });
+    expect(carved.ok && carved.rules.some(([, path]) => path === 'locked' || path.startsWith('locked/'))).toBe(false);
   });
 });
 
@@ -124,6 +134,13 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
       expect(ran.output, path).not.toContain('READ');
       expect(ran.output, path).toMatch(/Permission denied|No such file/);
     }
+  });
+  it('an unreadable directory stays unreachable even after the command changes its mode (Astra 2154 R3)', async () => {
+    const p = await project();
+    await mkdir(join(p.root, 'locked')); await writeFile(join(p.root, 'locked', '.env'), 'LOCKED_SECRET\n'); await chmod(join(p.root, 'locked'), 0o000); locked.push(join(p.root, 'locked'));
+    const landlock = await realmOf(p);
+    const ran = await landlock.run({ command: 'chmod 700 locked; cat locked/.env; echo "cat=$?"', cwd: p.root, environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 20_000 });
+    expect(ran.output).not.toContain('LOCKED_SECRET'); expect(ran.output).toMatch(/Permission denied[\s\S]*cat=1/u);
   });
   it('system paths and .git are not writable, .git stays readable, git works read-only', async () => {
     const r = await realm();

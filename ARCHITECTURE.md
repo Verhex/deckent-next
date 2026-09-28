@@ -901,21 +901,30 @@ fetch tool is the only egress), `--die-with-parent`, `--new-session`, fresh `/pr
 /lib* /opt /snap /nix /sys`; never `/`, `/mnt`, `/run`, `/var`, `/home`), PATH program directories (`bin`/`.bin`/`sbin` by name; a
 `bin` with its `lib*`/`libexec` siblings; never HOME or above it, never inside/above the project or scratch, never under `/mnt /media
 /run /dev /proc /sys /var`, never a non-program directory such as `~/.local`) read-only so an nvm/`~/.local/bin` toolchain keeps
-working, the project read-write, every `.git` directory read-only, the root `.git` file read-only and — only in the verified worktree
-shape (`gitWorktreeRepository`, shared with Landlock) — its common repository read-only; any other `.git` file opens nothing (a forged
+working — every bind source, the entry and each `lib*`/`libexec` sibling, must be its own canonical directory (no link in any
+component) admitted by the same exclusions, so `lib -> $HOME` beside a `bin` is never a bind and a symbolic-link toolchain directory is
+not bound at all (Astra 2154 R1; a component swapped for a link between the check and the mount is the documented same-user race) —,
+the project read-write, every `.git` directory read-only, the root `.git` file read-only and — only in the verified worktree shape
+(`gitWorktreeRepository`, shared with Landlock) — its common repository read-only; any other `.git` file opens nothing (a forged
 pointer a sandboxed command wrote cannot bind HOME; a submodule loses `git status` inside), the deny floor masked (denied directories
 and fully-denied subtrees as empty tmpfs; denied files as a read-only `/dev/null` bind that opens with EACCES — protected, not absent;
-symlinks neither followed nor masked; `node_modules`/`dist`-class directories not entered), the conversation's scratch area read-write
-(TMPDIR unchanged). Deny walk bounded (50 000 entries / 4 096 masks; over it the call is refused). The PID namespace ends every process
-the command started with the call, a `setsid` escapee included (measured: without `--die-with-parent` it survives); the outer `bwrap`
-exits on SIGTERM, so cancellation and the timeout end the namespace. Result marker `sandbox: bubblewrap`; card "Runs in a bubblewrap
-sandbox: …". Cost on this machine ≈ 90 ms per call (≈ 75 ms view resolution over 1.8 k entries, bwrap itself ≈ 10 ms) vs ≈ 2 ms on the
-host. Open limits: masked files read "Permission denied" rather than ENOENT; deny patterns inside ignored directories not masked;
-`.git` read-only means `git commit`/`git add` fail inside (owner decision); a data root inside the project keeps its ledger reachable
-(only approvals/previews/scratch are on the floor, as on the host); user-namespace-restricted hosts (AppArmor) not measured (the
-probe's `unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known
-paths (a service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the
-service dies (candidate for the "Host shell execution" orphan item) — untested.
+a regular file with more than one link is masked the same way, since another name of a protected inode would open it (Astra 2154 R2;
+single-link files stay open); symlinks neither followed nor masked; `node_modules`/`dist`-class directories not entered), the
+conversation's scratch area read-write (TMPDIR unchanged). What the walk could not see is closed, never left read-write (Astra 2154
+R3): a directory it could not read, or one beyond depth 32, is masked as an empty tmpfs (a `chmod` inside changes the tmpfs, not the
+host directory); an unreadable project root refuses the call. Deny walk bounded (50 000 entries / 4 096 masks; over it the call is
+refused). The PID namespace ends every process the command started with the call, a `setsid` escapee included (measured: without
+`--die-with-parent` it survives); the outer `bwrap` exits on SIGTERM, so cancellation and the timeout end the namespace. Result marker
+`sandbox: bubblewrap`; card "Runs in a bubblewrap sandbox: …". Cost on this machine ≈ 145 ms per call after the link-count reads (≈ 90
+ms before Astra 2154 R2; view resolution over 1.8 k entries, bwrap itself ≈ 10 ms) vs ≈ 2 ms on the host. Open limits: masked files
+read "Permission denied" rather than ENOENT; ignored-tree exception (both realms): `node_modules`/`dist`-class directories are not
+scanned, so a `node_modules/pkg/.env` is readable and a nested `node_modules/pkg/.git/config` writable inside (Astra 2154 measured
+both; owner option: mask/carve every `.git` and deny match inside ignored trees at the cost of scanning them); `.git` read-only means
+`git commit`/`git add` fail inside (owner decision); a data root inside the project keeps its ledger reachable (only
+approvals/previews/scratch are on the floor, as on the host); user-namespace-restricted hosts (AppArmor) not measured (the probe's
+`unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known paths (a
+service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the service dies
+(candidate for the "Host shell execution" orphan item) — untested.
 **Landlock realm (S11).** Second provider (chosen when bubblewrap is not usable): each call builds a rule set from a fresh scan of the
 project (`host-shell/internal/landlock.ts`) and runs bash through the native helper `shell-sandbox`
 (`host-shell/native/shell_sandbox.c`), which applies it and execs bash in the same process. Landlock only adds access and a directory
@@ -926,20 +935,21 @@ and unreadable directories no rule; symbolic links none; ignored directories rea
 directories (`/usr /bin /sbin /lib* /opt`, the running Node's `bin`/`lib`) read + execute, `/etc` and `/proc` read,
 `/dev/{null,zero,full,random,urandom}` read-write; the scratch area read-write and the command's `HOME`; HOME, `/tmp`, `/mnt`, `/run`,
 `/var`, `/sys` and everything else unreachable (`stat` is not restricted by Landlock). Bounds: 20 000 scanned entries, depth 32, 8 192
-rules, 1 MiB of rule arguments — past a bound nothing runs. The helper opens relative rule paths beneath the root with `openat2
-RESOLVE_BENEATH|NO_SYMLINKS`, requires the announced kernel ABI, sets `PR_SET_NO_NEW_PRIVS`, restricts itself (ABI ≥ 4: TCP
-bind/connect handled with no rule; ABI ≥ 6: signal and abstract-unix scopes), then installs a seccomp filter (foreign-architecture/x32
-calls kill; `io_uring_setup` refused; `socket()` refused except AF_INET/AF_INET6 stream sockets when Landlock handles TCP — ABI < 4:
-every socket refused; `listen()` and MSG_FASTOPEN sends refused: measured on ABI 7 that a unix socket reached `/var/run/docker.sock`,
-UDP left the machine, and the Landlock TCP rule missed a `listen()` autobind and a TCP Fast Open connect). Any setup failure is one
-line on fd 3 (close-on-exec), exit 125, no exec; the runner turns it into `spawn-failed` (effect refused), so a command cannot forge
-one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 → typed DEGRADED: marker `sandbox: degraded` and a notice naming what is
-open (signals ABI < 6, truncation ABI < 3, TCP by the socket filter ABI < 4) on the card, the live stream, the result and the finished
-line. Network is closed at every ABI. Open limits: the project root and every directory holding a protected path or `.git` cannot gain,
-lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root file, a first `mkdir dist`); tools installed under
-HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories are not carved; no PID namespace — a `setsid`
-descendant escapes the process group (it stays in the Landlock domain); ≈ 90 ms per call on this repository; a data root inside the
-project keeps its ledger writable.
+rules, 1 MiB of rule arguments — past a bound nothing runs (beyond depth 32 the whole set is refused; a directory the scan cannot read
+takes no rule and stays unreachable even after a `chmod` inside — pinned by tests after Astra 2154 R3). The helper opens relative rule
+paths beneath the root with `openat2 RESOLVE_BENEATH|NO_SYMLINKS`, requires the announced kernel ABI, sets `PR_SET_NO_NEW_PRIVS`,
+restricts itself (ABI ≥ 4: TCP bind/connect handled with no rule; ABI ≥ 6: signal and abstract-unix scopes), then installs a seccomp
+filter (foreign-architecture/x32 calls kill; `io_uring_setup` refused; `socket()` refused except AF_INET/AF_INET6 stream sockets when
+Landlock handles TCP — ABI < 4: every socket refused; `listen()` and MSG_FASTOPEN sends refused: measured on ABI 7 that a unix socket
+reached `/var/run/docker.sock`, UDP left the machine, and the Landlock TCP rule missed a `listen()` autobind and a TCP Fast Open
+connect). Any setup failure is one line on fd 3 (close-on-exec), exit 125, no exec; the runner turns it into `spawn-failed` (effect
+refused), so a command cannot forge one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 → typed DEGRADED: marker `sandbox:
+degraded` and a notice naming what is open (signals ABI < 6, truncation ABI < 3, TCP by the socket filter ABI < 4) on the card, the
+live stream, the result and the finished line. Network is closed at every ABI. Open limits: the project root and every directory
+holding a protected path or `.git` cannot gain, lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root
+file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories
+are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 90 ms per call
+on this repository; a data root inside the project keeps its ledger writable.
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):

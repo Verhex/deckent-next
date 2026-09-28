@@ -27,7 +27,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   deposit regresyonu tabanda 3/3 kırmızı → yeşil).
 - Sandbox birleşti (`lane/bwrap` `7e1281e` ⊃ `lane/landlock`): S9 bubblewrap → S11 Landlock → host (prefer notu) / ret (require); `sandbox: kısmi`
   etiketi bağlandı. arch delta'lar uygulandı (lint-arch 0), composition 4912/5000.
-- Sıradaki: tam verify → Astra REQUEST_REVIEW → PASS'te push → canlı geçiş (owner onayı).
+- Tam verify 646065c exit 0 (409/2731). Astra 2154 REVISE: bwrap R1 toolchain kardeş bağı HOME'a, R2 hard link takma adı, R3 okunamayan/derin
+  dizin maskesiz → `lane/bwrap` `985d82a` birleşti (canonical bind, nlink>1 maskesi, eksik tarama tmpfs/ret; bwrap ~145 ms/çağrı).
+- Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB ile birlikte).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 
