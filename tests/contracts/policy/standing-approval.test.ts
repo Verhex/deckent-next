@@ -107,6 +107,12 @@ describe('the call decision with a standing approval', () => {
     expect(decide(policy, 'shell-destructive', { key: KEY, session: true }).decision).toBe('require-approval');
   });
 
+  it('only a person\'s own standing-* grant stands: a hand-written grant of the kind under another id, or one for everybody, does not', () => {
+    for (const grant of [rule('company-grant', STANDING_GRANT_KIND, [KEY], 'allow'), { ...rule('standing-shared', STANDING_GRANT_KIND, [KEY], 'allow'), principals: 'all' }]) {
+      expect(decide(policyOf([...allowAll, grant]), 'shell-narrow-mutating', { key: KEY, session: false }).decision).toBe('require-approval');
+    }
+  });
+
   it('a role\'s authority over the whole kind (the owner root) is authority to delegate, never a standing approval', () => {
     const owner = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', separationOfDuties: [], restrictions: [], grants: allowAll,
       roles: [{ id: 'owner', permissions: [{ id: 'all-calls', effect: 'allow', actions: 'all', resource: { kind: STANDING_GRANT_KIND, ids: 'all' } }] }] },

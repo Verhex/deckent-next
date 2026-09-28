@@ -174,8 +174,8 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await granted.decisions.authorize(edit, args)).toBe('allow');
     expect(await granted.execute()).toMatchObject({ outcome: { status: 'ok' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
     expect(granted.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'used', source: 'grant', grantId: 'standing-1' });
-    // Revoked (another grant id / no grant) between the audit and an admission: the audited decision is gone.
-    for (const later of [asks, withGrant('standing-2')]) {
+    // Revoked, replaced by another grant id, or the policy revision changed (same grant) between the audit and an admission: the audited decision is gone.
+    for (const later of [asks, withGrant('standing-2'), withGrant('standing-1', 'p-edited')]) {
       const f = await fixture([withGrant(), withGrant(), later]);
       expect(await f.decisions.authorize(edit, args)).toBe('allow');
       expect(await f.execute()).toMatchObject({ outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, admissions: ['EFFECT_APPROVAL_REQUIRED'] });
