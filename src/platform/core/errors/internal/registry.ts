@@ -175,6 +175,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   ADOPTION_VERIFICATION_UNSETTLED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_UNSETTLED', p, l) }) },
   ADOPTION_VERIFICATION_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_CANCELLED', p, l) }) },
   ADOPTION_VERIFICATION_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_MISMATCH', p, l) }) },
+  // B06-2c: text is temporary until the lead lands the i18n delta (proof B06-2C-2026-09-28/i18n-delta.json).
+  ADOPTION_NOT_VERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_NOT_VERIFIED' }, l) }) },
+  ADOPTION_VERIFICATION_CRITERIA_WEAKER: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_CRITERIA_WEAKER' }, l) }) },
+  ADOPTION_VERIFICATION_NOT_CONFIGURED: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ADOPTION_VERIFICATION_NOT_CONFIGURED' }, l) }) },
   PATCH_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSUPPORTED', p, l) }) },
   PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_LIMIT', p, l) }) },
   PATCH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSAFE', p, l) }) },

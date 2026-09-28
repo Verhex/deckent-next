@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
+import { dockerReadOnlyMountsSchema } from './mounts.js';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
@@ -8,6 +9,7 @@ import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index
 const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
   nativeSubscription: nativeSubscriptionSchema.optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
+  readOnlyMounts: dockerReadOnlyMountsSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
     .refine(argv => (argv[0]?.length ?? 0) > 0).readonly(),
 }).strict().readonly();
@@ -31,8 +33,9 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   }
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
-  const { argv, nativeSubscription, ...options } = parsed.data;
+  const { argv, nativeSubscription, readOnlyMounts, ...options } = parsed.data;
   if (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
     !== createHash('sha256').update(JSON.stringify(argv)).digest('hex')) throw new DockerTaskProfileError();
-  return Object.freeze({ argv, nativeSubscription, options: Object.freeze(options) });
+  // Project-relative binds stay profile data; trusted composition resolves them to host paths (resolveDockerReadOnlyMounts).
+  return Object.freeze({ argv, nativeSubscription, readOnlyMounts, options: Object.freeze(options) });
 }

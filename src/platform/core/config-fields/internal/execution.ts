@@ -12,5 +12,13 @@ export const GIT_EXECUTION_SETTINGS = z.object({ gitExecutable: z.string().min(1
   timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe().default(4_194_304) }).strict();
 /** Branches an operator allows `integration-adopt` to move. Empty (default) refuses every adoption; a listed branch must
  * exist and must not be checked out in any worktree when adopted. Business policy data, not a grant: policy still applies. */
-export const ADOPTION_TARGET_SETTINGS = z.object({ targets: z.array(z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/)).max(64).default([]) }).strict();
+/** Same bounds as a domain identity (task kinds, evaluator ids): trimmed, no control characters, at most 256 code units. */
+const configIdentity = z.string().min(1).max(256).refine(value => value.trim() === value && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
+/** B06-2c: what counts as verification of an adopted commit. `kind` is the task kind whose Run verifies; `required` refuses adoption
+ * without one; `criteria` is the bar each such Run's acceptance must meet (per evaluator: never accepting more than these parameters). */
+export const ADOPTION_VERIFICATION_REQUIREMENT = z.object({ kind: configIdentity, required: z.boolean(),
+  criteria: z.array(z.object({ evaluator: z.object({ id: configIdentity, version: z.number().int().positive().safe() }).strict(),
+    parameters: z.record(z.string(), z.unknown()) }).strict()).min(1).max(16) }).strict();
+export const ADOPTION_TARGET_SETTINGS = z.object({ targets: z.array(z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/)).max(64).default([]),
+  verification: ADOPTION_VERIFICATION_REQUIREMENT.nullable().default(null) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();

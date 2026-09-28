@@ -5,9 +5,10 @@ import { GitIntegrationAdoption, GitIntegrationDelivery, GitRunWorkspaceProvider
 import type { AttemptIdentity } from '#domain/index.js';
 import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema,
   type IntegrationAdoptionCommand, type IntegrationRollbackCommand } from '#engine/index.js';
+import { criterionWithin } from '#capabilities/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
-/** Local SDK/CLI producer; target allow-list, paths, principal, session, Git options and the verification registry never come from the wire. */
+/** Local SDK/CLI producer; target allow-list, paths, principal, session, Git options, the verification registry and bar never come from the wire. */
 async function withAdoption<T>(root: string, identity: AttemptIdentity, options: ConfigLoadOptions, action: 'adopt-integration' | 'rollback-integration',
   use: (application: WorkspaceAdoptionApplication) => Promise<T>): Promise<T> {
   try {
@@ -22,6 +23,7 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
       const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),
         c.config.execution.adoption.targets, sessions, c.authorization, clock, { registry: c.config.admission?.registry ?? null,
+          requirement: c.config.execution.adoption.verification, criterionWithin,
           authorizeRun: (scopeId, runId, principal) => runs.authorize('inspect', { scopeId, runId }, principal),
           source: new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)) }));
     } finally { store.close(); }
