@@ -154,10 +154,12 @@ describe('work surface: approvals', () => {
     const fake = approvals([approval('ap-1'), approval('ap-2'), approval('ap-3'), approval('done', { status: 'decided', revision: 1, decision: 'allow' })]);
     const view = mount({ ledger: fake.ledger, pollMs: 10_000 });
     await view.type('/approvals\r');
-    await view.card('A-SUBJECT ap-1', 'card');
-    expect(view.frame()).toContain('A-ITEM 1 ap-1 summary ap-1');
-    expect(view.frame()).toContain('A-SUBJECT ap-1 run-1 task-1 svc');
+    await until(() => view.frame().includes('> A-ITEM 1 ap-1 summary ap-1') && view.frame().includes('A-ITEM 2 ap-2'), 'picker');
     expect(view.frame()).not.toContain('A-ITEM 4');
+    expect(view.frame()).not.toContain('A-PROMPT');
+    await view.type('\r');
+    await view.card('A-SUBJECT ap-1', 'card');
+    expect(view.frame()).toContain('A-SUBJECT ap-1 run-1 task-1 svc');
     // Keys that are not y/n/Enter/Esc (legacy "always" key, stray text, a paste) leave the card waiting and never reach the composer.
     await view.type('a'); view.stdin.write('yes'); await settle(60);
     expect(fake.decisions).toEqual([]);
@@ -167,10 +169,14 @@ describe('work surface: approvals', () => {
     await until(() => view.frame().includes('A-ALLOWED ap-1') && !view.frame().includes('A-PROMPT'), 'approved');
     expect(view.frame()).toContain('A-MORE 2');
     await view.type('/approvals\r');
+    await until(() => view.frame().includes('> A-ITEM 1 ap-2'), 'second picker');
+    await view.type('\r');
     await view.card('A-SUBJECT ap-2', 'second card');
     view.stdin.write('\r');
     await until(() => view.frame().includes('A-DENIED ap-2'), 'enter denies');
     await view.type('/approvals\r');
+    await until(() => view.frame().includes('> A-ITEM 1 ap-3'), 'third picker');
+    await view.type('\r');
     await view.card('A-SUBJECT ap-3', 'third card');
     view.stdin.write('\u001b');
     await until(() => view.frame().includes('A-DENIED ap-3'), 'esc denies');

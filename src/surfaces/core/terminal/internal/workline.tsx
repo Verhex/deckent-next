@@ -16,7 +16,8 @@ import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
-import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
+import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort, type ResumePickerItem } from './workline-sessions.js';
+import { ArrowPicker } from './arrow-picker.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
@@ -120,6 +121,8 @@ export function WorklineApp(props: WorklineProps) {
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
   const session = useConversationSession(props.sessions, labels.sessions);
+  const resumeGate = useRef<((choice: number | null) => void) | null>(null);
+  const [resumePicker, setResumePicker] = useState<readonly ResumePickerItem[] | null>(null);
   const turn = useRef<AbortController | null>(null);
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
@@ -135,7 +138,7 @@ export function WorklineApp(props: WorklineProps) {
 
   // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
   const closed = useRef(false);
-  useEffect(() => { closed.current = false; return () => { closed.current = true; turn.current?.abort(); }; }, []);
+  useEffect(() => { closed.current = false; return () => { closed.current = true; turn.current?.abort(); resumeGate.current?.(null); }; }, []);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
     const notices = opening.current;
@@ -268,7 +271,18 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
       setBusy(true);
-      try { push(await session.run(slash.command, slash.args, history)); }
+      try {
+        const result = await session.run(slash.command, slash.args, history);
+        if (result.resumePicker) {
+          // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
+          setResumePicker(result.resumePicker);
+          const choice = await new Promise<number | null>(resolve => { resumeGate.current = resolve; });
+          resumeGate.current = null;
+          if (!closed.current) setResumePicker(null);
+          const item = choice === null ? undefined : result.resumePicker[choice];
+          if (item && !closed.current) push((await session.run('resume', item.sessionId, history)).entries);
+        } else push(result.entries);
+      }
       catch (error) { push([notice('error', errorText(error))]); }
       finally { setBusy(false); }
       return true;
@@ -318,6 +332,12 @@ export function WorklineApp(props: WorklineProps) {
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
+  const choosing = resumePicker !== null || work.pickerOpen;
+  const finishResume = (choice: number | null) => {
+    const resolve = resumeGate.current;
+    resumeGate.current = null;
+    resolve?.(choice);
+  };
   return (
     <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -326,12 +346,15 @@ export function WorklineApp(props: WorklineProps) {
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
+      {resumePicker && !work.modalOpen && !work.pickerOpen
+        ? <ArrowPicker rows={resumePicker.map(item => item.label)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy ? labels.statusBusy : labels.statusReady} busy={busy}
+      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
         queued={queue.current.length} labels={labels.render} mode={mode.mode} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
-          An open decision card (P4) takes the keyboard away from it. */}
-      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen} onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}
+          An open decision card or arrow picker takes the keyboard away from it. */}
+      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
