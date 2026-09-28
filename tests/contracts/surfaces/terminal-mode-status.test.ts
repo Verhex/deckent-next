@@ -69,4 +69,28 @@ describe('/mode (T-L4 slice 4c)', () => {
     expect(calls).toEqual(['inspect', ['set', 'full-auto', 'p1+b1']]);
     expect(set.entries.map(entry => entry.kind === 'notice' ? entry.text : '')).toEqual(['/mode · ask → full-auto · modeEligible: 0']);
   });
+
+  it('says a v1 policy has no modes and calls no set (nothing to write), whether the view was known or is read first', async () => {
+    const v1 = { ...view, supported: false, revision: 'p1' };
+    const calls: unknown[] = [];
+    const port = {
+      async inspect() { calls.push('inspect'); return v1; },
+      async set(mode: 'ask' | 'auto-edit' | 'full-auto', expectedRevision: string) { calls.push(['set', mode, expectedRevision]); throw new Error('set must not be called'); },
+    };
+    for (const known of [null, v1]) {
+      const result = await runModeCommand('auto-edit', port, known);
+      expect(result.entries.map(entry => entry.kind === 'notice' ? [entry.level, entry.text] : [])).toEqual([['error', '/mode · ask · policy v1']]);
+      expect(result.view).toEqual(v1);
+    }
+    expect(calls).toEqual(['inspect']);
+  });
+
+  it('shows what each mode changes and which can be tried, from the view alone', async () => {
+    const port = { async inspect() { return view; }, async set(): Promise<never> { throw new Error('unused'); } };
+    const labels = { current: 'Mode: {mode}', changed: '{previous} → {mode}', inert: ' (inert)', unsupported: 'v1', usage: 'usage',
+      effect: { ask: 'ask-effect', 'auto-edit': 'edit-effect', 'full-auto': 'full-effect' }, switch: 'Try: {options}' };
+    const shown = await runModeCommand('', port, null, labels);
+    expect(shown.entries.map(entry => entry.kind === 'notice' ? entry.text : '')).toEqual(['Mode: ask — ask-effect',
+      'Try: /mode auto-edit (edit-effect); /mode full-auto (full-effect)']);
+  });
 });
