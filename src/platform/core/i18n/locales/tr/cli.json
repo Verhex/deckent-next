@@ -765,6 +765,7 @@
   "terminal.render.toolSummary.matches": "{count} eşleşme",
   "terminal.render.toolSummary.matchesMore": "{count}+ eşleşme",
   "terminal.render.toolSummary.entries": "{count} giriş",
+  "terminal.render.toolSandboxNone": "sandbox: yok",
   "terminal.session.banner": "Deckent terminal oturumu (satır modu). Komutlar: /status, /exit.",
   "terminal.service.started": "Runtime servisi arka planda başlatıldı (pid {pid}, günlük {log}); terminal kapansa da çalışmaya devam eder. {stop}",
   "terminal.service.connected": "Runtime servisine bağlanıldı ({instance}). {stop}",
