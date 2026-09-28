@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, resolveGlobalConfigPaths,
-  resolveProductPaths, productResourcePath, validatePath, validateExistingPath, validateTaskId,
+  resolveProductPaths, resolveProductLayout, productResourcePath, validatePath, validateExistingPath, validateTaskId,
   suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity,
   detectHostMemory, getSystemProfile, detectEnvironment, resolveLocalOsPrincipal, resolveLocalOsActorId,
   principalToActor, assertActorAssurance,
@@ -24,6 +24,16 @@ describe('platform and identity contracts', () => {
     expect(normalizeGlobalScopePlatform('linux', { WSL_INTEROP: 'on' })).toBe('wsl');
     expect(() => normalizeGlobalScopePlatform('freebsd', { DECKENT_HOME: '/x' })).toThrow();
     expect(() => resolveGlobalScopePaths('linux', {})).toThrow();
+  });
+  // Astra 2166: a product path the deny language cannot name literally (`*`, `?`) is refused at layout admission; brackets and braces are literal
+  // in that language and stay accepted.
+  it('refuses a project root, data root or bootstrap path that holds a glob wildcard; accepts brackets and braces', () => {
+    expect(() => resolveProductLayout({ projectRoot: '/p', root: '/p/.cache/deckent?1' })).toThrow('LAYOUT_PATH_UNEXPRESSIBLE');
+    expect(() => resolveProductLayout({ projectRoot: '/p', root: '/p/.cache/deck*ent' })).toThrow('LAYOUT_PATH_UNEXPRESSIBLE');
+    expect(() => resolveProductLayout({ projectRoot: '/pro?ject' })).toThrow('LAYOUT_PATH_UNEXPRESSIBLE');
+    expect(() => resolveProductLayout({ projectRoot: '/p', bootstrapConfigPath: '/p/.deckent/config*.json' })).toThrow('LAYOUT_PATH_UNEXPRESSIBLE');
+    expect(resolveProductLayout({ projectRoot: '/p[1]', root: '/p[1]/.cache/deckent{2}' }).root).toBe('/p[1]/.cache/deckent{2}');
+    expect(() => resolveGlobalScopePaths('linux', { HOME: '/h', DECKENT_HOME: '/data?x' })).toThrow('LAYOUT_PATH_UNEXPRESSIBLE');
   });
   it('keeps cache independent of the relocated durable root and rejects relative roots', () => {
     const scope = resolveGlobalScopePaths('linux', { HOME: '/h', DECKENT_HOME: '/data', XDG_CACHE_HOME: '/cache' });

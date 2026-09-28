@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { constants, open, readdir, readFile, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { globLiteralHead } from '#platform/index.js';
 
 /** Generated/vendored directory names skipped by walks (legacy baseline), plus unambiguous directory names from the root .gitignore. */
 export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', 'out', 'coverage',
@@ -19,14 +20,9 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '.git', '**/.git']);
 
 type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
-/** The matcher's wildcard characters — the one grammar: `*` and `?` only; `[`, `]`, `{`, `}` and every other character are literal. */
-const GLOB_WILDCARD = /[*?]/u;
-/** The literal head of a pattern before its first wildcard, in the matcher's own language (Astra 2164: the same cut the matcher's fast path
- * and the protected-anchor derivation use — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets). */
-export function globLiteralHead(pattern: string): string {
-  const wildcard = pattern.search(GLOB_WILDCARD);
-  return wildcard < 0 ? pattern : pattern.slice(0, wildcard);
-}
+// The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation
+// and the product layout admission share it (Astra 2164/2166) — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets.
+export { globLiteralHead } from '#platform/index.js';
 /**
  * Glob matcher without backtracking (Astra 2078 R2): `**` followed by a slash is any run of whole directories, `**` anything,
  * `*` any run within a segment, `?` one non-slash character. Matching is a dynamic program over (pattern token, path position),
