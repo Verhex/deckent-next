@@ -15,6 +15,7 @@ const abi = probe.landlockAbi;
 const skip = abi < 1 ? `Landlock unavailable (errno ${probe.landlockErrno})` : false;
 
 let base, project, scratch, outside;
+const python = ['/usr/bin/python3', '/bin/python3'].find(existsSync);
 const system = () => ['/usr', '/bin', '/sbin', '/lib', '/lib64'].filter(existsSync).flatMap(path => ['--rule', 'x', path])
   .concat(['--rule', 'r', '/etc', '--rule', 'r', '/proc', '--rule', 'd', '/dev/null']);
 /** The rule set the TypeScript builder produces for this layout: root and `sub` carved (listing only), `.git` read-only, `.env` files without a rule. */
@@ -100,11 +101,40 @@ describe('shell-sandbox (Landlock + seccomp) on a real project', { skip }, () =>
       await new Promise(done => setTimeout(done, 100));
       assert.equal(received.length, 0);
     } finally { udp.close(); }
-    const python = ['/usr/bin/python3', '/bin/python3'].find(existsSync);
     if (python) {
       const unix = await run(`${python} -c 'import socket; socket.socket(socket.AF_UNIX)' && echo opened`);
       assert.notEqual(unix.code, 0); assert.doesNotMatch(unix.stdout, /opened/);
     }
+  });
+  test('TCP paths the Landlock rule does not see are refused: listen on an ephemeral port, TCP Fast Open', { skip: (abi < 4 && 'ABI < 4') || (!python && 'no python3') }, async () => {
+    let accepted = 0;
+    const server = createTcpServer(socket => { accepted++; socket.destroy(); });
+    await new Promise(done => server.listen(0, '127.0.0.1', done));
+    try {
+      const port = server.address().port;
+      const fastOpen = await run(`${python} -c 'import socket; socket.socket().sendto(b"x", socket.MSG_FASTOPEN, ("127.0.0.1", ${port})); print("sent")'`);
+      assert.doesNotMatch(fastOpen.stdout, /sent/); assert.match(fastOpen.stderr, /Permission denied/);
+      const listening = await run(`${python} -c 'import socket; s = socket.socket(); s.listen(1); print("listening", s.getsockname()[1])'`);
+      assert.doesNotMatch(listening.stdout, /listening/); assert.match(listening.stderr, /Permission denied/);
+      await new Promise(done => setTimeout(done, 100));
+      assert.equal(accepted, 0);
+    } finally { server.close(); }
+  });
+  test('a degraded posture (ABI 3) is what the notice says: no socket at all, but signals reach outside processes', { skip: abi < 3 && 'ABI < 3' }, async () => {
+    let accepted = 0;
+    const server = createTcpServer(socket => { accepted++; socket.destroy(); });
+    await new Promise(done => server.listen(0, '127.0.0.1', done));
+    try {
+      const tcp = await run(`exec 3<>/dev/tcp/127.0.0.1/${server.address().port} && echo connected`, { requestAbi: 3 });
+      assert.equal(tcp.status, ''); assert.doesNotMatch(tcp.stdout, /connected/);
+      await new Promise(done => setTimeout(done, 100));
+      assert.equal(accepted, 0);
+    } finally { server.close(); }
+    const posture = await run('grep -E "^Seccomp:" /proc/self/status; kill -0 $PPID && echo signal-reached', { requestAbi: 3 });
+    assert.match(posture.stdout, /Seccomp:\s+2/); assert.match(posture.stdout, /signal-reached/);
+    const secret = await run(`cat ${outside}/secret`, { requestAbi: 1 });
+    assert.notEqual(secret.code, 0); assert.doesNotMatch(secret.stdout, /OUTSIDE_SECRET/);
+    assert.equal((await run('echo abi1 >> top.txt', { requestAbi: 1 })).code, 0);
   });
   test('the service process is out of reach: no signal, no environment (ABI >= 6)', { skip: abi < 6 && 'ABI < 6' }, async () => {
     const result = await run('kill -0 $PPID && echo signalled; cat /proc/$PPID/environ >/dev/null && echo environ');

@@ -117,11 +117,16 @@ static void add_rule(int ruleset, int root, char cls, const char *path, uint64_t
 #define ARG_LO(n) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[n]))
 #define RET(value) BPF_STMT(BPF_RET | BPF_K, (value))
 #define DENY(error) RET(SECCOMP_RET_ERRNO | ((error) & SECCOMP_RET_DATA))
+/** System call `nr` whose argument `arg` carries MSG_FASTOPEN is refused, otherwise allowed (5 instructions, self-contained jumps). */
+#define DENY_FASTOPEN(nr, arg) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 4), ARG_LO(arg), \
+  BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, MSG_FASTOPEN, 0, 1), DENY(EACCES), RET(SECCOMP_RET_ALLOW)
 
 /** Sockets: with the Landlock TCP rule (ABI >= 4) only AF_INET/AF_INET6 stream sockets of protocol 0/TCP reach the kernel, whose
  * connect/bind the Landlock network rule refuses; every other family and type (UDP, raw, unix — a unix socket reaches e.g. the
  * Docker daemon, which Landlock's filesystem rules do not cover —, netlink, vsock …) is refused here. Without it (ABI < 4) every
- * socket is refused. io_uring could open and connect sockets unseen by this filter: it is refused. Foreign-architecture system
+ * socket is refused. Two TCP paths the Landlock rule does not see (measured, ABI 7): `listen()` on an unbound socket binds an
+ * ephemeral port and accepts connections, and `sendto`/`sendmsg`/`sendmmsg` with MSG_FASTOPEN connect without `connect()` —
+ * both are refused. io_uring could open and connect sockets unseen by this filter: it is refused. Foreign-architecture system
  * calls end the process. */
 static void install_seccomp(int tcp_by_landlock) {
 #ifndef NATIVE_ARCH
@@ -139,6 +144,11 @@ static void install_seccomp(int tcp_by_landlock) {
 #endif
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_io_uring_setup, 0, 1),
     DENY(EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_listen, 0, 1),
+    DENY(EACCES),
+    DENY_FASTOPEN(SYS_sendto, 3),
+    DENY_FASTOPEN(SYS_sendmsg, 2),
+    DENY_FASTOPEN(SYS_sendmmsg, 3),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 1, 0),
     RET(SECCOMP_RET_ALLOW),
     // socket(domain, type, protocol); without the Landlock TCP rule every socket is refused (jump to the refusal).

@@ -72,9 +72,10 @@ export async function buildLandlockRules(input: LandlockSandboxInput, bounds: Pa
   try {
     const project = await scan('.', 0) ?? [['w', '.'] as const];
     const system: LandlockRule[] = [];
-    // The Node runtime the service runs on (its bin and lib, not its etc): `node`/`npm` work inside the sandbox.
-    const prefix = dirname(dirname(await realpath(process.execPath)));
-    for (const path of [...SYSTEM_EXEC, join(prefix, 'bin'), join(prefix, 'lib')]) if (await exists(path, 'dir')) system.push(['x', path]);
+    // The Node runtime the service runs on (its bin and lib, not its etc): `node`/`npm` work inside the sandbox. Only an installation
+    // prefix (`<prefix>/bin/node`); a node elsewhere (e.g. `~/bin/node`) must not open its parent directory.
+    const node = await realpath(process.execPath), prefix = basename(dirname(node)) === 'bin' ? dirname(dirname(node)) : null;
+    for (const path of [...SYSTEM_EXEC, ...(prefix ? [join(prefix, 'bin'), join(prefix, 'lib')] : [])]) if (await exists(path, 'dir')) system.push(['x', path]);
     for (const path of SYSTEM_READ) if (await exists(path, 'dir')) system.push(['r', path]);
     for (const path of DEVICES) if (await exists(path, 'any')) system.push(['d', path]);
     const common = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await worktreeCommonDir(root) : null;
@@ -99,6 +100,7 @@ export function landlockShellRealm(input: LandlockSandboxInput, abi: number): Sh
     kind: 'landlock' as const,
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
       if (resolve(request.cwd) !== input.scope.root) return refuse('the working directory is not the sandboxed project root');
+      if (!await exists(HELPER, 'any')) return refuse('the sandbox helper is not installed (native build missing)');
       const built = await buildLandlockRules(input);
       if (!built.ok) return refuse(built.reason);
       const prefix = ['--abi', String(abi), '--root', input.scope.root, ...built.rules.flatMap(([cls, path]) => ['--rule', cls, path]), '--'];
