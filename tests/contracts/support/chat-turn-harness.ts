@@ -36,6 +36,8 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
   thinkingSwitch?: boolean; dataInside?: boolean;
+  /** Astra 2162: the data root at this project-relative path (e.g. under the ignored `.cache`). */
+  dataRoot?: string;
   /** SCR-A: the `terminal.scratch` and `terminal.shell` sections, when a test sets them. */
   scratch?: Record<string, unknown>; shell?: Record<string, unknown>;
   /** FETCH: the `terminal.fetch` section, and the test-only transport handed to the in-process service (never config or env). */
@@ -44,9 +46,9 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   sandboxes?: ShellSandboxFactory } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
-  const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
+  const project = join(root, 'project'), data = options.dataRoot ? join(project, options.dataRoot) : options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }), mkdir(home, { mode: 0o700 })]);
-  await mkdir(data, { mode: 0o700 });
+  await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
   const state = { requests: [] as Record<string, unknown>[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',

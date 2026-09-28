@@ -71,6 +71,28 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     if (scanned.suspectFiles.length === 0 && inner.every(verdict => verdict.clean !== undefined)) return [['r', rulePath]];
     return [['l', rulePath], ...scanned.cleanFiles.map(name => ['r', `${rulePath}/${name}`] as const), ...inner.flatMap(verdict => verdict.clean ? [['r', verdict.clean] as const] : verdict.rules ?? [])];
   };
+  // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
+  // protected path is not one read-write grant: it is carved — listing only, its denied entries take no rule, the ancestors of protected
+  // paths are carved in turn, every other entry keeps its read-write grant unscanned (as ignored). A symbolic link on such a chain
+  // cannot be carved by path → the set is refused.
+  const anchors = [...input.project.protectedAnchors];
+  const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
+  const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
+  const carveProtected = async (rel: string, depth: number): Promise<readonly LandlockRule[]> => {
+    let entries: Dirent[];
+    try { entries = await readdir(join(root, rel), { withFileTypes: true }); } catch { return []; }
+    if ((seen += entries.length) > limit.maxEntries) throw new BoundExceeded(`the project has more than ${limit.maxEntries} entries to scan`);
+    if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);
+    const rules: LandlockRule[] = [['l', rel]];
+    for (const entry of entries) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); continue; }
+      if (denied(child)) continue;
+      if (entry.isDirectory() && hasProtectedBeneath(child)) rules.push(...await carveProtected(child, depth + 1));
+      else if (entry.isDirectory() || entry.isFile()) rules.push(['w', child]);
+    }
+    return rules;
+  };
   const scan = async (rel: string, depth: number): Promise<readonly LandlockRule[] | null> => {
     let entries: Dirent[];
     try { entries = await readdir(rel === '.' ? root : join(root, rel), { withFileTypes: true }); } catch { return []; }
@@ -85,10 +107,10 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
         if (entry.isDirectory()) return { rules: await scanGit(join(root, child), child, 0), carve: true };
         return { rules: await lstat(join(root, child)).then(info => info.nlink === 1, () => false) ? [['r', child]] : [], carve: true };
       }
-      if (entry.isSymbolicLink()) return { carve: false };
+      if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); return { carve: false }; }
       if (denied(child)) return { carve: true };
       if (entry.isDirectory()) {
-        if (ignoredDirs.has(entry.name)) return { clean: child, carve: false };
+        if (ignoredDirs.has(entry.name)) return hasProtectedBeneath(child) ? { rules: await carveProtected(child, depth + 1), carve: true } : { clean: child, carve: false };
         if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);
         const inner = await scan(child, depth + 1);
         return inner === null ? { clean: child, carve: false } : { rules: inner, carve: true };

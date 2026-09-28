@@ -191,8 +191,13 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     const astra = await f.run(`cat alias.txt 2>&1; echo x >> alias.txt 2>&1; echo "alias-write=$?"; cat plain.txt; cat ~/tools2/lib/note.txt 2>&1; ls ~/tools2/lib 2>&1;`
       + ` cat ${DEEP}/.env 2>&1; chmod 700 locked 2>&1; cat locked/.env 2>&1; ls locked 2>&1 | wc -l`);
     expect(astra.output).not.toContain('SECRET');
-    expect(astra.output).toMatch(/^cat: alias\.txt: Permission denied\n.*alias\.txt: Permission denied\nalias-write=1\nplain\n.*note\.txt: No such file or directory\n/u);
-    expect(astra.output).toMatch(/locked\/\.env: No such file or directory\n0\n$/u);
+    // Streams are checked line by line, never for their interleaving (stdout and stderr arrive in their own order; Astra 2162 R2).
+    const lines = astra.output.split('\n');
+    expect(lines).toContain('cat: alias.txt: Permission denied'); expect(lines.some(line => line.endsWith('alias.txt: Permission denied') && line.startsWith('bash:'))).toBe(true);
+    expect(lines).toContain('alias-write=1'); expect(lines).toContain('plain');
+    expect(lines.some(line => line.endsWith('tools2/lib/note.txt: No such file or directory'))).toBe(true);
+    expect(lines).toContain('cat: locked/.env: No such file or directory'); expect(lines.filter(line => line === '0')).toHaveLength(1);
+    expect(lines.some(line => line.includes(`${DEEP}/.env: No such file or directory`))).toBe(true);
     expect(await readFile(join(f.project, '.env'), 'utf8')).toBe('SECRET-ENV=1\n');
     expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('project\n');
     expect(await readFile(join(f.scratch, 'made.txt'), 'utf8')).toBe('scratch\n');
@@ -259,7 +264,9 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     if (!usable.ok) throw new Error(usable.reason);
     const ran = await usable.realm.run({ command: `git log --oneline -1 | wc -l; git fsck --connectivity-only 2>&1 | grep -c "Could not read" ; cat .git/objects/aa/${'a'.repeat(38)} 2>&1`, cwd: scope.root, environment: f.environment,
       fixedEnv: { TMPDIR: f.scratch }, timeoutMs: 60_000 });
-    expect(ran.output).toMatch(/^1\n0\n.*Permission denied\n$/u); expect(ran.output).not.toContain('SECRET');
+    const clone_lines = ran.output.split('\n').filter(Boolean);
+    expect(clone_lines.filter(line => line === '1')).toHaveLength(1); expect(clone_lines.filter(line => line === '0')).toHaveLength(1);
+    expect(clone_lines.some(line => line.endsWith('Permission denied'))).toBe(true); expect(clone_lines).toHaveLength(3); expect(ran.output).not.toContain('SECRET');
   });
   // Astra 2158: verdicts are taken afresh every call in the same process — a `.git` file that was clean (single-link, or a verified object)
   // and then gained another name (`.env`) and new content through it is closed on the next call, though its directory's times did not change.
