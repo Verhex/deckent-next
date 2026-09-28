@@ -521,8 +521,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   from `cli.worker.phase.*`, age = observation time − host `receivedAt` (never `atMs`), truncated/dropped markers, a
   finished/failed session labelled "worker reported"; `starting` with unmapped events is muted progress, not an error.
   `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
-  and unsealed attempts are visible). `/approvals [n|id]` lists pending items via the runtime `listApprovals` and opens
-  one y/N card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
+  and unsealed attempts are visible). `/approvals` opens an arrow-key picker of pending items (runtime `listApprovals`; Enter opens
+  the highlighted item's y/N card, Esc closes) and `/approvals <n|id>` lists them and opens that card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
   `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
   no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
   default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
