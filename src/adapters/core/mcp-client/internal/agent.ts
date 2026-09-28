@@ -1,8 +1,8 @@
 import type { AgentToolSpec, EffectCommand, JsonObject } from '#domain/index.js';
 import { bubblewrapShellSandbox } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { landlockShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
-import { McpClientPool, type McpLaunchContext } from './pool.js';
-import type { McpClientSettings, McpToolCell, McpToolVerdict } from './pin.js';
+import type { McpClientPool, McpLaunchContext } from './pool.js';
+import type { McpClientSettings, McpToolCell } from './pin.js';
 import { agentMcpEffectCommandId, describeMcpApproval, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND } from './target.js';
 
 /** One offered MCP tool as a turn knows it: where it lives, its pinned definition and the permission cell it is decided in. */
@@ -15,6 +15,7 @@ export interface McpOfferedTool {
   readonly cell: McpToolCell;
   readonly command: string;
   readonly posture: string;
+  readonly timeoutMs: number;
 }
 /**
  * The MCP tools one turn may offer (MCP-CLIENT): every configured server is opened (started, listed, verified) and only its `pinned` tools
@@ -28,7 +29,7 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: [server.command, ...server.args].join(' '), posture: state.posture }));
+        cell: verdict.cell, command: [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs }));
     }
   }
   return offered;
@@ -63,28 +64,3 @@ export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
 export const mcpInspectSandboxes = (project: ShellSandboxLayout['project']) => [bubblewrapShellSandbox({ project, scratchDir: null }),
   landlockShellSandbox({ project, scratchDir: null })];
 
-export interface McpServerListing { readonly schemaVersion: 1; readonly servers: readonly { readonly id: string; readonly command: string; readonly args: readonly string[];
-  readonly realm: string; readonly environment: readonly string[]; readonly pinnedTools: number }[] }
-/** `deckent mcp servers list`: configuration only; nothing is started. */
-export function listMcpServers(settings: McpClientSettings | null): McpServerListing {
-  return { schemaVersion: 1, servers: (settings?.servers ?? []).map(server => ({ id: server.id, command: server.command, args: server.args, realm: server.realm,
-    environment: server.environment, pinnedTools: server.tools.length })) };
-}
-export interface McpServerInspection {
-  readonly schemaVersion: 1;
-  readonly server: Record<string, unknown>;
-  readonly tools: readonly (Omit<McpToolVerdict, 'spec'>)[];
-}
-/** `deckent mcp servers inspect <id>`: starts the server under its realm with its own pool, reads the era and the tool list, verifies the pins
- * and closes it again. It never calls a tool. */
-export async function inspectMcpServer(settings: McpClientSettings, id: string, context: McpLaunchContext): Promise<McpServerInspection | null> {
-  const server = settings.servers.find(entry => entry.id === id);
-  if (!server) return null;
-  const controller = new AbortController(), pool = new McpClientPool(controller.signal);
-  try {
-    const state = await pool.open(server, settings, context);
-    const tools = state.ok ? state.tools.map(verdict => Object.fromEntries(Object.entries(verdict).filter(([key]) => key !== 'spec')) as Omit<McpToolVerdict, 'spec'>) : [];
-    const rest = Object.fromEntries(Object.entries(state).filter(([key]) => key !== 'tools'));
-    return { schemaVersion: 1, server: { id: server.id, command: server.command, args: server.args, realm: server.realm, ...rest, stderr: pool.stderr(server.id) }, tools };
-  } finally { controller.abort(); await pool.close(); }
-}

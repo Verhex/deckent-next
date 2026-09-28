@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
-import { inspectConfiguredMcpServers } from '#composition/core/agent-turn/index.js';
+import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerTranscript } from '#composition/core/worker-observation/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
@@ -45,7 +45,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     stopRuntimeService: (projectRoot, options) => stopConfiguredRuntimeService(projectRoot, options),
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
-    inspectMcpServers: inspectConfiguredMcpServers,
+    runMcpCommand: runConfiguredMcpCommand,
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,

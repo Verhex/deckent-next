@@ -12,7 +12,7 @@ export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2
 export const MCP_CLIENT_TOOLS_MAX = 512;
 export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
 
-/** Where a server starts: the project root, the service environment (the source of the allowlisted names) and the sandbox providers. */
+/** Where a server starts: the project root, the service environment (HOME/PATH of a sandbox view) and the sandbox providers. */
 export interface McpLaunchContext {
   readonly cwd: string;
   readonly environment: Readonly<Record<string, string | undefined>>;
@@ -28,8 +28,7 @@ const SANDBOX_POSTURE = 'sandbox: bubblewrap (the project is writable, HOME and 
 /** The realm of one server (the shell's modes): `host` as is; a sandbox provider that can hold a long-lived process wraps the command;
  * none usable → `require-sandbox` refuses, `prefer-sandbox` runs on the host and says so (never silently). */
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
-  const env: Record<string, string> = {};
-  for (const name of server.environment) { const value = context.environment[name]; if (value !== undefined) env[name] = value; }
+  const env = { ...server.env };
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(), reasons: string[] = [];
   if (capabilities.platform !== 'linux') reasons.push(`platform ${capabilities.platform}`);
@@ -83,7 +82,7 @@ export class McpClientPool {
   }
   /** Starts (when needed), lists and verifies one server; serialized per server. */
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
-    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, server.environment, server.realm])).digest('hex');
+    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm])).digest('hex');
     let state = this.states.get(server.id);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); state = undefined; }
     if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, lock: Promise.resolve() };
