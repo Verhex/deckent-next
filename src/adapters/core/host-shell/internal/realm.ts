@@ -25,6 +25,8 @@ export interface ShellSandboxLayout {
   readonly scratchDir: string | null;
   /** SHELL-AUTONOMY: the write floor over a workspace-relative path (a call the owner did not approve sees its existing paths read-only). */
   readonly writeFloor?: (rel: string) => boolean;
+  /** MODES-3: a full-access turn — `.git` (and a worktree's common repository) is writable (commit, branch); the inode floor still holds. */
+  readonly repositoryWritable?: boolean;
 }
 /** A sandbox mechanism (S9 bubblewrap, S11 Landlock) as a realm provider: usable on the measured host — then its realm, marker,
  * card posture and a notice when the posture falls short (typed DEGRADED) — or why not. A provider never falls back by itself; the

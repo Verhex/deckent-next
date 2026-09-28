@@ -36,7 +36,7 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
     expect(withRestrictions([{ ...restriction, modeEligible: true }])).toBe(false);
   });
 
-  it('reads bindings v1 unchanged and v2 modes of one principal over explicit scopes', () => {
+  it('reads bindings v1 unchanged and v2 modes of one principal over explicit scopes (v2 is read-only since MODES-3, mapped to v3)', () => {
     expect(bindingsFileSchema.safeParse({ schemaVersion: 1, revision: 'b', bindings: [] }).success).toBe(true);
     expect(bindingsFileSchema.safeParse({ schemaVersion: 1, revision: 'b', bindings: [], modes: [person('auto-edit')] }).success).toBe(false);
     expect(bindingsFileSchema.safeParse({ schemaVersion: 2, revision: 'b', bindings: [], modes: [person('auto-edit')] }).success).toBe(true);
@@ -52,14 +52,17 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
     expect(paths).toContain('modes.0.scopes');
   });
 
-  it('resolves exactly one mode entry for the person and scope; none, two or ask is null (fail closed)', () => {
-    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), me, 'scope')).toEqual({ mode: 'auto-edit', id: 'me-mode' });
-    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), me, 'other')).toBeNull();
-    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), { issuer: 'host', subject: '1001' }, 'scope')).toBeNull();
-    expect(principalPermissionMode(policyOf([], [person('ask')]), me, 'scope')).toBeNull();
-    expect(principalPermissionMode(policyOf([], [person('auto-edit'), person('full-auto', ['scope'], 'second')]), me, 'scope')).toBeNull();
-    expect(principalPermissionMode(policyOf([], null), me, 'scope')).toBeNull();
-    expect(principalPermissionMode({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [] }, me, 'scope')).toBeNull();
+  it('resolves exactly one mode entry for the person and scope; none is the default standart, two ask for every edit (fail closed)', () => {
+    const standart = { mode: 'standart', askEdits: false, id: null };
+    // A v2 `auto-edit` entry reads as standart (MODES-3); v2 `ask` as standart that asks for every edit too.
+    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), me, 'scope')).toEqual({ mode: 'standart', askEdits: false, id: 'me-mode' });
+    expect(principalPermissionMode(policyOf([], [person('full-auto')]), me, 'scope')).toEqual({ mode: 'full-auto', askEdits: false, id: 'me-mode' });
+    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), me, 'other')).toEqual(standart);
+    expect(principalPermissionMode(policyOf([], [person('auto-edit')]), { issuer: 'host', subject: '1001' }, 'scope')).toEqual(standart);
+    expect(principalPermissionMode(policyOf([], [person('ask')]), me, 'scope')).toEqual({ mode: 'standart', askEdits: true, id: 'me-mode' });
+    expect(principalPermissionMode(policyOf([], [person('auto-edit'), person('full-auto', ['scope'], 'second')]), me, 'scope')).toEqual({ mode: 'standart', askEdits: true, id: null });
+    expect(principalPermissionMode(policyOf([], null), me, 'scope')).toEqual(standart);
+    expect(principalPermissionMode({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [] }, me, 'scope')).toEqual(standart);
   });
 
   it('names every matching require-approval rule only when all are eligible; an allow rule never adds eligibility', () => {
@@ -72,15 +75,18 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
 });
 
 describe('the one permission decision of an agent tool call (T-L4 slice 4a)', () => {
-  it('lowers an eligible require-approval on an ordinary edit in auto-edit and full-auto, never in ask', () => {
-    for (const mode of ['auto-edit', 'full-auto']) {
+  it('lowers an eligible require-approval on an ordinary edit in standart (the default) and full-auto, never while the person asks for edits too', () => {
+    for (const [mode, expected] of [['auto-edit', 'standart'], ['full-auto', 'full-auto']] as const) {
       expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), [person(mode)]), 'edit')).toEqual({ decision: 'allow', revision: 'p+b',
-        relaxation: { mode, cell: 'edit-non-floor', company: 'edit-tool', person: 'me-mode' } });
+        relaxation: { mode: expected, cell: 'edit-non-floor', company: 'edit-tool', person: 'me-mode' } });
     }
     expect(decide(policyOf(editGrants('require-approval', 'require-approval', { tool: true, op: true }), [person('auto-edit')]), 'edit').relaxation)
       .toMatchObject({ company: 'edit-tool+file-write' });
+    // v2 `ask` = standart + askEdits: still asks (the migration keeps the person's choice).
     expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), [person('ask')]), 'edit')).toMatchObject({ decision: 'require-approval', relaxation: null });
-    expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), null), 'edit')).toMatchObject({ decision: 'require-approval', relaxation: null });
+    // No entry is the default standart: lowered, and the audit names no person entry.
+    expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), null), 'edit')).toMatchObject({ decision: 'allow',
+      relaxation: { mode: 'standart', cell: 'edit-non-floor', person: null } });
   });
 
   it('never lowers deny, the floor, low, destructive, always-ask, other modify, a read tool or a read-only command (M1, M2, M5)', () => {
@@ -116,9 +122,9 @@ describe('the one permission decision of an agent tool call (T-L4 slice 4a)', ()
       .toMatchObject({ decision: 'require-approval', relaxation: null });
     expect(decide(policyOf([...editGrants('require-approval', 'allow', { tool: true }), rule('unmarked', 'agent-tool', ['edit_file'], 'require-approval')],
       [person('full-auto')]), 'edit')).toMatchObject({ decision: 'require-approval', relaxation: null });
-    // Another person's mode never applies; an operation unknown to the policy is no grant (deny), not a lowering.
-    expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), [person('full-auto', ['scope'], 'theirs', { issuer: 'host', subject: '1001' })]), 'edit'))
-      .toMatchObject({ decision: 'require-approval', relaxation: null });
+    // Another person's mode never applies (their full-auto does not lower my narrow shell); an unknown operation is no grant (deny), not a lowering.
+    expect(decide(policyOf([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
+      [person('full-auto', ['scope'], 'theirs', { issuer: 'host', subject: '1001' })]), 'shell-narrow-mutating', 'run_shell')).toMatchObject({ decision: 'require-approval', relaxation: null });
     expect(decide(policyOf([rule('edit-tool', 'agent-tool', ['edit_file'], 'require-approval', true)], [person('full-auto')]), 'edit')).toMatchObject({ decision: 'deny' });
   });
 

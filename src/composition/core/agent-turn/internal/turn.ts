@@ -1,14 +1,14 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError,
+import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
   requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
   type ProductResource } from '#platform/index.js';
-import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
+import { createGlobMatcher, createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   bubblewrapShellSandbox, isWriteApprovalFloored, landlockShellSandbox, MCP_PROJECT_REGISTRY_PATH, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
@@ -22,7 +22,7 @@ import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfig
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createAgentFileEdits } from './edits.js';
-import { createAgentCallDecisions } from './mode.js';
+import { createAgentCallDecisions, withAgentAudit } from './mode.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 
@@ -70,10 +70,20 @@ export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Obje
  * moved inside the project (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and
  * shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
  */
-export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
+export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, fullAccess = false): readonly string[] {
+  // MODES-3: a full-access turn opens only the repository internals (`.git`: commit, branch, push); credentials and product state stay closed.
+  const base = fullAccess ? DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)) : DEFAULT_WORKSPACE_READ_DENY;
   // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
-  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
+  return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
     MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
+}
+/** MODES-3 `edit-authority`: the installation's configuration file inside the project (it decides where policy, bindings and approvals live, the
+ * realm and the network), its sidecars and a writer's temporary — never written without the owner's card, full access included. */
+export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout): (rel: string) => boolean {
+  const rel = relative(projectRoot, productResourcePath(layout, 'config')).split(sep).join('/'), slash = rel.lastIndexOf('/');
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return () => false;
+  const matchers = [`${rel}*`, `${rel.slice(0, slash + 1)}.${rel.slice(slash + 1)}*`].map(createGlobMatcher);
+  return path => matchers.some(match => match(path));
 }
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
@@ -89,6 +99,17 @@ export function agentProductStateDeny(projectRoot: string, layout: ProductLayout
     const slash = path.lastIndexOf('/');
     return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
   }));
+}
+
+/** MODES-3: a turn launched in full access is admitted only on the company grant, and recorded before anything runs (no record, no turn; a
+ * refusal is recorded when it can be). */
+async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvocationContext>>, command: { readonly scopeId: string; readonly turnId: string;
+  readonly sessionId?: string | undefined }, clock: SystemTrustedClock): Promise<void> {
+  const admission = admitFullAccessTurn(await context.policy.load(), { principal: context.principal, scopeId: command.scopeId, turnId: command.turnId,
+    sessionId: command.sessionId ?? null, eventId: randomUUID(), atMs: clock.sample().wallMs });
+  const recorded = await withAgentAudit(context, audit => audit.record(admission.event)).then(() => true, () => false);
+  if (!admission.allowed) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  if (!recorded) throw ErrorRegistry.createError('AUDIT_UNAVAILABLE');
 }
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
@@ -114,6 +135,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const clock = new SystemTrustedClock();
   registerProviderConfig();
   const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
+  const fullAccess = command.fullAccess === true;
+  if (fullAccess) await admitFullAccess(context, command, clock);
   const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   const chat = readTerminalChatConfig(config);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
@@ -129,7 +152,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (command.reasoning === 'off' && !thinkingSwitch) throw ErrorRegistry.createError('AGENT_TURN_REASONING_UNSUPPORTED');
   const roundThinking = command.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {};
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
-  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
+  const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout, fullAccess), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
+  // A call the owner did not approve sees the write floor read-only in a sandbox; in full access only the configuration file stays so.
+  const authority = agentAuthorityPaths(projectRoot, context.layout), writeFloor = fullAccess ? authority : isWriteApprovalFloored;
   // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area.
   // The area is held from before it is opened until the turn ends (Astra 2149): every exit below releases it in `finally`.
   const scratch = workspace ? await openScratchSession(await prepareProductDirectory(context.layout, 'scratch'), scratchSessionKey({ scopeId: command.scopeId, principal: context.principal,
@@ -148,11 +173,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
-    const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
-    const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
+    const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
+      ...(project ? { authority } : {}) }) : null;
+    const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout),
-      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor: isWriteApprovalFloored }) }) : null;
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(fullAccess ? { repositoryWritable: true } : {}) }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
@@ -162,7 +188,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
-      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
+      ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
 
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
     const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
@@ -181,7 +207,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp });
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess });
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
 
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');

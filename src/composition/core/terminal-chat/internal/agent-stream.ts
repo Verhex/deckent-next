@@ -24,6 +24,8 @@ export interface TerminalAgentTurnInput {
   readonly reasoning?: 'off';
   /** The terminal conversation (protocol v16, SCR-A): the service keeps its scratch area across the conversation's turns. */
   readonly sessionId?: string;
+  /** MODES-3 (v17): the terminal was launched in full access; the service admits it only on the company grant. */
+  readonly fullAccess?: true;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
 
@@ -35,7 +37,8 @@ type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown }
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
   const admission = await ports.preflight?.(input.projectRoot, input.options) ?? null;
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
-    ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}) };
+    ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.fullAccess === true ? { fullAccess: true as const } : {}) };
   const cancel = () => ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;

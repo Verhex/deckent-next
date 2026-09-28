@@ -32,7 +32,8 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     const events = f.audit();
     expect(events).toHaveLength(2);
     expect(events.map(record => record.event.subject)).toEqual([
-      expect.objectContaining({ kind: 'permission-mode', mode: 'auto-edit', cell: 'edit-non-floor', tool: { name: 'edit_file', version: 1 },
+      // MODES-3: a bindings v2 `auto-edit` entry reads as standart (the audit names the mode it ran in); v2 `ask` still shows the card.
+      expect.objectContaining({ kind: 'permission-mode', mode: 'standart', cell: 'edit-non-floor', tool: { name: 'edit_file', version: 1 },
         grants: { company: 'edit-tools', person: 'me-mode' }, decision: { previous: 'require-approval', next: 'allow' }, summary: { kind: 'edit', path: 'src/a.ts' } }),
       expect.objectContaining({ mode: 'full-auto', cell: 'edit-non-floor' })]);
     expect(events[0]!.event).toMatchObject({ principal: me[0], policyRevision: 'p-auto-edit+b-auto-edit' });

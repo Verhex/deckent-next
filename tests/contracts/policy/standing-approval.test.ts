@@ -10,8 +10,11 @@ const principal = { id: 'os:1000', ...me, assurance: 'os-user' as const, scopeId
 type Effect = 'allow' | 'deny' | 'require-approval';
 const rule = (id: string, kind: string, ids: string[], effect: Effect, extra: Record<string, unknown> = {}, who: unknown = me, scopes: string[] = ['scope']) =>
   ({ id, effect, actions: kind === 'operation' ? ['execute'] : ['invoke'], scopes, principals: [who], resource: { kind, ids }, ...extra });
+// MODES-3: the person asks for every edit too (standart + askEdits, the v2 `ask`), so a standing approval is what lowers an eligible edit here;
+// in the default standart the mode lowers it first (the mode first, the standing approval last).
 const policyOf = (grants: unknown[], restrictions: unknown[] = []) => resolvePolicyBindings(
-  { schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions, grants }, { schemaVersion: 2, revision: 'b', bindings: [], modes: [] });
+  { schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions, grants },
+  { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'asks', principal: me, scopes: ['scope'], mode: 'standart', askEdits: true }] });
 const KEY = 'v1:run_shell:command:npm test';
 let seq = 0;
 const standingGrant = (key = KEY, who: unknown = me, scopes = ['scope']) => rule(`standing-${++seq}`, STANDING_GRANT_KIND, [key], 'allow', {}, who, scopes);

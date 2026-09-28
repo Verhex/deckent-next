@@ -15,6 +15,8 @@ export interface BubblewrapView {
   readonly toolchainPaths: readonly string[];
   /** Repository directories (`.git`, a worktree's gitdir and common dir): read-only over the writable project (owner 2026-09-28). */
   readonly readOnlyPaths: readonly string[];
+  /** MODES-3 full access: a worktree's common repository outside the project, bound read-write (absent: none). */
+  readonly writablePaths?: readonly string[];
   /** Denied directories inside the project: an empty tmpfs in their place. */
   readonly maskedDirectories: readonly string[];
   /** Denied files inside the project: `/dev/null` bound read-only in their place. A plain (non-device) bind carries `nodev`, so the
@@ -41,6 +43,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   for (const path of view.systemPaths) args.push('--ro-bind-try', path, path);
   for (const path of view.toolchainPaths) args.push('--ro-bind-try', path, path);
   args.push('--bind', view.projectRoot, view.projectRoot);
+  for (const path of view.writablePaths ?? []) args.push('--bind', path, path);
   for (const path of view.readOnlyPaths) args.push('--ro-bind', path, path);
   for (const path of view.maskedDirectories) args.push('--tmpfs', path);
   for (const path of view.maskedFiles) args.push('--ro-bind', '/dev/null', path);

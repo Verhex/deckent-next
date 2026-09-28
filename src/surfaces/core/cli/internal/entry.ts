@@ -50,8 +50,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     context.initialize?.();
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
-    if (argv.length === 0 && interactiveTerminal(context)) {
-      await (await import('./terminal.js')).terminalCommand(['terminal'], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+    // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
+    if ((argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access')) {
+      await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
     if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }

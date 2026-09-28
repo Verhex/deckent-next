@@ -52,6 +52,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees take read-only rules (their
   // directory is carved, so the entry cannot be replaced or removed either). A floor path that does not exist yet is not covered here.
   const floored = writeFloorReadOnly && input.writeFloor ? input.writeFloor : () => false;
+  // MODES-3: a full-access turn writes Git metadata (commit, branch): its clean entries take `w` rules; the inode floor is unchanged.
+  const git = input.repositoryWritable ? 'w' as const : 'r' as const;
   let seen = 0;
   let gitSeen = 0;
   /**
@@ -70,11 +72,11 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     if (depth + 1 > limit.maxDepth) return [['l', rulePath]];
     const inner = await Promise.all(scanned.directories.map(async name => {
       const childRule = `${rulePath}/${name}`, rules = await scanGit(join(dir, name), childRule, depth + 1);
-      return rules.length === 1 && rules[0]![0] === 'r' && rules[0]![1] === childRule ? { clean: childRule } : { rules };
+      return rules.length === 1 && rules[0]![0] === git && rules[0]![1] === childRule ? { clean: childRule } : { rules };
     }));
     // Every entry clean (a single-link or verified file, a clean directory) → the directory itself is one read-only rule.
-    if (scanned.suspectFiles.length === 0 && inner.every(verdict => verdict.clean !== undefined)) return [['r', rulePath]];
-    return [['l', rulePath], ...scanned.cleanFiles.map(name => ['r', `${rulePath}/${name}`] as const), ...inner.flatMap(verdict => verdict.clean ? [['r', verdict.clean] as const] : verdict.rules ?? [])];
+    if (scanned.suspectFiles.length === 0 && inner.every(verdict => verdict.clean !== undefined)) return [[git, rulePath]];
+    return [['l', rulePath], ...scanned.cleanFiles.map(name => [git, `${rulePath}/${name}`] as const), ...inner.flatMap(verdict => verdict.clean ? [[git, verdict.clean] as const] : verdict.rules ?? [])];
   };
   // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
   // protected path is not one read-write grant: it is carved — listing only, its denied entries take no rule, the ancestors of protected
@@ -113,7 +115,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (entry.name === '.git') {
         if (entry.isSymbolicLink()) return { rules: [], carve: true };
         if (entry.isDirectory()) return { rules: await scanGit(join(root, child), child, 0), carve: true };
-        return { rules: await ops.nlink(join(root, child)) === 1 ? [['r', child]] : [], carve: true };
+        return { rules: await ops.nlink(join(root, child)) === 1 ? [[git, child]] : [], carve: true };
       }
       if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); return { carve: false }; }
       if (denied(child)) return { carve: true };
@@ -144,7 +146,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     for (const path of SYSTEM_READ) if (await exists(path, 'dir')) system.push(['r', path]);
     for (const path of DEVICES) if (await exists(path, 'any')) system.push(['d', path]);
     // The common repository of a worktree (root `.git` file with its own read rule, in the verified shape): read-only under the same floor.
-    const commonDir = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
+    const commonDir = project.some(([cls, path]) => cls === git && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
     const common = commonDir ? await scanGit(commonDir, commonDir, 0) : [];
     const scratch = input.scratchDir && isAbsolute(input.scratchDir) && await exists(input.scratchDir, 'dir') ? await realpath(input.scratchDir) : null;
     const rules = [...system, ...project, ...common, ...(scratch ? [['w', scratch] as const] : [])];

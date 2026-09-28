@@ -87,7 +87,9 @@ export type AgentTurnStreamEvent = z.infer<typeof agentTurnStreamEventSchema>;
 /** Protocol vocabulary of `chatTurn.reasoning` (v16), not a configuration value. */
 export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
 export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
-  messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional(), sessionId: identitySchema.optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
+  messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional(), sessionId: identitySchema.optional(),
+  /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */
+  fullAccess: z.literal(true).optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
   { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);

@@ -11,18 +11,20 @@ import type { PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
-interface Parsed { action: Action; json: boolean; help: boolean; language?: string; scopeId?: string }
+interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; language?: string; scopeId?: string }
 const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
 
 function parse(argv: readonly string[]): Parsed {
-  // Bare `deckent terminal` is the interactive terminal, the same as `deckent` with no arguments on a TTY.
-  const action = (argv.length === 1 ? 'workline' : argv[1]) as Action;
+  // Bare `deckent terminal` (options only) is the interactive terminal, the same as `deckent` with no arguments on a TTY.
+  const named = argv[1] !== undefined && !argv[1].startsWith('-');
+  const action = (named ? argv[1] : 'workline') as Action;
   if (argv[0] !== 'terminal' || !ACTIONS.includes(action)) throw ErrorRegistry.createError('CLI_USAGE');
-  const parsed: Parsed = { action, json: false, help: false };
-  for (let index = 2; index < argv.length; index++) {
+  const parsed: Parsed = { action, json: false, help: false, fullAccess: false };
+  for (let index = named ? 2 : 1; index < argv.length; index++) {
     const key = argv[index] === '-h' ? '--help' : argv[index]!;
     if (key === '--help') parsed.help = true;
+    else if (key === '--full-access') parsed.fullAccess = true;
     else if (key === '--json') parsed.json = true;
     else if (key === '--no-color') continue;
     else if (key === '--lang' || key === '--scope') {
@@ -33,6 +35,8 @@ function parse(argv: readonly string[]): Parsed {
   }
   if (parsed.help && parsed.json) throw ErrorRegistry.createError('CLI_USAGE');
   if (parsed.json && (parsed.action === 'session' || parsed.action === 'workline')) throw ErrorRegistry.createError('CLI_USAGE');
+  // Full access is a launch of the interactive terminal only (MODES-3); no other action runs agent tools.
+  if (parsed.fullAccess && parsed.action !== 'workline') throw ErrorRegistry.createError('CLI_USAGE');
   return parsed;
 }
 
@@ -105,8 +109,10 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       refused: t('terminal.mention.refused', {}, locale) },
     mode: { current: t('terminal.mode.current', {}, locale), changed: t('terminal.mode.changed', {}, locale), inert: t('terminal.mode.inert', {}, locale),
       unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale),
-      effect: { ask: t('terminal.mode.effect.ask', {}, locale), 'auto-edit': t('terminal.mode.effect.auto-edit', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale) },
-      switch: t('terminal.mode.switch', {}, locale) },
+      effect: { standart: t('terminal.mode.effect.standart', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale),
+        'full-access': t('terminal.mode.effect.full-access', {}, locale) },
+      switch: t('terminal.mode.switch', {}, locale), fullAccessLaunch: t('terminal.mode.fullAccessLaunch', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
@@ -211,6 +217,21 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
+  // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
+  const modePort = context.inspectPermissionMode && context.setPermissionMode ? {
+    inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
+    set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision,
+      ...(askEdits === undefined ? {} : { askEdits }) }, options) } : null;
+  // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
+  // it again on every turn and call). An explicit flag without the grant is refused; a stored start mode without it opens a standart session.
+  const accessNotices: { level: 'info' | 'error'; text: string }[] = [];
+  let fullAccess = false;
+  if (parsed.fullAccess && !modePort) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
+  const view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
+  if (parsed.fullAccess && !view?.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  if (parsed.fullAccess || (view?.mode === 'full-access' && view.fullAccess)) fullAccess = true;
+  else if (view?.mode === 'full-access') accessNotices.push({ level: 'error', text: t('terminal.fullAccess.startDenied', {}, locale) });
+  if (fullAccess) accessNotices.push({ level: 'error', text: t('terminal.fullAccess.banner', {}, locale) });
   const ledger = createWorklineLedgerPorts({ root, scopeId, options, locale, workerHeartbeatMs: config.inspection.workers.heartbeatMs,
     approvalPageSize: config.approvals.pageSize,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
@@ -238,19 +259,16 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.attachTerminalMentions ? { attachMentions: (text: string, paths: readonly string[], signal: AbortSignal) =>
       context.attachTerminalMentions!(root, { scopeId, text, paths }, options, signal) } : {}),
     ...(sessions ? { sessions } : {}),
-    // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
-    ...(context.inspectPermissionMode && context.setPermissionMode ? { permissionMode: {
-      inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
-      set: (mode: PermissionMode, expectedRevision: string) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision }, options) } } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string }>) =>
+    ...(modePort ? { permissionMode: modePort } : {}), ...(fullAccess ? { fullAccess } : {}),
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true }>) =>
       context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
-        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}) }, options, signal) } : {}),
+        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, options, signal) } : {}),
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options, locale) } : {}),
-    ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
+    ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
