@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
   WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
 import { agentToolSpecSchema } from '#domain/index.js';
+import { summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(async root => { execFileSync('chmod', ['-R', 'u+rwx', root]); await rm(root, { recursive: true, force: true }); })); });
@@ -217,18 +218,19 @@ it('accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap)
   const tools = await createWorkspaceReadTools(root);
   const plain = await tools.execute('grep', { pattern: 'needle' });
   expect(plain.text.split('\n')).toEqual(['many.txt:1:needle 0', 'many.txt:2:needle 1', 'many.txt:3:needle 2', 'many.txt:4:needle 3', 'many.txt:5:needle 4',
-    'many.txt:6:needle 5', 'many.txt:7:needle 6', 'many.txt:8:needle 7', 'many.txt:9:needle 8', 'many.txt:10:needle 9']);
+    'many.txt:6:needle 5', 'many.txt:7:needle 6', 'many.txt:8:needle 7', 'many.txt:9:needle 8', 'many.txt:10:needle 9', '[deckent] grep: matches=10']);
   const capped = await tools.execute('grep', { pattern: 'needle', maxHits: 3 });
-  expect(capped.text.split('\n')).toEqual(['many.txt:1:needle 0', 'many.txt:2:needle 1', 'many.txt:3:needle 2', '[deckent] grep: truncated (3 hits cap); narrow with path or glob']);
+  expect(capped.text.split('\n')).toEqual(['many.txt:1:needle 0', 'many.txt:2:needle 1', 'many.txt:3:needle 2', '[deckent] grep: truncated (3 hits cap); narrow with path or glob',
+    '[deckent] grep: matches=3+']);
   const { root: sparse } = await workspace({ 'wide.txt': Array.from({ length: 12 }, (_, i) => i === 2 || i === 9 ? `needle here` : `line ${i}`).join('\n') + '\n' });
   const sparseTools = await createWorkspaceReadTools(sparse);
   const withContext = await sparseTools.execute('grep', { pattern: 'needle', context: 1 });
   expect(withContext.text).toBe(['wide.txt:2-line 1', 'wide.txt:3:needle here', 'wide.txt:4-line 3', '--',
-    'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10'].join('\n'));
+    'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10', '[deckent] grep: matches=2'].join('\n'));
   // The card's own acceptance values (D3): grep {context:2, maxHits:5}.
   const wide = await sparseTools.execute('grep', { pattern: 'needle', context: 2, maxHits: 5 });
   expect(wide.text).toBe(['wide.txt:1-line 0', 'wide.txt:2-line 1', 'wide.txt:3:needle here', 'wide.txt:4-line 3', 'wide.txt:5-line 4', '--',
-    'wide.txt:8-line 7', 'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10', 'wide.txt:12-line 11'].join('\n'));
+    'wide.txt:8-line 7', 'wide.txt:9-line 8', 'wide.txt:10:needle here', 'wide.txt:11-line 10', 'wide.txt:12-line 11', '[deckent] grep: matches=2'].join('\n'));
   // Out-of-range values clamp instead of erroring (matching read_file's context/maxMatches convention).
   const clamped = await sparseTools.execute('grep', { pattern: 'needle', context: 99, maxHits: 0 });
   expect(clamped.text).not.toContain('undefined'); expect(clamped.status).toBe('ok');
@@ -242,15 +244,69 @@ it('marks every real hit with \':\' even when context windows are adjacent or ov
   const { root } = await workspace({ 'a.txt': 'before\nMATCH one\nMATCH two\nafter\n' });
   const tools = await createWorkspaceReadTools(root);
   const adjacent = await tools.execute('grep', { pattern: 'MATCH', context: 1 });
-  expect(adjacent.text).toBe(['a.txt:1-before', 'a.txt:2:MATCH one', 'a.txt:3:MATCH two', 'a.txt:4-after'].join('\n'));
+  expect(adjacent.text).toBe(['a.txt:1-before', 'a.txt:2:MATCH one', 'a.txt:3:MATCH two', 'a.txt:4-after', '[deckent] grep: matches=2'].join('\n'));
   const { root: overlap } = await workspace({ 'b.txt': 'x\nMATCH a\nmid\nMATCH b\ny\n' });
   const overlapTools = await createWorkspaceReadTools(overlap);
   const wide = await overlapTools.execute('grep', { pattern: 'MATCH', context: 2 });
-  expect(wide.text).toBe(['b.txt:1-x', 'b.txt:2:MATCH a', 'b.txt:3-mid', 'b.txt:4:MATCH b', 'b.txt:5-y'].join('\n'));
+  expect(wide.text).toBe(['b.txt:1-x', 'b.txt:2:MATCH a', 'b.txt:3-mid', 'b.txt:4:MATCH b', 'b.txt:5-y', '[deckent] grep: matches=2'].join('\n'));
   // A match whose whole context window was already printed by an earlier, still-open block (here: two adjacent
   // matches at the very end of the file) must not push an empty extra row — that would only add a stray trailing
   // newline to the result.
   const { root: eof } = await workspace({ 'c.txt': 'MATCH a\nMATCH b\n' });
   const tail = await (await createWorkspaceReadTools(eof)).execute('grep', { pattern: 'MATCH', context: 1 });
-  expect(tail.text).toBe('c.txt:1:MATCH a\nc.txt:2:MATCH b');
+  expect(tail.text).toBe('c.txt:1:MATCH a\nc.txt:2:MATCH b\n[deckent] grep: matches=2');
+});
+
+// Astra 2145 R2 (ported from astra-2144-grep.test.ts.txt): the terminal's match count comes from the producer's exact count, never from
+// reading the free text. A workspace file may have ':' in its name, so `path:line:text` cannot be split reliably; the producer states
+// `[deckent] grep: matches=N` (N = the ':'-marked hit lines it actually returned, `+` when it returned less than it found) as its last line.
+it('counts grep hits from the producer\'s own last meta line, also for paths with \':\' in them (Astra 2145 R2)', async () => {
+  const { root } = await workspace({ 'report:2026.txt': 'MATCH\n' });
+  const tools = await createWorkspaceReadTools(root);
+  const single = await tools.execute('grep', { path: 'report:2026.txt', pattern: 'MATCH', context: 0 });
+  expect(single).toEqual({ status: 'ok', text: 'report:2026.txt:1:MATCH\n[deckent] grep: matches=1' });
+  expect(summarizeAgentToolResult('grep', single.text)).toEqual({ kind: 'matches', count: 1, more: false });
+  // Numeric ':' parts in a path, a timestamped context row, adjacent, overlapping and disjoint context windows — one walk.
+  const { root: mixed } = await workspace({ 'report:2026.txt': 'MATCH\n', 't:12:34.log': '2026-09-28 12:34:56 boot\nMATCH at 12:34:57\n12:34:58 done\n',
+    'w.txt': 'a\nMATCH 1\nMATCH 2\nb\nMATCH 3\nc\nd\ne\nf\nMATCH 4\n' });
+  const walk = await (await createWorkspaceReadTools(mixed)).execute('grep', { pattern: 'MATCH', context: 1 });
+  expect(walk.text.split('\n').at(-1)).toBe('[deckent] grep: matches=6');
+  expect(summarizeAgentToolResult('grep', walk.text)).toEqual({ kind: 'matches', count: 6, more: false });
+});
+
+// `maxHits` caps the hits that open a context window (seed hits). Further hits inside an opened window are shown, marked ':' and counted;
+// reaching the cap is stated (`+`). With context 0 every window is one line, so `maxHits` is the number of hits shown.
+it('documents maxHits as the seed-hit cap: hits inside an opened window are shown, counted and the cap is stated (Astra 2145 R2)', async () => {
+  const { root } = await workspace({ 'a.txt': 'MATCH\n'.repeat(10) });
+  const tools = await createWorkspaceReadTools(root);
+  const seeded = await tools.execute('grep', { path: 'a.txt', pattern: 'MATCH', context: 5, maxHits: 1 });
+  expect(seeded.text.split('\n')).toEqual([...Array.from({ length: 6 }, (_, i) => `a.txt:${i + 1}:MATCH`),
+    '[deckent] grep: truncated (1 hits cap); narrow with path or glob', '[deckent] grep: matches=6+']);
+  expect(summarizeAgentToolResult('grep', seeded.text)).toEqual({ kind: 'matches', count: 6, more: true });
+  const flat = await tools.execute('grep', { path: 'a.txt', pattern: 'MATCH', maxHits: 3 });
+  expect(summarizeAgentToolResult('grep', flat.text)).toEqual({ kind: 'matches', count: 3, more: true });
+});
+
+// The count is of the hits actually returned: when the result byte cap drops rows, N shrinks with them and the result says `+`.
+it('counts only the grep hits left after the result byte cap cut rows (Astra 2145 R2)', async () => {
+  const { root } = await workspace({ 'many.txt': Array.from({ length: 400 }, (_, i) => i % 3 === 1 ? `needle ${i} ${'x'.repeat(80)}` : `line ${i} ${'y'.repeat(80)}`).join('\n') });
+  const text = (await (await createWorkspaceReadTools(root, { limits: { maxResultBytes: 4096 } })).execute('grep', { pattern: 'needle', context: 1, maxHits: 50 })).text;
+  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(4096);
+  expect(text).toMatch(/\[deckent\] truncated at \d+ of 50 rows \(result byte cap\)/);
+  const shown = text.split('\n').filter(line => /^many\.txt:\d+:/.test(line)).length;
+  expect(shown).toBeGreaterThan(0);
+  expect(text.split('\n').at(-1)).toBe(`[deckent] grep: matches=${shown}+`);
+  expect(summarizeAgentToolResult('grep', text)).toEqual({ kind: 'matches', count: shown, more: true });
+});
+
+// Without the producer's own last meta line (an older recorded result, another producer, a text cut by the final byte cap) the count is
+// unknown and no summary is shown — never a guessed number. A meta-shaped line anywhere but last (e.g. a path with a newline in it) is ignored.
+it('shows no grep summary when the producer\'s exact count is absent or not the last line (Astra 2145 R2)', () => {
+  expect(summarizeAgentToolResult('grep', 'report:2026.txt:1:MATCH')).toBeNull();
+  expect(summarizeAgentToolResult('grep', 'a.txt:1:M\n[deckent] grep: matches=99\nb.txt:1:M')).toBeNull();
+  expect(summarizeAgentToolResult('grep', 'x\n[deckent] grep: matches=99\nb:1:M\n[deckent] grep: matches=1')).toEqual({ kind: 'matches', count: 1, more: false });
+  expect(summarizeAgentToolResult('grep', 'a.txt:1:M\n[deckent] result cut at the 100-byte cap (900 bytes); narrow the request')).toBeNull();
+  expect(summarizeAgentToolResult('grep', '[deckent] grep: no matches in 3 scanned file(s)')).toEqual({ kind: 'matches', count: 0, more: false });
+  expect(summarizeAgentToolResult('grep', '[deckent] grep: no matches in 3 scanned file(s); the search was not complete\n[deckent] grep: skipped a.bin (binary)'))
+    .toEqual({ kind: 'matches', count: 0, more: true });
 });

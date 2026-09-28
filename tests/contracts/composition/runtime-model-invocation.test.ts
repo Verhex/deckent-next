@@ -227,7 +227,9 @@ it.skipIf(process.platform !== 'linux')('records live SDK cancellation while a p
       expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_cancellations WHERE command_id=?')
         .get(cancellation.commandId)?.record))).toMatchObject({ command: cancellation, disposition: 'requested' });
       expect(JSON.parse(String(audit.prepare('SELECT record FROM model_invocation_controls').get()?.record)))
-        .toMatchObject({ send: { state: 'permitted', ownerId: runtimeServiceModelOwnerId(descriptor.instanceId) } });
+        .toMatchObject({ send: { state: 'permitted', ownerId: runtimeServiceModelOwnerId(
+          // Astra 2145 R1: the owner names this endpoint's custody (the guard digest), not only the instance.
+          createHash('sha256').update(`${service.endpoint}\0${process.getuid!()}`).digest('hex'), descriptor.instanceId) } });
     } finally { audit.close(); }
     await within(closed, 'MODEL_INVOCATION_ABORT_NOT_OBSERVED');
     const settled = await within(invocation, 'MODEL_INVOCATION_ABORT_NOT_SETTLED');

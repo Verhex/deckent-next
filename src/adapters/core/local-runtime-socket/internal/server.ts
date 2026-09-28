@@ -128,10 +128,15 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
   socket.once('close', disconnectedNow);
 }
 
-/** Installation custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the
- * kernel releases when the process dies. Hold it before any startup work that must not race a live service (ledger
- * backup/migration), then start the listener under the same custody (Astra 2054 R1). */
-export interface LocalRuntimeSocketGuard { start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>; release(): Promise<void> }
+/** Custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the kernel releases when
+ * the process dies. Hold it before any startup work that must not race a live service (ledger backup/migration), then start the
+ * listener under the same custody (Astra 2054 R1). It proves nothing about another endpoint: the runtime socket is a configurable
+ * layout resource, so work owned under custody names `custodyId` (Astra 2145 R1). */
+export interface LocalRuntimeSocketGuard {
+  readonly custodyId: string;
+  start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>;
+  release(): Promise<void>;
+}
 
 export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions): Promise<LocalRuntimeSocketGuard> {
   const resolved = await resolveSocketOptions(options);
@@ -144,6 +149,7 @@ export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocket
   }
   let state: 'held' | 'started' | 'released' = 'held';
   return Object.freeze({
+    custodyId: resolved.custodyId,
     async start(handler: RuntimeServiceHandler) {
       if (state !== 'held') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
       state = 'started';

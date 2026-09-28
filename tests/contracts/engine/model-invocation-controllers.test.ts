@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ModelInvocationControllers } from '#engine/core/model-invocation/index.js';
+import { endedRuntimeServiceModelOwner, ModelInvocationControllers, runtimeServiceModelOwnerId } from '#engine/core/model-invocation/index.js';
 
 const digest = (value: string) => value.repeat(64);
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
@@ -69,4 +69,20 @@ describe('live model invocation controllers', () => {
     expect(controllers.requestAbort(control)).toBe('abort-requested');
     expect(stale.signal.aborted).toBe(false); expect(current.signal.aborted).toBe(true);
   });
+});
+
+// Astra 2145 R1: holding one endpoint's custody proves only that no service is alive on THAT endpoint. A service's send owner names the
+// custody it was minted under, and a start proves ended only owners of the custody it holds now; no prefix-only match is expressible.
+it('proves a service owner ended only under the very custody it was minted with (Astra 2145 R1)', () => {
+  const custody = digest('c'), other = digest('d'), instance = '5b0f7c1e-2d3a-4e5f-8a9b-0c1d2e3f4a5b';
+  const owner = runtimeServiceModelOwnerId(custody, instance);
+  expect(owner).toBe(`runtime-service:${custody}:${instance}`);
+  const ended = endedRuntimeServiceModelOwner(custody);
+  expect(ended(owner)).toBe(true);
+  expect(endedRuntimeServiceModelOwner(other)(owner)).toBe(false);
+  // The earlier, unpublished shape (no custody), a host-less direct call's bare id and malformed owners stay unproven.
+  for (const unproven of [`runtime-service:${instance}`, instance, `runtime-service:${custody}:`, `runtime-service:${custody}`,
+    `runtime-service:${custody.toUpperCase()}:${instance}`, ` runtime-service:${custody}:${instance}`]) expect(ended(unproven)).toBe(false);
+  expect(() => runtimeServiceModelOwnerId('not-a-digest', instance)).toThrow();
+  expect(() => endedRuntimeServiceModelOwner(custody.slice(1))).toThrow();
 });

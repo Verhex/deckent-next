@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -46,7 +46,8 @@ async function startRuntime(project: string, env: Record<string, string>): Promi
   return child;
 }
 
-it.skipIf(process.platform !== 'linux')('a killed service leaves its open call to the next start, which settles it unknown; a live owner keeps its call', async () => {
+/** One installation (project, data root, ledger, activation, policy) with a TLS provider that holds the calls named in `hold`. */
+async function installation(maxInFlight: number) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-crash-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
@@ -79,7 +80,7 @@ it.skipIf(process.platform !== 'linux')('a killed service leaves its open call t
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'local', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
     protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
-      definition: pricedProviderDefinition(`https://127.0.0.1:${address.port}`, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
+      definition: pricedProviderDefinition(`https://127.0.0.1:${address.port}`, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: 20_000 } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ mode: 'api', layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
@@ -103,11 +104,17 @@ it.skipIf(process.platform !== 'linux')('a killed service leaves its open call t
   const invokeThroughService = async (commandId: string) => {
     const input = join(root, `${commandId}.json`); await writeFile(input, JSON.stringify(command(commandId)), { mode: 0o600 });
     const child = spawn(process.execPath, [cli, 'models', 'invoke', '--input', input, '--json'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    children.push(child); let stdout = '';
-    child.stdout!.on('data', chunk => { stdout += String(chunk); });
-    return { child, done: new Promise<string>(done => child.once('exit', () => done(stdout))) };
+    children.push(child); let stdout = '', stderr = '';
+    child.stdout!.on('data', chunk => { stdout += String(chunk); }); child.stderr!.on('data', chunk => { stderr += String(chunk); });
+    const exited = new Promise<{ code: number | null; stdout: string; stderr: string }>(done => child.once('exit', code => done({ code, stdout, stderr })));
+    return { child, exited, done: exited.then(result => result.stdout) };
   };
 
+  return { root, project, ledger, env, held, hold, bodies, command, query, counters, states, invokeThroughService };
+}
+
+it.skipIf(process.platform !== 'linux')('a killed service leaves its open call to the next start, which settles it unknown; a live owner keeps its call', async () => {
+  const { project, env, held, hold, bodies, command, query, counters, states, invokeThroughService } = await installation(2);
   // 1. A call through the service is open at the provider when the service process is killed.
   const first = await startRuntime(project, env), crashSeen = hold('crash');
   const crashClient = await invokeThroughService('crash');
@@ -139,4 +146,39 @@ it.skipIf(process.platform !== 'linux')('a killed service leaves its open call t
   expect(counters()).toEqual({ lifetime_calls: 3, in_flight: 0 });
   // The provider saw each call exactly once: nothing was sent again.
   expect(bodies.filter(body => body.includes('prompt-crash'))).toHaveLength(1);
+}, 60_000);
+
+// Astra 2145 R1 (ported from astra-2144-custody.test.ts.txt): endpoint custody proves only that no service is alive on THAT endpoint.
+// The runtime socket is a configurable layout resource, so a second real service can start on another socket over the same ledger
+// while the first is alive with a call open at the provider. The second start must not settle that call or free its slot: the call's
+// owner names the custody it was permitted under, and the second service holds a different one.
+it.skipIf(process.platform !== 'linux')('a service on another socket over the same ledger never settles a live service\'s open call (Astra 2145 R1)', async () => {
+  const { project, env, held, hold, bodies, states, counters, query, invokeThroughService } = await installation(1);
+  const first = await startRuntime(project, env), liveSeen = hold('live');
+  const liveClient = await invokeThroughService('live');
+  await bounded(liveSeen, 'LIVE_CALL_NOT_AT_PROVIDER');
+  expect(states()).toEqual([{ command_id: 'live', state: 'claimed' }]);
+  // Same ledger, second endpoint: only the runtime socket moves.
+  const configPath = join(project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+  config.layout.resources = { runtimeSocket: 'state/second.sock' };
+  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+  await startRuntime(project, env);
+  process.kill(first.pid!, 0);
+  expect(first.exitCode === null && first.signalCode === null).toBe(true);
+  expect(held.has('live')).toBe(true);
+  expect(states()).toEqual([{ command_id: 'live', state: 'claimed' }]);
+  expect(counters()).toEqual({ lifetime_calls: 1, in_flight: 1 });
+  // The live call still holds the only slot: a call through the second service is refused before it reaches the provider.
+  const refused = await bounded(invokeThroughService('after').then(call => call.exited), 'REFUSED_CALL_TIMEOUT');
+  expect(refused.code).not.toBe(0);
+  expect(`${refused.stdout}${refused.stderr}`).toContain('MODEL_INVOCATION_CAPACITY_EXHAUSTED');
+  expect(bodies.some(body => body.includes('prompt-after'))).toBe(false);
+  expect(counters()).toEqual({ lifetime_calls: 1, in_flight: 1 });
+  // The first service's own late answer is still written to its call.
+  held.get('live')!.release!();
+  expect(JSON.parse(await bounded(liveClient.done, 'LIVE_CALL_TIMEOUT'))).toMatchObject({ receipt: { outcome: { state: 'responded' } } });
+  expect(states()).toEqual([{ command_id: 'live', state: 'responded' }]);
+  expect(counters()).toEqual({ lifetime_calls: 1, in_flight: 0 });
+  const [live] = query<{ record: string }>("SELECT record FROM model_invocations WHERE command_id='live'");
+  expect(JSON.parse(live!.record).outcome).toMatchObject({ state: 'responded' });
 }, 60_000);
