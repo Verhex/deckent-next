@@ -1718,7 +1718,16 @@
         "src/platform/core/common",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/domain/core/audit",
+        "src/engine/core/agent-turn",
+        "src/engine/core/approval",
+        "src/engine/core/audit",
+        "src/platform/core/clock",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     }

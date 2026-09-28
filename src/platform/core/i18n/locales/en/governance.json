@@ -974,6 +974,8 @@
   "error.MCP_TOOL_UNKNOWN": "The server offers no tool named {name}.",
   "error.MCP_APPROVAL_NEEDS_TERMINAL": "Approving an MCP server needs a terminal to show its card; after reading `deckent mcp get`, pass --yes.",
   "error.MCP_REGISTRY_FILE_INVALID": "The MCP registry file {path} is not valid JSON of the expected shape; nothing was written.",
+  "error.MCP_SERVER_NOT_TRUSTED": "{name} is not trusted; approve it first.",
+  "error.MCP_TRUST_STORE_UNAVAILABLE": "The MCP trust record cannot be read ({reason}); nothing was changed.",
   "error.EFFECT_TARGET_UNAVAILABLE": "The target could not be read before recording any intent. Nothing was sent.",
   "error.EFFECT_CORRUPT": "A recorded operation intent is invalid.",
   "error.ADOPTION_TARGET_DENIED": "The target branch is not in execution.adoption.targets or is not a plain branch reference. Nothing was changed.",

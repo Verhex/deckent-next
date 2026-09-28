@@ -974,6 +974,8 @@
   "error.MCP_TOOL_UNKNOWN": "Sunucuda {name} adlı araç yok.",
   "error.MCP_APPROVAL_NEEDS_TERMINAL": "MCP sunucusunu onaylamak kartını gösterecek bir terminal ister; `deckent mcp get` çıktısını okuduktan sonra --yes verin.",
   "error.MCP_REGISTRY_FILE_INVALID": "{path} MCP kayıt dosyası beklenen biçimde geçerli JSON değil; hiçbir şey yazılmadı.",
+  "error.MCP_SERVER_NOT_TRUSTED": "{name} güvenilir değil; önce onaylayın.",
+  "error.MCP_TRUST_STORE_UNAVAILABLE": "MCP güven kaydı okunamıyor ({reason}); hiçbir şey değiştirilmedi.",
   "error.EFFECT_TARGET_UNAVAILABLE": "Hedef, herhangi bir niyet kaydedilmeden önce okunamadı. Hiçbir şey gönderilmedi.",
   "error.EFFECT_CORRUPT": "Kayıtlı bir operasyon niyeti geçersiz.",
   "error.ADOPTION_TARGET_DENIED": "Hedef dal execution.adoption.targets içinde değil ya da düz bir dal referansı değil. Hiçbir şey değiştirilmedi.",

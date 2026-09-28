@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { withConfigWriteLock } from '#platform/index.js';
+import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
 import { MCP_SCOPES } from './registry.js';
 
 /**
@@ -49,7 +49,7 @@ export const findMcpTrust = (state: McpTrustState, scopeName: McpTrustRecord['sc
 export async function updateMcpTrust(directory: string, change: (state: McpTrustState) => McpTrustState['servers']): Promise<McpTrustState> {
   return withConfigWriteLock(join(directory, MCP_TRUST_FILE), async () => {
     const current = await readMcpTrust(directory);
-    if (!current.ok) throw Object.assign(new Error(current.reason), { code: 'MCP_TRUST_STORE_UNAVAILABLE' });
+    if (!current.ok) throw ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason: current.reason } });
     const next = fileSchema.parse({ schemaVersion: 1, revision: current.state.revision + 1, servers: change(current.state) });
     const temporary = join(directory, `.${MCP_TRUST_FILE}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
     const handle = await open(temporary, 'wx', 0o600);
