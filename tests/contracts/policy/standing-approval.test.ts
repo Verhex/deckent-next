@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getPolicyVocabulary, policyChangeSchema, resolvePolicyBindings, standingCell, standingCovers, standingGrantChange, standingPattern, standingRevokeChange,
   STANDING_GRANT_KIND, STANDING_PATTERN_MAX_CHARS } from '#domain/index.js';
-import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
+import { decideAgentToolCall, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
 
 // PERSISTENT-APPROVALS G6: a standing approval (this session / persisted as the person's own grant) lowers only a persistable cell, only
 // by an exact narrow pattern, and never a deny, the write floor, destructive shell or a fetch.
@@ -119,5 +119,18 @@ describe('the call decision with a standing approval', () => {
     { schemaVersion: 2, revision: 'b', bindings: [{ id: 'root', principals: [me], roles: ['owner'], scopes: 'all' }], modes: [] });
     expect(decide(owner, 'shell-narrow-mutating', { key: KEY, session: false }).decision).toBe('require-approval');
     expect(decide(owner, 'shell-narrow-mutating', { key: KEY, session: true })).toMatchObject({ decision: 'allow', standing: { source: 'session' } });
+  });
+
+  it('standingWouldLower: a scope is offered only where the answer would actually lower the call', () => {
+    const would = (policy: unknown, cell: AgentToolCallCell, key: string, tool = 'run_shell') => standingWouldLower(policy, { principal, scopeId: 'scope', tool: { name: tool },
+      operation: { id: cell.startsWith('shell') ? 'host.shell.run' : 'workspace.file.write' }, cell, standing: { key, session: false } });
+    expect(would(policyOf(allowAll), 'shell-narrow-mutating', KEY)).toBe(true);
+    expect(would(policyOf(allowAll), 'shell-destructive', KEY)).toBe(false);
+    expect(would(policyOf(allowAll), 'edit-floor', 'v1:edit_file:directory:src/*', 'edit_file')).toBe(false);
+    const editKey = 'v1:edit_file:directory:src/*';
+    const company = (extra: Record<string, unknown>) => policyOf([rule('t-edit', 'agent-tool', ['edit_file'], 'require-approval', extra), rule('o-edit', 'operation', ['workspace.file.write'], 'allow')]);
+    expect(would(company({ modeEligible: true }), 'edit', editKey, 'edit_file')).toBe(true);
+    expect(would(company({}), 'edit', editKey, 'edit_file')).toBe(false);
+    expect(would(policyOf([rule('t-edit', 'agent-tool', ['edit_file'], 'deny'), rule('o-edit', 'operation', ['workspace.file.write'], 'allow')]), 'edit', editKey, 'edit_file')).toBe(false);
   });
 });

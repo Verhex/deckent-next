@@ -426,4 +426,18 @@ describe('work surface: approval card with standing scopes (G6)', () => {
     await view.type('n');
     await until(() => view.stdout.text.includes('A-DENIED appr-p'), 'denied');
   });
+
+  it('shows the whole pattern a standing answer covers: 200 characters, inner double spaces and all — never clipped or flattened', async () => {
+    const pattern = `echo ${'x'.repeat(60)}  ${'y'.repeat(120)}`;
+    const view = mount({ streamTurn: (async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-w', revision: 0, summary: 's', preview: 'p', expiresAt: Date.now() + 600_000,
+        standing: { scopes: ['session' as const], pattern } };
+      await settle(400);
+      yield { kind: 'done' as const, finish: 'stop' as const };
+    }) as never, ledger: port([]) as never });
+    await settle(20); await view.type('go\r');
+    await view.card('S-COVERS', 'covers line');
+    expect(view.stdout.text).toContain(`S-COVERS ${pattern}`);
+    await view.type('n');
+  });
 });

@@ -35,6 +35,7 @@ type Modal =
   | null;
 
 const SUMMARY_MAX = 160;
+/** The covers line is never clipped or flattened: the card shows everything a standing answer would allow (the pattern is one line of at most 200 characters). */
 const clip = (text: string) => { const flat = terminalSafeText(text).replace(/\s+/g, ' ').trim(); return flat.length > SUMMARY_MAX ? `${flat.slice(0, SUMMARY_MAX - 1)}…` : flat; };
 
 function phaseCounts(run: RunView): string {
@@ -167,7 +168,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       ? [fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester })] : [];
     card = <DecisionCard key={`approval:${approval.approvalId}`} title={work.approvalTitle} prompt={scopedPrompt} pendingText={work.approvalPending} scopes={scoped?.scopes ?? []}
       lines={[...subject, clip(approval.summary), ...(preview === undefined ? [] : previewLines(preview, work.approvalPreviewMore)),
-        ...(scoped ? [fillTemplate(scoped.labels.covers, { pattern: clip(scoped.pattern) })] : []),
+        ...(scoped ? [fillTemplate(scoped.labels.covers, { pattern: terminalSafeText(scoped.pattern) })] : []),
         fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })]}
       onDecide={(yes, standing) => void decideApproval(approval, remaining, yes, standing)} />;
   } else if (work && modal?.kind === 'cancel') {

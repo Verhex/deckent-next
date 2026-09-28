@@ -109,3 +109,15 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   }
   return standing ? done('allow', null, standing) : done('require-approval');
 }
+
+/**
+ * Whether a standing answer to this call's card would actually lower it: the same decision with a hypothetical session memory (a persisted
+ * grant lowers exactly where a session memory does). The card offers a scope only when this holds — a company `require-approval` that is not
+ * `modeEligible` would otherwise "save" an answer that never lowers anything.
+ */
+export function standingWouldLower(policy: unknown, request: AgentToolCallRequest): boolean {
+  const key = request.standing?.key;
+  if (key === undefined) return false;
+  const decision = decideAgentToolCall(policy, { ...request, standing: { key, session: true } });
+  return decision.decision === 'allow' && decision.standing !== undefined;
+}
