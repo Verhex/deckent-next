@@ -410,6 +410,14 @@ access alone is not evidence of a policy bypass. Further custody/parity changes 
 Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped here; the MCP client reaches only the owner's
 local stdio servers (MCP-CLIENT); Desktop/HTTP, remote MCP servers and IFS connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
+**Startup cost (STARTUP-COST, seventh batch).** A process entry's static import graph is paid on every run. Heavy packages (`ink`,
+`react`, `@modelcontextprotocol/server|client`) load only on the entry path that uses them and through dynamic `import()`: the terminal UI
+loads with `deckent terminal` / the arg-less TTY opening (`workSurfaceLabels`/`runtimeBuildSkew` live in `cli/internal/work-labels.ts`),
+`surfaces/index.ts` offers `loadMcpSurface()` instead of `createMcpServer`, and the MCP client SDK loads with the first MCP server start.
+`tests/contracts/composition/startup-graph.test.ts` (on `dist`, static edges only) holds this for the SDK and CLI entries and "no Ink/React/
+MCP client" for the stdio MCP entry. Measured by the lane: `deckent --version` 468 → 247 ms, SDK import 311 → 237 ms. Next: the whole
+`adapters/index.js` barrel on process entries (remaining cost is ESM compile/resolve); a compile cache is a separate decision.
+
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
@@ -919,6 +927,16 @@ parent-death signal) — candidate: record the group id in the effect journal an
 endpoint custody alone; a service started on another socket over the same ledger is not excluded from them (ledger-level custody is
 the proposed class fix, owner decision).
 
+**`@` index, `/resume` replay and `/context` (TERM-UX-1, seventh batch).** The terminal's `@` index (`RuntimeWorkspaceFileHost`) waits for
+its first walk; after its 10 s ttl the old list returns at once while one background walk refreshes it; a list older than `maxStaleMs` (1 h)
+is not served; a failed refresh keeps the old list. The terminal warms the index at opening (`findTerminalMentions('')`, same authority and
+deny) and a bare `@` does not wait for the 60 ms quiet period. `/resume` prints the chosen conversation (last 24 messages, user text ≤ 600
+characters, attached file bodies not printed, tool results as one count line, summaries marked); the model context was already whole.
+`/context`: window bar and percentage, the automatic summary threshold (display constant 0.75 = `AGENT_COMPACTION_HIGH_WATER`, held
+equal by a contract test) and the tokens left, a size-estimate split of the visible history (the service's own instructions are not in
+it), the last summary, the three largest items and a `/new` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
+decision), redrawing an open suggestion list when the index refreshes.
+
 **Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
 `terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process (bwrap
 on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures `unknown`, nothing installed). Sandbox
@@ -1145,6 +1163,23 @@ The 2026-09-25 review limits (Astra 2078: no path recheck of walked descriptors,
 corrected in `e12a253` (every walked directory and file is re-verified; globs match by a bounded dynamic program); Astra 2091 found
 no new blocker in them.
 
+**Anthropic Messages provider (ANTHROPIC-PROVIDER G8, seventh batch).** Provider adapters: `openai-chat-http` (v4), `openrouter-chat-http`
+(v1) and `anthropic-messages-http` (v1, family `anthropic-messages`, API version `2023-06-01`; unit `adapters/core/provider-anthropic-messages`).
+The adapter takes the provider-neutral (OpenAI-shaped) local request and returns an assembled neutral `chat.completion` evidence; consumers
+do not know the family (one exception: the capability check knows both). `provider-http-json` credential kinds are `none | bearer |
+header(x-api-key)` with bounded static headers; `header` only over https. Spend: price id `anthropic-published-tariff` v1 (published rates
+are profile data; the quote ceiling is integer arithmetic); settlement of usage × tariff does not exist yet, so a responded call stays
+`held` (checkpoint A, blocks real Anthropic use). Thinking continuity: a process-local bounded cache inside the adapter, bound to the
+unchanged request prefix (checkpoint B: `providerContinuation`, v17). Error codes reuse `OPENAI_CHAT_*`. Not yet: profile `effort`, SSE
+byte/token metering in live streaming, a keyring/`secretResolver` link for the key (environment variable only), the owner's smoke test.
+
+**Sandbox scan speed (SANDBOX-SPEED G2, seventh batch).** Both realms' scans pick their reads per directory by `statfs`: synchronous on
+a local file system, asynchronous elsewhere (`fs-ops`); the verdict is re-read on every call and does not depend on the read flavour
+(Astra 2158 holds). The deny matcher answers the shapes the deny list is made of — `**/<segment glob>`, a literal, a literal head with one
+trailing `*` or `**` — without the dynamic program, on the platform's one wildcard set (`GLOB_WILDCARD`, only `*` and `?`); equivalence
+with the general matcher is an oracle test. Measured on this repository (ext4/WSL2, warm): bubblewrap ~465 → ~60 ms, Landlock ~316 →
+~51 ms per call. Open: execution off the event loop (~50 ms block), network file systems, `statfs`/`readdir` micro-costs.
+
 **Permission modes — decision and audit (T-L4 slice 4a, owner 2026-09-27 q1–q5).** A person's mode is `ask | auto-edit | full-auto`
 in `bindings.json` v2 `modes` (one exact principal, explicit scopes, one mode; bindings v1 stays readable = everyone `ask`; zero or
 two entries for the same person and scope = `ask`). The company marks a v2 `require-approval` rule or role permission
@@ -1195,6 +1230,28 @@ bindings revision is `m-` + sha256(previous revision, new body) (chained, no ABA
 non-`ask` write. The terminal shows the mode as a droppable status-row segment (catalog text only; drop order notice → elapsed →
 mode → model → queue; hidden when unknown or unsupported), refreshed at open, after `/mode` and after each turn; `/mode` shows it
 and `/mode <mode>` sets it with the revision last read. The surface reads and writes no file.
+
+**`/mode` messages (MODE-UX G3, seventh batch).** On a v1 policy (`view.supported = false`) the surface never calls `set`; `/mode` shows
+the current mode with a one-line effect, the other modes with theirs, and says when nothing in this scope can change it. Typed refusals:
+`PERMISSION_MODE_DENIED` (`{mode}`; no allow grant on `permission-mode`/`set`, instead of the generic `POLICY_DENIED`; `require-approval`
+stays `POLICY_APPROVAL_UNSUPPORTED`) and `PERMISSION_MODE_LOCKED` (the authority write lock is held; `CONFIG_WRITE_LOCKED`'s path/pid/age
+carried, only on `setPermissionMode`). Protocol and view schema unchanged (v15). Open: which modes are actually settable (per-mode `set`
+grant) is not in the view (checkpoint).
+
+**Standing approvals (PERSISTENT-APPROVALS G6, owner 2026-09-28 "kapsam seçmeli", seventh batch).** A standing approval is the person's
+own v2 grant on resource kind `agent-tool-call` (ids `standing-*`, one person, one scope list, id = key `v1:<tool>:<kind>:<pattern>`), or
+"this session" (`SessionStanding`, the service process's memory keyed by scope + person + conversation). Only the lowering step of
+`decideAgentToolCall` reads it (step 4): it lowers the floor raise of a standing cell, or an eligible `require-approval` that no mode
+lowered; a deny is never lowered, and only the edit, `shell-read-low` and `shell-narrow-mutating` cells can stand (write floor,
+destructive, always-ask, other-modify, fetch and MCP cells cannot). A role's all-ids authority over the kind is authority to delegate,
+never an approval. Persisting goes through `policy.administer@1` (P3): `PersistentStanding` submits the change, allows the pending
+operation approval as the same person through `ApprovalApplication.decide` (separation of duties applies) and resubmits; the delegation
+bound is that person's authority. Every use and every "this session" answer is a sealed `standing-approval` audit event (`remembered` /
+`used`) written before the memory holds it or the effect runs. The card offers a scope only when `standingWouldLower` holds. CLI:
+`deckent policy grants --mine` / `deckent policy revoke`. No version changed (policy v2, bindings v1/v2, ledger v42, protocol v16, layout 4);
+the vocabulary gains `agent-tool-call`. Not yet: protocol v17 (card scopes + decision field; MCP `decide_approval` keeps them out), the
+service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`, the installation root (P4; a v1 live policy cannot offer
+"always"), `/policy`, listing this session's memory.
 
 ## Package contract
 
@@ -1248,6 +1305,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-29 | Seventh batch keeps `surfaces/core/terminal` within the 2000-line unit budget by moving two dependency-free presentation pieces: the approval-card key mapping (`decisionKey`, `scopedDecisionKey`, `StandingScope`) to `terminal-kit` and `ArrowPicker` to `terminal-render`; `terminal` re-exports the key mapping unchanged. | MODE-UX, PERSISTENT-APPROVALS, `/mcp` and TERM-UX-1 together passed 2000 (2020, then 2041). No budget raise; the next terminal feature splits the unit by responsibility (e.g. a session unit), as TERM-UX-1 noted. |
 | 2026-09-28 | FOUNDATION: `budgets.packageLines.composition` 5000 → 5500 (owner-approved increase; earlier decision "raise to 5500 if the pressure returns"). | MCP client + policy administration wiring (seventh batch, measured 5067 lines after the SESSION-RESULT-LIMIT, POLICY-ADMIN and MCP-CLIENT merges). The next pressure is answered by moving responsibility out of composition, not by another raise. |
 | 2026-09-22 | Operator **Terminal Contract v1**: regions, motor-agnostic events, colour tiers, Ink + line adapters; every chat turn is a governed model invocation in the caller's scope; chat ≠ run ledger. | One contract across Terminal/MCP/Desktop; Ink is the Node rich-TTY adapter, not product authority. Integration removed an unmanaged HTTP chat path and a global Run-capacity cap found in review. |
 | 2026-09-16 | Clean-room port into this repository instead of in-place refactor of the legacy codebase (587k lines, 24.8k-line spawn backend, 40.9k tests, 5,535 path-keyed lint baselines). | Every in-place move broke 8+ gates and preserved dead code; the owner chose deletion over archive. |
@@ -1655,6 +1713,15 @@ lock 39–70 lost updates, with it 0. The `POLICY_*` refusal codes have en/tr te
 (`/policy`, `deckent policy`, protocol v17), refusal audit events, last-owner guard, external-change detection, a sealed archive, MCP
 `decide_approval` refusal for authority subjects.
 
+**Authority hardening (POLICY-HARDEN P3-R, seventh batch).** `ApprovalApplication` takes a `restriction { catalog, surface?, refused? }`:
+an approval of an operation whose descriptor is `surface: 'authority'` is allowed only by the application built with `surface: 'authority'`;
+every general surface (SDK, CLI, MCP `decide_approval` through the runtime service, the terminal) gets `APPROVAL_SURFACE_RESTRICTED` (registered,
+so the runtime client sees the code); a deny stays open everywhere (open decision). A claimed intent whose authority is gone at settle is
+refused terminally (`POLICY_DENIED` → `refused/EFFECT_REJECTED`; no new refusal value). Audit event v1 gains `authority-refusal` (`stage
+decide|submit|settle`, code, command/approval ids; no change content). The approval summary of an authority operation is a redacted,
+human-readable diff (`describePolicyChange`, ≤ 2048 characters, cut by code point) through `OperationApprovalBroker`'s `describe`; no
+protocol field. Remaining: P4 installation root, P5 authority surface, model tool M3, ledger v43 archive.
+
 **Company scope registry (H34 S1, ledger v39).** Every request scope resolves to a company or is refused with typed `SCOPE_UNKNOWN`;
 no flag relaxes this. Ledger v39 adds `companies(company_id)` and `scope_registry(scope_id PK, company_id FK, origin
 'migration'|'start'|'admission')`: one company per scope, insert-only pins, so the company of every scope-partitioned record is the
@@ -1707,20 +1774,29 @@ before the decision; after sending, timeout/cancel/crash is `unknown` and never 
 pass `redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
 `{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). CLI: `deckent mcp add|add-json|list|get|remove|approve` (`list`
 reports connected/drifted/failed for approved servers and "pending approval" without starting others; `get` never starts). Not yet:
-in-turn trust card (new C12 approval subject kind), terminal `/mcp`, company policy source (POLICY-ADMIN), http/sse/OAuth, MRTR input
+a separate approval subject kind (the first-use card reuses `agent-tool-call`), `/mcp` texts beyond the catalog lines, company policy source (POLICY-ADMIN), http/sse/OAuth, MRTR input
 requests from servers (no elicitation/sampling/roots handler; an `input_required` server is untested), `subscriptions/listen`/listChanged
-(the list is re-read each turn), paginated `tools/list` (SDK 2.1.0 `listTools()` returns the first page; 2.2.0 follows `nextCursor`),
-signed server bundles. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in legacy, auto and
+(the list is re-read each turn),
+signed server bundles. The tool list is read with all its pages (SDK 2.2.0 follows `nextCursor`; at most 16 pages and 512 tools, more is
+`too-many-tools`; pins apply over every page). Trust decisions (owner 2026-09-28, `db5121d`): adding a local/user server is its trust
+decision (cards, or `--yes`; `--no-approve` skips); a project entry is decided on its first use. Cards come in two phases — `launch`
+(definition as written, variables set/unset, env names, realm; nothing runs before yes) and `tools` (started in its realm; live tools with
+digests; yes pins them); no records `declined` for that definition; an unanswered card records nothing. User trust lives beside the
+personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the data root. Trust and registry
+writes run in the config write lock (`withConfigWriteLock`). Every change (trust, decline, reset, revoke, reconnect) is a sealed `mcp-trust`
+audit event written first. The turn asks first-use cards on the C12 approval path as an `agent-tool-call` subject with the reserved tool
+`mcp_trust` (no approval schema change). `/mcp` lists servers and trust state and does approve (reset), reconnect (record counter; the
+service replaces the process on next use) and remove. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in legacy, auto and
 pinned-2026 modes (`mcp-eras-process.test.ts`).
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,
 `ttlMs`/`cacheScope` on lists, `subscriptions/listen`, MRTR, Tasks as an extension). Deckent pins `@modelcontextprotocol/server` and
-`client` 2.1.0 (npm 2026-09-23T15:45Z; `core` 2.1.0 transitively): stdio server transport closes on stdin EOF and drops in-flight
-requests, HTTP gets a 4 MiB body limit and requires `MCP-Protocol-Version` on 2026-07-28 POSTs, DPoP and OAuth scope challenges are
-added. Implemented: stdio server both eras; stdio client `auto` negotiation. Not implemented: HTTP server/client in either era,
-`input_required`/MRTR, `subscriptions/listen`, Tasks, resources/prompts. SDK 2.2.0 (npm 2026-09-28T19:09Z) is not adopted yet
-(pagination-following `listTools()`, notification rejection fixes, OAuth issuer binding) — a separate upgrade slice.
+`client` 2.2.0 (npm 2026-09-28T19:09Z; `core` 2.2.0 transitively; MCP-SDK-22). Since 2.1.0 (2026-09-23): stdio server transport closes on
+stdin EOF and drops in-flight requests, HTTP gets a 4 MiB body limit and requires `MCP-Protocol-Version` on 2026-07-28 POSTs, DPoP and
+OAuth scope challenges are added; 2.2.0: `listTools()` follows `nextCursor` (bounded by `listMaxPages`), no unhandled rejection when
+notifying on a closed connection, OAuth issuer binding. Implemented: stdio server both eras; stdio client `auto` negotiation. Not implemented: HTTP server/client in either era,
+`input_required`/MRTR, `subscriptions/listen`, Tasks, resources/prompts.
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
 it never adopts the old directory or declares its writer dead. Git delivery has its own policy action

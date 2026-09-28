@@ -4,6 +4,25 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (MCP-CLIENT, owner 2026-09-28): `deckent mcp add` trusts personal servers in one step (two cards: start it?, trust these tools?),
+  project MCP servers ask on first use in the terminal, user trust holds in every project, every trust change is audited, `/mcp`
+  lists/approves/reconnects/removes servers. The client reads every tool-list page (at most 16 pages / 512 tools).
+- ADDED (PERSISTENT-APPROVALS G6, owner 2026-09-28): scope-selectable standing approvals — "this session" or the person's own persisted
+  grant for an edit or read/narrow shell pattern, audited on every use; `deckent policy grants --mine` / `deckent policy revoke`.
+- SECURITY (POLICY-HARDEN P3-R): authority-change approvals are allowed only on the authority surface (MCP `decide_approval` and every
+  general path get `APPROVAL_SURFACE_RESTRICTED`); an intent that lost its authority is refused at settle; authority refusals are audited;
+  the approval card shows a redacted human-readable diff.
+- ADDED (ANTHROPIC-PROVIDER G8): native Anthropic Messages provider adapter (`anthropic-messages-http` v1) with x-api-key header
+  credential, SSE streaming, tool turns, thinking control and published-tariff reservation (settlement still held).
+- CHANGED (MODE-UX G3): `/mode` shows every mode with its effect; typed `PERMISSION_MODE_DENIED` / `PERMISSION_MODE_LOCKED`.
+- ADDED (TERM-UX-1): the `@` file list answers at once (served stale while refreshed, at most one hour old), `/resume` replays the
+  conversation on screen, `/context` shows how full the window is and what fills it.
+- PERF (SANDBOX-SPEED G2): sandbox scans read synchronously on local file systems and the deny matcher answers common shapes directly
+  (bubblewrap ~465 → ~60 ms, Landlock ~316 → ~51 ms per call on the measured repository).
+- PERF (STARTUP-COST): Ink and the MCP server/client SDKs leave the CLI/SDK static import graph (`deckent --version` 468 → 247 ms measured
+  by the lane); a startup-graph contract test guards it.
+- DEPS: `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.2.0 (npm 2026-09-28).
+
 - ADDED (MCP-CLIENT, owner 2026-09-28 S6 a): Deckent is an MCP client of the owner's local stdio servers, registered in scoped files like
   Claude Code (`.deckent/mcp.json` project, personal `mcp.json` user/local; managed > local > project > user), approved and tool-pinned in
   product state (a changed entry or tool asks again), both protocol eras, realm per server, every call a C11 effect of Core
@@ -16,7 +35,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 - FIX (SESSION-RESULT-LIMIT-2026-09-28): when a declared profile's worst-case result cannot be delivered on some surface
   (runtime service, MCP), `deckent doctor` reports it (`modelInvocationDelivery`) and `models activate` refuses the activation
   (`MODEL_ACTIVATION_DELIVERY_UNFIT`).
-- DEPS: `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.0.0 → 2.1.0 (npm 2026-09-23); the client is now a product
+- DEPS: `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.0.0 → 2.1.0 (npm 2026-09-23; later 2.2.0 above); the client is now a product
   dependency. 2.1.0 stdio servers close on stdin end-of-file. FOUNDATION: composition package budget 5000 → 5500 (owner-approved).
 
 - FIX/SECURITY (TERM-FEEDBACK-1, owner live test 2026-09-28): compaction survives a summary answer in another shape and falls back
