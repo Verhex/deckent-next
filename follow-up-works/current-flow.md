@@ -24,7 +24,10 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 
 ## Altıncı parti (`integrate/2026-09-28-g`, worktree `/home/alperen/deckent-next-integrate-g`, taban dd63fd9)
 - Fetch birleşti (`lane/fetch` `e6bc551`; S6/S7/S10; Q1 Jev ee030c0e: `allowlist` katı, `approval` kart; `deposit` 2149 yazım şeridinde, eşzamanlı
-  deposit regresyonu tabanda 3/3 kırmızı → yeşil). arch delta uygulandı (lint-arch 0), composition 4906/5000. Tam verify beşinci parti PASS'inden sonra.
+  deposit regresyonu tabanda 3/3 kırmızı → yeşil).
+- Sandbox birleşti (`lane/bwrap` `7e1281e` ⊃ `lane/landlock`): S9 bubblewrap → S11 Landlock → host (prefer notu) / ret (require); `sandbox: kısmi`
+  etiketi bağlandı. arch delta'lar uygulandı (lint-arch 0), composition 4912/5000.
+- Sıradaki: tam verify → Astra REQUEST_REVIEW → PASS'te push → canlı geçiş (owner onayı).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 

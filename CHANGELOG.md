@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (S9/S11, owner 2026-09-28): sandboxed `run_shell` — under `prefer-sandbox` (default) / `require-sandbox` a command runs in
+  bubblewrap when the host has it (no network, HOME hidden, deny floor masked, `.git` read-only, project + scratch writable, PID namespace
+  ends every child), else in a Landlock + seccomp sandbox (no network at every ABI, `sandbox: degraded` below ABI 6); every result names
+  its realm; the host fallback notice names why each mechanism was unusable.
 - ADDED (FETCH S6/S7/S10, owner 2026-09-28): governed `fetch_url` — `terminal.fetch` (default egress none; `allowlist` refuses
   other hosts, `approval` asks for them), Core `network.fetch@1` C11 effect, public-address-only HTTPS with SNI and the checked address,
   redirect allowlist, body saved in the scratch area through the scratch write lane, no permission-mode lowering; system prompt v3.

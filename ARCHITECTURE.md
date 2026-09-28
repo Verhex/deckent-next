@@ -866,11 +866,12 @@ held); the agent shell tool puts that note in the model's result and the owner's
 agent-turn loop; the terminal's finished call line shows a short suffix for `group-ended`/`unverified` and nothing for `clean` or an absent
 field (CLEANUP-MARK; closes Astra 2124 open item 1, owner 2026-09-27); the line reserves its elapsed/status/cleanup tail and shortens
 the command text instead, and below the room for the tool name the tail takes its own wrapped line (Astra 2139 R3). This is a process-group
-contract, not a sandbox: a descendant that left the group (setsid, a daemon) is not observed and can outlive the call. Output streams
+contract, not a sandbox (the bubblewrap realm adds a PID namespace; the Landlock realm does not): a descendant that left the group (setsid, a daemon) is not observed and can outlive the call. Output streams
 in chunks ≤ 8 KiB without splitting a UTF-8 character; the result keeps 16 KiB (`HOST_SHELL_RESULT_MAX_BYTES`; a quarter head, the
 rest tail), cut on UTF-8 boundaries — a character split across two pipe reads is carried to the next read, never replaced by U+FFFD
 (Astra 2112 R2) — with the omitted byte count (legacy kept everything). `durationMs` is monotonic elapsed time (I40). Results: exited (code/signal), timed-out, cancelled, spawn-failed,
-unsupported-platform (Windows). It is not a sandbox: the command has the service user's file, process and network access. Open:
+unsupported-platform (Windows). On the host realm it is not a sandbox: the command has the service user's file, process and network
+access (the sandbox realms below narrow this). Open:
 the command runs in its own process group so it can be killed, which also means a service crash leaves a running command orphaned
 (the turn is closed as interrupted at the next start, but nothing signals the group; legacy had the same property; Node has no
 parent-death signal) — candidate: record the group id in the effect journal and signal it at start.
@@ -878,19 +879,73 @@ parent-death signal) — candidate: record the group id in the effect journal an
 endpoint custody alone; a service started on another socket over the same ledger is not excluded from them (ledger-level custody is
 the proposed class fix, owner decision).
 
-**Shell realm (S5, owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock identities; only
-host is implemented yet). `terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes
-once per process (bwrap on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures are `unknown`,
-nothing installed). `require-sandbox` without an implemented sandbox refuses before any plan, approval or effect
-(`SHELL_SANDBOX_UNAVAILABLE`); macOS/Windows `SHELL_REALM_UNSUPPORTED`; `prefer-sandbox` runs on the host and says so in the approval
-preview, the live stream, the model result and the finished line (`sandbox: none`) — never a silent fallback. Finding host mechanisms is
-not an implemented sandbox (bubblewrap S9, Landlock S11 pending).
+**Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
+`terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process (bwrap
+on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures `unknown`, nothing installed). Sandbox
+mechanisms are realm providers (`ShellSandbox.usable(capabilities)` → realm, result marker, card posture, a notice when the posture
+falls short — or why not), taken in preference order from a code-only composition port (`RuntimeServicePorts.shellSandboxes`; shipped
+list **bubblewrap, then Landlock**). `host` → host (result bytes unchanged); a sandbox mode → the first usable provider; none usable →
+`require-sandbox` refuses before any plan, approval or effect (`SHELL_SANDBOX_UNAVAILABLE`), `prefer-sandbox` runs on the host and says
+so in the approval preview, the live stream, the model result and the finished line (`sandbox: none; running on host (bubblewrap: …;
+landlock: …)`) — never a silent fallback; macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
+bubblewrap | landlock | degraded | none`; only trusted metadata, never command output); the approval card shows the realm's posture.
+Both sandbox launchers go through the host shell's one process runner (`ShellLaunch`: program, argv ending in `bash --noprofile --norc
+-c`, optional fd 3 setup-failure channel), so the process-group, cancellation, timeout, output-bound and cleanup contract is the same
+everywhere; a realm that cannot set itself up refuses the call (`spawn-failed` → effect `refused`, the reason is the result: "nothing
+was run"), never runs on the host instead.
+**Bubblewrap realm (S9).** `adapters/core/shell-sandbox-bwrap`: `bwrap … -- bash` with the launcher verified at a known path
+(`/usr/bin/bwrap`, `/usr/local/bin/bwrap`, `/bin/bwrap`: regular executable not writable by group/others; PATH never consulted for it),
+usable only with `bubblewrap` and `userNamespace` both measured `available`. View per call: `--unshare-all` (network included; the
+fetch tool is the only egress), `--die-with-parent`, `--new-session`, fresh `/proc`, minimal `/dev`, `/tmp` and HOME as 64 MiB tmpfs
+(HOME never bound: `~/.ssh`, tokens, a ledger under HOME invisible), system prefixes read-only by allowlist (`/usr /etc /bin /sbin
+/lib* /opt /snap /nix /sys`; never `/`, `/mnt`, `/run`, `/var`, `/home`), PATH program directories (`bin`/`.bin`/`sbin` by name; a
+`bin` with its `lib*`/`libexec` siblings; never HOME or above it, never inside/above the project or scratch, never under `/mnt /media
+/run /dev /proc /sys /var`, never a non-program directory such as `~/.local`) read-only so an nvm/`~/.local/bin` toolchain keeps
+working, the project read-write, every `.git` directory read-only, the root `.git` file read-only and — only in the verified worktree
+shape (`gitWorktreeRepository`, shared with Landlock) — its common repository read-only; any other `.git` file opens nothing (a forged
+pointer a sandboxed command wrote cannot bind HOME; a submodule loses `git status` inside), the deny floor masked (denied directories
+and fully-denied subtrees as empty tmpfs; denied files as a read-only `/dev/null` bind that opens with EACCES — protected, not absent;
+symlinks neither followed nor masked; `node_modules`/`dist`-class directories not entered), the conversation's scratch area read-write
+(TMPDIR unchanged). Deny walk bounded (50 000 entries / 4 096 masks; over it the call is refused). The PID namespace ends every process
+the command started with the call, a `setsid` escapee included (measured: without `--die-with-parent` it survives); the outer `bwrap`
+exits on SIGTERM, so cancellation and the timeout end the namespace. Result marker `sandbox: bubblewrap`; card "Runs in a bubblewrap
+sandbox: …". Cost on this machine ≈ 90 ms per call (≈ 75 ms view resolution over 1.8 k entries, bwrap itself ≈ 10 ms) vs ≈ 2 ms on the
+host. Open limits: masked files read "Permission denied" rather than ENOENT; deny patterns inside ignored directories not masked;
+`.git` read-only means `git commit`/`git add` fail inside (owner decision); a data root inside the project keeps its ledger reachable
+(only approvals/previews/scratch are on the floor, as on the host); user-namespace-restricted hosts (AppArmor) not measured (the
+probe's `unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known
+paths (a service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the
+service dies (candidate for the "Host shell execution" orphan item) — untested.
+**Landlock realm (S11).** Second provider (chosen when bubblewrap is not usable): each call builds a rule set from a fresh scan of the
+project (`host-shell/internal/landlock.ts`) and runs bash through the native helper `shell-sandbox`
+(`host-shell/native/shell_sandbox.c`), which applies it and execs bash in the same process. Landlock only adds access and a directory
+rule reaches everything beneath it, so a directory holding a protected path or a `.git` is carved: listing only, each entry its own
+rule — clean files and trees read-write, `.git` read-only, protected paths (the turn's deny list), multiply linked files, special files
+and unreadable directories no rule; symbolic links none; ignored directories read-write as a whole and not scanned. A worktree's root
+`.git` file opens its common repository read-only only in the worktree shape; no other `.git` file opens anything outside. System
+directories (`/usr /bin /sbin /lib* /opt`, the running Node's `bin`/`lib`) read + execute, `/etc` and `/proc` read,
+`/dev/{null,zero,full,random,urandom}` read-write; the scratch area read-write and the command's `HOME`; HOME, `/tmp`, `/mnt`, `/run`,
+`/var`, `/sys` and everything else unreachable (`stat` is not restricted by Landlock). Bounds: 20 000 scanned entries, depth 32, 8 192
+rules, 1 MiB of rule arguments — past a bound nothing runs. The helper opens relative rule paths beneath the root with `openat2
+RESOLVE_BENEATH|NO_SYMLINKS`, requires the announced kernel ABI, sets `PR_SET_NO_NEW_PRIVS`, restricts itself (ABI ≥ 4: TCP
+bind/connect handled with no rule; ABI ≥ 6: signal and abstract-unix scopes), then installs a seccomp filter (foreign-architecture/x32
+calls kill; `io_uring_setup` refused; `socket()` refused except AF_INET/AF_INET6 stream sockets when Landlock handles TCP — ABI < 4:
+every socket refused; `listen()` and MSG_FASTOPEN sends refused: measured on ABI 7 that a unix socket reached `/var/run/docker.sock`,
+UDP left the machine, and the Landlock TCP rule missed a `listen()` autobind and a TCP Fast Open connect). Any setup failure is one
+line on fd 3 (close-on-exec), exit 125, no exec; the runner turns it into `spawn-failed` (effect refused), so a command cannot forge
+one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 → typed DEGRADED: marker `sandbox: degraded` and a notice naming what is
+open (signals ABI < 6, truncation ABI < 3, TCP by the socket filter ABI < 4) on the card, the live stream, the result and the finished
+line. Network is closed at every ABI. Open limits: the project root and every directory holding a protected path or `.git` cannot gain,
+lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root file, a first `mkdir dist`); tools installed under
+HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories are not carved; no PID namespace — a `setsid`
+descendant escapes the process group (it stays in the Landlock domain); ≈ 90 ms per call on this repository; a data root inside the
+project keeps its ledger writable.
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
 only a read-only command of bounded reach (risk `none`) runs without asking, and only under allow; `low` (traversal, repository
 objects), modify and the destructive table ask the owner in every mode (slice 4 may relax modify, never the destructive floor). The
-approval preview shows the exact command, its risk tier and reason, and that it is not a sandbox. Every run is a C11 effect on the
+approval preview shows the exact command, its risk tier and reason, and where it runs (the realm's posture: bubblewrap, Landlock and its limits, or the host: not a sandbox). Every run is a C11 effect on the
 `host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn; the approval subject's
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
 record, so an uncertain run never makes the shell busy; its effect identity is the turn, the call's position (model round, index in
@@ -927,7 +982,8 @@ requests still receive the typed refusal. Large compacted frames and tails above
 the service environment and over an operator naming `TMPDIR` in `terminal.shell.environment`). The shell path port takes the area as
 a second root: an absolute path inside it is checked against the area's own scope (read-only `none` → may run without asking under
 allow; `cp/mv/mkdir/touch` into it → `narrow-mutating`); leaving it lexically or through a link is `PATH_OUTSIDE_ROOT`.
-`$TMPDIR/...` is a variable expansion and still asks in every mode. Project-root classification is unchanged; not a sandbox (S9).
+`$TMPDIR/...` is a variable expansion and still asks in every mode. Project-root classification is unchanged. In the Landlock realm the area
+is also the command's `HOME`; in the bubblewrap realm HOME is an empty tmpfs and the area is a separate read-write bind.
 **Agent fetch tool (FETCH S6/S7/S10, owner 2026-09-28).** `terminal.fetch` (schemaVersion 1, optional): `egress: none | allowlist |
 approval` (default `none`), `allowedHosts[]` (exact lowercase DNS names; no wildcard, no IP), `maxBytes` (4 MiB), `timeoutMs` (30 s),
 `maxRedirects` (3); no proxy field (corporate proxy is a separate slice). `none` builds nothing: no `fetch_url`, no transport use, and

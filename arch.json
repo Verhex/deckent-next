@@ -462,7 +462,8 @@
         "src/adapters/core/file-policy",
         "src/platform/core/clock",
         "src/adapters/core/scratch-store",
-        "src/adapters/core/http-fetch"
+        "src/adapters/core/http-fetch",
+        "src/adapters/core/host-shell"
       ],
       "plan": "EXECUTION"
     },
@@ -1130,7 +1131,8 @@
         "src/adapters/core/audit-store",
         "src/platform/core/host",
         "src/adapters/core/scratch-store",
-        "src/adapters/core/http-fetch"
+        "src/adapters/core/http-fetch",
+        "src/adapters/core/shell-sandbox-bwrap"
       ],
       "plan": "SURFACES"
     },
@@ -1677,6 +1679,14 @@
         "src/adapters/core/native-connection",
         "src/domain/core/agent-tool",
         "src/engine/core/effect"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/shell-sandbox-bwrap": {
+      "dependencies": [
+        "src/adapters/core/host-shell",
+        "src/adapters/core/workspace-read",
+        "src/domain/core/agent-tool"
       ],
       "plan": "SURFACES"
     }
