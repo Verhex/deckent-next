@@ -51,18 +51,27 @@ async function gitDirsOf(gitFile: string): Promise<string[]> {
   return dirs;
 }
 
-/** PATH directories outside the system prefixes that exist (a toolchain under HOME), each with its `lib*`/`libexec` siblings when it is a `bin`. */
-async function toolchainOf(pathVariable: string | undefined, exclude: readonly string[]): Promise<string[]> {
+/** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
+const TOOLCHAIN_DIR_NAMES = new Set(['bin', '.bin', 'sbin']);
+/**
+ * PATH directories outside the system prefixes that exist (a toolchain under HOME such as nvm), read-only. Never HOME itself, an
+ * ancestor of it (`/home`, `/root`, `/`), the project, the scratch area or any ancestor of those; never a directory that is not a
+ * program directory by name (`~/.local` would expose `~/.local/share`).
+ */
+async function toolchainOf(pathVariable: string | undefined, protectedPaths: { readonly enclosed: readonly string[]; readonly home: string | null }): Promise<string[]> {
   const out: string[] = [];
   const seen = new Set<string>();
-  const skipped = (path: string) => NEVER_BOUND_PREFIXES.some(prefix => under(path, prefix)) || BUBBLEWRAP_SYSTEM_PATHS.some(prefix => under(path, prefix));
+  // Skipped: excluded/system prefixes; not a program directory by name; inside or above the project/scratch area; HOME itself or above it
+  // (a directory under HOME — nvm, `~/.local/bin` — is what this is for).
+  const skipped = (path: string) => NEVER_BOUND_PREFIXES.some(prefix => under(path, prefix)) || BUBBLEWRAP_SYSTEM_PATHS.some(prefix => under(path, prefix))
+    || !TOOLCHAIN_DIR_NAMES.has(basename(path)) || protectedPaths.enclosed.some(enclosed => under(path, enclosed) || under(enclosed, path))
+    || (protectedPaths.home !== null && under(protectedPaths.home, path));
   for (const entry of (pathVariable ?? '').split(':').slice(0, 256)) {
     // Excluded prefixes are decided on the text first: a foreign drive (`/mnt/c/…` on WSL) is never touched (each stat there costs milliseconds).
     if (!isAbsolute(entry) || skipped(entry)) continue;
     let real: string;
     try { real = await realpath(entry); if (!(await stat(real)).isDirectory()) continue; } catch { continue; }
     if (skipped(real)) continue;
-    if (exclude.some(prefix => under(real, prefix)) || exclude.some(prefix => under(prefix, real))) continue;
     const candidates = basename(real) === 'bin' ? [real, ...['lib', 'lib64', 'libexec'].map(name => join(dirname(real), name))] : [real];
     for (const candidate of candidates) {
       if (seen.has(candidate)) continue;
@@ -112,8 +121,9 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   if (refused) return { ok: false, reason: refused };
   const home = environment['HOME'];
   const scratchDir = layout.scratchDir;
-  const toolchainPaths = await toolchainOf(environment['PATH'], [root, ...(scratchDir ? [scratchDir] : [])]);
-  return { ok: true, view: Object.freeze({ projectRoot: root, scratchDir, home: home && isAbsolute(home) ? home : null, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
+  const homeDir = home && isAbsolute(home) ? home : null;
+  const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
+  return { ok: true, view: Object.freeze({ projectRoot: root, scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     toolchainPaths, readOnlyPaths: [...readOnly], maskedDirectories, maskedFiles }) };
 }
 

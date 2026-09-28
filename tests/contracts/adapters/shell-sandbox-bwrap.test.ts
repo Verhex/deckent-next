@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createWorkspaceScope, probeShellCapabilities, resolveShellRealm, hostShellRealm, type ShellCapabilities,
   type ShellSandboxLayout } from '#adapters/index.js';
@@ -123,6 +123,18 @@ describe('bubblewrap realm selection (S9)', () => {
     expect(view.view.maskedFiles.some(path => path.endsWith('/node_modules/pkg/.npmrc'))).toBe(false);
     expect(view.view.toolchainPaths).toEqual([join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib')]);
     expect(view.view.systemPaths).toContain('/usr'); expect(view.view.systemPaths.some(path => path.startsWith('/mnt') || path === '/run' || path === '/var')).toBe(false);
+  });
+  it('never binds HOME, an ancestor of HOME, the project or a non-program directory from PATH, only bin-like entries', async () => {
+    const f = await fixture();
+    await mkdir(join(f.home, '.local', 'share'), { recursive: true }); await mkdir(join(f.home, '.local', 'bin'), { recursive: true });
+    const entries = [f.home, dirname(f.home), '/home', '/', join(f.home, '.local'), join(f.home, '.local', 'share'), f.scope.root, dirname(f.scope.root), f.scratch,
+      join(f.home, 'tools', 'bin'), join(f.home, '.local', 'bin'), '/mnt/c/Windows', join(f.home, 'nowhere', 'bin')];
+    const view = await resolveBubblewrapView(f.layout, { ...f.environment, PATH: entries.join(':') });
+    if (!view.ok) throw new Error(view.reason);
+    expect(view.view.toolchainPaths).toEqual([join(f.home, 'tools', 'bin'), join(f.home, 'tools', 'lib'), join(f.home, '.local', 'bin')]);
+    const args = bubblewrapArguments(view.view);
+    const bound = args.flatMap((arg, i) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? [args[i + 2]] : []);
+    for (const path of [f.home, dirname(f.home), '/home', '/', join(f.home, '.local'), join(f.home, '.local', 'share'), dirname(f.scope.root)]) expect(bound).not.toContain(path);
   });
   it('binds the gitdir and common dir of a worktree read-only', async () => {
     const f = await fixture({ worktree: true });
