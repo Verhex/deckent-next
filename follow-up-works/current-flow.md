@@ -16,8 +16,15 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Birleştirmede lead düzeltmeleri: şablon araç/operasyon adları gerçek kataloğa sözleşme testiyle bağlandı (ters kanıt: ad bozulunca
   kırmızı); Astra 2145 iki-soket testi artık ikinci servisin `LOCAL_RUNTIME_ALREADY_RUNNING` ile reddini bekliyor; S5 native yoklamasının
   manifestine test betiği eklendi (`test:native` onu reddediyordu → tam verify düşerdi).
-- Hedefli kanıt: tsc 0, lint-arch 0 ihlal, native 26/26 + yoklama 1/1, birleşme testleri 157/157.
-- Sıradaki: tam verify (4 worker, Docker imajı) → Astra REQUEST_REVIEW → PASS'te tam sha push → canlı geçiş.
+- Tam verify `599a0fc` exit 0 (402/2659, native 26+1, host 62, smoke). Astra 2149 REVISE: R1 temizlik ↔ yeni tur yarışı, R2 eşzamanlı yazımda
+  kota aşımı → `lane/fix-2149` `deb2b7d` birleşti (tur açmadan önce tutar, temizlik silme boyunca sahip, kapanış drain; tek yazım sırası).
+- Sıradaki: bu düzeltmeyle tam verify → Astra yeniden inceleme → PASS'te tam sha push → canlı geçiş.
+
+## Altıncı parti adayları
+- Fetch `lane/fetch` `453f1d7` (S6/S7/S10; Q1 Jev ee030c0e ile karar: `allowlist` katı, `approval` kart). Birleşmede `deposit` fix-2149'un
+  `spend` yazım sırasına bağlanır (`proof/FIX-2149-2026-09-28/docs-delta.md` §2) + eşzamanlı deposit regresyonu.
+- Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
+  bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 
 ## Canlı geçişte yapılacaklar (PASS sonrası)
 - Ledger v41 → v42 yedekli göç; layout 3 → 4 (`state/scratch`): geçişten önce kabul edilmiş Run'ların görevleri `RUN_STORE_CONFLICT`

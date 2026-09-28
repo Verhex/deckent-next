@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (Astra 2149): scratch retention never removes an area a turn is opening or using, and service stop waits for a removal in
+  flight; concurrent scratch writes never exceed the session or installation quota (one write lane per service).
 - SECURITY (LEDGER-SINGLETON, owner 2026-09-28): one runtime service per ledger. A second `runtime serve` against the same ledger
   through another endpoint is refused (`LOCAL_RUNTIME_ALREADY_RUNNING`) before it touches the running service's turns, model calls,
   approvals, previews, scratch areas or schema; the service holds a kernel lock on `<ledger>-lock` next to its ledger.

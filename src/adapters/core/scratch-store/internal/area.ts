@@ -4,6 +4,7 @@ import { lstat, mkdir, open, readdir, rename, rm, utimes, type FileHandle } from
 import { join, posix } from 'node:path';
 import { encodeCommandProjection, type AgentToolOutcome, type AgentToolSpec, type EffectTargetRef } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
+import type { ScratchActivity } from './custody.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_READ_TOOL_SPECS, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { ABSENT_FILE_VERSION, planWorkspaceEdit, resolveWritable, unifiedDiff, WORKSPACE_FILE_TARGET_KIND, WorkspaceFileTarget, writablePath,
   type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/core/workspace-write/index.js';
@@ -99,12 +100,21 @@ export interface ScratchSession {
   reads(tool: string): boolean;
   /** `scratch_read` / `scratch_list`: the workspace read tools over this area. */
   read(tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome>;
+  /**
+   * Every write into the area (the `scratch_write` effect, or bytes another effect produced): `write` runs as the scratch resource's
+   * only write (the custody's lane) after the session and installation ceilings admitted `bytes` at `rel` (the file it replaces
+   * counted once); the lane is released whatever the outcome. A refusal never runs `write`; an abort while waiting runs nothing.
+   */
+  spend<T>(rel: string, bytes: number, write: () => Promise<T>, signal?: AbortSignal): Promise<{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string }>;
+  /** Ends this turn's hold of the area (idempotent): from then on the sweep may remove it once it is past retention. */
+  release(): void;
   /** Stores bytes a service effect produced (a fetched body, FETCH S7) at `rel`: session and installation quota, 0600, atomic. */
   deposit(rel: string, data: Uint8Array): Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 }
 
 const quotaRefusal = (detail: string): WorkspaceEditPlan => ({ ok: false, error: `scratch-quota-exceeded (${detail})` });
-/** The session and installation ceilings for writing `bytes` to `rel` (the file it replaces is not counted twice); null when within. */
+/** The session and installation ceilings for writing `bytes` to `rel` (the file it replaces is not counted twice); null when within. Advisory
+ * when planning (before any card); binding only inside the custody's write lane (`spend`), where no other scratch write runs meanwhile. */
 async function quotaCheck(session: Pick<ScratchSession, 'root' | 'dir' | 'limits'>, rel: string, bytes: number): Promise<WorkspaceEditPlan | null> {
   const replaced = await lstat(join(session.dir, ...rel.split('/'))).then(info => info.isFile() ? info.size : 0, () => 0);
   const [own, all] = await Promise.all([scratchUsage(session.dir), scratchUsage(session.root)]);
@@ -137,13 +147,13 @@ async function planIntoNewDirectories(scope: WorkspaceScope, path: unknown, cont
 /**
  * The session's area as an effect target. Record ids are `<owner>/<session>/<path>` (unique in the installation: the ledger's busy check
  * and sequence are per target kind and id); the physical write is the workspace file target over this area — conditional on the planned
- * version, atomic, journaled — creating files 0600. The quota is checked again right before the write; missing directories of the path
- * are created then (after the decision), never through a link.
+ * version, atomic, journaled — creating files 0600. The write runs inside the session's `spend` (quota admitted in the custody's write
+ * lane); missing directories of the path are created then (after the decision), never through a link.
  */
 class ScratchFileTarget implements EffectTarget {
   readonly kind = SCRATCH_FILE_TARGET_KIND;
   private readonly inner: WorkspaceFileTarget;
-  constructor(private readonly session: Pick<ScratchSession, 'root' | 'key' | 'dir' | 'scope' | 'limits'>, journal: string) {
+  constructor(private readonly session: Pick<ScratchSession, 'root' | 'key' | 'dir' | 'scope' | 'limits' | 'spend'>, journal: string) {
     this.inner = new WorkspaceFileTarget(session.scope, journal, { createMode: 0o600, maxFileBytes: session.limits.writeMaxBytes });
   }
   identity() { return `scratch-file:${this.session.root}`; }
@@ -159,14 +169,16 @@ class ScratchFileTarget implements EffectTarget {
   async apply(request: EffectApplyRequest) {
     const local = this.local(request.target), content = (request.input as { content?: unknown } | null)?.content;
     if (typeof content !== 'string') throw new EffectTargetError('EFFECT_TARGET_REJECTED');
-    const refused = await quotaCheck(this.session, local.id, Buffer.byteLength(content, 'utf8'));
-    if (refused && !refused.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED', { cause: new ScratchError('SCRATCH_QUOTA_EXCEEDED', refused.error) });
-    const parent = posix.dirname(local.id);
-    if (parent !== '.') {
-      try { await ensureScratchDirectories(this.session.dir, parent.split('/')); }
-      catch (error) { throw new EffectTargetError('EFFECT_TARGET_REJECTED', { cause: error }); }
-    }
-    return this.inner.apply({ ...request, target: local });
+    const written = await this.session.spend(local.id, Buffer.byteLength(content, 'utf8'), async () => {
+      const parent = posix.dirname(local.id);
+      if (parent !== '.') {
+        try { await ensureScratchDirectories(this.session.dir, parent.split('/')); }
+        catch (error) { throw new EffectTargetError('EFFECT_TARGET_REJECTED', { cause: error }); }
+      }
+      return this.inner.apply({ ...request, target: local });
+    });
+    if (!written.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED', { cause: new ScratchError('SCRATCH_QUOTA_EXCEEDED', written.error) });
+    return written.value;
   }
   async lookup(ref: EffectTargetRef, idempotencyKey: string) { return this.inner.lookup(this.local(ref), idempotencyKey); }
 }
@@ -190,18 +202,33 @@ const READ_AS: Readonly<Record<string, string>> = Object.freeze({ scratch_read: 
 
 /**
  * Opens this conversation's scratch area under the layout's `scratch` resource `root` (already a verified private product directory):
- * creates `<owner>/<session>` (0700, no link followed) and marks it used now (its age decides retention). The area is a workspace scope
- * of its own with the Core read floor (a protected name is refused here too); reads use the workspace read tools over it.
+ * holds the area in the service's scratch custody first (waiting while a removal of it is in flight), then creates `<owner>/<session>`
+ * (0700, no link followed) and marks it used now (its age decides retention); a failed open releases the hold. The area is a workspace
+ * scope of its own with the Core read floor (a protected name is refused here too); reads use the workspace read tools over it.
  */
-export async function openScratchSession(root: string, key: string, limits: ScratchLimits,
+export async function openScratchSession(root: string, key: string, limits: ScratchLimits, custody: Pick<ScratchActivity, 'hold' | 'lane'>,
   readLimits: { readonly maxResultBytes?: number } = {}): Promise<ScratchSession> {
   if (!KEY.test(key)) throw new ScratchError('SCRATCH_KEY_INVALID');
+  const release = await custody.hold(key);
+  try { return await openHeld(root, key, limits, custody, readLimits, release); }
+  catch (error) { release(); throw error; }
+}
+
+async function openHeld(root: string, key: string, limits: ScratchLimits, custody: Pick<ScratchActivity, 'lane'>,
+  readLimits: { readonly maxResultBytes?: number }, release: () => void): Promise<ScratchSession> {
   await ensureScratchDirectories(root, key.split('/'));
   const now = new Date();
   await utimes(join(root, ...key.split('/')), now, now);
   const tools = await createWorkspaceReadTools(join(root, ...key.split('/')), { deny: DEFAULT_WORKSPACE_READ_DENY,
     ...(readLimits.maxResultBytes ? { limits: { maxResultBytes: readLimits.maxResultBytes } } : {}) });
-  const scope = tools.scope, dir = scope.root, base = { root, key, dir, scope, limits };
+  const scope = tools.scope, dir = scope.root, measured = { root, key, dir, scope, limits };
+  const base = { ...measured, async spend<T>(rel: string, bytes: number, write: () => Promise<T>, signal?: AbortSignal) {
+    const handOn = await custody.lane(signal);
+    try {
+      const refused = await quotaCheck(measured, rel, bytes);
+      return refused && !refused.ok ? { ok: false as const, error: refused.error } : { ok: true as const, value: await write() };
+    } finally { handOn(); }
+  } };
   const writes: WorkspaceEditArea = Object.freeze({ operation: SCRATCH_FILE_WRITE_OPERATION,
     async plan(tool: string, args: Record<string, unknown>): Promise<WorkspaceEditPlan> {
       const content = args['content'];
@@ -216,7 +243,7 @@ export async function openScratchSession(root: string, key: string, limits: Scra
     },
     floored: () => false, targetId: (rel: string) => `${key}/${rel}`, target: (journal: string) => new ScratchFileTarget(base, journal),
     shown: (rel: string) => join(dir, ...rel.split('/')) });
-  return Object.freeze({ ...base, writes, reads: (tool: string) => Object.hasOwn(READ_AS, tool),
+  return Object.freeze({ ...base, writes, release, reads: (tool: string) => Object.hasOwn(READ_AS, tool),
     async read(tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> {
       const as = READ_AS[tool];
       if (!as) return { status: 'error', text: `[deckent] ${tool}: error=unknown-tool` };
