@@ -13,17 +13,31 @@ import { agentWorkspaceDeny } from './turn.js';
  * own context for their next message, like a paste: it is bounded here and grants nothing.
  */
 export interface RuntimeWorkspaceFileHost {
-  /** The project's file list under `deny`, walked at most once per `ttlMs` (single flight); ranking runs on it per query. */
+  /**
+   * The project's file list under `deny`. A first walk is awaited; afterwards the last list answers at once (TERM-UX-1 a): once it is older
+   * than `ttlMs` one background walk refreshes it (single flight), so no keystroke waits for a walk again. A list older than `maxStaleMs` is
+   * not served: the caller waits for a fresh walk. Ranking runs on the list per query.
+   */
   index(projectRoot: string, deny: readonly string[]): Promise<WorkspaceFileIndex>;
 }
-export function createRuntimeWorkspaceFileHost(ttlMs = 10_000, now: () => number = Date.now): RuntimeWorkspaceFileHost {
-  const cached = new Map<string, { readonly at: number; readonly index: Promise<WorkspaceFileIndex> }>();
+export function createRuntimeWorkspaceFileHost(ttlMs = 10_000, now: () => number = Date.now, maxStaleMs = 300_000): RuntimeWorkspaceFileHost {
+  interface Entry { readonly at: number; readonly index: Promise<WorkspaceFileIndex>; refreshing: boolean }
+  const cached = new Map<string, Entry>();
+  const walk = (projectRoot: string, deny: readonly string[]) => createWorkspaceScope(projectRoot, deny).then(scope => indexWorkspaceFiles(scope));
   return Object.freeze({
     index(projectRoot: string, deny: readonly string[]) {
-      const key = [projectRoot, ...deny].join('\0'), hit = cached.get(key);
-      if (hit && now() - hit.at < ttlMs) return hit.index;
-      const index = createWorkspaceScope(projectRoot, deny).then(scope => indexWorkspaceFiles(scope));
-      cached.set(key, { at: now(), index });
+      const key = [projectRoot, ...deny].join('\0'), hit = cached.get(key), at = now();
+      if (hit && at - hit.at < ttlMs) return hit.index;
+      if (hit && at - hit.at < maxStaleMs) {
+        if (!hit.refreshing) {
+          hit.refreshing = true;
+          // A failed refresh keeps the older list and is retried by a later query.
+          walk(projectRoot, deny).then(fresh => { cached.set(key, { at: now(), index: Promise.resolve(fresh), refreshing: false }); }, () => { hit.refreshing = false; });
+        }
+        return hit.index;
+      }
+      const index = walk(projectRoot, deny);
+      cached.set(key, { at, index, refreshing: false });
       // A failed walk is not cached: the next query walks again.
       index.catch(() => { if (cached.get(key)?.index === index) cached.delete(key); });
       return index;

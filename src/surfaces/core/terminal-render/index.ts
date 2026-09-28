@@ -1,5 +1,6 @@
 export * from './internal/assistant-stream.js';
 export * from './internal/assistant-view.js';
+export * from './internal/context-view.js';
 export * from './internal/glyphs.js';
 export * from './internal/highlight.js';
 export * from './internal/inline.js';

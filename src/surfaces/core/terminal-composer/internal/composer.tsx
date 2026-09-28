@@ -112,7 +112,8 @@ export function Composer(props: ComposerProps): ReactNode {
           }, ignore);
         };
         const delay = latest.current.mentionDelayMs ?? MENTION_DELAY_MS;
-        if (delay > 0) lookupTimer.current = setTimeout(ask, delay); else ask();
+        // The bare `@` (empty query) asks at once: the list of the first files needs no quiet time (TERM-UX-1 a).
+        if (delay > 0 && intent.query !== '') lookupTimer.current = setTimeout(ask, delay); else ask();
       }
     }
   }, []);

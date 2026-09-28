@@ -257,6 +257,9 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
   const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
   const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
+  // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
+  // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
+  if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
   await runTerminalWorkline({
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,

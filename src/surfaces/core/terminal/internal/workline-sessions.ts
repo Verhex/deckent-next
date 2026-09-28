@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import type { AgentChatMessage, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
+import { contextViewLines, fillTemplate, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
 import { notice } from './workline-actions.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
+import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
 
 export interface ConversationSessionSummary { readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string }
 /** Conversation snapshots of this scope (T-L5c); the caller binds the scope. Snapshots are context, never authority. */
@@ -35,6 +36,8 @@ export interface ConversationSessionLabels {
   readonly context: string;
   /** No measurement yet · `{count}` messages */
   readonly contextNone: string;
+  /** TERM-UX-1 b/d: resume replay (`terminal.session.history*`) and `/context` lines (`terminal.context.*`); neutral until the catalog carries them. */
+  readonly history?: ResumedHistoryLabels; readonly view?: ContextViewLabels;
 }
 /** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string }
@@ -53,9 +56,10 @@ const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T'
  */
 export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined) {
   const sessionId = useRef<string>(randomUUID());
-  const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null);
+  const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
   const noteContext = useCallback((delta: TurnDelta) => {
     if (delta.kind === 'context') context.current = { promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality };
+    if (delta.kind === 'compacted') compaction.current = { count: (compaction.current?.count ?? 0) + 1, replacedMessages: delta.replacedMessages, atMs: Date.now() };
   }, []);
   const save = useCallback(async (history: readonly AgentChatMessage[]): Promise<WorkLedgerEntry[]> => {
     if (!port || !labels) return [];
@@ -71,15 +75,16 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
     if (command === 'new') {
-      history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null;
+      history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null; compaction.current = null;
       return done([notice('info', labels.started)]);
     }
     if (command === 'context') {
       const measured = context.current;
-      if (!measured) return done([notice('info', fillTemplate(labels.contextNone, { count }))]);
-      const percent = measured.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : '?';
-      return done([notice('info', fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: measured.promptTokens,
-        window: measured.windowTokens ?? '?', percent, count }))]);
+      const head = !measured ? fillTemplate(labels.contextNone, { count })
+        : fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: measured.promptTokens, window: measured.windowTokens ?? '?',
+          percent: measured.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : '?', count });
+      const view = contextViewLines({ measured, history: history.current, compaction: compaction.current, now: Date.now(), when }, labels.view);
+      return done([notice('info', head), ...view.map(line => notice('info', line))]);
     }
     if (!port) return done([notice('error', labels.unavailable)]);
     if (!args) {
@@ -95,8 +100,8 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const messages = target ? await port.load(target) : null;
     if (!target || !messages) return done([notice('error', labels.notFound)]);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
-    sessionId.current = target; context.current = null;
-    return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) }))]);
+    sessionId.current = target; context.current = null; compaction.current = null;
+    return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history)]);
   }, [labels, port]);
   const id = useCallback(() => sessionId.current, []);
   return { noteContext, save, run, id };
