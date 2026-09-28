@@ -1143,7 +1143,8 @@
         "src/adapters/core/http-fetch",
         "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/mcp-client",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/adapters/core/provider-anthropic-messages"
       ],
       "plan": "SURFACES"
     },
@@ -1169,7 +1170,8 @@
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/engine/core/runtime",
-        "src/adapters/core/mcp-transport"
+        "src/adapters/core/mcp-transport",
+        "src/adapters/core/provider-anthropic-messages"
       ],
       "plan": "PROVIDERS"
     },
@@ -1738,6 +1740,19 @@
         "src/platform/core/config"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/provider-anthropic-messages": {
+      "dependencies": [
+        "src/adapters/core/provider-http-json",
+        "src/adapters/core/provider-openai-chat",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {
