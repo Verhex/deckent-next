@@ -116,7 +116,8 @@
         "src/engine/core/provider-spend",
         "src/platform/core/common",
         "src/platform/core/config",
-        "src/adapters/core/scratch-store"
+        "src/adapters/core/scratch-store",
+        "src/adapters/core/http-fetch"
       ],
       "plan": "PROVIDERS"
     },
@@ -460,7 +461,8 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/file-policy",
         "src/platform/core/clock",
-        "src/adapters/core/scratch-store"
+        "src/adapters/core/scratch-store",
+        "src/adapters/core/http-fetch"
       ],
       "plan": "EXECUTION"
     },
@@ -1127,7 +1129,8 @@
         "src/engine/core/audit",
         "src/adapters/core/audit-store",
         "src/platform/core/host",
-        "src/adapters/core/scratch-store"
+        "src/adapters/core/scratch-store",
+        "src/adapters/core/http-fetch"
       ],
       "plan": "SURFACES"
     },
@@ -1666,6 +1669,14 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/domain/core/agent-turn"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/http-fetch": {
+      "dependencies": [
+        "src/adapters/core/native-connection",
+        "src/domain/core/agent-tool",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     }

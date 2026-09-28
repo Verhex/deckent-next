@@ -714,6 +714,8 @@ sent. The turn's `requestDigest` binds `sha256(segment)`: a turn id replayed aft
 root or layout, other tool set) is `AGENT_TURN_CONFLICT`, never an answer to another prompt. System prompt **v2** (SCR-A): the renderer moved
 to `engine/core/agent-turn` (pure text; composition budget); v2 adds the scratch line (path, tools, diagrams as Mermaid/SVG text,
 `run_shell` TMPDIR, retention). The request digest changes with it: a turn id replayed across the update is `AGENT_TURN_CONFLICT`.
+System prompt **v3** (FETCH): the network line (`fetch_url`, allowlisted hosts ≤ 32 named, what happens to other hosts) or `Network
+access: none`; every turn's request digest changes again.
 **Agent tool deny floor per layout (TL-C finding).** Agent read tools (and through the same scope, edit and shell path
 classification) deny the Core floor plus the layout's `approvals` and `approvalPreviews` directories when they lie inside the
 project; previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
@@ -926,6 +928,45 @@ the service environment and over an operator naming `TMPDIR` in `terminal.shell.
 a second root: an absolute path inside it is checked against the area's own scope (read-only `none` → may run without asking under
 allow; `cp/mv/mkdir/touch` into it → `narrow-mutating`); leaving it lexically or through a link is `PATH_OUTSIDE_ROOT`.
 `$TMPDIR/...` is a variable expansion and still asks in every mode. Project-root classification is unchanged; not a sandbox (S9).
+**Agent fetch tool (FETCH S6/S7/S10, owner 2026-09-28).** `terminal.fetch` (schemaVersion 1, optional): `egress: none | allowlist |
+approval` (default `none`), `allowedHosts[]` (exact lowercase DNS names; no wildcard, no IP), `maxBytes` (4 MiB), `timeoutMs` (30 s),
+`maxRedirects` (3); no proxy field (corporate proxy is a separate slice). `none` builds nothing: no `fetch_url`, no transport use, and
+the system prompt says there is no network access. **Egress mapping (decided, Jev ee030c0e 0.90 / sufficiency 0.77): `allowlist`
+refuses every host outside `allowedHosts` without a card or a DNS lookup (`host-not-allowed`); `approval` runs listed hosts under
+policy and opens an owner card for any other host.** A redirect is followed only to the call's own host (for an approved call: the host
+the owner approved) or an allowlisted host (decided, Q2). A timeout before the TLS handshake finished sent no HTTP request and is
+`refused`; after it, `unknown` (decided, Q3). `fetch_url {url, maxBytes?}` (class `deckent`) is planned before anything is resolved —
+no DNS query leaves the machine before a decision: https only, no userinfo, port 443, no IP literal, ≤ 2048 characters, fragment
+dropped. Decision: the one `decideAgentToolCall` over `agent-tool/invoke fetch_url` and `operation/execute network.fetch`; cells
+`fetch-listed` (the policy decision stands) and `fetch-unlisted` (allow → card); neither is relaxable, so no permission mode lowers a
+fetch and the `permission-mode` audit event is never written for one (schema unchanged); a fetch is not counted by the silent-decision
+counters. The card shows `GET <whole URL>`, the allowlist verdict, the byte limit and `sha256(url)`; the approval resource is the URL
+cut at 200 characters and the arguments digest binds the rest (C12 G3 unchanged). Each call is a C11 effect of Core
+**`network.fetch@1`** on target kind **`network-fetch`** (root registry module `core.network-fetch`; the id closes the `network`
+namespace to overlays; `write` class, policy approval, no precondition, no compensation, input `{url, maxBytes}` ≤ 4 KiB), its own
+record, identity = turn + call position + arguments digest. Adapter `adapters/core/http-fetch`: every hop resolves the host, requires
+every answer to pass the gateway's `isPublicNativeAddress` (extended to IPv6: global unicast `2000::/3` minus `2001::/23`,
+`2001:db8::/32`, `2002::/16`, `3fff::/20`; mapped/NAT64/ULA/link-local/multicast/loopback are outside; the machine's own addresses
+excluded; the gateway still resolves IPv4 only), connects to the checked address (no second resolution) with SNI and Host = host and
+certificate verification on, sends one GET with `User-Agent: Deckent-Fetch/1`, `Accept-Encoding: identity`, no
+`Authorization`/`Cookie`; a redirect (301/302/303/307/308) is followed only over https to an allowlisted host or the call's own host,
+anything else stops (`redirect-refused`, `too-many-redirects`); the body is cut at `min(maxBytes, args.maxBytes)`; `timeoutMs` bounds
+the whole call. Outcomes: nothing sent (bad URL, DNS, non-public address, TLS/connect failure, or a timeout before the TLS handshake
+finished) → effect `refused`; answered (any status, a stopped redirect included) → `settled`; sent then timed out, cancelled or broken
+→ `unknown`, never sent again (`lookup` is always unknown). The body lands in the conversation's scratch area as
+`fetch/<sha256(body)>.<ext>` (extension only from a fixed media-type table) through `ScratchSession.deposit` — not a `scratch_write`
+effect (its content would ride in the intent, bounded at 1 MiB) but the same scratch write lane: `deposit` runs inside
+`ScratchSession.spend`, so its quota check and write are one transition with no other scratch write in between (Astra 2149 R2);
+exclusive 0600 temporary file, flushed, renamed; over quota the body is not kept (`scratch-quota-exceeded`); the fetch call's signal
+abandons the wait for the lane (result `not saved: error=cancelled`). The model gets status, content type, size, cut flag, redirects,
+final URL, the saved path and, for a text type, the first 16 KiB through the existing secret-shape filter (`redactText`); a binary body
+is not shown. The transport (resolve / connect / trust anchors) is a code-only port: the product always uses the system transport;
+`startConfiguredRuntimeService(…, { fetchTransport })` exists for in-process tests and `runtime serve` never passes it; the
+public-address check is not part of the transport and cannot be turned off. Open limits: prompt-injection in fetched text is inherent
+(the head is data, a body line may imitate a `[deckent]` meta line); the saved file is not redacted (as scratch); the deposit path is
+created link-free but the final rename is by path (same-user race, as scratch); fetched bodies wait in the one installation-wide
+scratch lane (a 4 MiB write holds it for its write); no proxy, no POST, no cookies/auth by design; an allowlisted host that resolves to
+a private/intranet address is always refused (the on-prem/Enterprise intranet need belongs to the proxy slice).
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live since the owner's 2026-09-25 migration, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
@@ -1206,7 +1247,8 @@ Docker/pool/evidence/consent ceremony. `firstRunPolicyTemplate` (domain policy) 
 silently `allow`, edit/shell `require-approval` with `modeEligible: true`, operation grants for `workspace.file.write`,
 `host.shell.run` and `workspace.scratch.write` (both sides must allow for silence), no pool/service grant (owner's decision). Tool
 names and operation ids are template data pinned to the real tool specs and Core descriptors by a contract test. `doctor --json`
-reports `policyTemplate: {id, version} | null` (recognition only, never authority).
+reports `policyTemplate: {id, version} | null` (recognition only, never authority). It grants no fetch: the default egress is `none`,
+and opening the network (a `fetch_url` / `network.fetch` grant and a `terminal.fetch` section) is a separate owner decision.
 
 ### Workspace patch preparation (implemented, ledger29)
 
@@ -1470,7 +1512,7 @@ signature is refused until verification exists (A04-3, owner Q7). Config shape i
 registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: module
 loading, signature verification and a separately distributed Enterprise package (A04-3), public SDK export of module registration.
 
-**Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file` and `host` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
+**Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host` and `network` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
 it never adopts the old directory or declares its writer dead. Git delivery has its own policy action

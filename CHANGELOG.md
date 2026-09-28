@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (FETCH S6/S7/S10, owner 2026-09-28): governed `fetch_url` — `terminal.fetch` (default egress none; `allowlist` refuses
+  other hosts, `approval` asks for them), Core `network.fetch@1` C11 effect, public-address-only HTTPS with SNI and the checked address,
+  redirect allowlist, body saved in the scratch area through the scratch write lane, no permission-mode lowering; system prompt v3.
 - FIX (Astra 2149): scratch retention never removes an area a turn is opening or using, and service stop waits for a removal in
   flight; concurrent scratch writes never exceed the session or installation quota (one write lane per service).
 - SECURITY (LEDGER-SINGLETON, owner 2026-09-28): one runtime service per ledger. A second `runtime serve` against the same ledger

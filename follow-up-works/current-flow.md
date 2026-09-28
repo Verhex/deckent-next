@@ -20,9 +20,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   kota aşımı → `lane/fix-2149` `deb2b7d` birleşti (tur açmadan önce tutar, temizlik silme boyunca sahip, kapanış drain; tek yazım sırası).
 - Sıradaki: bu düzeltmeyle tam verify → Astra yeniden inceleme → PASS'te tam sha push → canlı geçiş.
 
-## Altıncı parti adayları
-- Fetch `lane/fetch` `453f1d7` (S6/S7/S10; Q1 Jev ee030c0e ile karar: `allowlist` katı, `approval` kart). Birleşmede `deposit` fix-2149'un
-  `spend` yazım sırasına bağlanır (`proof/FIX-2149-2026-09-28/docs-delta.md` §2) + eşzamanlı deposit regresyonu.
+## Altıncı parti (`integrate/2026-09-28-g`, worktree `/home/alperen/deckent-next-integrate-g`, taban dd63fd9)
+- Fetch birleşti (`lane/fetch` `e6bc551`; S6/S7/S10; Q1 Jev ee030c0e: `allowlist` katı, `approval` kart; `deposit` 2149 yazım şeridinde, eşzamanlı
+  deposit regresyonu tabanda 3/3 kırmızı → yeşil). arch delta uygulandı (lint-arch 0), composition 4906/5000. Tam verify beşinci parti PASS'inden sonra.
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 
