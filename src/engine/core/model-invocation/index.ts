@@ -12,6 +12,10 @@ export { modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvoca
 export { createModelInvocationEvidenceRecord, createModelInvocationPreventedRecord, createModelInvocationResponseRecord, createModelInvocationUnknownRecord,
   modelInvocationResponseContentDescriptor, parseModelInvocationPurgeAdmission, verifyModelInvocationPurgeReceipt, verifyModelInvocationRecord } from './internal/content.js';
 export type { ModelInvocationDelivery } from './internal/delivery.js';
+export { modelInvocationNativeResponseUpperBound } from './internal/delivery.js';
+export { assessModelInvocationProfileDelivery } from './internal/profile-delivery.js';
+export type { ModelInvocationProfileDeliveryAssessment, ModelInvocationDeliveryFinding,
+  ModelInvocationDeliverySurface } from './internal/profile-delivery.js';
 export { ModelInvocationStoreError } from './internal/port.js';
 export type { ModelInvocationAdmission, ModelInvocationClaimResult, ModelInvocationRecord, ModelInvocationStore,
   ModelInvocationPurgeAdmission, ModelInvocationPurgeResult, ModelInvocationPurgeStore, ModelInvocationStoreErrorCode } from './internal/port.js';
