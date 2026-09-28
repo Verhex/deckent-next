@@ -74,7 +74,15 @@ function utf8IncompleteTail(buffer: Buffer): number {
  * boundaries with a character split across pipe reads carried to the next read (Astra 2112 R2). Windows is not supported yet (typed
  * result, nothing runs).
  */
-export function runHostShell(request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK): Promise<HostShellResult> {
+/** A launcher around bash (S11, adapter-internal): its program and arguments come first, then `bash --noprofile --norc -c <command>`;
+ * the launcher must exec bash in its own process, so the process-group contract below is unchanged. It reports a setup failure as
+ * text on fd 3 before anything runs (the call is then `spawn-failed` with that text as its output); fd 3 closed with nothing
+ * written means the command started — the command itself never holds fd 3, so it cannot forge a setup failure. */
+export interface HostShellLaunch { readonly program: string; readonly prefix: readonly string[] }
+/** Longest setup-failure text kept from a launcher. */
+const LAUNCH_STATUS_MAX_BYTES = 1_024;
+
+export function runHostShell(request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK, launch?: HostShellLaunch): Promise<HostShellResult> {
   const started = clock.sample().monotonicMs;
   const elapsedMs = () => Math.max(0, Math.round(clock.sample().monotonicMs - started));
   const keep = request.resultMaxBytes ?? HOST_SHELL_RESULT_MAX_BYTES;
@@ -92,8 +100,10 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return new Promise(resolve => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
-        stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      const shell = ['--noprofile', '--norc', '-c', request.command];
+      child = spawn(launch ? launch.program : 'bash', launch ? [...launch.prefix, 'bash', ...shell] : shell, { cwd: request.cwd,
+        env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
+        stdio: launch ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;
     let termSent = false, killSent = false, forceTimer: NodeJS.Timeout | null = null;
@@ -194,8 +204,13 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
       exited = true;
       reaping = reapGroup().then(cleanup => { if (openPipes > 0 && !settled) drainTimer = setTimeout(releasePipes, PIPE_DRAIN_GRACE_MS); return cleanup; });
     });
+    // The launcher's status channel (fd 3): text is a setup failure before anything ran; `close` below waits for its end too.
+    let setupFailure = '';
+    child.stdio[3]?.on('data', (chunk: Buffer) => { if (setupFailure.length < LAUNCH_STATUS_MAX_BYTES) setupFailure += chunk.toString('utf8').slice(0, LAUNCH_STATUS_MAX_BYTES); });
     child.once('close', (code, signal) => {
-      void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(done(ending ?? 'exited', code, signal, pipesReleased ? 'unverified' : cleanup)));
+      void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(setupFailure !== ''
+        ? Object.freeze({ ...done('spawn-failed', null, null, cleanup), output: `[deckent] ${setupFailure.trim()}; nothing was run.` })
+        : done(ending ?? 'exited', code, signal, pipesReleased ? 'unverified' : cleanup)));
     });
   });
 }

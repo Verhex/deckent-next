@@ -4,3 +4,5 @@ export { HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARG
 export { probeShellCapabilities, shellSandboxCapabilities, type ShellCapabilities, type ShellCapabilityStatus, type ShellProbeEnvironment } from './internal/probe.js';
 export { hostShellRealm, resolveShellRealm, type ShellRealmResolution } from './internal/realm.js';
 export { describeHostShellResult, hostShellCleanupNote } from './internal/result.js';
+export { buildLandlockRules, LANDLOCK_RULE_BOUNDS, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet, type LandlockSandboxInput,
+  type ShellSandboxScope } from './internal/landlock.js';

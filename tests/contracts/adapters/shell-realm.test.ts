@@ -64,7 +64,8 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, notice: null });
+    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, notice: null, marker: null,
+      preview: expect.stringContaining('not a sandbox') });
   });
   it.skipIf(process.platform !== 'linux')('host delegates to the existing runner without changing output or result fields', async () => {
     const request = { command: 'printf "host-bytes\\n"', cwd: '/tmp', environment: {} };

@@ -5,6 +5,10 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { scratchSessionKey } from '#adapters/index.js';
 import { me, principal, runtime } from '../support/chat-turn-harness.js';
 
+/** S11: realm selection follows measured capabilities; this file keeps its no-sandbox-mechanism cases deterministic on hosts that have one. */
+vi.mock('#adapters/core/host-shell/internal/probe.js', async original => ({ ...await original<Record<string, unknown>>(),
+  shellSandboxCapabilities: async () => ({ platform: process.platform, bubblewrap: 'unavailable', userNamespace: 'unavailable', landlock: { status: 'unavailable', abi: null } }) }));
+
 // SCR-A (owner 2026-09-28): the agent's scratch area through the real runtime service, real policy file and real ledger.
 const scratchGrants = (toolEffect: 'allow' | 'require-approval', operationEffect: 'allow' | 'require-approval' = 'allow') => [
   { id: 'scratch-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me,

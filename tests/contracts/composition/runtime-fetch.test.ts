@@ -2,12 +2,16 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { agentToolArgumentsDigest } from '#engine/index.js';
 import { scratchSessionKey } from '#adapters/index.js';
 import { me, principal, runtime } from '../support/chat-turn-harness.js';
 import { startFetchFixture, type FetchFixture } from '../support/fetch-fixture.js';
+
+/** S11: realm selection follows measured capabilities; this file keeps its no-sandbox-mechanism cases deterministic on hosts that have one. */
+vi.mock('#adapters/core/host-shell/internal/probe.js', async original => ({ ...await original<Record<string, unknown>>(),
+  shellSandboxCapabilities: async () => ({ platform: process.platform, bubblewrap: 'unavailable', userNamespace: 'unavailable', landlock: { status: 'unavailable', abi: null } }) }));
 
 // FETCH S7 + S10 (owner 2026-09-28): `fetch_url` through the real runtime service, real policy file and ledger, and a real local TLS
 // server reached through the test-only transport (the service's public-address check stays in force).

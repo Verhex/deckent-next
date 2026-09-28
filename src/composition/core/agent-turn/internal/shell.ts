@@ -39,7 +39,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
-    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities());
+    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities(), { scope, scratchDir: input.scratch?.dir ?? null });
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
@@ -59,8 +59,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
       if (!planned?.ok) return undefined;
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n`
-        + (planned.realm.notice ?? 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).'));
+      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.preview}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
@@ -106,14 +105,15 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm.notice), cleanup: ran.cleanup };
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm), cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
         if (ran && ran.status !== 'exited') {
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
+          // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? '' : '\n[deckent] the command was stopped; what it changed before that is unknown.'}`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'

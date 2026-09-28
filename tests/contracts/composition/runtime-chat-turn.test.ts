@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
@@ -21,6 +23,21 @@ import { agentFileEffectCommandId, agentShellEffectCommandId, chatTurnCompaction
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+
+/** S11: the shell realm follows measured host capabilities; these tests inject them (default: no sandbox mechanism), so the S5
+ * fallback cases stay deterministic on hosts that have bubblewrap or Landlock, and the Landlock case is chosen explicitly. */
+const sandboxProbe = vi.hoisted(() => ({ capabilities: null as null | Record<string, unknown> }));
+vi.mock('#adapters/core/host-shell/internal/probe.js', async original => {
+  const actual = await original<Record<string, unknown>>();
+  return { ...actual, shellSandboxCapabilities: async () => sandboxProbe.capabilities ?? { platform: process.platform, bubblewrap: 'unavailable',
+    userNamespace: 'unavailable', landlock: { status: 'unavailable', abi: null } } };
+});
+const kernelLandlockAbi = (() => {
+  try {
+    return process.platform === 'linux' ? Number(JSON.parse(execFileSync(fileURLToPath(new URL('../../../src/adapters/core/host-shell/native/build/Release/shell-capabilities',
+      import.meta.url)), { encoding: 'utf8' })).landlockAbi) : 0;
+  } catch { return 0; }
+})();
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 afterEach(async () => {
@@ -1389,4 +1406,45 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       expect(view.stdout.text).not.toContain('UNKNOWN');
     } finally { view.instance.unmount(); }
   }, 30_000);
+});
+
+// S11: a real turn through the service with Landlock chosen from injected capabilities (its own block: line bound of the main one).
+describe.skipIf(process.platform !== 'linux')('agent shell in the Landlock realm (S11)', () => {
+  it.skipIf(kernelLandlockAbi < 1)('S11 a sandbox that cannot be set up runs nothing: the effect is refused and the reason reaches the model', async () => {
+    // The measured posture promises more than the kernel offers (a probe older than the kernel): the helper refuses before exec.
+    sandboxProbe.capabilities = { platform: 'linux', bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: kernelLandlockAbi + 1 } };
+    try {
+      const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox' }); await f.start();
+      f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Done.' }];
+      const events: AgentTurnStreamEvent[] = [];
+      await f.client().chatTurn(ask('turn-realm-landlock-setup'), event => events.push(event));
+      expect(toolText(events)).toMatch(/^\[deckent\] run_shell: sandbox: landlock; spawn-failed after [\d.]+s \(cat src\/a\.ts\)\n\[deckent\] shell-sandbox: .*; nothing was run\.$/u);
+      expect(toolText(events)).not.toContain('export const a');
+      expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'refused' }]);
+    } finally { sandboxProbe.capabilities = null; }
+  });
+  it.skipIf(kernelLandlockAbi < 1)('S11 prefer-sandbox with Landlock runs the command confined: realm named in preview and result, outside files unreadable', async () => {
+    sandboxProbe.capabilities = { platform: 'linux', bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: kernelLandlockAbi } };
+    try {
+      const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'absent' }); await f.start();
+      const outside = join(f.project, '..', 'home', 'secret.txt');
+      await writeFile(outside, 'OUTSIDE_SECRET\n', { mode: 0o600 });
+      f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } },
+        { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: `cat ${outside}` }) } }, { content: 'Done.' }];
+      const events: AgentTurnStreamEvent[] = [], client = f.client(), pending: Promise<unknown>[] = [];
+      await client.chatTurn(ask('turn-realm-landlock'), event => {
+        events.push(event);
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          commandId: 'landlock-outside', expectedRevision: event.revision, decision: 'allow', reason: 'The sandbox must refuse it' }));
+      });
+      await Promise.all(pending);
+      const texts = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+      expect(texts[0]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 0 after [\d.]+s \(cat src\/a\.ts\)\nexport const a = 1;\n$/u);
+      expect(texts[1]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 1 /u);
+      expect(texts[1]).toContain('Permission denied'); expect(texts[1]).not.toContain('OUTSIDE_SECRET');
+      expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('Landlock') });
+      expect(events.some(event => event.kind === 'tool.output' && event.text.includes('sandbox: none'))).toBe(false);
+      expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }, { target_kind: 'host-shell', state: 'settled' }]);
+    } finally { sandboxProbe.capabilities = null; }
+  });
 });
