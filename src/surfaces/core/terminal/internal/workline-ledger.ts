@@ -1,6 +1,6 @@
 import type { RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
-import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
+import type { ListApprovalPage, StandingScope, WorklineApproval } from './approval-watch.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
 
 export interface WorklineLedgerPorts {
@@ -17,7 +17,7 @@ export interface WorklineLedgerPorts {
   /** One page of the scope's approval records through the runtime approval application. */
   readonly listApprovalPage?: ListApprovalPage;
   /** Records one explicit operator decision through the runtime (same live-session path as `approvals decide`). */
-  readonly decideApproval?: (approval: Pick<WorklineApproval, 'approvalId' | 'revision'>, decision: 'allow' | 'deny') => Promise<WorklineApproval>;
+  readonly decideApproval?: (approval: Pick<WorklineApproval, 'approvalId' | 'revision'>, decision: 'allow' | 'deny', standing?: StandingScope) => Promise<WorklineApproval>;
   /** Governed run cancellation (`run cancel`) against the inspected revision; returns the rendered typed outcome. */
   readonly cancelRun?: (runId: string, expectedRevision: number) => Promise<string>;
 }

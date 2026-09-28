@@ -5,7 +5,7 @@ import type { RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { notice, type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
-import { APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval } from './approval-watch.js';
+import { APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type StandingScope, type WorklineApproval } from './approval-watch.js';
 import { fillTemplate, formatDuration } from './worker-line.js';
 import { WorkerPanel } from './worker-panel.js';
 import { DecisionCard } from './decision-card.js';
@@ -26,13 +26,16 @@ export interface WorkSurfaceInput {
 }
 
 /** A tool call of the running turn waiting for the owner (T-L4): its preview is shown; the decision goes through `decideApproval`. */
-export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: number; summary: string; preview: string; expiresAt: number }>;
+export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: number; summary: string; preview: string; expiresAt: number;
+  /** The scopes the service offers beyond "this once" and exactly what they cover (absent: the plain y/N card). */
+  standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> }>;
 type Modal =
-  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string }>
+  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>
   | Readonly<{ kind: 'cancel'; run: RunView }>
   | null;
 
 const SUMMARY_MAX = 160;
+/** The covers line is never clipped or flattened: the card shows everything a standing answer would allow (the pattern is one line of at most 200 characters). */
 const clip = (text: string) => { const flat = terminalSafeText(text).replace(/\s+/g, ' ').trim(); return flat.length > SUMMARY_MAX ? `${flat.slice(0, SUMMARY_MAX - 1)}…` : flat; };
 
 function phaseCounts(run: RunView): string {
@@ -116,11 +119,19 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     setModal({ kind: 'approval', approval: target, remaining: pending.length - 1 });
   }, [labels.runNotFound, ledger, push, work]);
 
-  const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean) => {
+  const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => {
     try {
-      const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny');
+      const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing);
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       push([notice('info', fillTemplate(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, { id: record.approvalId }))]);
+      // What the service answered about the standing scope is shown as it is: a saved answer, or the reason it was not saved (the call
+      // itself was allowed once either way).
+      if (standing && work!.approvalStanding) {
+        const answer = record.standing;
+        const labels = work!.approvalStanding, always = standing === 'always';
+        push([notice(answer?.saved ? 'info' : 'error', fillTemplate(answer?.saved ? (always ? labels.savedAlways : labels.savedSession) : (always ? labels.notSavedAlways : labels.notSavedSession),
+          { id: record.approvalId, reason: answer?.reason ?? 'unconfirmed' }))]);
+      }
       if (remaining > 0) push([notice('info', fillTemplate(work!.approvalMore, { count: remaining }))]);
     } catch (error) { push([notice('error', errorText(error))]); }
     // A late answer closes only its own card: a newer card (the turn's next call) may already be open (Astra 2092 R1).
@@ -137,7 +148,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
 
   /** Opens the card for a call of the running turn; the turn waits in the service until the decision (or expiry) lands. */
   const askTurnApproval = useCallback((request: TurnApprovalRequest) => {
-    setModal({ kind: 'approval', remaining: 0, preview: request.preview, approval: { approvalId: request.approvalId, runId: '-', taskId: '-',
+    setModal({ kind: 'approval', remaining: 0, preview: request.preview, ...(request.standing ? { standing: request.standing } : {}), approval: { approvalId: request.approvalId, runId: '-', taskId: '-',
       summary: request.summary, requester: '-', revision: request.revision, status: 'pending', decision: null, expiresAt: request.expiresAt } });
   }, []);
   /** The call's approval settled elsewhere (expiry, cancel): its card closes without a decision. `unsettled`: the service could not
@@ -150,12 +161,16 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   let card: ReactNode = null;
   if (work && modal?.kind === 'approval') {
     const { approval, remaining, preview } = modal;
+    // The scopes are offered only when the service named them AND the labels exist: a card never shows a key it cannot explain.
+    const scoped = modal.standing && work.approvalStanding && modal.standing.scopes.length > 0 ? { labels: work.approvalStanding, ...modal.standing } : null;
+    const scopedPrompt = !scoped ? work.approvalPrompt : scoped.scopes.length === 2 ? scoped.labels.promptBoth : scoped.scopes[0] === 'session' ? scoped.labels.promptSession : scoped.labels.promptAlways;
     const subject = preview === undefined
       ? [fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester })] : [];
-    card = <DecisionCard key={`approval:${approval.approvalId}`} title={work.approvalTitle} prompt={work.approvalPrompt} pendingText={work.approvalPending}
+    card = <DecisionCard key={`approval:${approval.approvalId}`} title={work.approvalTitle} prompt={scopedPrompt} pendingText={work.approvalPending} scopes={scoped?.scopes ?? []}
       lines={[...subject, clip(approval.summary), ...(preview === undefined ? [] : previewLines(preview, work.approvalPreviewMore)),
+        ...(scoped ? [fillTemplate(scoped.labels.covers, { pattern: terminalSafeText(scoped.pattern) })] : []),
         fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })]}
-      onDecide={yes => void decideApproval(approval, remaining, yes)} />;
+      onDecide={(yes, standing) => void decideApproval(approval, remaining, yes, standing)} />;
   } else if (work && modal?.kind === 'cancel') {
     const view = modal.run;
     card = <DecisionCard key={`cancel:${view.runId}`} title={fillTemplate(work.cancelTitle, { run: view.runId })} prompt={work.cancelPrompt}

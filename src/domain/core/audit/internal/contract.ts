@@ -65,6 +65,17 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('authority-refusal'), stage: z.enum(['decide', 'submit', 'settle']), code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
     operation: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), commandId: identitySchema.nullable(), approvalId: identitySchema.nullable(),
     decider: auditPrincipalSchema.nullable() }).strict(),
+  /**
+   * A standing approval (PERSISTENT-APPROVALS G6, owner 2026-09-28) at work. `remembered`: the person answered "this session" on an approval
+   * card — recorded before the memory holds it (no record, no memory). `used`: a later call the standing approval lowered from an owner
+   * approval to a run, recorded before the effect (no record, nothing runs). `source: grant` is the person's own persisted grant (its
+   * creation is the `authority-change` event); the pattern itself is named by its digest and the call's own summary, never the raw text.
+   */
+  z.object({ kind: z.literal('standing-approval'), phase: z.enum(['remembered', 'used']), source: z.enum(['session', 'grant']), grantId: identitySchema.nullable(),
+    cell: z.enum(['edit', 'shell-read-low', 'shell-narrow-mutating']), keyDigest: digest, approvalId: identitySchema.nullable(),
+    tool: z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict(),
+    call: z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict(),
+    summary: auditSummarySchema }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();

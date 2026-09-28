@@ -16,3 +16,6 @@ export type { DelegatedRule, DelegationVerdict, PolicyChange, PolicyChangePlan }
 export { describePolicyChange, POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
 export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';
 export type { PolicyBinding } from './internal/schema.js';
+export { isStandingGrantId, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, STANDING_PATTERN_MAX_CHARS, standingCell, standingCovers, standingGrantChange, standingGrantId,
+  standingPattern, standingRevokeChange } from './internal/standing.js';
+export type { StandingCell, StandingPattern, StandingPatternResult, StandingRefusal } from './internal/standing.js';
