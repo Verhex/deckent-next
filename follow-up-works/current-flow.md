@@ -29,6 +29,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   etiketi bağlandı. arch delta'lar uygulandı (lint-arch 0), composition 4912/5000.
 - Tam verify 646065c exit 0 (409/2731). Astra 2154 REVISE: bwrap R1 toolchain kardeş bağı HOME'a, R2 hard link takma adı, R3 okunamayan/derin
   dizin maskesiz → `lane/bwrap` `985d82a` birleşti (canonical bind, nlink>1 maskesi, eksik tarama tmpfs/ret; bwrap ~145 ms/çağrı).
+- Astra 2156 REVISE: R2 sınıfı Git özel yollarında (korunan inode'a hard link `.git` dosyası / `.git/` içi takma ad iki realm'de okunuyor,
+  bwrap'ta yazılıyor) → `lane/bwrap` `dd36e3d` birleşti (inode tabanı Git grant'lerinden önce ve tüm Git metadata'sına; doğrulanmış nesne muafiyeti;
+  bwrap ~178 ms, Landlock ~124 ms/çağrı).
 - Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB ile birlikte).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
