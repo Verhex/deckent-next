@@ -211,7 +211,9 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     const f = await fixture({ worktree: true });
     await mkdir(join(f.project, 'sub')); await writeFile(join(f.project, 'sub', '.git'), `gitdir: ${f.home}\n`);
     const forged = await f.run('cat ~/note.txt 2>&1; echo x > .git 2>&1; echo "gitfile=$?"');
-    expect(forged.output).toMatch(/note\.txt: No such file or directory\n.*\.git: Read-only file system\ngitfile=1/u); expect(forged.output).not.toContain('SECRET');
+    // The shell reports a failed redirection on its own stderr, so its order against stdout is not fixed: check each line alone.
+    expect(forged.output).toMatch(/note\.txt: No such file or directory/u); expect(forged.output).toMatch(/\.git: Read-only file system/u);
+    expect(forged.output).toMatch(/^gitfile=1$/mu); expect(forged.output).not.toContain('SECRET');
     const gitdir = join(f.main, '.git', 'worktrees', 'worktree');
     const result = await f.run(`git status --short; echo "status=$?"; git log --oneline -1 | wc -l; echo x >> "${gitdir}/config" 2>&1; echo "gitdir=$?"; echo x >> "${f.main}/.git/config" 2>&1; echo "common=$?"`);
     expect(result.output).toMatch(/status=0\n1\n/u); expect(result.output).toMatch(/gitdir=1/u); expect(result.output).toMatch(/common=1/u);
