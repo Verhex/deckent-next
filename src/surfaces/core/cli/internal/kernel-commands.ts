@@ -6,7 +6,8 @@ import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, Task
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
-import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler } from './init.js';
+import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
+  PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
 import type { ToolchainCurrencyReport } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
@@ -71,6 +72,10 @@ export interface CommandContext extends ModelCommandContext {
   inspectInstallation?: InstallationInspectionHandler;
   applyInstallation?: InstallationApplyHandler;
   resumeInstallation?: InstallationResumeHandler;
+  previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
+  applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
+  // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
+  inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
@@ -152,9 +157,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // Explicit opt-in only: default doctor stays network-free; the report never updates, rebuilds or activates a worker.
   if (args.toolchains && !context.inspectToolchainCurrency) throw ErrorRegistry.createError('CLI_USAGE');
   const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
+  // SCR-B: a local, soft read (no template, no policy file, or an unsafe/custom one -> null); never blocks doctor.
+  const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: 'ready',
+    company: { companyId: config.company.id }, status: 'ready', policyTemplate,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),

@@ -15,17 +15,31 @@ export interface InstallationResumeInput {
 export type InstallationPublicationResult = Awaited<ReturnType<InstallationPublicationApplication['apply']>>;
 export type InstallationApplyHandler = (projectRoot: string, input: InstallationApplyInput) => Promise<InstallationPublicationResult>;
 export type InstallationResumeHandler = (projectRoot: string, input: InstallationResumeInput) => Promise<InstallationPublicationResult>;
+// SCR-B (owner 2026-09-28, checkpoint option B): a Docker/pool-free installation of just policy.json + bindings.json,
+// journaled the same way as the resources above, for a fresh, terminal-only project. No supplied profile: the
+// versioned default template is product-fixed (proof/SCR-B-2026-09-28/review.md), the only input is which scope
+// it is granted for.
+export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
+export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
 export async function initCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
-  if (!['preview', 'inspect', 'apply', 'resume', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
+  let scopeId: string | undefined, policyPreview = false, policyApply = false;
+  if (!['preview', 'inspect', 'apply', 'resume', 'policy', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--json' && !json) { json = true; continue; }
     if (flag === '--allow-shutdown' && !allowShutdown) { allowShutdown = true; continue; }
     if (flag === '--no-color') continue;
+    if (flag === '--preview' && action === 'policy' && !policyPreview && !policyApply) { policyPreview = true; continue; }
+    if (flag === '--apply' && action === 'policy' && !policyApply && !policyPreview) { policyApply = true; continue; }
+    if (flag === '--scope' && action === 'policy' && scopeId === undefined) {
+      scopeId = argv[++i];
+      if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
+      continue;
+    }
     if (flag === '--docker-executable' && ['inspect', 'apply', 'resume'].includes(action ?? '') && dockerExecutable === undefined) {
       dockerExecutable = argv[++i];
       if (!dockerExecutable || dockerExecutable.startsWith('-') || !isAbsolute(dockerExecutable)) throw ErrorRegistry.createError('CLI_USAGE');
@@ -60,6 +74,21 @@ export async function initCommand(argv: readonly string[], context: CommandConte
     if (!dockerExecutable || !proposalDigest || !acceptCustom || !context.resumeInstallation) throw ErrorRegistry.createError('CLI_USAGE');
     const result = await context.resumeInstallation(root, { allowShutdown, dockerExecutable, proposalDigest, acceptCustom: true });
     emit(result, { ...sinks, json, render: value => `${t('cli.init.applied', {}, locale)}\n${formatValue(value)}` });
+    return;
+  }
+  if (action === 'policy') {
+    if (!scopeId || policyPreview === policyApply || profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown) {
+      throw ErrorRegistry.createError('CLI_USAGE');
+    }
+    if (policyApply) {
+      if (!context.applyPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
+      const result = await context.applyPolicyTemplateInstallation(root, scopeId);
+      emit(result, { ...sinks, json, render: value => formatValue(value) });
+      return;
+    }
+    if (!context.previewPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
+    const result = await context.previewPolicyTemplateInstallation(root, scopeId);
+    emit(result, { ...sinks, json, render: value => formatValue(value) });
     return;
   }
   if (!profilePath) throw ErrorRegistry.createError('INSTALL_PROFILE_REQUIRED');
