@@ -57,11 +57,11 @@ function expectedIdentity(path: string): string | null {
  * (Astra 2158 R2): content cannot change without the kernel advancing ctime (a user may set mtime back with `utime`, never ctime),
  * and the same inode under another object name is another question. A ctime change from any cause re-hashes the file.
  */
-export async function isVerifiedGitObject(path: string): Promise<boolean> {
+export async function isVerifiedGitObject(path: string, ops: FsOps = fsOpsFor(path)): Promise<boolean> {
   const identity = expectedIdentity(path);
   if (identity === null) return false;
   let key: string;
-  try { const info = await stat(path); key = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}:${identity}`; } catch { return false; }
+  try { const info = await ops.stat(path); key = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}:${identity}`; } catch { return false; }
   const cached = verified.get(key);
   if (cached !== undefined) return cached;
   const result = await verify(path).catch(() => false);
@@ -98,7 +98,7 @@ export async function scanGitDirectory(dir: string, ops: FsOps = fsOpsFor(dir)):
     if (!entry.isFile()) return;
     const path = join(dir, entry.name);
     const links = await ops.nlink(path);
-    (links === 1 || await isVerifiedGitObject(path) ? cleanFiles : suspectFiles).push(entry.name);
+    (links === 1 || await isVerifiedGitObject(path, ops) ? cleanFiles : suspectFiles).push(entry.name);
   }));
   return Object.freeze({ readable: true, suspectFiles: suspectFiles.sort(), cleanFiles: cleanFiles.sort(), directories: directories.sort() });
 }

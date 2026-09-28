@@ -1,5 +1,5 @@
-import { lstatSync, readdirSync, statfsSync, type Dirent, type StatsFsBase } from 'node:fs';
-import { lstat, readdir } from 'node:fs/promises';
+import { lstatSync, readdirSync, statfsSync, statSync, type Dirent, type Stats, type StatsFsBase } from 'node:fs';
+import { lstat, readdir, stat } from 'node:fs/promises';
 
 /**
  * How a sandbox scan reads the file system (SANDBOX-SPEED). The deny/inode-floor scans of every shell call (bubblewrap and Landlock) read
@@ -16,17 +16,21 @@ export interface FsOps {
   readonly readdir: (path: string) => Dirent[] | Promise<Dirent[]>;
   /** The link count of a path; 2 (multi-linked, so suspect) when it cannot be read, never a thrown error. */
   readonly nlink: (path: string) => number | Promise<number>;
+  /** `stat` of a path (following links); throws (or rejects) when it cannot be read. */
+  readonly stat: (path: string) => Stats | Promise<Stats>;
 }
 
 export const ASYNC_FS_OPS: FsOps = Object.freeze({
   kind: 'async',
   readdir: (path: string) => readdir(path, { withFileTypes: true }),
   nlink: (path: string) => lstat(path).then(info => info.nlink, () => 2),
+  stat: (path: string) => stat(path),
 });
 export const SYNC_FS_OPS: FsOps = Object.freeze({
   kind: 'sync',
   readdir: (path: string) => readdirSync(path, { withFileTypes: true }),
   nlink: (path: string) => { try { return lstatSync(path).nlink; } catch { return 2; } },
+  stat: (path: string) => statSync(path),
 });
 
 /** `f_type` values of file systems whose metadata is served locally (statfs(2), Linux man-pages 6.19): ext2/3/4, XFS, Btrfs, tmpfs,

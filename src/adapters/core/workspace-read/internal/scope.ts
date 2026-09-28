@@ -25,6 +25,20 @@ type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: '
  * so its cost is bounded by pattern length × path length for any pattern — a hostile pattern cannot stall the service.
  */
 export function createGlobMatcher(pattern: string): (path: string) => boolean {
+  // Shapes the deny list is made of match without the dynamic program (every shell call asks thousands of paths against every pattern):
+  // `**/<segment glob>` matches the path's last segment (its `**/` is any run of whole directories, so the rest is exactly the final
+  // segment); a literal is an equality; a literal head with one trailing `*` (`.brain/memory.db*`) or `**` (`.git/**`) is a prefix
+  // test, `*` also requiring no slash after it. Equivalence with the general matcher is the oracle test's subject.
+  if (pattern.startsWith('**/') && !/[/]|\*\*/u.test(pattern.slice(3))) {
+    const last = createGlobMatcher(pattern.slice(3));
+    return (path: string) => last(path.slice(path.lastIndexOf('/') + 1));
+  }
+  if (!/[*?]/u.test(pattern)) return (path: string) => path === pattern;
+  const tail = /^([^*?]*)(\*\*|\*)$/u.exec(pattern);
+  if (tail) {
+    const [, literal = '', kind] = tail;
+    return kind === '**' ? (path: string) => path.startsWith(literal) : (path: string) => path.startsWith(literal) && !path.includes('/', literal.length);
+  }
   const tokens: GlobToken[] = [];
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i]!;
