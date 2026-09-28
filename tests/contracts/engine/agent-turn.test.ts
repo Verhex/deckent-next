@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { readFileSync as readFixture } from 'node:fs';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { AGENT_TURN_NO_PROGRESS_NOTE, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
+import { AGENT_TURN_NO_PROGRESS_NOTE, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
   type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
@@ -392,4 +394,60 @@ it('writes the summary input newest-first within its byte bound and reads the su
   const summary = { objective: 'o', findings: ['f'], decisions: [], unresolved: [], nextActions: [], inspectedAreas: ['src/a.ts'] };
   expect(parseAgentCompactionSummary(`Here:\n\`\`\`json\n${JSON.stringify(summary)}\n\`\`\``)).toEqual(summary);
   for (const bad of [null, '', 'no object', '{"objective":1}', '{ not json }']) expect(parseAgentCompactionSummary(bad)).toBeNull();
+});
+
+// TERM-FEEDBACK-1 (live turn 975da614): Qwen answered the summary call with every list field as one string; the strict schema
+// refused it and the turn ended in `error`. The answer is normalized into the same bounded shape, losing no text.
+it('normalizes the live summary answer whose list fields are single strings, keeping all of its text within the bounds', () => {
+  const fixture = JSON.parse(readFixture(join(import.meta.dirname, '../../fixtures/agent-turn/compaction-response-975da614.json'), 'utf8')) as { content: string };
+  const raw = JSON.parse(fixture.content) as Record<string, string>;
+  const summary = parseAgentCompactionSummary(fixture.content);
+  expect(summary).not.toBeNull();
+  expect(agentCompactionSummarySchema.safeParse(summary).success).toBe(true);
+  expect(summary!.objective).toBe(raw['objective']);
+  for (const field of ['findings', 'decisions', 'unresolved', 'nextActions', 'inspectedAreas'] as const) {
+    // The findings string is longer than one item may be: it is split at a space, never cut.
+    expect(summary![field].join(' ').replace(/\s+/g, ' ')).toBe(raw[field]!.replace(/\s+/g, ' ').trim());
+  }
+  expect(summary!.findings.length).toBeGreaterThan(1);
+});
+
+it('fills absent lists, stringifies scalar items, bounds item count and objective length, and still refuses an answer without an objective', () => {
+  const many = Array.from({ length: 45 }, (_, i) => `f${i}`);
+  const summary = parseAgentCompactionSummary(JSON.stringify({ objective: 'o'.repeat(2_500), findings: many, decisions: [1, true, null, { a: 1 }] }))!;
+  expect(summary.decisions).toEqual(['1', 'true', '{"a":1}']);
+  expect(summary.unresolved).toEqual([]); expect(summary.nextActions).toEqual([]); expect(summary.inspectedAreas).toEqual([]);
+  expect(summary.findings).toHaveLength(40); expect(summary.findings.at(-1)).toBe('[6 more items omitted by Deckent]');
+  expect(summary.objective.length).toBeLessThanOrEqual(2_000); expect(summary.objective).toMatch(/…\[cut: 2500 characters, sha256 [0-9a-f]{16}\]$/);
+  expect(agentCompactionSummarySchema.safeParse(summary).success).toBe(true);
+  for (const bad of ['{"findings":["x"]}', '{"objective":{"x":1}}', '[1,2]']) expect(parseAgentCompactionSummary(bad)).toBeNull();
+});
+
+it('compacts mechanically when the summary answer is unreadable: labelled not model-written, the round runs, and the turn says so', async () => {
+  const history = [{ role: 'system' as const, content: 'S' }, ...Array.from({ length: 12 }, (_, i) => i % 2
+    ? { role: 'assistant' as const, content: `answer ${i} ${'x'.repeat(6_000)}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
+  { role: 'user' as const, content: 'q' }] as AgentTurnMessage[];
+  const sent: (readonly AgentTurnMessage[])[] = [];
+  const p = ports([messages => { sent.push(messages); return answer('done'); }]), events: AgentTurnEvent[] = [];
+  const result = await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: event => events.push(event) },
+    { ...p.value, measure: async input => ({ promptTokens: JSON.stringify(input.messages).length, windowTokens: 40_000, quality: 'provider-count' }),
+      summarize: async () => 'unreadable' });
+  expect(result).toMatchObject({ finish: 'stop', answer: 'done' });
+  expect(result.note).toMatch(/without a model summary/);
+  const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnEvent, { kind: 'compacted' }>;
+  const excerpt = compacted.messages[0]!.content;
+  expect(excerpt).toContain('not written by the model'); expect(excerpt).not.toContain('Summary (model-written)');
+  expect(excerpt).toContain('1. question 0'); expect(excerpt).toMatch(/\[assistant\] answer 1 x+ …\[cut: 6009 characters/);
+  // The mechanical excerpt relieves the pressure: the next measurement is below the high-water mark.
+  expect(JSON.stringify(sent[0]).length).toBeLessThan(40_000 * 0.75);
+});
+
+it('closes the turn with a note that says how to go on when the summary call itself failed', async () => {
+  const history = [{ role: 'system' as const, content: 'S' }, ...Array.from({ length: 12 }, (_, i) =>
+    ({ role: i % 2 ? 'assistant' as const : 'user' as const, content: `m${i}`, ...(i % 2 ? { toolCalls: [] } : {}) })),
+  { role: 'user' as const, content: 'q' }] as AgentTurnMessage[];
+  const failed = ports([answer('never')]);
+  const result = await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: () => undefined },
+    { ...failed.value, measure: async () => ({ promptTokens: 9000, windowTokens: 10_000, quality: 'provider-count' }), summarize: async () => null });
+  expect(result.note).toMatch(/history is unchanged.*Send the message again to retry, or start a new conversation/);
 });

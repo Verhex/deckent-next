@@ -241,7 +241,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
         const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
         if (result?.receipt.outcome?.state !== 'responded') return null;
-        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result));
+        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result)) ?? 'unreadable';
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);

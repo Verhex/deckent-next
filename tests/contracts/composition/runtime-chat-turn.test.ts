@@ -301,6 +301,30 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
   }, 30_000);
 
+  // TERM-FEEDBACK-1 (live turn 975da614): the recorded summary answer (every list field one string) compacts and the turn goes on; an
+  // answer with no readable summary compacts with Deckent's labelled mechanical excerpt and the turn's note says so.
+  it('continues the turn with the live summary answer, and with a labelled mechanical excerpt when the answer is unreadable', async () => {
+    const live = JSON.parse(await readFile(join(import.meta.dirname, '../../fixtures/agent-turn/compaction-response-975da614.json'), 'utf8')) as { content: string };
+    const history = [{ role: 'system' as const, content: 'SYS' }, ...Array.from({ length: 16 }, (_, i) => i % 2
+      ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] } : { role: 'user' as const, content: `question ${i}` }),
+    { role: 'user' as const, content: 'go on' }];
+    for (const [turnId, summary] of [['turn-live-summary', live.content], ['turn-unreadable-summary', 'I summarized it for you.']] as const) {
+      const f = await runtime({ tokenize: true, windowTokens: 100_000, count: body => body.messages.length > 12 ? 90_000 : 900 }); await f.start();
+      f.state.script = [{ summary }, { content: 'Going on.' }];
+      const events: AgentTurnStreamEvent[] = [];
+      const result = await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: history }, event => events.push(event));
+      expect(result).toMatchObject({ finish: 'stop', answer: 'Going on.' });
+      const compacted = events.find(event => event.kind === 'compacted') as Extract<AgentTurnStreamEvent, { kind: 'compacted' }>;
+      if (summary === live.content) {
+        expect(result.note).toBeNull();
+        expect(compacted.messages[0]!.content).toContain('Summary (model-written):'); expect(compacted.messages[0]!.content).toContain('arch.json: tier order');
+      } else {
+        expect(result.note).toBe(engine.AGENT_TURN_MECHANICAL_COMPACTION_NOTE);
+        expect(compacted.messages[0]!.content).toContain('not written by the model'); expect(compacted.messages[0]!.content).toContain('[assistant] answer 1');
+      }
+    }
+  }, 60_000);
+
   // TL-C (D4): the model-facing system prompt is the service's, in code, versioned; the client's catalog text follows it.
   it('sends one system message: the service segment with the workspace layout and tool rules, then the client prompt, with no contradiction (D4)', async () => {
     const f = await runtime({ dataInside: true }); await f.start();
