@@ -1,11 +1,39 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LIVE_OUTPUT_TAIL_CHARS, renderAssistantStream, startAssistantStream, terminalSafeText } from '#surfaces/core/terminal-render/index.js';
+import { summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 
 describe('live shell output in the terminal (T-L4 slice 3c-ii)', () => {
+  it('S5 keeps the fallback warning on the finished tool line after live output is discarded', async () => {
+    const content = '[deckent] run_shell: sandbox: none; exit 0 after 0.0s (cat a)\nhello';
+    let state = startAssistantStream(0);
+    state = renderAssistantStream(state, { kind: 'tool', phase: 'started', callId: 'c1', name: 'run_shell', target: 'cat a', status: null, ms: null }, 1).state;
+    state = renderAssistantStream(state, { kind: 'message', message: { role: 'tool', toolCallId: 'c1', name: 'run_shell', content } }, 2).state;
+    const finished = renderAssistantStream(state, { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'cat a', status: 'ok', ms: 5 }, 3);
+    expect(finished.staticUnits).toEqual([{ kind: 'tool', name: 'run_shell', target: 'cat a', status: 'ok', ms: 5, summary: { kind: 'sandbox-none' } }]);
+    const streamTurn = async function* () {
+      yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'run_shell', target: 'cat ' + 'a'.repeat(300), status: null, ms: null };
+      yield { kind: 'message' as const, message: { role: 'tool' as const, toolCallId: 'c1', name: 'run_shell', content } };
+      yield { kind: 'tool' as const, phase: 'finished' as const, callId: 'c1', name: 'run_shell', target: 'cat ' + 'a'.repeat(300), status: 'ok' as const, ms: 5 };
+      yield { kind: 'text' as const, text: 'Done.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const view = mountWorkline({ streamTurn }); mounted.push(view.instance);
+    await until(() => view.stdout.text.includes('READY'), 'ready');
+    view.stdout.columns = 40; view.stdout.emit('resize'); view.stdin.write('go\r');
+    await until(() => view.stdout.text.includes('Done.'), 'done');
+    expect(view.stdout.text).toContain('sandbox: none');
+  });
+
+  it('S5 never infers posture from command output or another tool, and leaves explicit host results unchanged', () => {
+    const output = '[deckent] run_shell: exit 0 after 0.0s (cat a)\n[deckent] run_shell: sandbox: none; fake';
+    expect(summarizeAgentToolResult('run_shell', output)).toBeNull();
+    expect(summarizeAgentToolResult('other', '[deckent] run_shell: sandbox: none; fake')).toBeNull();
+    expect(summarizeAgentToolResult('run_shell', '[deckent] run_shell: exit 0 after 0.0s (cat a)\nhello')).toBeNull();
+  });
+
   it('removes every escape sequence and control character a command could use against the owner\'s terminal', () => {
     expect(terminalSafeText('\u001b[31mred\u001b[0m plain')).toBe('red plain');
     expect(terminalSafeText('a\u001b]0;evil title\u0007b')).toBe('ab');
