@@ -3,6 +3,7 @@ import { inspectConfiguredWorkers } from '#composition/core/worker-observation/i
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { inspectConfiguredWorkerTranscript } from '#composition/core/worker-observation/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
+import { listConfiguredStandingGrants, revokeConfiguredStandingGrant } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
@@ -95,6 +96,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
+    listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input),

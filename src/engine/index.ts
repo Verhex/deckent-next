@@ -15,7 +15,7 @@ export { ServicePolicyAuthorization, decideAgentToolCall, PermissionModeApplicat
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from '#engine/core/policy/index.js';
 export { AuthorityChangeError, authorityChangeAuditEvent, chainAuthorityRevision } from '#engine/core/policy/index.js';
 export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from '#engine/core/policy/index.js';
-export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from '#engine/core/policy/index.js';
+export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation, StandingApproval } from '#engine/core/policy/index.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from '#engine/core/policy/index.js';
 export { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
 export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryEntry, DispatchInventoryPage, DispatchInventoryStore, DispatchInventoryAuthorization } from '#engine/core/dispatch/index.js';

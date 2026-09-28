@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
 import { AuditApplication, PolicyAuthorizationError, agentToolArgumentsDigest, decideAgentToolCall, type AgentToolCallCell, type AgentToolCallDecision,
-  type EffectApprovalGate, type ShellPermissionTier } from '#engine/index.js';
+  type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
@@ -44,7 +44,9 @@ const isAuditedDecision = (audited: Relaxed, again: AgentToolCallDecision) => ag
  */
 export function createAgentCallDecisions(input: { readonly context: Context; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly edits: (tool: string) => ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
-  readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null }) {
+  readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null;
+  /** This conversation's "this session" memory (a service-process map). */
+  readonly standing?: { readonly memory: SessionStanding; readonly session: string } }) {
   const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name;
   const stored = new Map<string, Stored>();
@@ -52,11 +54,14 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   // An edit tool no area serves still carries the project's write operation (never a one-sided decision).
   const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? edits(tool.name)?.operation ?? WORKSPACE_FILE_WRITE_OPERATION.operation
     : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : fetches(tool) ? NETWORK_FETCH_OPERATION.operation : null;
+  const standingOf = (tool: AgentToolSpec, cell: AgentToolCallCell, args: Record<string, unknown> | undefined) => !args ? null : standingCallKey({ tool: tool.name, cell,
+    path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : null, command: typeof args['command'] === 'string' ? args['command'] : null },
+  input.standing && { sessions: input.standing.memory, session: input.standing.session });
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
-  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown): Promise<AgentToolCallDecision | null> => {
+  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell }); }
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell, standing: standingOf(tool, cell, args) }); }
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
@@ -70,6 +75,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true))); }
     finally { store.close(); }
   };
+  const callSummary = (tool: AgentToolSpec, args: Record<string, unknown>) => tool.toolClass === 'edit' ? { kind: 'edit' as const, path: edits(tool.name)?.target(tool.name, args) ?? '' }
+    : { kind: 'shell' as const, head: String(args['command'] ?? '').slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) };
+  const standingEvent = (phase: 'remembered' | 'used', tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cell: Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
+    revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
+    principal: context.principal, revision, atMs: clock.sample().wallMs, standing, cell, approvalId, tool, argsDigest: agentToolArgumentsDigest(tool.name, args), summary: callSummary(tool, args) });
   return {
     async authorize(tool: AgentToolSpec, args: Record<string, unknown> | undefined): Promise<'allow' | 'deny' | 'require-approval'> {
       if (!args) return (await decide(tool, 'read'))?.decision === 'deny' ? 'deny' : 'require-approval';
@@ -87,7 +97,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
         : fetches(tool) && fetch ? (plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)(fetch.plan(args)) : `[deckent] ${tool.name}: error=unknown-tool`;
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? `[deckent] ${tool.name}: error=failed` }); return 'require-approval'; }
-      const decision = await decide(tool, cell, snapshot);
+      const decision = await decide(tool, cell, snapshot, args);
       if (!decision) return 'deny';
       stored.set(key, { cell, decision });
       return decision.decision;
@@ -97,6 +107,16 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const kept = stored.get(keyOf(tool, args));
       if (kept && 'planError' in kept) return { ok: false, text: kept.planError };
       return { ok: true, requireApproval: kept?.decision.decision !== 'allow' };
+    },
+    /** "This session" answer of the card (G6): audited first (no record, no memory); only a standing cell can be remembered. */
+    async remember(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string): Promise<boolean> {
+      const kept = stored.get(keyOf(tool, args)), memory = input.standing;
+      const found = kept && 'cell' in kept ? standingOf(tool, kept.cell, args) : null;
+      if (!memory || !kept || !found) return false;
+      try { await withAudit(audit => audit.record(standingEvent('remembered', tool, args, execution, callId, found.cell, 'decision' in kept ? kept.decision.revision : '', { source: 'session', key: found.key, grantId: null }, approvalId))); }
+      catch { return false; }
+      memory.memory.remember(memory.session, found.key);
+      return true;
     },
     /**
      * Runs one edit or shell call at its effect with the right gate. `run` performs the C11 effect with the gate it is given.
@@ -109,23 +129,22 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
         if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner);
-        const fresh = await decide(tool, kept.cell);
+        const fresh = await decide(tool, kept.cell, undefined, args);
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };
-        const relaxation = fresh.relaxation;
-        if (!relaxation) {
+        const { relaxation, standing } = fresh;
+        if (!relaxation && !standing) {
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
           if (!fetches(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
           return await run(inner);
         }
-        const argsDigest = agentToolArgumentsDigest(tool.name, args), path = edits(tool.name)?.target(tool.name, args) ?? null, command = String(args['command'] ?? '');
-        const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: permissionModeEventId(scopeId, turnId, execution, argsDigest), scopeId,
-          principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision: fresh.revision, atMs: clock.sample().wallMs,
+        const event: AuditEvent = relaxation ? { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject },
+          policyRevision: fresh.revision, atMs: clock.sample().wallMs, eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args)),
           subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool: { name: tool.name, version: tool.version },
             call: { turnId, round: execution.round, index: execution.index, callId }, grants: { company: relaxation.company, person: relaxation.person },
-            decision: { previous: 'require-approval', next: 'allow' },
-            summary: tool.toolClass === 'edit' ? { kind: 'edit', path: path ?? '' } : { kind: 'shell', head: command.slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest } } };
+            decision: { previous: 'require-approval', next: 'allow' }, summary: callSummary(tool, args) } }
+          : standingEvent('used', tool, args, execution, callId, standingOf(tool, kept.cell, args)!.cell, fresh.revision, standing!, null);
         // No audit, no relaxation: the event is durable before anything is written or spawned.
         try { await withAudit(audit => audit.record(event)); }
         catch { return { status: 'error', text: `[deckent] ${tool.name}: error=audit-unavailable (the permission mode's decision could not be recorded; nothing ran)` }; }
@@ -136,9 +155,9 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
               if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               // The same decision again on the policy as it is now: a deny since wins; anything but the audited relaxation (a lost one,
               // another mode or revision, a plain allow) asks, and nothing runs here.
-              const again = await decide(tool, kept.cell);
+              const again = await decide(tool, kept.cell, undefined, args);
               if (!again || again.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
-              if (!isAuditedDecision({ ...fresh, relaxation }, again)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+              if (!(relaxation ? isAuditedDecision({ ...fresh, relaxation }, again) : isAuditedStanding(standing!, fresh.revision, again))) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               return inner.admit(descriptor, 'allow', command, principal, context);
             }
             return inner.admit(descriptor, decision, command, principal, context);

@@ -12,7 +12,9 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
   approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}', approvalPrompt: 'A-PROMPT',
   approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}', approvalMore: 'A-MORE {count}',
-  approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
+  approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL',
+  approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS', savedSession: 'S-SAVED-SESSION {id}',
+    savedAlways: 'S-SAVED-ALWAYS {id}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
@@ -351,5 +353,77 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
     await settle(20); await view.type('go\r');
     await view.card('A-TITLE', 'card');
     await until(() => view.stdout.text.includes('A-UNSETTLED appr-3') && !view.frame().includes('A-TITLE'), 'card closed with the unsettled notice');
+  });
+});
+
+// PERSISTENT-APPROVALS G6: a card the service marks with standing scopes offers exactly those keys; the choice reaches the port as a typed
+// argument; the view shows what the service answered (saved or the reason), and never offers a key the service did not name.
+describe('work surface: approval card with standing scopes (G6)', () => {
+  const scoped = (scopes: readonly ('session' | 'always')[], id: string) => async function* () {
+    yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: id, revision: 0, summary: 'run_shell · npm test · 0123456789ab',
+      preview: '$ npm test', expiresAt: Date.now() + 600_000, standing: { scopes, pattern: 'npm test' } };
+    await settle(400);
+    yield { kind: 'text' as const, text: 'Done.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+  };
+  const port = (calls: unknown[][], answer: (standing: string | undefined) => unknown = () => undefined) => ({ scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; },
+    async inspectRun() { return null; },
+    async decideApproval(approval: { approvalId: string; revision: number }, decision: 'allow' | 'deny', standing?: string) {
+      calls.push([approval.approvalId, decision, standing]);
+      return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0, ...(answer(standing) as object ?? {}) };
+    } });
+  const open = async (scopes: readonly ('session' | 'always')[], calls: unknown[][], answer?: (standing: string | undefined) => unknown) => {
+    const view = mount({ streamTurn: scoped(scopes, 'appr-s') as never, ledger: port(calls, answer) as never });
+    await settle(20); await view.type('run it\r');
+    await view.card('A-TITLE', 'scoped card');
+    return view;
+  };
+
+  it('shows what a standing answer covers and the offered keys; s and a decide allow with that scope and report what the service saved', async () => {
+    const calls: unknown[][] = [];
+    const view = await open(['session', 'always'], calls, standing => ({ standing: { scope: standing, saved: true } }));
+    expect(view.stdout.text).toContain('S-COVERS npm test'); expect(view.stdout.text).toContain('S-PROMPT-BOTH');
+    await view.type('a');
+    await until(() => view.stdout.text.includes('S-SAVED-ALWAYS appr-s'), 'always saved shown');
+    expect(calls).toEqual([['appr-s', 'allow', 'always']]);
+    const session: unknown[][] = [];
+    const second = await open(['session', 'always'], session, standing => ({ standing: { scope: standing, saved: true } }));
+    await second.type('s');
+    await until(() => second.stdout.text.includes('S-SAVED-SESSION appr-s'), 'session saved shown');
+    expect(session).toEqual([['appr-s', 'allow', 'session']]);
+  });
+
+  it('a scope the service did not offer is not a key; y stays once, n and Enter deny; a not-saved answer is shown with its reason', async () => {
+    const onlySession: unknown[][] = [];
+    const view = await open(['session'], onlySession);
+    expect(view.stdout.text).toContain('S-PROMPT-SESSION'); expect(view.stdout.text).not.toContain('S-PROMPT-BOTH');
+    await view.type('a'); await settle(60);
+    expect(onlySession).toEqual([]);
+    await view.type('y');
+    await until(() => view.stdout.text.includes('A-ALLOWED appr-s'), 'once');
+    expect(onlySession).toEqual([['appr-s', 'allow', undefined]]);
+    const refused: unknown[][] = [];
+    const second = await open(['session', 'always'], refused, standing => ({ standing: { scope: standing, saved: false, reason: 'STANDING_DELEGATION' } }));
+    await second.type('a');
+    await until(() => second.stdout.text.includes('S-NOT-SAVED-ALWAYS appr-s STANDING_DELEGATION'), 'not saved shown');
+    const denied: unknown[][] = [];
+    const third = await open(['session', 'always'], denied);
+    await third.type('\r');
+    await until(() => third.stdout.text.includes('A-DENIED appr-s'), 'enter denies');
+    expect(denied).toEqual([['appr-s', 'deny', undefined]]);
+  });
+
+  it('without standing scopes the card is the plain y/N card: s and a do nothing', async () => {
+    const calls: unknown[][] = [];
+    const view = mount({ streamTurn: (async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-p', revision: 0, summary: 's', preview: 'p', expiresAt: Date.now() + 600_000 };
+      await settle(400);
+      yield { kind: 'done' as const, finish: 'stop' as const };
+    }) as never, ledger: port(calls) as never });
+    await settle(20); await view.type('go\r');
+    await view.card('A-PROMPT', 'plain card');
+    await view.type('sa'); await settle(60);
+    expect(calls).toEqual([]);
+    await view.type('n');
+    await until(() => view.stdout.text.includes('A-DENIED appr-p'), 'denied');
   });
 });

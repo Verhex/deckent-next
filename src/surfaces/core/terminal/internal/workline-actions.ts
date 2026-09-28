@@ -50,6 +50,19 @@ export interface WorkSurfaceLabels {
   readonly approvalMore: string;
   readonly approvalNotify: string;
   readonly approvalPollFailed: string;
+  /** Standing scopes on an approval card (PERSISTENT-APPROVALS G6); absent = the plain y/N card only. */
+  readonly approvalStanding?: {
+    /** `{pattern}`: exactly what a standing answer covers (the command, or the directory pattern). */
+    readonly covers: string;
+    readonly promptBoth: string;
+    readonly promptSession: string;
+    readonly promptAlways: string;
+    /** `{id}`: the approval was allowed and the standing answer saved; `notSaved…` adds `{reason}` (the call was allowed once either way). */
+    readonly savedSession: string;
+    readonly savedAlways: string;
+    readonly notSavedSession: string;
+    readonly notSavedAlways: string;
+  };
   readonly cancelUsage: string;
   readonly cancelTitle: string;
   readonly cancelDetail: string;

@@ -18,6 +18,8 @@ export const policyResources = Object.freeze({
   // A person setting their own terminal permission mode (T-L4 slice 4c): the resource id is the target mode; the rule never names
   // whose entry — only the caller's own entry is ever written. The mode itself creates no authority.
   permissionMode: Object.freeze({ kind: 'permission-mode' as const, actions: Object.freeze(['set'] as const) }),
+  // A person's standing approval of one call pattern (PERSISTENT-APPROVALS G6): the resource id is the pattern key. It only lowers an approval.
+  agentToolCall: Object.freeze({ kind: 'agent-tool-call' as const, actions: Object.freeze(['invoke'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

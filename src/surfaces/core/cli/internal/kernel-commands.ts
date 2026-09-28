@@ -75,6 +75,8 @@ export interface CommandContext extends ModelCommandContext {
   previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
   applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
+  listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
+  revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
