@@ -71,7 +71,7 @@ const extensionOf = (contentType: string | null) => EXTENSIONS[mediaType(content
 const isText = (contentType: string | null) => { const type = mediaType(contentType); return type.startsWith('text/') || /(?:json|xml|javascript|yaml)$/u.test(type); };
 
 /** Stores a fetched body in the scratch area (the scratch store owns the quota and the file). */
-export type FetchDeposit = (rel: string, data: Uint8Array) => Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
+export type FetchDeposit = (rel: string, data: Uint8Array, signal?: AbortSignal) => Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 export interface FetchRun { readonly result: HttpFetchResult; readonly stored: Awaited<ReturnType<FetchDeposit>> | null }
 
 const inputSchema = z.object({ url: z.string().min(1).max(FETCH_URL_MAX_CHARS), maxBytes: z.number().int().positive() }).strict();
@@ -93,7 +93,8 @@ export class NetworkFetchTarget implements EffectTarget {
     const result = await fetchHttps({ url: parsed.data.url, maxBytes: Math.min(parsed.data.maxBytes, settings.maxBytes), timeoutMs: settings.timeoutMs,
       maxRedirects: settings.maxRedirects, redirectAllowed, transport, signal });
     const stored = result.outcome === 'response'
-      ? await this.run.deposit(`fetch/${sha256(result.body)}.${extensionOf(result.contentType)}`, result.body).catch(() => ({ ok: false as const, error: 'scratch-unavailable' }))
+      ? await this.run.deposit(`fetch/${sha256(result.body)}.${extensionOf(result.contentType)}`, result.body, signal)
+        .catch(() => ({ ok: false as const, error: signal.aborted ? 'cancelled' : 'scratch-unavailable' }))
       : null;
     this.run.onResult({ result, stored });
     if (result.outcome === 'refused') throw new EffectTargetError('EFFECT_TARGET_REJECTED');

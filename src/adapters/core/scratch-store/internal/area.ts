@@ -108,8 +108,9 @@ export interface ScratchSession {
   spend<T>(rel: string, bytes: number, write: () => Promise<T>, signal?: AbortSignal): Promise<{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string }>;
   /** Ends this turn's hold of the area (idempotent): from then on the sweep may remove it once it is past retention. */
   release(): void;
-  /** Stores bytes a service effect produced (a fetched body, FETCH S7) at `rel`: session and installation quota, 0600, atomic. */
-  deposit(rel: string, data: Uint8Array): Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
+  /** Stores bytes a service effect produced (a fetched body, FETCH S7) at `rel` through `spend` (the one write lane: session and
+   * installation quota admitted with no other scratch write in between), 0600, atomic; `signal` abandons the wait for the lane. */
+  deposit(rel: string, data: Uint8Array, signal?: AbortSignal): Promise<{ readonly ok: true; readonly path: string; readonly rel: string } | { readonly ok: false; readonly error: string }>;
 }
 
 const quotaRefusal = (detail: string): WorkspaceEditPlan => ({ ok: false, error: `scratch-quota-exceeded (${detail})` });
@@ -251,17 +252,19 @@ async function openHeld(root: string, key: string, limits: ScratchLimits, custod
       return { ...result, text: result.text.replaceAll(`[deckent] ${as}:`, `[deckent] ${tool}:`) };
     },
     // Not a `scratch_write` effect (its content would ride in the intent, bounded at 1 MiB): the producing effect owns the bytes, the area
-    // owns the quota and the file — an exclusive 0600 temporary file in the (link-free, created here) directory, flushed, then renamed.
-    async deposit(rel: string, data: Uint8Array) {
+    // owns the quota and the file. The check and the write are one transition in the custody's write lane (Astra 2149 R2): an exclusive
+    // 0600 temporary file in the (link-free, created here) directory, flushed, then renamed.
+    async deposit(rel: string, data: Uint8Array, signal?: AbortSignal) {
       const parts = rel.split('/');
       if (parts.some(part => !part || part === '.' || part === '..')) return { ok: false as const, error: 'invalid-path' };
-      const refused = await quotaCheck(base, rel, data.byteLength);
-      if (refused && !refused.ok) return { ok: false as const, error: refused.error };
-      await ensureScratchDirectories(dir, parts.slice(0, -1));
-      const path = join(dir, ...parts), temporary = join(dir, ...parts.slice(0, -1), `.deposit-${randomUUID()}`);
-      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-      try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
-      try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
-      return { ok: true as const, path, rel };
+      const written = await base.spend(rel, data.byteLength, async () => {
+        await ensureScratchDirectories(dir, parts.slice(0, -1));
+        const path = join(dir, ...parts), temporary = join(dir, ...parts.slice(0, -1), `.deposit-${randomUUID()}`);
+        const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
+        try { await rename(temporary, path); } catch (error) { await rm(temporary, { force: true }); throw error; }
+        return path;
+      }, signal);
+      return written.ok ? { ok: true as const, path: written.value, rel } : { ok: false as const, error: written.error };
     } });
 }

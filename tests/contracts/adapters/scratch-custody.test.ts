@@ -169,6 +169,36 @@ describe.skipIf(process.platform !== 'linux')('scratch custody (Astra 2149): one
     expect(await scratchUsage(f.root)).toBe(1_000);
   });
 
+  it('R2 (FETCH): two concurrent deposits of fetched bodies that each fit alone under the shared installation budget — exactly one is kept', async () => {
+    const f = await fixture(), activity = createScratchActivity();
+    const [one, two] = await Promise.all(['one', 'two'].map(id => openScratchSession(f.root, keyOf(id, id), { ...limits, sessionMaxBytes: 4_000 }, activity))) as [ScratchSession, ScratchSession];
+    const results = await Promise.all([one.deposit('fetch/a.bin', Buffer.alloc(1_000, 0x61)), two.deposit('fetch/b.bin', Buffer.alloc(1_000, 0x62))]);
+    expect(results.map(result => result.ok ? 'kept' : result.error.split(' ')[0]).sort()).toEqual(['kept', 'scratch-quota-exceeded']);
+    expect(await scratchUsage(f.root)).toBe(1_000);
+  });
+
+  it('R2 (FETCH): a deposit and a scratch_write that each fit alone share the lane — exactly one is written', async () => {
+    const f = await fixture(), activity = createScratchActivity();
+    const [one, two] = await Promise.all(['one', 'two'].map(id => openScratchSession(f.root, keyOf(id, id), { ...limits, sessionMaxBytes: 4_000 }, activity))) as [ScratchSession, ScratchSession];
+    const [deposited, written] = await Promise.allSettled([one.deposit('fetch/a.bin', Buffer.alloc(1_000, 0x61)), write(two, 'n.txt', 1_000, '3')]);
+    const kept = [deposited.status === 'fulfilled' && deposited.value.ok ? 'written' : 'quota', outcome(written)];
+    expect(kept.sort()).toEqual(['quota', 'written']);
+    expect(await scratchUsage(f.root)).toBe(1_000);
+  });
+
+  it('R2 (FETCH): a deposit whose fetch was cancelled while it waited for the lane writes nothing and hands the lane on', async () => {
+    const f = await fixture(), activity = createScratchActivity();
+    const session = await openScratchSession(f.root, keyOf('one'), { ...limits, installationMaxBytes: 10_000, sessionMaxBytes: 10_000 }, activity);
+    const handOn = await activity.lane(), stop = new AbortController();
+    const waiting = session.deposit('fetch/a.bin', Buffer.alloc(100), stop.signal);
+    expect(await pending(waiting)).toBe('pending');
+    stop.abort(); handOn();
+    await expect(within(waiting)).rejects.toBeDefined();
+    expect(await scratchUsage(f.root)).toBe(0);
+    await within(session.deposit('fetch/b.bin', Buffer.alloc(100)));
+    expect(await scratchUsage(f.root)).toBe(100);
+  });
+
   it('R2: two files of one session share the session budget', async () => {
     const f = await fixture(), activity = createScratchActivity();
     const session = await openScratchSession(f.root, keyOf('one'), { ...limits, installationMaxBytes: 10_000 }, activity);

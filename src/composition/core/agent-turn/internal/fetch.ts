@@ -30,7 +30,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
         target: { kind: NETWORK_FETCH_TARGET_KIND, id: `fetch-${commandId.slice(0, 32)}` }, input: { url: planned.url, maxBytes: planned.maxBytes }, expectedVersion: null };
       let ran: FetchRun | null = null;
       // A redirect stays inside the allowlist or the host the call named (and, when asked, the owner approved); anything else stops.
-      const target = new NetworkFetchTarget({ settings, transport: input.transport, signal, deposit: (rel, data) => input.scratch.deposit(rel, data),
+      const target = new NetworkFetchTarget({ settings, transport: input.transport, signal, deposit: (rel, data, wait) => input.scratch.deposit(rel, data, wait),
         redirectAllowed: host => host === planned.host || settings.allowedHosts.includes(host), onResult: value => { ran = value; } });
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
