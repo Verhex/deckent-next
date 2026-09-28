@@ -77,6 +77,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_ACTIVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_UNAVAILABLE', p, l) }) },
   MODEL_ACTIVATION_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_OUTCOME_UNKNOWN', p, l) }) },
   MODEL_ACTIVATION_CATALOG_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_CATALOG_CONFLICT', p, l) }) },
+  // SESSION-RESULT-LIMIT-2026-09-28: neutral text equal to the proposed `en` catalog value until the lead wires `error.MODEL_ACTIVATION_DELIVERY_UNFIT`.
+  MODEL_ACTIVATION_DELIVERY_UNFIT: { category: 'error', render: () => ({ message: 'A declared invocation profile for this '
+    + 'reference cannot deliver its worst-case result on every surface. Activation was refused; run `deckent doctor` for '
+    + 'which profile and surface, widen the surface capacity or narrow the profile\'s own response limit, then retry.' }) },
   TASK_EVALUATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_INVALID', p, l) }) },
   TASK_EVALUATION_STALE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_STALE', p, l) }) },
   TASK_EVALUATION_NOT_READY: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_NOT_READY', p, l) }) },

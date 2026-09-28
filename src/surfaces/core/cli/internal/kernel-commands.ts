@@ -8,7 +8,7 @@ import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
   PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
-import type { ToolchainCurrencyReport } from '#engine/index.js';
+import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import {
   configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
@@ -76,6 +76,8 @@ export interface CommandContext extends ModelCommandContext {
   applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
+  // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
+  assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
@@ -159,13 +161,18 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const toolchains = args.toolchains ? await context.inspectToolchainCurrency!(root, options) : undefined;
   // SCR-B: a local, soft read (no template, no policy file, or an unsafe/custom one -> null); never blocks doctor.
   const policyTemplate = context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
+  // SESSION-RESULT-LIMIT-2026-09-28: unconditional like policyTemplate (nobody was looking at the line-mode/MCP path
+  // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
+  const modelInvocationDelivery = context.assessModelInvocationDelivery
+    ? await context.assessModelInvocationDelivery(root, options) : [];
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: 'ready', policyTemplate,
+    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
     ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : [])].join('\n'));
+  // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet (i18n-delta.json).
 }

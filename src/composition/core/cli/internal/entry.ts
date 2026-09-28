@@ -20,6 +20,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -95,6 +96,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
+    assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input),

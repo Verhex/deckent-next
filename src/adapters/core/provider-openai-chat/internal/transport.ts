@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ModelInvocationNativePort } from '#engine/index.js';
+import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
@@ -124,10 +124,9 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       if (!prepared || typeof prepared !== 'object' || !preparedTokens.has(prepared)) {
         throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       }
-      const cap = BigInt((prepared as PreparedOpenAiChatRequest).limits.responseMaxBytes);
-      // usage is null or an unchanged native subtree. Its serialized size cannot exceed native's size.
-      const wrapper = BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 1, native: null, usage: null }), 'utf8'));
-      return wrapper - 8n + cap + (cap > 4n ? cap : 4n);
+      // usage is null or an unchanged native subtree; its serialized size cannot exceed native's size, so both
+      // are bounded by the same declared response cap (shared formula: SESSION-RESULT-LIMIT-2026-09-28).
+      return modelInvocationNativeResponseUpperBound((prepared as PreparedOpenAiChatRequest).limits.responseMaxBytes);
     },
     async prepare(profile: unknown, definition: unknown, nativeRequest: unknown): Promise<unknown> {
       const profileEnvelope = openAiChatWireObjectSchema.safeParse(profile);
