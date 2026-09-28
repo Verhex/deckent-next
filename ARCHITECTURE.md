@@ -713,7 +713,7 @@ message holds for it); the terminal never sends `on`. `reasoning_effort` stays o
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
 compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
-`/resume` lists this scope's recent sessions and `/resume <n|id>` continues one (its messages become the history; later turns save
+`/resume` opens an arrow-key picker of this scope's recent sessions (Enter continues the highlighted one, Esc closes; TERM-PICKERS) and `/resume <n|id>` continues one (its messages become the history; later turns save
 into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).

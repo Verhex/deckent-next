@@ -4,6 +4,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (terminal): `/resume` and `/approvals` without arguments open an arrow-key picker (Enter opens, Esc closes).
 - ADDED (B06-2b, ledger v42): an adoption can bind an accepted verification Run of the delivered commit (SDK `verificationRunId` +
   `verificationKind`); mismatching, failed, pending, unsettled or cancelled Runs are refused by name and nothing moves; v1 adoption
   records migrate to v2 at the service-start upgrade (backed up); a v41 build refuses a v42 ledger.
