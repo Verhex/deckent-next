@@ -59,12 +59,25 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     await expect(target.apply({ input: { command: 'printf must-not-run' } } as never)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
     expect(onOutput).not.toHaveBeenCalled(); expect(onResult).not.toHaveBeenCalled();
   });
-  it('requires an implemented sandbox, even if every host capability is present', async () => {
+  it('requires a usable sandbox provider, even if every host capability is present', async () => {
     const capabilities = await probeShellCapabilities(linux(undefined, true));
     expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, notice: null });
+    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, notice: null, posture: expect.stringContaining('not a sandbox') });
+  });
+  it('S9: takes sandbox providers in preference order, names why each was unusable in the visible fallback, and host mode never picks one', async () => {
+    const capabilities = await probeShellCapabilities(linux(undefined, true));
+    const realm = { kind: 'bubblewrap' as const, run: vi.fn() };
+    const unusable = { kind: 'landlock' as const, posture: 'L', usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
+    const usable = { kind: 'bubblewrap' as const, posture: 'in a bubblewrap sandbox', usable: vi.fn(() => ({ ok: true as const, realm })) };
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, notice: null, posture: 'in a bubblewrap sandbox' });
+    expect(resolveShellRealm('require-sandbox', capabilities, [usable])).toMatchObject({ ok: true, realm });
+    expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, notice: null });
+    expect(usable.usable).toHaveBeenCalledWith(capabilities);
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm,
+      notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*landlock: no-abi/u) });
+    expect(resolveShellRealm('require-sandbox', capabilities, [unusable])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
   });
   it.skipIf(process.platform !== 'linux')('host delegates to the existing runner without changing output or result fields', async () => {
     const request = { command: 'printf "host-bytes\\n"', cwd: '/tmp', environment: {} };

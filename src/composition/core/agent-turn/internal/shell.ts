@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { SystemTrustedClock } from '#platform/index.js';
 import { createLocalPeerSession, createShellPathContext, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
   HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
-  type HostShellResult, type LocalPeerIdentity,
+  type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
@@ -31,7 +31,9 @@ type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: S
 export function createAgentShell(input: { readonly scope: WorkspaceScope; readonly peer: LocalPeerIdentity; readonly config: TerminalShellConfig;
   readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string; readonly channel: RuntimeServiceTurnChannel;
   /** SCR-A: the conversation's scratch area — the command's `TMPDIR`, and a second root its path checks accept. */
-  readonly scratch: { readonly scope: WorkspaceScope; readonly dir: string } | null }) {
+  readonly scratch: { readonly scope: WorkspaceScope; readonly dir: string } | null;
+  /** S9: sandbox providers in preference order; the realm is resolved per call against the service's host measurement. */
+  readonly sandboxes: readonly ShellSandbox[] }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
@@ -39,7 +41,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
-    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities());
+    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities(), input.sandboxes);
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
@@ -59,8 +61,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
       if (!planned?.ok) return undefined;
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n`
-        + (planned.realm.notice ?? 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).'));
+      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.notice ?? planned.realm.posture}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
@@ -112,12 +113,12 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
-        if (ran && ran.status !== 'exited') {
+        if (ran && ran.status !== 'exited' && ran.status !== 'spawn-failed') {
           return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
-          : code === 'EFFECT_REJECTED' ? 'the command could not start'
+          : code === 'EFFECT_REJECTED' ? `the command could not start${ran?.output ? ` (${ran.output.trim()})` : ''}`
           : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
           : typeof code === 'string' ? code : 'failed';
         return { status: 'error', text: `[deckent] run_shell: error=${why}` };

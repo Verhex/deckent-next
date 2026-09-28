@@ -75,6 +75,16 @@ function utf8IncompleteTail(buffer: Buffer): number {
  * result, nothing runs).
  */
 export function runHostShell(request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK): Promise<HostShellResult> {
+  return runShellProcess(BASH_LAUNCH, request, clock);
+}
+
+/** What is spawned for a command: the host shell itself, or a sandbox launcher (S9 bubblewrap) that ends with the same shell line. */
+export interface ShellLaunch { readonly file: string; readonly args: (command: string) => readonly string[] }
+export const BASH_LAUNCH: ShellLaunch = Object.freeze({ file: 'bash', args: (command: string) => ['--noprofile', '--norc', '-c', command] });
+
+/** The one process runner behind every realm: `launch` decides the executable and argv; the group, cancellation, timeout, pipe and
+ * output contracts above are the same for all of them. */
+export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, clock: HostShellClock = MONOTONIC_CLOCK): Promise<HostShellResult> {
   const started = clock.sample().monotonicMs;
   const elapsedMs = () => Math.max(0, Math.round(clock.sample().monotonicMs - started));
   const keep = request.resultMaxBytes ?? HOST_SHELL_RESULT_MAX_BYTES;
@@ -92,7 +102,7 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return new Promise(resolve => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
+      child = spawn(launch.file, [...launch.args(request.command)], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;

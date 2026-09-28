@@ -10,7 +10,8 @@ import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
+  bubblewrapShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
+  type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentFetch } from './fetch.js';
@@ -31,11 +32,13 @@ export interface RuntimeChatTurnHost {
   readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
   readonly scratch: ScratchActivity;
   readonly fetchTransport: HttpFetchTransport;
+  /** S9: the sandbox providers a shell call may pick, in preference order (bubblewrap first); only an in-process test passes another list. */
+  readonly shellSandboxes: ShellSandboxFactory;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = layout => [bubblewrapShellSandbox(layout)]): RuntimeChatTurnHost {
   void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
-  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -118,7 +121,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
-      config: readTerminalShellConfig(config), scratch }) : null;
+      config: readTerminalShellConfig(config), scratch, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
