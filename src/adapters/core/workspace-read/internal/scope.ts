@@ -74,6 +74,10 @@ export interface WalkIncomplete { depthLimited: number; unreadable: number; chan
 export interface WorkspaceScope {
   readonly root: string;
   readonly ignoredDirs: ReadonlySet<string>;
+  /** The literal, nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from
+   * `.deckent/host/**`; a pattern starting with a glob has none): paths whose ancestors a shell sandbox must never grant whole, even
+   * under an ignored tree (Astra 2162). Derived from the deny list, so a `.gitignore` change cannot lift them. */
+  readonly protectedAnchors: ReadonlySet<string>;
   denied(rel: string): boolean;
   /** The real, workspace-relative path of an existing target; symlinks are resolved and must stay inside and not denied. */
   resolve(requested: unknown, allowRoot?: boolean): Promise<ResolvedPath>;
@@ -110,6 +114,10 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
       if (name !== '' && !/[*?[\]]/.test(name) && !name.includes('/')) ignoredDirs.add(name);
     }
   } catch { /* no readable .gitignore: the baseline stands */ }
+  const protectedAnchors = new Set(deny.flatMap(pattern => {
+    const head = pattern.slice(0, pattern.search(/[*?[]/u) < 0 ? pattern.length : pattern.search(/[*?[]/u)).replace(/\/$/u, '');
+    return head.includes('/') ? [head] : [];
+  }));
   const inside = (abs: string, allowRoot: boolean) => { const rel = relative(root, abs); return rel === '' ? allowRoot : !rel.startsWith('..') && !isAbsolute(rel); };
   const denied = (rel: string) => rel !== '' && denyMatchers.some(match => match(rel));
   const close = async (handle: FileHandle | undefined) => { await handle?.close().catch(() => undefined); };
@@ -118,7 +126,7 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
     try { return await readlink(fdPath(handle)) === (rel === '' ? root : join(root, rel)); } catch { return false; }
   };
   return Object.freeze({
-    root, ignoredDirs, denied, verify,
+    root, ignoredDirs, protectedAnchors, denied, verify,
     async resolve(requested: unknown, allowRoot = false): Promise<ResolvedPath> {
       if (!supported) return { ok: false, error: 'platform-unsupported' };
       if (requested !== undefined && typeof requested !== 'string') return { ok: false, error: 'path-invalid' };

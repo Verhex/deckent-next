@@ -142,7 +142,7 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
     await mkdir(join(p.root, 'locked')); await writeFile(join(p.root, 'locked', '.env'), 'LOCKED_SECRET\n'); await chmod(join(p.root, 'locked'), 0o000); locked.push(join(p.root, 'locked'));
     const landlock = await realmOf(p);
     const ran = await landlock.run({ command: 'chmod 700 locked; cat locked/.env; echo "cat=$?"', cwd: p.root, environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 20_000 });
-    expect(ran.output).not.toContain('LOCKED_SECRET'); expect(ran.output).toMatch(/Permission denied[\s\S]*cat=1/u);
+    expect(ran.output).not.toContain('LOCKED_SECRET'); expect(ran.output).toMatch(/Permission denied/u); expect(ran.output.split('\n')).toContain('cat=1');
   });
   it('system paths and .git are not writable, .git stays readable, git works read-only', async () => {
     const r = await realm();
@@ -202,7 +202,11 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
       if (!resolution.ok) throw new Error('realm expected');
       const ran = await resolution.realm.run({ command: 'echo b >> a.txt && git status --short a.txt && git commit -qam x; echo "commit=$?"; cat ' + `${other}/.git/HEAD`,
         cwd: scope.root, environment: { PATH: '/usr/bin:/bin' } });
-      expect(ran.output, root).toMatch(/^ M a\.txt\n(.|\n)*index\.lock.*Permission denied(.|\n)*commit=128\n(.|\n)*Permission denied/u);
+      // stdout (`git status`, `commit=`) and stderr (git's and cat's refusals) are checked apart, never for their interleaving.
+      const lines = ran.output.split('\n');
+      expect(lines, root).toContain(' M a.txt'); expect(lines, root).toContain('commit=128');
+      expect(lines.some(line => line.includes('index.lock') && line.includes('Permission denied')), root).toBe(true);
+      expect(lines.some(line => line.endsWith('/.git/HEAD: Permission denied')), root).toBe(true);
       expect(ran.output, root).not.toContain('refs/heads');
     }
   });

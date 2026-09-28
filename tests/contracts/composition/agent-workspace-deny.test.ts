@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, probeShellCapabilities } from '#adapters/index.js';
+import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, landlockShellSandbox, probeShellCapabilities } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { agentWorkspaceDeny } from '#composition/core/agent-turn/index.js';
-import { resolveProductLayout } from '#platform/index.js';
+import { prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 
 const capabilities = await probeShellCapabilities();
 const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
@@ -99,5 +99,62 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect(result.output).not.toContain('PRODUCT-STATE'); expect(result.output).not.toContain('SERVICE-ANSWER');
     // The masked directory lists empty (a tmpfs): no other conversation's name.
     expect(result.output).not.toMatch(/^other-session\.json$/m);
+  });
+});
+
+// Astra 2162: the product state stays closed to both sandboxes when an ancestor is an ignored directory — a `.gitignore` entry for
+// `.deckent/`, or a data root under the baseline-ignored `.cache` — and the protection does not depend on `.gitignore`. Read and write
+// are refused, ordinary project files and the conversation scratch area keep working; a chain through a symbolic link refuses the call.
+describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('product state under an ignored ancestor (Astra 2162)', () => {
+  async function layoutAt(dataRel: string, gitignore: string | null) {
+    const base = await mkdtemp(join(tmpdir(), 'dn-ignored-state-')); roots.push(base);
+    const root = join(base, 'project'), data = join(root, ...dataRel.split('/')), scratch = join(base, 'scratch');
+    await mkdir(data, { recursive: true, mode: 0o700 }); await mkdir(join(root, 'src'), { recursive: true }); await mkdir(scratch, { recursive: true, mode: 0o700 });
+    await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1;\n');
+    if (gitignore !== null) await writeFile(join(root, '.gitignore'), gitignore);
+    const layout = resolveProductLayout({ projectRoot: root, root: data });
+    const ledger = await prepareProductFile(layout, 'ledger'); await writeFile(ledger, 'SYNTHETIC_PRODUCT_STATE\n');
+    const deny = agentWorkspaceDeny(root, layout), scope = await createWorkspaceScope(root, deny);
+    const rel = ledger.slice(root.length + 1);
+    return { root, scope, scratch, ledger, rel, sandbox: { project: scope, scratchDir: scratch } };
+  }
+  const environment = { PATH: '/usr/bin:/bin', HOME: '/nonexistent-home' };
+  for (const [name, dataRel, gitignore] of [['a .gitignore entry for the data root parent', '.deckent/live-data', '.deckent/\n'], ['a baseline-ignored data root parent', '.cache/deckent', null]] as const) {
+    it(`refuses the ledger to both realms under ${name}, keeps the project and the scratch area writable`, async () => {
+      const p = await layoutAt(dataRel, gitignore);
+      expect(p.scope.denied(p.rel)).toBe(true);
+      for (const provider of [bubblewrapShellSandbox(p.sandbox), landlockShellSandbox(p.sandbox)]) {
+        const usable = provider.usable(capabilities); if (!usable.ok) throw new Error(usable.reason);
+        const ran = await usable.realm.run({ command: `cat '${p.rel}' 2>&1; echo "cat=$?"; printf 'SYNTHETIC_WRITE\\n' >> '${p.rel}' 2>&1; echo "append=$?";`
+          + ` echo ok > src/made.txt; echo "project=$?"; echo s > "$TMPDIR/s.txt"; echo "scratch=$?"; cat src/a.ts`, cwd: p.root, environment, fixedEnv: { TMPDIR: p.scratch }, timeoutMs: 20_000 });
+        const lines = ran.output.split('\n');
+        expect(ran.output, provider.kind).not.toContain('SYNTHETIC');
+        for (const line of ['cat=1', 'append=1', 'project=0', 'scratch=0', 'export const a = 1;']) expect(lines, provider.kind).toContain(line);
+        expect(await readFile(p.ledger, 'utf8'), provider.kind).toBe('SYNTHETIC_PRODUCT_STATE\n');
+        expect(await readFile(join(p.root, 'src', 'made.txt'), 'utf8'), provider.kind).toBe('ok\n'); expect(await readFile(join(p.scratch, 's.txt'), 'utf8'), provider.kind).toBe('s\n');
+        await rm(join(p.root, 'src', 'made.txt')); await rm(join(p.scratch, 's.txt'));
+      }
+      const view = await resolveBubblewrapView(p.sandbox, environment);
+      expect(view.ok && view.view.maskedFiles).toContain(p.ledger);
+      const rules = await buildLandlockRules(p.sandbox);
+      expect(rules.ok && rules.rules.some(([cls, path]) => cls === 'w' && (path === '.' || p.rel.startsWith(`${path}/`)))).toBe(false);
+    });
+  }
+  it('refuses the call when the product state lies behind a symbolic link on its ancestor chain', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-ignored-link-')); roots.push(base);
+    const root = join(base, 'project'), real = join(base, 'elsewhere'); await mkdir(join(real, 'deckent'), { recursive: true }); await mkdir(join(root, '.cache'), { recursive: true });
+    await symlink(join(real, 'deckent'), join(root, '.cache', 'deckent'));
+    // The product's own file preparation refuses a linked data root (MANAGED_FILE_UNSAFE); the file is placed by hand to prove the realms refuse too.
+    const layout = resolveProductLayout({ projectRoot: root, root: join(root, '.cache', 'deckent') });
+    const ledger = productResourcePath(layout, 'ledger'); await mkdir(join(ledger, '..'), { recursive: true }); await writeFile(ledger, 'SYNTHETIC_PRODUCT_STATE\n');
+    const scope = await createWorkspaceScope(root, agentWorkspaceDeny(root, layout));
+    const sandbox = { project: scope, scratchDir: null };
+    expect(await resolveBubblewrapView(sandbox, environment)).toMatchObject({ ok: false, reason: expect.stringContaining('symbolic link') });
+    expect(await buildLandlockRules(sandbox)).toMatchObject({ ok: false, reason: expect.stringContaining('symbolic link') });
+    for (const provider of [bubblewrapShellSandbox(sandbox), landlockShellSandbox(sandbox)]) {
+      const usable = provider.usable(capabilities); if (!usable.ok) throw new Error(usable.reason);
+      const ran = await usable.realm.run({ command: 'cat .cache/deckent/state/ledger.db', cwd: root, environment, timeoutMs: 20_000 });
+      expect(ran, provider.kind).toMatchObject({ status: 'spawn-failed' }); expect(ran.output, provider.kind).not.toContain('SYNTHETIC');
+    }
   });
 });

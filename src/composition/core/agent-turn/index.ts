@@ -1,4 +1,4 @@
-export { AGENT_READABLE_PRODUCT_RESOURCES, agentWorkspaceDeny, cancelPeerConfiguredChatTurn, chatTurnCompactionCommandId,
+export { AGENT_READABLE_PRODUCT_RESOURCES, agentProductStateDeny, agentWorkspaceDeny, cancelPeerConfiguredChatTurn, chatTurnCompactionCommandId,
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';
