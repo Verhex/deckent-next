@@ -74,6 +74,8 @@ function exchange(transport: HttpFetchTransport, host: string, address: string, 
     request.on('response', (response: IncomingMessage) => {
       const status = response.statusCode ?? 0, header = (name: string) => { const value = response.headers[name]; return typeof value === 'string' ? value : null; };
       const base = { status, contentType: header('content-type'), location: header('location') };
+      // Attached first: a redirect's unread body is cut when the connection closes, and that error must land here, not unhandled.
+      response.on('error', error => finish(error));
       if (REDIRECT_STATUSES.has(status) && base.location !== null) { finish(null, { ...base, body: Buffer.alloc(0), truncated: false }); return; }
       const chunks: Buffer[] = [];
       let size = 0;
@@ -86,7 +88,6 @@ function exchange(transport: HttpFetchTransport, host: string, address: string, 
         chunks.push(chunk); size += chunk.length;
       });
       response.on('end', () => finish(null, { ...base, body: Buffer.concat(chunks, size), truncated: false }));
-      response.on('error', error => finish(error));
       response.on('close', () => { if (!response.complete) finish(new Error('connection-broken')); });
     });
     request.end();

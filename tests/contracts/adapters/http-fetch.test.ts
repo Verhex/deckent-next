@@ -77,10 +77,16 @@ describe.skipIf(process.platform !== 'linux')('https fetch adapter (FETCH S6)', 
     f.routes.set('docs.example/to-other', (_request, response) => response.writeHead(301, { location: 'https://other.example/x' }).end());
     f.routes.set('docs.example/to-http', (_request, response) => response.writeHead(307, { location: 'http://docs.example/x' }).end());
     f.routes.set('docs.example/loop', (_request, response) => response.writeHead(302, { location: '/loop' }).end());
+    // A redirect whose body is still arriving is followed without waiting for it (the cut connection is handled, never unhandled).
+    f.routes.set('docs.example/to-mirror-slow', (_request, response) => {
+      response.writeHead(302, { location: 'https://mirror.example/final', 'content-type': 'text/html' }); response.write('<p>moved</p>');
+      setTimeout(() => response.end('<p>done</p>'), 300);
+    });
+    expect(await run(f, 'https://docs.example/to-mirror-slow')).toMatchObject({ outcome: 'response', httpStatus: 200, finalUrl: 'https://mirror.example/final' });
     const followed = await run(f, 'https://docs.example/to-mirror');
     expect(followed).toMatchObject({ outcome: 'response', httpStatus: 200, finalUrl: 'https://mirror.example/final', redirects: 1 });
     expect(followed.body.toString()).toBe('mirrored');
-    expect(f.seen.map(row => row.sni)).toEqual(['docs.example', 'mirror.example']);
+    expect(f.seen.map(row => row.sni)).toEqual(['docs.example', 'mirror.example', 'docs.example', 'mirror.example']);
 
     expect(await run(f, 'https://docs.example/to-other')).toMatchObject({ outcome: 'stopped', reason: 'redirect-refused', httpStatus: 301 });
     expect(f.resolved).not.toContain('other.example');
