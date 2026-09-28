@@ -861,6 +861,7 @@
   "terminal.slash.mode": "İzin modunu göster ya da ayarla",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
   "terminal.slash.reasoning": "Model düşünmesini ve ön izlemesini aç ya da kapat",
+  "terminal.slash.scratch": "Bu konuşmanın scratch alanını listele (/scratch path · /scratch clear)",
   "terminal.mode.current": "İzin modu: {mode}",
   "terminal.mode.changed": "İzin modu: {previous} → {mode}",
   "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
@@ -871,5 +872,12 @@
   "terminal.mention.refused": "@{path} eklenmedi: {reason}",
   "terminal.reasoning.on": "Düşünme açık (ön izleme ve model düşünmesi)",
   "terminal.reasoning.off": "Düşünme kapalı (ön izleme ve model düşünmesi)",
-  "terminal.reasoning.usage": "Kullanım: /reasoning [on|off]"
+  "terminal.reasoning.usage": "Kullanım: /reasoning [on|off]",
+  "terminal.scratch.summary": "/scratch · {path} · {count} dosya · {bytes} / {limit} bayt",
+  "terminal.scratch.empty": "/scratch · {path} · boş",
+  "terminal.scratch.entry": "  {path} · {bytes} bayt",
+  "terminal.scratch.more": "  … {count} tane daha",
+  "terminal.scratch.path": "/scratch · {path}",
+  "terminal.scratch.cleared": "/scratch clear · {count} dosya ({bytes} bayt) silindi · {path}",
+  "terminal.scratch.usage": "Kullanım: /scratch [path|clear]"
 }

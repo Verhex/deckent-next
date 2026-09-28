@@ -861,6 +861,7 @@
   "terminal.slash.mode": "Show or set your permission mode",
   "terminal.slash.modeArgument": "[ask|auto-edit|full-auto]",
   "terminal.slash.reasoning": "Turn model thinking and its preview on or off",
+  "terminal.slash.scratch": "List this conversation's scratch area (/scratch path · /scratch clear)",
   "terminal.mode.current": "Permission mode: {mode}",
   "terminal.mode.changed": "Permission mode: {previous} → {mode}",
   "terminal.mode.inert": " (no rule is mode-eligible in this scope, so the mode changes nothing here)",
@@ -871,5 +872,12 @@
   "terminal.mention.refused": "Not attached @{path}: {reason}",
   "terminal.reasoning.on": "Reasoning on (preview and model thinking)",
   "terminal.reasoning.off": "Reasoning off (preview and model thinking)",
-  "terminal.reasoning.usage": "Usage: /reasoning [on|off]"
+  "terminal.reasoning.usage": "Usage: /reasoning [on|off]",
+  "terminal.scratch.summary": "/scratch · {path} · {count} files · {bytes} of {limit} bytes",
+  "terminal.scratch.empty": "/scratch · {path} · empty",
+  "terminal.scratch.entry": "  {path} · {bytes} bytes",
+  "terminal.scratch.more": "  … {count} more",
+  "terminal.scratch.path": "/scratch · {path}",
+  "terminal.scratch.cleared": "/scratch clear · {count} files ({bytes} bytes) removed · {path}",
+  "terminal.scratch.usage": "Usage: /scratch [path|clear]"
 }

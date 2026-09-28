@@ -45,7 +45,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
       'terminal.slash.transcriptArgument': t('terminal.slash.transcriptArgument', {}, locale),
       'terminal.slash.cancelArgument': t('terminal.slash.cancelArgument', {}, locale),
       'terminal.slash.mode': t('terminal.slash.mode', {}, locale), 'terminal.slash.modeArgument': t('terminal.slash.modeArgument', {}, locale),
-      'terminal.slash.reasoning': t('terminal.slash.reasoning', {}, locale) } };
+      'terminal.slash.reasoning': t('terminal.slash.reasoning', {}, locale), 'terminal.slash.scratch': t('terminal.slash.scratch', {}, locale) } };
 }
 
 /** Catalog strings of `/resume`, `/context` and `/new` (terminal.session.*). */

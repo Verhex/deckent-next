@@ -4,9 +4,9 @@ import { firstRunPolicyTemplate, identitySchema, immutableJsonObjectSchema, matc
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
 
-// SCR-A cross-lane note (owner 2026-09-28): tool names + the scratch write's own operation (target kind
-// scratch-file; `workspace.scratch.write` is not yet a real catalog symbol on this base, written as data for
-// the lead's merge). Product-fixed template content, not an adapter choice, so it lives here rather than composition.
+// Tool names + operation ids as data (engine may not import the adapters defining them); pinned against the real tool specs and
+// Core operation descriptors by tests/contracts/installation/first-run-template-catalog.test.ts. Product-fixed template content,
+// not an adapter choice, so it lives here rather than composition.
 export const FIRST_RUN_READ_TOOL_NAMES = Object.freeze(['read_file', 'list_dir', 'grep', 'glob']);
 export const FIRST_RUN_SCRATCH_TOOL_NAMES = Object.freeze(['scratch_write', 'scratch_read', 'scratch_list']);
 export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'write_file', 'run_shell']);
