@@ -348,7 +348,6 @@
     "src/composition/core/terminal-chat": {
       "dependencies": [
         "src/domain/core/agent-turn",
-        "src/domain/core/agent-tool",
         "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
@@ -358,7 +357,8 @@
         "src/engine/core/model-invocation",
         "src/platform/core/config",
         "src/platform/core/errors",
-        "src/engine/core/agent-turn"
+        "src/engine/core/agent-turn",
+        "src/adapters/core/provider-openai-chat"
       ],
       "plan": "SURFACES"
     },
@@ -1086,7 +1086,9 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/provider-spend",
         "src/engine/core/model-invocation",
-        "src/engine/core/provider-spend"
+        "src/engine/core/provider-spend",
+        "src/domain/core/agent-tool",
+        "src/domain/core/agent-turn"
       ],
       "plan": "PROVIDERS"
     },
@@ -1108,7 +1110,6 @@
         "src/adapters/core/attempt-store",
         "src/composition/core/model-invocation",
         "src/composition/core/provider-catalog",
-        "src/composition/core/terminal-chat",
         "src/domain/core/agent-tool",
         "src/domain/core/effect",
         "src/engine/core/effect",
