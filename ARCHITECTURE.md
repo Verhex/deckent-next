@@ -56,7 +56,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   not a separate filesystem root. Default is one company. Enterprise maps customer identity,
   RBAC/RLS and governance into these contracts. Company-aware Core policy precedes M2; IdP/SIEM
   adapters belong to M4. The retired tenant fields and file-isolation helpers are gone (H34 S4): company is a data scope,
-  config schema 3, layout registry 3, doctor JSON 2; older versions are refused with a typed error, never converted.
+  config schema 3, layout registry 4 (SCR-A, owner 2026-09-28: `scratch` resource), doctor JSON 2; older versions are refused with a
+  typed error, never converted.
 - Development is in deckent-next. Public deckent receives only the completed Core distribution. Proprietary
   Enterprise sources/packages remain separately controlled from their first implementation, consume public Core
   APIs and are excluded from public source, history and package artifacts. Core installs without Enterprise.
@@ -238,6 +239,10 @@ refresh, usage and dogfood closure remain open.
 - Terminal/Desktop and other surface-local cache/session/scratch use declared platform-local runtime/temp
   locations with scope, permissions, owner and retention. Durable jobs/decisions never rely on temporary files.
   Actual locations are inspectable from the shared CLI/SDK/MCP path-query contract; no surface-specific truth.
+  The agent's scratch area is the layout resource `scratch` (`state/scratch`, registry v4): `<owner>/<session>` where owner =
+  sha256(scope, principal issuer+subject) and session = sha256(conversation id | turn id), 32 hex each (no identity text in paths);
+  directories 0700 created one component at a time from a descriptor, never through a link; files written by `scratch_write` 0600.
+  Inspectable by path-query (`inspect layout` lists `scratch`).
 - Remote database/blob storage remains supported: `.deckent` contains configuration references, manifests and
   inspectable logical locations, not secret plaintext or an unsolicited mirror of every remote ERP record.
   External systems of record remain external. Workspace/worktree allocation is a separate managed resource.
@@ -316,7 +321,10 @@ refresh, usage and dogfood closure remain open.
   was pushed (2026-09-26, `5fa0812`); the live service still ran v13. From `5fa0812` on, v14 is released: further changes bump. v15 was introduced 2026-09-27 (T-L5 `@file`) as the single v15 package
   (owner 2026-09-27); it is unreleased until pushed, and the remaining v15 items add to it without another bump. v15 was pushed and runs in the live service (released). v16 was
   introduced 2026-09-28 (OPEN-REASONING-FILE, owner) as the single v16 package: `chatTurn` gains the optional `reasoning`; it is
-  unreleased until pushed, and further v16 items add to it without another bump.
+  unreleased until pushed, and further v16 items add to it without another bump. SCR-A adds to v16: `chatTurn.sessionId?` and the
+  operations `inspectScratch` / `clearScratch` (`{ schemaVersion: 1, scopeId, sessionId }`, delivery required, current version only;
+  the peer is the owner — scope membership read/write, no further grant). `inspectScratch` → path, exists, bytes, files newest first
+  (≤ 200, bounded to the delivery), limits; `clearScratch` empties the area and keeps its directory (a shell's TMPDIR stays valid).
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -685,7 +693,9 @@ continuation (`hasMore=true` → `nextStartLine`), same-argument read references
 Each sent round has exactly one system message: the segment, then the client's own system text (catalog: persona + reply language).
 The client's history, `message`/`compacted` events and saved sessions never hold the segment; measurement counts exactly what is
 sent. The turn's `requestDigest` binds `sha256(segment)`: a turn id replayed after the segment changed (new version, other project
-root or layout, other tool set) is `AGENT_TURN_CONFLICT`, never an answer to another prompt.
+root or layout, other tool set) is `AGENT_TURN_CONFLICT`, never an answer to another prompt. System prompt **v2** (SCR-A): the renderer moved
+to `engine/core/agent-turn` (pure text; composition budget); v2 adds the scratch line (path, tools, diagrams as Mermaid/SVG text,
+`run_shell` TMPDIR, retention). The request digest changes with it: a turn id replayed across the update is `AGENT_TURN_CONFLICT`.
 **Agent tool deny floor per layout (TL-C finding).** Agent read tools (and through the same scope, edit and shell path
 classification) deny the Core floor plus the layout's `approvals` and `approvalPreviews` directories when they lie inside the
 project; previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
@@ -789,6 +799,27 @@ the approval is pending, removed when it settles and swept at service start (Ast
 index), the arguments and the planned version (Astra 2113: the version alone collided after writes B, A, B and reported a write that
 did not happen); the effect's approval gate (C12 G3) admits only from the durable `agent-tool-call` record of exactly the executed call: a sealed (MAC) `allow`, subject and action digest rebuilt from the executed call (turn, round, index, tool@version, resource, arguments digest), requested by the effect principal, decided on the request it names, inside its expiry at the claim (judged by the requesting process, I40-c B). It applies whenever the owner was asked — tool decision, write floor or operation decision. The claimed intent pins `approval {approvalId, actionDigest}` (its consumption); later passes verify the pin without a window; a settled record replays. In-turn state is only a pointer to the record and the per-turn one-approval-one-command map; it never admits. Not excluded: another writer between the final
 version check and the rename (no advisory locks). `adapters/core/sqlite-agent-turn` stores `agent_turns` and `agent_turn_tool_calls` in the ledger.
+**Agent scratch area (SCR-A, owner 2026-09-28).** Three tools, no new class or decision cell: `scratch_write {path, content}` (class
+`edit`, cell `edit`, never on the write floor), `scratch_read` (= `read_file` over the area) and `scratch_list` (= `list_dir`), class
+`read`. A scratch write is a C11 effect of the Core operation `workspace.scratch.write@1` on target kind `scratch-file` (namespace
+`workspace` is Core-closed; registry module `core.scratch-write`); record ids are `<owner>/<session>/<path>` because the effect
+store's busy check and sequence are per target kind and id across scopes. The physical write reuses the workspace-file target over
+the session area (conditional on the planned version, atomic, journaled, 0600). Silence comes only from policy: `agent-tool/invoke
+scratch_*` and `operation/execute workspace.scratch.write` both `allow` → no card in ask mode; otherwise the normal C12 flow or
+`POLICY_DENIED`; a mode relaxation uses the existing `permission-mode` event (audit schema unchanged). Missing directories are
+created at the effect (after the decision), never through a link. Quotas are configuration (`terminal.scratch`: write 1 MiB,
+session 64 MiB, installation 512 MiB), checked when planned (before any card) and again at the effect; a refusal is the tool result
+`error=scratch-quota-exceeded (<write|session|installation>: …)`, never a cut. The encoded effect input must also fit the catalog
+bound (1 MiB), so the effective content ceiling is 1 MiB minus JSON escaping. The area belongs to the conversation:
+`chatTurn.sessionId` (v16, optional) keys it; without it the turn has its own area. Project tools never reach the scratch resource
+(`agentWorkspaceDeny` adds it beside approvals and previews). Retention: a session area whose newest change (lstat walk, links not
+followed) is older than `terminal.scratch.retentionDays` (7) is removed at service start under endpoint custody and by the running
+service every `sweepIntervalMs` (1 h, unreferenced timer, stopped with the service); an area held by a running turn is never removed
+(checked before measuring and again right before removal); non-area entries are left alone; an area past the walk bounds is kept and
+counted `unreadable` (observer `onScratchSwept({ removedSessions, removedBytes, kept, unreadable })`). Open limits: content is stored
+in the effect intent (ledger growth under heavy use; content-addressed input is a follow-up); the installation quota walks the whole
+resource per write (bounded 100 000 entries / depth 64, fail-closed past them); shell writes are measured but not stopped by the
+quota; sweep vs. a turn starting in the same instant relies on the double activity check; scratch content is not redacted.
 **Read-only shell classification (T-L4 slice 3a, Jev d6909e28).** `engine/core/shell-classification` is pure: a POSIX `sh -c`
 scanner (pipelines of stages; redirection only to /dev/null or between stdout/stderr; substitutions, expansions, subshells, braces,
 heredocs and background jobs refused with typed reasons), the legacy program allowlist and option grammars (argv semantics: quoting
@@ -876,6 +907,11 @@ the client before runtime compaction. Both were corrected in `2900a8d` (dedupe b
 refusal, owner decision 2026-09-26); Astra 2117 scoped PASS (2026-09-27, 46 fresh engine/runtime tests) closes these two repros.
 The selected four-bytes-per-completion-token reserve is a sizing allowance, not a universal tokenizer byte bound; oversized
 requests still receive the typed refusal. Large compacted frames and tails above the watermark remain open limitations.
+**Shell TMPDIR = scratch area (SCR-A).** `run_shell` gets `TMPDIR` = the conversation's scratch area (a fixed value that wins over
+the service environment and over an operator naming `TMPDIR` in `terminal.shell.environment`). The shell path port takes the area as
+a second root: an absolute path inside it is checked against the area's own scope (read-only `none` → may run without asking under
+allow; `cp/mv/mkdir/touch` into it → `narrow-mutating`); leaving it lexically or through a link is `PATH_OUTSIDE_ROOT`.
+`$TMPDIR/...` is a variable expansion and still asks in every mode. Project-root classification is unchanged; not a sandbox (S9).
 **Allocation without a lifetime total (T-L3a, owner 2026-09-25, ledger v36).** A model invocation profile's allocation may set
 `maxCalls: null`: no lifetime total of calls, an explicit and audited profile choice (the local terminal profile can use it;
 live since the owner's 2026-09-25 migration, API profiles keep theirs). `maxInFlight` still bounds concurrency, and policy, activation, provider availability and spending authority
@@ -889,6 +925,8 @@ tool_calls`; the legacy `function_call` is never accepted and `tool_choice: none
 pieces, contiguous indexes) and pass the same check; a streamed name that no declared name can still match stops the read and presentation at once; a cut stream is interrupted
 (uncertain) and yields no call. Arguments stay the provider's raw text: invalid JSON is the loop's typed tool error to the model.
 The loop sees the provider-neutral `AgentToolCall` (`id`, `name`, `argumentsJson`); native details stay in the native result.
+The OpenAI chat wire shape (request messages, response reading, the uncounted prompt bound) belongs to the `provider-openai-chat`
+adapter; the compaction call protocol and the approval preview bound belong to engine `agent-turn` (COMP-BUDGET-2).
 The 2026-09-25 review limits (Astra 2079: `tool_choice: none` on responses, an undeclared streamed name rejected only at finish) were
 corrected in `e12a253`; Astra 2091 found no new blocker in them.
 **Agent terminal direction (owner 2026-09-24) and tool contract (T-L1).** The terminal becomes a Claude Code-class agent
@@ -1142,6 +1180,19 @@ No journal publication, permission grant, publisher trust, installation readines
 2026-09-19 REAL-INIT/P3E-PUBLICATION: explicit local custom consent binds actual OS issuer/subject to a freshly measured proposal; publisher authenticity stays unverified. A complete pending journal precedes every target effect. Original authored profile and normalized configuration are separate, immutable recovery inputs; resume revalidates current schema/paths/identity/evidence and rejects drift instead of silently adding defaults. Fresh file publication stages private bounded bytes in a transaction-reserved namespace and links without replacing a target; recovery recognizes only exact target/temp inode/content, including a bounded partial-prefix stage. SQLite schema11 stores exact installation ownership and pool in the same transaction; foreign markerless/nonempty databases are refused before persistent journal-mode changes. Readonly final verification precedes committed journal admission. Apply/resume share one engine application and require explicit custom acceptance/proposal/executable; shutdown permission remains an independent profile choice. This is local POSIX trusted-host installation; no builtin release profile, remote bootstrap, publisher signature, upgrade/overwrite flow or MCP self-authorization is added.
 
 2026-09-20 AUTH/NATIVE-CONFIG: the global API-mode vendor-key requirement was a known metadata/activation defect and is removed (Fable2042). Credential, profile and request-budget holds belong to native invocation admission (A3/B08/B09), never general config/catalog reads; no invocation authority follows from API mode or activation.
+
+### First-run policy template (implemented, SCR-B, owner 2026-09-28 option B)
+
+`deckent init policy --scope <id> --preview|--apply` is a second installation path that needs no Docker, pool or registry: it
+journals only `policy.json` + `bindings.json` under the same single `installationJournal` ("one installation, one transaction";
+`InstallationResource` gains `bindings`, journal schema unchanged), takes no `authoredProfile`, and derives its plan/transaction id
+deterministically from scope + principal + template version. `PolicyTemplateInstallationApplication` (engine installation) is the
+sibling of `InstallationPublicationApplication`, reusing its `INSTALLATION_PUBLICATION_*` vocabulary without the
+Docker/pool/evidence/consent ceremony. `firstRunPolicyTemplate` (domain policy) is a v2 policy + v1 bindings: read and scratch tools
+silently `allow`, edit/shell `require-approval` with `modeEligible: true`, operation grants for `workspace.file.write`,
+`host.shell.run` and `workspace.scratch.write` (both sides must allow for silence), no pool/service grant (owner's decision). Tool
+names and operation ids are template data pinned to the real tool specs and Core descriptors by a contract test. `doctor --json`
+reports `policyTemplate: {id, version} | null` (recognition only, never authority).
 
 ### Workspace patch preparation (implemented, ledger29)
 

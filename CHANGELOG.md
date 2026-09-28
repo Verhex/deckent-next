@@ -4,6 +4,16 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (SCR-A, owner 2026-09-28): the terminal agent has its own scratch area per conversation (`scratch_write` / `scratch_read` /
+  `scratch_list`), outside the project, silent when policy allows it, with typed quotas (1 MiB write, 64 MiB conversation, 512 MiB
+  installation) and 7-day retention; the shell's `TMPDIR` points to it; `/scratch`, `/scratch path`, `/scratch clear`. Layout registry
+  v4 (`scratch`), protocol v16 additions (`chatTurn.sessionId`, `inspectScratch`, `clearScratch`), Core operation
+  `workspace.scratch.write@1`, model-facing system prompt v2.
+- ADDED (SCR-B, owner 2026-09-28 option B): `deckent init policy --scope <id> --preview|--apply` installs a versioned first-run policy
+  (read and scratch tools silent, edit/shell ask and mode-eligible, no pool/service grant) without Docker; `doctor --json` reports
+  `policyTemplate`.
+- CHANGED (COMP-BUDGET-2): the OpenAI chat wire shape lives in the `provider-openai-chat` adapter and the compaction protocol in engine
+  `agent-turn`; composition 4826/5000 lines, budget unchanged.
 - ADDED (B06-2c): `execution.adoption.verification {kind, required, criteria}`; adoption without a required verification, with
   the wrong kind or weaker criteria is refused by name; CLI `task integration-adopt --verification-run` and `run create
   --delivery-command-id`; Docker profiles may bind project dependency directories read-only (`readOnlyMounts`).
