@@ -7,7 +7,7 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createWorkspaceScope, probeShellCapabilities, resolveShellRealm, hostShellRealm, type ShellCapabilities,
+import { buildLandlockRules, createWorkspaceScope, probeShellCapabilities, resolveShellRealm, hostShellRealm, type ShellCapabilities,
   type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView, BUBBLEWRAP_KNOWN_PATHS } from '#adapters/core/shell-sandbox-bwrap/index.js';
 
@@ -159,6 +159,21 @@ describe('bubblewrap realm selection (S9)', () => {
     const view = await resolveBubblewrapView(f.layout, f.environment);
     if (!view.ok) throw new Error(view.reason);
     expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git'), join(f.main, '.git')]);
+  });
+  // Merge Astra 2170 x MODES-3: a full-access turn's layout writes the repository (and a worktree's common one), but a call whose project is
+  // read-only keeps the repository read-only too — in both realms (no writable common repository under a read-only project).
+  it('writes the repository of a full-access layout only while the call\'s project is writable (bubblewrap and Landlock)', async () => {
+    const f = await fixture({ worktree: true });
+    const layout = { ...f.layout, writeFloor: null, repositoryWritable: true }, common = join(f.main, '.git');
+    const writable = await resolveBubblewrapView(layout, f.environment), readOnly = await resolveBubblewrapView(layout, f.environment, {}, { projectReadOnly: true });
+    if (!writable.ok || !readOnly.ok) throw new Error('view refused');
+    expect({ writable: writable.view.writablePaths, readOnly: writable.view.readOnlyPaths }).toEqual({ writable: [common], readOnly: [] });
+    expect({ writable: readOnly.view.writablePaths, readOnly: readOnly.view.readOnlyPaths }).toEqual({ writable: undefined, readOnly: [join(f.scope.root, '.git'), common] });
+    expect(bubblewrapArguments(readOnly.view).join(' ')).toContain(`--ro-bind ${f.scope.root} ${f.scope.root}`);
+    const rules = async (projectReadOnly: boolean) => { const built = await buildLandlockRules(layout, {}, undefined, { projectReadOnly }); if (!built.ok) throw new Error(built.reason);
+      return built.rules.filter(([cls, path]) => cls === 'w' && (path === '.git' || path.startsWith(common))).map(([, path]) => path); };
+    expect((await rules(false)).length).toBeGreaterThan(0);
+    expect(await rules(true)).toEqual([]);
   });
   it('a forged .git pointer opens nothing outside: nested files are ignored, the root file only in the verified worktree shape', async () => {
     const f = await fixture({ worktree: true });
