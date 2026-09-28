@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { existsSync } from 'node:fs';
 import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
@@ -256,6 +258,25 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     const ran = await usable.realm.run({ command: `git log --oneline -1 | wc -l; git fsck --connectivity-only 2>&1 | grep -c "Could not read" ; cat .git/objects/aa/${'a'.repeat(38)} 2>&1`, cwd: scope.root, environment: f.environment,
       fixedEnv: { TMPDIR: f.scratch }, timeoutMs: 60_000 });
     expect(ran.output).toMatch(/^1\n0\n.*Permission denied\n$/u); expect(ran.output).not.toContain('SECRET');
+  });
+  // Astra 2158: verdicts are taken afresh every call in the same process — a `.git` file that was clean (single-link, or a verified object)
+  // and then gained another name (`.env`) and new content through it is closed on the next call, though its directory's times did not change.
+  it('re-checks git metadata every call: a file that became another name of a secret after a warm call is closed (Astra 2158)', async () => {
+    const f = await fixture();
+    const data = Buffer.from('blob 6\0hello\n'), hash = createHash('sha1').update(data).digest('hex');
+    const object = join('.git', 'objects', hash.slice(0, 2), hash.slice(2));
+    await mkdir(join(f.project, '.git', 'objects', hash.slice(0, 2)), { recursive: true });
+    await writeFile(join(f.project, object), deflateSync(data)); await writeFile(join(f.project, '.git', 'cached-file'), 'PUBLIC_BEFORE\n');
+    const first = await f.run(`cat .git/cached-file; cat ${object} | wc -c`);
+    expect(first.output).toMatch(/^PUBLIC_BEFORE\n\d+\n$/u);
+    // Between two calls of the same process: link both under `.env` and write new protected content through that name.
+    await rm(join(f.project, '.env')); await link(join(f.project, '.git', 'cached-file'), join(f.project, '.env')); await writeFile(join(f.project, '.env'), 'SECRET-LATER-PLAIN\n');
+    await link(join(f.project, object), join(f.project, 'secrets', '.env')); await writeFile(join(f.project, 'secrets', '.env'), 'SECRET-LATER-OBJECT\n');
+    const view = await resolveBubblewrapView(f.layout, f.environment);
+    if (!view.ok) throw new Error(view.reason);
+    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.project, '.git', 'cached-file'), join(f.project, object)]));
+    const warm = await f.run(`cat .git/cached-file 2>&1; cat ${object} 2>&1`);
+    expect(warm.output).not.toContain('SECRET'); expect(warm.output).toMatch(/cached-file: Permission denied\n.*Permission denied\n$/u);
   });
   it('has no network: a port the host reaches is unreachable from the sandbox', async () => {
     const f = await fixture();

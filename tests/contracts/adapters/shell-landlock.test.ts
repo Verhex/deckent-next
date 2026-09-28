@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { chmod, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildLandlockRules, describeHostShellResult, hostShellRealm, landlockShellSandbox, resolveShellRealm, type ShellCapabilities } from '#adapters/core/host-shell/index.js';
 import { createWorkspaceScope } from '#adapters/index.js';
@@ -229,6 +231,23 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
       expect(ran.output, root).toMatch(/status=0\n1\n$/u);
     }
     expect(execFileSync('find', [join(clone, '.git', 'objects'), '-type', 'f', '-links', '+1'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length).toBeGreaterThan(1);
+  });
+  it('re-checks git metadata every call: a file that became another name of a secret after a warm call takes no rule (Astra 2158)', async () => {
+    const p = await project();
+    const data = Buffer.from('blob 6\0hello\n'), hash = createHash('sha1').update(data).digest('hex');
+    const object = join('.git', 'objects', hash.slice(0, 2), hash.slice(2));
+    await mkdir(join(p.root, '.git', 'objects', hash.slice(0, 2)), { recursive: true });
+    await writeFile(join(p.root, object), deflateSync(data)); await writeFile(join(p.root, '.git', 'cached-file'), 'PUBLIC_BEFORE\n');
+    const landlock = await realmOf(p);
+    const run = (command: string) => landlock.run({ command, cwd: p.root, environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 20_000, fixedEnv: { TMPDIR: p.scratch } });
+    expect((await run(`cat .git/cached-file; cat ${object} | wc -c`)).output).toMatch(/^PUBLIC_BEFORE\n\d+\n$/u);
+    await rm(join(p.root, '.env')); await link(join(p.root, '.git', 'cached-file'), join(p.root, '.env')); await writeFile(join(p.root, '.env'), 'SECRET-LATER-PLAIN\n');
+    await link(join(p.root, object), join(p.root, 'pkg', '.env')); await writeFile(join(p.root, 'pkg', '.env'), 'SECRET-LATER-OBJECT\n');
+    const rules = await buildLandlockRules({ project: p.scope, scratchDir: p.scratch });
+    // Neither file takes a read rule any more, and no directory above them is one read grant (they are carved: listing only).
+    expect(rules.ok && rules.rules.some(([cls, path]) => cls === 'r' && (path === '.git/cached-file' || path === object || path === '.git' || path === dirname(object)))).toBe(false);
+    const warm = await run(`cat .git/cached-file 2>&1; cat ${object} 2>&1`);
+    expect(warm.output).not.toContain('SECRET'); expect(warm.output).toMatch(/cached-file: Permission denied\n.*Permission denied\n$/u);
   });
   it('keeps the process-group contract: a timeout ends the sandboxed group, background children included', async () => {
     const r = await realm();
