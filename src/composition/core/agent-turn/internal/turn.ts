@@ -8,7 +8,7 @@ import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PRE
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
   type ProductResource } from '#platform/index.js';
-import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
+import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   bubblewrapShellSandbox, landlockShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
@@ -114,7 +114,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
-  const declares = (id: string) => binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+  const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
     && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.

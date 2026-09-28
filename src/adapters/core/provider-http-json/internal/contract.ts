@@ -12,7 +12,9 @@ export class NativeJsonHttpError extends Error {
   constructor(readonly code: NativeJsonHttpErrorCode, readonly status?: number) { super(code); this.name = 'NativeJsonHttpError'; }
 }
 
-export type NativeJsonHttpAuthentication = Readonly<{ type: 'none' } | { type: 'bearer'; credentialRef: string }>;
+/** `header` carries the credential value verbatim in one named request header (for example `x-api-key`), never in an Authorization header. */
+export type NativeJsonHttpAuthentication = Readonly<{ type: 'none' } | { type: 'bearer'; credentialRef: string }
+  | { type: 'header'; name: string; credentialRef: string }>;
 export type NativeJsonHttpDefinition = Readonly<{ endpoint: string; authentication: NativeJsonHttpAuthentication;
   tls?: Readonly<{ caPem: string }> }>;
 export type NativeJsonHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
@@ -27,9 +29,17 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
     return canonical(value) === canonical(parsed.toString());
   } catch { return false; }
 });
+/** Header names the transport owns or that would change routing/framing; a caller-chosen name can never shadow them. */
+const RESERVED_HEADER = /^(authorization|x-api-key|accept|content-.*|host|cookie|set-cookie|proxy-.*|connection|transfer-encoding|te|upgrade|expect|forwarded|x-forwarded-.*)$/;
+export const nativeJsonHttpHeaderNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).refine(name => !RESERVED_HEADER.test(name));
+const headerValue = z.string().regex(/^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/);
+/** Static, non-secret request headers (for example a pinned API version). Bounded; secrets never belong here. */
+export const nativeJsonHttpStaticHeadersSchema = z.record(nativeJsonHttpHeaderNameSchema, headerValue)
+  .refine(headers => Object.keys(headers).length <= 8);
 const definitionSchema = z.object({ endpoint: z.string().min(1),
   authentication: z.discriminatedUnion('type', [z.object({ type: z.literal('none') }).strict(),
-    z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict()]),
+    z.object({ type: z.literal('bearer'), credentialRef: credentialReference }).strict(),
+    z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: credentialReference }).strict()]),
   tls: z.object({ caPem: certificate }).strict().optional() }).strict();
 const limitsSchema = z.object({ requestMaxBytes: positive, responseMaxBytes: positive,
   timeoutMs: positive.max(2_147_483_647) }).strict();
@@ -73,7 +83,7 @@ export function parseNativeJsonHttpLimits(input: unknown): NativeJsonHttpLimits 
   return Object.freeze(parsed.data);
 }
 
-function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer', hasTls: boolean): boolean {
+function isCanonicalEndpoint(endpoint: string, authentication: 'none' | 'bearer' | 'header', hasTls: boolean): boolean {
   let url: URL;
   try { url = new URL(endpoint); } catch { return false; }
   const common = url.search === '' && url.hash === '' && url.username === '' && url.password === ''

@@ -36,6 +36,7 @@ export { initializeInstallationLedger, verifyInstallationLedger, InstallationLed
 export { openSqliteModelActivationStore, openSqliteModelActivationReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';
 export * from '#adapters/core/provider-openai-chat/index.js';
+export * from '#adapters/core/provider-anthropic-messages/index.js';
 export * from '#adapters/core/provider-openrouter-chat/index.js';
 export * from '#adapters/core/provider-openrouter-pricing/index.js';
 export * from '#adapters/core/npm-registry/index.js';

@@ -76,3 +76,25 @@ it('records the exact generic adapter identity in rejected response evidence', a
   expect(result).toMatchObject({ kind: 'rejected', evidence: { adapter: { id: 'custom-native-adapter', version: 7 },
     reason: 'http-status', httpStatus: 429, body: { complete: true, byteLength: body.byteLength, observedBytes: body.byteLength } } });
 });
+
+it('sends a header credential verbatim in its own header, never as Authorization, with only bounded static headers', async () => {
+  const seen: IncomingMessage['headers'][] = [];
+  const endpoint = await secureFixture((request, reply) => { seen.push(request.headers); request.resume(); reply.end('{}'); });
+  const base = { definition: { endpoint, authentication: { type: 'header' as const, name: 'x-api-key' as const, credentialRef: 'KEY' }, tls: { caPem: certificate } },
+    limits: { ...limits }, body: '{}', adapter: { id: 'adapter-one', version: 1 } };
+  const options = { async resolveCredential(reference: string) { return reference === 'KEY' ? 'sk-ant-key_1' : undefined; }, parseResponse: () => ({ response }) };
+  await expect(sendNativeJsonHttp({ ...base, headers: { 'anthropic-version': '2023-06-01' } }, options)).resolves.toEqual(response);
+  expect(seen[0]).toMatchObject({ 'x-api-key': 'sk-ant-key_1', 'anthropic-version': '2023-06-01' });
+  expect(seen[0]!.authorization).toBeUndefined();
+  // Static headers can never shadow what the transport owns, carry control characters, or exceed the bound.
+  for (const headers of [{ authorization: 'Bearer x' }, { 'x-api-key': 'k' }, { accept: '*/*' }, { 'content-length': '1' }, { host: 'evil' }, { 'proxy-authorization': 'x' },
+    { 'Upper-Case': 'x' }, { good: 'line\r\nbreak' }, { good: '' }, Object.fromEntries(Array.from({ length: 9 }, (_v, index) => [`h${index}`, 'v']))]) {
+    await expect(sendNativeJsonHttp({ ...base, headers }, options), JSON.stringify(headers)).rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_REQUEST_INVALID' });
+  }
+  expect(seen).toHaveLength(1);
+  // A header credential never travels in cleartext, and only the x-api-key name exists.
+  const clear = await fixture((_request, reply) => reply.end('{}'));
+  await expect(sendNativeJsonHttp({ ...base, definition: { ...base.definition, endpoint: clear, tls: undefined as never } }, options)).rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_DEFINITION_INVALID' });
+  await expect(sendNativeJsonHttp({ ...base, definition: { ...base.definition, authentication: { type: 'header', name: 'authorization', credentialRef: 'KEY' } as never } }, options))
+    .rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_DEFINITION_INVALID' });
+});

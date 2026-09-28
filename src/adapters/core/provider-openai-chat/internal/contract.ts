@@ -123,7 +123,7 @@ export function parseOpenAiChatHttpLimits(input: unknown): OpenAiChatHttpLimits 
   return Object.freeze(parsed.data);
 }
 
-export function parseOpenAiChatTextRequest(input: unknown, definition: OpenAiChatHttpDefinition): OpenAiChatTextRequest {
+export function parseOpenAiChatTextRequest(input: unknown, definition: Pick<OpenAiChatHttpDefinition, 'maxOutputTokens'>): OpenAiChatTextRequest {
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && requestSchema.safeParse(copied.data);
   if (!parsed || !parsed.success || parsed.data.max_completion_tokens > definition.maxOutputTokens) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object') { for (const entry of Object.values(value)) deepFreeze(entry); Object.freeze(value); } return value; };
