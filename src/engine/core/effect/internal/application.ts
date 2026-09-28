@@ -194,7 +194,13 @@ export class EffectApplication {
 
   private async apply(record: EffectRecord, target: EffectTarget, settle: (record: EffectRecord) => Promise<void>): Promise<EffectResult> {
     const { command } = record.intent;
-    await settle(record);
+    try { await settle(record); }
+    catch (error) {
+      // The grant that admitted this claimed command is gone before anything was sent: a terminal refusal, so the claimed intent never
+      // keeps its target record busy (an unknown record might already have an effect and is never refused here).
+      if (error instanceof PolicyAuthorizationError && error.code === 'POLICY_DENIED' && record.state === 'claimed') await this.save(record, refuseEffect(record, 'EFFECT_REJECTED'));
+      throw error;
+    }
     try {
       const applied = await target.apply({ target: command.target, operation: command.operation, idempotencyKey: record.intent.wireKey!,
         expectedVersion: command.expectedVersion, input: command.input ?? null });

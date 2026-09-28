@@ -16,5 +16,5 @@ export { decideAgentToolCall } from './internal/permission-mode.js';
 export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from './internal/permission-mode.js';
 export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from './internal/permission-mode-admin.js';
-export { AuthorityChangeError, authorityChangeAuditEvent, chainAuthorityRevision } from './internal/authority.js';
+export { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision } from './internal/authority.js';
 export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from './internal/authority.js';

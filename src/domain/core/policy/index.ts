@@ -13,5 +13,6 @@ export type { CorePolicyResource, CorePolicyAction } from './internal/vocabulary
 export { authorityDocuments, DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
   policyChangeSchema } from './internal/administer.js';
 export type { DelegatedRule, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
+export { describePolicyChange, POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
 export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';
 export type { PolicyBinding } from './internal/schema.js';

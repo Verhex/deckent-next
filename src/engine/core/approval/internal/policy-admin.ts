@@ -1,15 +1,18 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, planPolicyChange,
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
   effectCommandSchema, policyChangeSchema, PolicyChangeError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
-import type { SessionAuthority, SessionVerifier } from '#engine/core/authentication/index.js';
-import { AuthorityChangeError, authorityChangeAuditEvent, chainAuthorityRevision, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
+import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
+import { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
 import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, type EffectAdmission, type EffectApplyRequest, type EffectApprovalContext,
   type EffectApprovalGate, type EffectOutcome, type EffectStore, type EffectTarget } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
 import { verifyApproval } from './integrity.js';
 import { OperationApprovalBroker } from './operation.js';
 
+/** Refusal codes of an authority submission that are audited (transient or unknown-outcome failures are not refusals). */
+const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEEDS', 'POLICY_DENIED', 'POLICY_CHANGE_INVALID', 'EFFECT_REJECTED',
+  'EFFECT_PRECONDITION_CHANGED', 'APPROVAL_DENIED', 'APPROVAL_EXPIRED', 'APPROVAL_STALE']);
 /** What the approval gate learned about this submission, for the target that writes inside the store's lock. */
 interface AuthoritySubmission { requester?: VerifiedPrincipal; decider?: ApprovalActor; approvalId?: string; inputDigest?: string }
 export interface AuthorityTargetHooks {
@@ -101,14 +104,40 @@ export interface PolicyAdministrationDependencies {
  */
 export class PolicyAdministrationApplication {
   constructor(private readonly deps: PolicyAdministrationDependencies) {}
-  submit(input: unknown, credential?: unknown): Promise<EffectOutcome> {
+  async submit(input: unknown, credential?: unknown): Promise<EffectOutcome> {
     const { deps } = this;
     const command = effectCommandSchema.parse(input);
+    const submission: AuthoritySubmission = {};
+    const previous = await deps.effects.loadEffect(command.scopeId, command.commandId);
+    try { return await this.run(command, submission, credential); }
+    catch (error) {
+      // A replay of a command already refused terminally is the same refusal, not a new event; anything else that stops here is recorded.
+      const code = (error as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && AUDITED_REFUSALS.has(code) && previous?.state !== 'refused') {
+        // `settle`: the command had claimed its intent (now or before) — the refusal came at the effect, not before any intent.
+        const stopped = (await deps.effects.loadEffect(command.scopeId, command.commandId))?.state;
+        await this.auditRefusal(command, submission, code, previous?.state === 'claimed' || stopped === 'refused' ? 'settle' : 'submit', credential);
+      }
+      throw error;
+    }
+  }
+  /** Best-effort: the refusal stands with or without its audit record (a refusal changes nothing to protect by failing differently). */
+  private async auditRefusal(command: EffectCommand, submission: AuthoritySubmission, code: string, stage: 'submit' | 'settle', credential: unknown) {
+    const { deps } = this;
+    try {
+      const principal = submission.requester ?? (await authenticateSession(deps.sessions, deps.sessions, deps.clock, credential, command.scopeId)).principal;
+      deps.audit(authorityRefusalAuditEvent({ scopeId: command.scopeId, principal, atMs: deps.clock.sample().wallMs, policyRevision: (await deps.policy.load() as Policy).revision,
+        stage, code, operation: command.operation, commandId: command.commandId, approvalId: submission.approvalId ?? null, decider: submission.decider ?? null }));
+    } catch { /* see above */ }
+  }
+  private run(command: EffectCommand, submission: AuthoritySubmission, credential?: unknown): Promise<EffectOutcome> {
+    const { deps } = this;
     // The typed, bounded change set is checked before anything is asked: an invalid input never opens a card. Snapshot-dependent checks
     // (an id that exists, a known role) stay with the plan at the gate and inside the write.
     if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
-    const submission: AuthoritySubmission = {};
-    const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs });
+    // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
+    const describe = async (asked: EffectCommand, budget: number) => describePolicyChange(authorityDocuments(policySchema.parse(await deps.policy.load())), asked.input, budget);
+    const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs, describe });
     const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission);
     const target = new AuthorityDocumentTarget(deps.authority, {
       bound(snapshot, touched) {

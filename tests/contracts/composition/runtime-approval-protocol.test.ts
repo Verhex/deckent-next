@@ -100,3 +100,32 @@ it('pages a hidden-subject view over visible approvals only: a page never comes 
     expect(walked).toEqual([f.task.request.approvalId, 'tool-call'].sort());
   } finally { await stopTestRuntimeService(service); }
 });
+
+// POLICY-HARDEN K3 at the runtime service: the peer behind MCP `decide_approval` (same uid) cannot allow an approval of an authority-surface
+// operation (`policy.administer@1`); the request stays pending. A deny is still accepted. KNOWN GAP (lead: registry entry): the service
+// answers with the stable code, but `APPROVAL_SURFACE_RESTRICTED` is not in `ErrorRegistry`, so the client maps it to the generic
+// RUNTIME_SERVICE_TRANSPORT (client.ts `ErrorRegistry.has`); once registered, tighten the first assertion to `{ code: 'APPROVAL_SURFACE_RESTRICTED' }`.
+it('refuses an allow of a policy.administer approval from a runtime client (the MCP decide_approval path); the record stays pending', async () => {
+  const f = await fixture();
+  const layout = (await openConfiguredAttemptStore(f.project, { env: f.env }).then(opened => { opened.store.close(); return opened; }));
+  const integrity = await openLocalIntegrityAuthority(layout.layout, 'authority.key', true);
+  const journal = openSqliteApprovalStore(layout.path, sqlite);
+  const requester = { id: 'owner', issuer: hostname(), subject: String(userInfo().uid) }, now = Date.now();
+  const seed = (approvalId: string) => journal.store.create(sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 2, approvalId, scopeId: 's',
+    subject: { kind: 'operation', operation: { id: 'policy.administer', version: 1 }, target: { kind: 'authority-document', id: 'installation' }, commandId: `cmd-${approvalId}`,
+      inputDigest: digest(approvalId), targetBinding: digest('binding'), expectedVersion: 'p1', compensates: null },
+    requester, actionDigest: digest(`authority-${approvalId}`), policyRevision: 'p1', summary: 'policy.administer@1 · 1 change\n+ grant g: allow', createdAt: now, expiresAt: now + 600_000 }),
+  revision: 0, status: 'pending', decision: null }, integrity));
+  seed('authority-a'); seed('authority-b'); journal.close();
+  const service = await startTestRuntimeService(f.project, f.env);
+  try {
+    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const decide = (approvalId: string, decision: 'allow' | 'deny') => client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `${decision}-${approvalId}`,
+      expectedRevision: 0, decision, reason: 'Reviewed' });
+    await expect(decide('authority-a', 'allow')).rejects.toBeInstanceOf(Error);
+    expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'authority-a' })).toMatchObject({ status: 'pending', decision: null });
+    await expect(decide('authority-b', 'deny')).resolves.toMatchObject({ status: 'decided', decision: { decision: 'deny' } });
+    // An ordinary operation approval is still decidable on the same surface.
+    await expect(decide('operation', 'allow')).resolves.toMatchObject({ status: 'decided' });
+  } finally { await stopTestRuntimeService(service); }
+});

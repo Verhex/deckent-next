@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
-  separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type VerifiedPrincipal } from '#domain/index.js';
+  separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
-import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
+import { PolicyAuthorizationError, authorityRefusalAuditEvent, type PolicySource } from '#engine/core/policy/index.js';
+import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
 
@@ -26,15 +27,34 @@ function commandFingerprint(tag: string, command: z.infer<typeof approvalRenewal
   return sha256(encodeCommandProjection(tag, { envelope, approvalId: command.approvalId, reason: command.reason,
     ...('decision' in command ? { decision: command.decision } : {}) }));
 }
+/**
+ * Which approvals this decision surface may allow (POLICY-HARDEN K3). Approvals of an operation whose descriptor is `surface: 'authority'`
+ * (`policy.administer@1`) are decided only where the composition names the authority surface (`/policy`, later); every other approval
+ * surface — SDK, CLI, MCP `decide_approval`, the terminal's y/N card — is refused with `APPROVAL_SURFACE_RESTRICTED` and the request stays
+ * pending (a deny only withdraws a request and stays open). `refused` records that refusal (audit is best-effort here: it never turns
+ * the refusal into something else).
+ */
+export interface ApprovalDecisionRestriction { readonly catalog: OperationCatalog; readonly surface?: 'authority'; readonly refused?: (event: AuditEvent) => void | Promise<void> }
 export class ApprovalApplication {
   constructor(private readonly store: ApprovalStore, private readonly verifier: PrincipalVerifier,
     private readonly sessions: SessionVerifier & SessionAuthority, private readonly policy: PolicySource,
     private readonly integrity: IntegrityAuthority, private readonly clock: TrustedClock,
-    private readonly channel: string, private readonly pageLimit: number, private readonly beforeCommit: (record: ApprovalRecord) => void = () => undefined) { identitySchema.parse(channel); counterSchema.positive().parse(pageLimit); }
+    private readonly channel: string, private readonly pageLimit: number, private readonly beforeCommit: (record: ApprovalRecord) => void = () => undefined,
+    private readonly restriction?: ApprovalDecisionRestriction) { identitySchema.parse(channel); counterSchema.positive().parse(pageLimit); }
   private async authorize(action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
     const policy = policySchema.parse(await this.policy.load());
     authorizeApproval(policy, action, scopeId, id, principal);
     return policy;
+  }
+  private async assertDecidableHere(record: ApprovalRecord, actor: { readonly issuer: string; readonly subject: string }) {
+    const { restriction } = this, subject = approvalSubject(record.request);
+    if (!restriction || restriction.surface === 'authority' || subject.kind !== 'operation') return;
+    if ((await restriction.catalog.resolve(subject.operation))?.surface !== 'authority') return;
+    try {
+      await restriction.refused?.(authorityRefusalAuditEvent({ scopeId: record.request.scopeId, principal: actor, atMs: this.clock.sample().wallMs, policyRevision: record.request.policyRevision,
+        stage: 'decide', code: 'APPROVAL_SURFACE_RESTRICTED', operation: subject.operation, commandId: subject.commandId, approvalId: record.request.approvalId, decider: null }));
+    } catch { /* the refusal stands without its audit record */ }
+    throw new ApprovalError('APPROVAL_SURFACE_RESTRICTED');
   }
   private expired(record: ApprovalRecord, now: number) {
     // I40-c B: only the producing turn judges tool-call expiry, through its wall clock and monotonic TTL.
@@ -89,6 +109,7 @@ export class ApprovalApplication {
     const loaded = this.store.load(command.scopeId, command.approvalId); if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
     let record = verifyApproval(loaded, this.integrity);
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+    if (command.decision === 'allow') await this.assertDecidableHere(record, actor);
     const fingerprint = commandFingerprint('approval-command:1', command, actor);
     const replay = this.store.receipt(command.scopeId, command.commandId);
     // A replay returns the exact receipt; it never issues a new authorization or reopens the request.
