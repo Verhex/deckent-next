@@ -96,6 +96,7 @@ const kernelAbi = (() => {
     return process.platform === 'linux' ? Number(JSON.parse(execFileSync(probe, { encoding: 'utf8' })).landlockAbi) : 0;
   } catch { return 0; }
 })();
+const gitAvailable = (() => { try { execFileSync('git', ['--version']); return true; } catch { return false; } })();
 /** A readable regular file of the real HOME (its content is never read by the test itself). */
 const homeFile = (() => {
   try { return readdirSync(homedir()).map(name => join(homedir(), name)).find(path => { try { return statSync(path).isFile(); } catch { return false; } }) ?? null; }
@@ -165,6 +166,26 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
     // A command that imitates the failure is still an ordinary exit.
     const forged = await (await realmOf(p)).run({ command: 'echo "shell-sandbox: setup failed" >&2; exit 125', cwd: p.root, environment: { PATH: '/usr/bin:/bin' } });
     expect(forged).toMatchObject({ status: 'exited', exitCode: 125 });
+  });
+  it.skipIf(!gitAvailable)('git works read-only in a repository and in a worktree; a forged .git file opens nothing outside', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-landlock-git-')); roots.push(base);
+    const main = join(base, 'main'), tree = join(base, 'tree'), other = join(base, 'other'), scratch = join(base, 'scratch');
+    const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } });
+    await mkdir(scratch);
+    for (const repo of [main, other]) { await mkdir(repo); git(repo, 'init', '-q'); await writeFile(join(repo, 'a.txt'), 'a\n'); git(repo, 'add', 'a.txt'); git(repo, 'commit', '-qm', 'a'); }
+    git(main, 'worktree', 'add', '-q', tree);
+    // A forged pointer in a subdirectory (a sandboxed command could write one): it must not open the other repository.
+    await mkdir(join(tree, 'sub')); await writeFile(join(tree, 'sub', '.git'), `gitdir: ${join(other, '.git')}\n`);
+    for (const root of [main, tree]) {
+      const scope = await createWorkspaceScope(root);
+      const resolution = resolveShellRealm('prefer-sandbox', caps(kernelAbi), { scope, scratchDir: scratch });
+      if (!resolution.ok) throw new Error('realm expected');
+      const ran = await resolution.realm.run({ command: 'echo b >> a.txt && git status --short a.txt && git commit -qam x; echo "commit=$?"; cat ' + `${other}/.git/HEAD`,
+        cwd: scope.root, environment: { PATH: '/usr/bin:/bin' } });
+      expect(ran.output, root).toMatch(/^ M a\.txt\n(.|\n)*index\.lock.*Permission denied(.|\n)*commit=128\n(.|\n)*Permission denied/u);
+      expect(ran.output, root).not.toContain('refs/heads');
+    }
   });
   it('keeps the process-group contract: a timeout ends the sandboxed group, background children included', async () => {
     const r = await realm();
