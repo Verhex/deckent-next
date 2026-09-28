@@ -998,5 +998,7 @@
   "error.INTEGRITY_KEY_UNAVAILABLE": "The local integrity key is unavailable or unsafe.",
   "error.PERMISSION_MODE_CONFLICT": "The policy or the bindings changed after your mode was read; nothing was written. Check /mode and try again.",
   "error.PERMISSION_MODE_UNSUPPORTED": "Your policy is v1, so permission modes are off and edit/shell calls ask as policy says; nothing was written. To use /mode, move to a v2 policy with a bindings file (a fresh setup: `deckent init policy --scope <scope> --preview`, then `--apply`; it does not overwrite an existing policy.json). For auto-edit or full-auto, also add an allow grant: resource kind `permission-mode`, action `set`, ids [auto-edit, full-auto].",
-  "error.PERMISSION_MODE_INVALID": "The permission mode request is not valid: the mode must be ask, auto-edit or full-auto."
+  "error.PERMISSION_MODE_INVALID": "The permission mode request is not valid: the mode must be ask, auto-edit or full-auto.",
+  "error.PERMISSION_MODE_DENIED": "No grant lets you set {mode} in this scope; nothing was written. Add an allow grant (resource `permission-mode`, action `set`, id {mode}) to the policy.",
+  "error.PERMISSION_MODE_LOCKED": "Another Deckent process is changing the policy files right now (lock {path}, pid {pid}, held {ageSeconds}s); nothing was written. Wait a moment and run /mode again; a lock left by a process that is gone clears itself."
 }
