@@ -1,4 +1,4 @@
-export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, readTerminalConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, type TerminalChatConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from '#adapters/core/contract/index.js';
+export { registerProviderConfig, providerSpendingSchema, providerSpendAuditConfigSchema, readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -64,3 +64,4 @@ export * from '#adapters/core/workspace-write/index.js';
 export * from '#adapters/core/shell-paths/index.js';
 export * from '#adapters/core/host-shell/index.js';
 export * from '#adapters/core/scratch-store/index.js';
+export * from '#adapters/core/http-fetch/index.js';

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { connect, isIPv4, BlockList, type Socket } from 'node:net';
+import { connect, isIPv4, isIPv6, BlockList, type Socket } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { networkInterfaces } from 'node:os';
 import { chmod, mkdtemp, realpath, lstat, rm } from 'node:fs/promises';
@@ -18,8 +18,15 @@ const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
   ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
   ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]] as const) denied.addSubnet(address, prefix);
+// IPv6 (FETCH S6): only global unicast 2000::/3, without the special-purpose blocks inside it (IETF protocol assignments incl.
+// Teredo, documentation, 6to4). Mapped/compatible IPv4, NAT64, ULA, link-local, multicast and loopback lie outside 2000::/3.
+const globalV6 = new BlockList(), deniedV6 = new BlockList();
+globalV6.addSubnet('2000::', 3, 'ipv6');
+for (const [address, prefix] of [['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20]] as const) deniedV6.addSubnet(address, prefix, 'ipv6');
+/** Whether a numeric address is publicly routable and not this machine's own (the gateway resolves IPv4 only; the fetch adapter both). */
 export function isPublicNativeAddress(address: string) {
-  return isIPv4(address) && !denied.check(address) && !Object.values(networkInterfaces()).flat().some(row => row?.address === address);
+  const routable = isIPv4(address) ? !denied.check(address) : isIPv6(address) && globalV6.check(address, 'ipv6') && !deniedV6.check(address, 'ipv6');
+  return routable && !Object.values(networkInterfaces()).flat().some(row => row?.address === address);
 }
 /** One per-attempt capability. No TCP listener, TLS interception, redirects, refresh or host writeback. */
 /** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */

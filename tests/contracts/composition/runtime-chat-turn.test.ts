@@ -284,7 +284,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
-    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v2\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v3\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
     expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
     expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
     // The summary call never carries the switch when the model does not declare it (TL-C D8).
@@ -304,7 +304,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
     expect(sent.map(message => message.role)).toEqual(['system', 'user']);
     const system = sent[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v2]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v3]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
     expect(system).toContain(`Project root: ${f.project}`);
     expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).toContain('.deckent/live-data/state/terminal-sessions');
     expect(system).toContain('.deckent/config.json');

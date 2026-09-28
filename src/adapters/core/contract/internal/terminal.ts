@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { modelReferenceSchema } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
@@ -43,6 +44,17 @@ export const terminalConfigSchema = z.object({
     retentionDays: z.number().int().min(1).max(365).default(7),
     sweepIntervalMs: z.number().int().min(60_000).max(86_400_000).default(3_600_000),
   }).strict().optional(),
+  /** The agent's `fetch_url` (FETCH S6, owner 2026-09-28): `none` (default: no tool, no network), `allowlist` (only the listed hosts),
+   * `approval` (listed hosts at once, any other host asks the owner). Hosts are exact lowercase DNS names (no wildcard, no IP). No proxy. */
+  fetch: z.object({
+    schemaVersion: z.literal(1),
+    egress: z.enum(['none', 'allowlist', 'approval']).default('none'),
+    allowedHosts: z.array(z.string().max(253).regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u)
+      .refine(host => isIP(host) === 0, 'FETCH_HOST_IS_IP')).max(256).default([]),
+    maxBytes: z.number().int().min(1_024).max(67_108_864).default(4_194_304),
+    timeoutMs: z.number().int().min(1_000).max(300_000).default(30_000),
+    maxRedirects: z.number().int().min(0).max(10).default(3),
+  }).strict().optional(),
 }).strict();
 
 export type TerminalConfig = z.infer<typeof terminalConfigSchema>;
@@ -69,6 +81,15 @@ export function readTerminalScratchConfig(config: Record<string, unknown>): Term
   const { writeMaxBytes, sessionMaxBytes, installationMaxBytes, retentionDays, sweepIntervalMs } = scratch
     ?? terminalConfigSchema.shape.scratch.unwrap().parse({ schemaVersion: 1 });
   return Object.freeze({ writeMaxBytes, sessionMaxBytes, installationMaxBytes, retentionDays, sweepIntervalMs });
+}
+
+export type TerminalFetchConfig = { readonly egress: 'none' | 'allowlist' | 'approval'; readonly allowedHosts: readonly string[]; readonly maxBytes: number;
+  readonly timeoutMs: number; readonly maxRedirects: number };
+/** The fetch section, or its defaults when absent (egress none, no hosts, 4 MiB, 30 s, 3 redirects). */
+export function readTerminalFetchConfig(config: Record<string, unknown>): TerminalFetchConfig {
+  const fetch = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).fetch;
+  const { egress, allowedHosts, maxBytes, timeoutMs, maxRedirects } = fetch ?? terminalConfigSchema.shape.fetch.unwrap().parse({ schemaVersion: 1 });
+  return Object.freeze({ egress, allowedHosts: Object.freeze([...allowedHosts]), maxBytes, timeoutMs, maxRedirects });
 }
 
 export function readTerminalConfig(config: Record<string, unknown>): TerminalConfig {

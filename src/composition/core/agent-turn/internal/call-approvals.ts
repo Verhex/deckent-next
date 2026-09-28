@@ -6,9 +6,11 @@ import type { loadPeerInvocationContext } from '#composition/core/model-invocati
 
 type Execution = { readonly round: number; readonly index: number };
 const displayTarget = (args: Record<string, unknown>) => typeof args['path'] === 'string' ? args['path'] : typeof args['pattern'] === 'string' ? args['pattern'] : null;
-/** What a call's line and its approval name: the shell command (first 200 characters; the arguments digest binds the rest) or the path. */
+const cut = (text: string) => text.length > 200 ? `${text.slice(0, 199)}…` : text;
+/** What a call's line and its approval name: the shell command or the fetched URL (first 200 characters; the arguments digest binds the
+ * rest), or the path. */
 export const describeAgentCall = (tool: AgentToolSpec, args: Record<string, unknown>) => tool.toolClass === 'shell' && typeof args['command'] === 'string'
-  ? (args['command'].length > 200 ? `${args['command'].slice(0, 199)}…` : args['command']) : displayTarget(args);
+  ? cut(args['command']) : tool.name === 'fetch_url' && typeof args['url'] === 'string' ? cut(args['url']) : displayTarget(args);
 
 /**
  * Owner approvals of one turn's edit and shell calls at their effects (C12 G3). The subject is built by one function when the owner is

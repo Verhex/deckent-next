@@ -37,6 +37,18 @@ describe.skipIf(process.platform !== 'linux')('scratch store (SCR-A)', () => {
     expect(scratchSessionKey({ scopeId: 'scope', principal: { issuer: 'host', subject: '1000' }, turnId: 't1' }).split('/')[1]).not.toBe(f.key.split('/')[1]);
   });
 
+  it('deposits service bytes (a fetched body, FETCH S7) 0600 and atomically under the session quota; a bad path or a full area keeps nothing', async () => {
+    const f = await area();
+    const kept = await f.session.deposit('fetch/body.txt', Buffer.alloc(1_500, 0x61));
+    expect(kept).toEqual({ ok: true, path: join(f.session.dir, 'fetch', 'body.txt'), rel: 'fetch/body.txt' });
+    expect((await stat(join(f.session.dir, 'fetch', 'body.txt'))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(f.session.dir, 'fetch'))).mode & 0o777).toBe(0o700);
+    expect(await f.session.deposit('fetch/more.txt', Buffer.alloc(1_000))).toMatchObject({ ok: false, error: expect.stringMatching(/^scratch-quota-exceeded \(session: /u) });
+    expect(await f.session.deposit('../escape.txt', Buffer.alloc(1))).toEqual({ ok: false, error: 'invalid-path' });
+    expect((await readdir(join(f.session.dir, 'fetch'))).sort()).toEqual(['body.txt']);
+    await expect(lstat(join(f.root, f.key.split('/')[0]!, 'escape.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('never creates a directory through a link: a link placed after planning is refused at the effect and nothing is written outside', async () => {
     const f = await area();
     const planned = await f.session.writes.plan('scratch_write', { path: 'sub/x.txt', content: 'x\n' });

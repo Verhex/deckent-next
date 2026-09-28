@@ -3,10 +3,12 @@ import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
 import { productResourcePath, type ProductLayout } from '#platform/index.js';
 
 /**
- * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area). The text is protocol, like tool descriptions:
+ * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access). The text is protocol, like tool descriptions:
  * English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 2;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 3;
+/** Allowlisted hosts named in the prompt; past this the prompt gives their count only. */
+const NAMED_HOSTS_MAX = 32;
 
 /** A path as the model's tools address it: workspace-relative inside the project, else absolute. */
 function shown(projectRoot: string, path: string): { readonly text: string; readonly inside: boolean } {
@@ -21,8 +23,11 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
  * results continue, and one progress line between tool rounds. Deterministic for one project, layout, scratch area and tool set.
  */
 export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: string; readonly layout: ProductLayout; readonly tools: readonly AgentToolSpec[];
-  readonly scratch?: { readonly dir: string; readonly retentionDays: number } | null }): string {
-  const { projectRoot, layout, tools, scratch } = input;
+  readonly scratch?: { readonly dir: string; readonly retentionDays: number } | null;
+  /** FETCH: the declared fetch tool's allowlist and what happens to other hosts; absent or null = no network access (egress none). */
+  readonly network?: { readonly allowedHosts: readonly string[]; readonly others: 'ask' | 'refused' } | null }): string {
+  const { projectRoot, layout, tools, scratch, network } = input;
+  const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root), at = (resource: 'ledger' | 'terminalSessions') => shown(projectRoot, productResourcePath(layout, resource)).text;
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
   const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
@@ -41,6 +46,10 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
       + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
     '- Approvals, approval previews, keys and credential files are protected: the read tools refuse them; do not try to read them another way.',
+    network ? `- Network: fetch_url fetches one https:// URL (GET, no credentials). ${hosts ? `Allowlisted hosts (${hosts}) run at once;` : 'No host is allowlisted;'}`
+      + ` ${network.others === 'ask' ? 'any other host waits for the operator\'s approval' : 'any other host is refused'}. The body is saved in the scratch area under`
+      + ' fetch/ and the result shows its first 16 KiB; read the rest with scratch_read.'
+      : '- Network access: none. This installation allows no fetching: do not guess what a web page says, and do not try to reach the network another way.',
   ];
   if (tools.length) {
     lines.push('', 'Tools:', ...classes.flatMap(([label, names, note]) => names ? [`- ${label}: ${names}.${note}`] : []),
