@@ -392,10 +392,11 @@ describe('composer rendered by Ink (no colour tier)', () => {
     const view = mount({ busy: true, mentions: async query => { queries.push(query); return ['src/app.ts']; } });
     await view.type('open @sr');
     await until(() => view.stdout.text.includes('> @src/app.ts'), 'picker offers the candidate');
+    // The bare `@` asks at once (TERM-UX-1 a); the rest is debounced: fast typing asks once more, for the settled query.
+    await until(() => queries.at(-1) === 'sr', 'settled query asked');
+    expect(queries).toEqual(['', 'sr']);
     await view.keys('\t');
     await until(() => view.stdout.text.includes('> open @src/app.ts |'), 'mention completed');
-    // Debounced: fast typing asks once for the settled query.
-    expect(queries.at(-1)).toBe('sr');
     await view.keys('\u001b');
     await until(() => view.calls.cancel === 1, 'esc cancels while busy');
   });
