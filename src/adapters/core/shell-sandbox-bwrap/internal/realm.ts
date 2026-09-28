@@ -225,10 +225,10 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       if (capabilities.userNamespace !== 'available') return { ok: false, reason: `user namespace ${capabilities.userNamespace}` };
       const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
       if (!binary.ok) return { ok: false, reason: binary.reason };
-      // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. The server's view
-      // keeps the write floor as the plain shell view does (writeFloorReadOnly is a per-call SHELL-AUTONOMY bound, not applied here).
+      // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
+      // third-party code no card approves call by call, so its view keeps the write floor's existing paths read-only (SHELL-AUTONOMY, lead).
       const launch = async (environment: Readonly<Record<string, string | undefined>>) => {
-        const view = await resolveBubblewrapView(layout, environment, options);
+        const view = await resolveBubblewrapView(layout, environment, options, true);
         return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view) } : { ok: false as const, reason: view.reason };
       };
       return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null, containment: 'sandbox', launch };

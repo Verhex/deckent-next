@@ -4,7 +4,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
+import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
   readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
   type McpLiveTool } from '#adapters/index.js';
 
@@ -221,6 +221,43 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
     expect(await run('host')).toEqual({ home: 'SECRET-HOME\n', network: 'reached' });
     const caged = await run('require-sandbox');
     expect(caged.home).toBe('ENOENT'); expect(caged.network).not.toBe('reached');
+  }, 60_000);
+});
+
+// SHELL-AUTONOMY (lead, merge with MCP-CLIENT): a server is third-party code no card approves call by call, so its long-lived bubblewrap view
+// keeps the write floor's existing paths read-only, while the rest of the project stays writable; on the host the same server writes.
+const WRITER_SERVER = `import { createInterface } from 'node:readline';
+import { appendFileSync } from 'node:fs';
+const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
+const write = path => { try { appendFileSync(path, 'x\\n'); return 'written'; } catch (error) { return error.code; } };
+createInterface({ input: process.stdin }).on('line', line => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') send({ id: message.id, result: { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'writer', version: '1' } } });
+  else if (message.method === 'tools/list') send({ id: message.id, result: { tools: [{ name: 'write', description: 'Append to files', inputSchema: { type: 'object', properties: {} } }] } });
+  else if (message.method === 'tools/call') send({ id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ floor: write(process.argv[2]), plain: write(process.argv[3]) }) }] } });
+  else if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } });
+});
+`;
+describe.skipIf(!sandboxReady)('MCP client: the write floor in the server\'s bubblewrap view (SHELL-AUTONOMY)', () => {
+  it('a sandboxed server cannot write the write floor (read-only bind) but writes elsewhere in the project; the host realm writes both', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-floor-')); roots.push(root);
+    const home = join(root, 'home'), project = join(root, 'project');
+    mkdirSync(home, { recursive: true }); mkdirSync(join(project, 'tools'), { recursive: true }); mkdirSync(join(project, 'src'), { recursive: true });
+    writeFileSync(join(project, 'tools', 'writer-mcp.mjs'), WRITER_SERVER); writeFileSync(join(project, 'package.json'), '{}\n'); writeFileSync(join(project, 'src', 'notes.txt'), '');
+    const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
+    const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const tool = { name: 'write', description: 'Append to files', inputSchema: { type: 'object', properties: {} } };
+    const run = async (realm: 'require-sandbox' | 'host') => {
+      const server = { id: realm === 'host' ? 'writer-host' : 'writer-caged', command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'),
+        join(project, 'package.json'), join(project, 'src', 'notes.txt')], env: {}, realm, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
+      const p = pool(), opened = await p.open(server, settings([server], { connectTimeoutMs: 20_000 }), { cwd: project, environment, sandboxes });
+      expect(opened).toMatchObject({ ok: true, sandboxed: realm !== 'host' });
+      const answer = await p.call(server.id, 'write', pinOf(tool).digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
+      return JSON.parse(((answer as { result: { content: { text: string }[] } }).result.content[0]!).text) as { floor: string; plain: string };
+    };
+    expect(await run('require-sandbox')).toEqual({ floor: 'EROFS', plain: 'written' });
+    expect(readFileSync(join(project, 'package.json'), 'utf8')).toBe('{}\n');
+    expect(await run('host')).toEqual({ floor: 'written', plain: 'written' });
   }, 60_000);
 });
 

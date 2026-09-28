@@ -3,6 +3,7 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { STANDING_GRANT_KIND } from '#domain/index.js';
 import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28 live test, session ffc7277c): in full-auto, a command the classifier cannot bound (compound, variable
@@ -135,4 +136,20 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
       expect(await readFile(config, 'utf8')).toBe(before);
     }, 120_000);
   }
+
+  // Merge with PERSISTENT-APPROVALS (lead 2026-09-29): a call a standing approval lowered was not approved by the owner either, so the realm
+  // keeps the write floor read-only for it, as for a mode relaxation; an owner-approved call sees the floor writable.
+  it.skipIf(!bwrapReady)('bubblewrap: a standing-approved call sees the write floor read-only, an owner-approved one writable; the audit names the standing path', async () => {
+    const standingCommand = 'find . -maxdepth 1 -name package.json -writable', approvedCommand = 'find . -maxdepth 1 -writable -name package.json';
+    const f = await modeRuntime({ grants: [...LIVE, rule('standing-1', STANDING_GRANT_KIND, [`v1:run_shell:command:${standingCommand}`], 'allow')], mode: 'ask', ...REALMS.bubblewrap });
+    await writeFile(join(f.project, 'package.json'), '{}\n');
+    const standing = await f.call('run_shell', { command: standingCommand });
+    expect(standing).toMatchObject({ card: false, status: 'ok' });
+    expect(standing.text).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0/u);
+    expect(standing.text).not.toContain('./package.json');
+    const approved = await f.call('run_shell', { command: approvedCommand }, 'allow');
+    expect(approved).toMatchObject({ card: true, status: 'ok' });
+    expect(approved.text).toContain('./package.json');
+    expect(f.audit().map(record => record.event.subject)).toEqual([expect.objectContaining({ kind: 'standing-approval', phase: 'used', source: 'grant', grantId: 'standing-1' })]);
+  }, 120_000);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePolicyBindings, type ShellRealmContainment } from '#domain/index.js';
-import { classifyShellContainment, decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
+import { resolvePolicyBindings, STANDING_GRANT_KIND, type ShellRealmContainment } from '#domain/index.js';
+import { classifyShellContainment, decideAgentToolCall, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28): the one decision function takes the planned realm's containment and the command's containment.
 // Only full-auto ∧ enforced sandbox ∧ contained lowers the shell cells the classifier could not bound; never destructive, never on the
@@ -65,5 +65,34 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
   it('refuses PowerShell and empty commands', () => {
     expect(classifyShellContainment('ls', floor, 'powershell')).toMatchObject({ contained: false, reasonCode: 'UNSUPPORTED_DIALECT' });
     expect(contained('   ')).toMatchObject({ contained: false, reasonCode: 'EMPTY_COMMAND' });
+  });
+});
+
+// Merge with PERSISTENT-APPROVALS (lead 2026-09-29): one decision, the mode first and the standing approval last. `shell-read-low` is both a
+// standing cell and a sandbox cell, so with a standing grant, a session memory, full-auto and an enforced sandbox all present, the mode
+// lowers it (a `permission-mode` event); on the host the standing approval does (a `standing-approval` event); the audit tells them apart.
+describe('sandbox mode relaxation and standing approvals together (SHELL-AUTONOMY × PERSISTENT-APPROVALS)', () => {
+  const KEY = 'v1:run_shell:command:find . -writable';
+  const withStanding = (mode: string) => resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [
+    rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
+    { ...rule('standing-1', STANDING_GRANT_KIND, [KEY], 'allow'), actions: ['invoke'] }] },
+    { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
+  const request = (realm: ShellRealmContainment, contained = true, session = true) => ({ principal, scopeId: 'scope', tool: { name: 'run_shell' },
+    operation: { id: 'host.shell.run' }, cell: 'shell-read-low' as const, shell: { realm, contained }, standing: { key: KEY, session } });
+  it('full-auto inside a sandbox: the mode lowers first, the standing approval is not used', () => {
+    const decided = decideAgentToolCall(withStanding('full-auto'), request('sandbox'));
+    expect(decided).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-modify' } });
+    expect(decided.standing).toBeUndefined();
+  });
+  it('where no mode lowers (host, degraded, not contained, ask), the standing approval is the last resort', () => {
+    for (const [mode, realm, contained] of [['full-auto', 'host', true], ['full-auto', 'degraded', true], ['full-auto', 'sandbox', false], ['ask', 'sandbox', true]] as const) {
+      expect({ mode, realm, contained, ...decideAgentToolCall(withStanding(mode), request(realm, contained)) })
+        .toMatchObject({ decision: 'allow', relaxation: null, standing: { source: 'grant', key: KEY, grantId: 'standing-1' } });
+    }
+  });
+  it('standingWouldLower with a shell field: no scope is offered where the mode already lowers, one is where it does not', () => {
+    expect(standingWouldLower(withStanding('full-auto'), request('sandbox', true, false))).toBe(false);
+    expect(standingWouldLower(withStanding('full-auto'), request('host', true, false))).toBe(true);
+    expect(standingWouldLower(withStanding('ask'), request('sandbox', true, false))).toBe(true);
   });
 });

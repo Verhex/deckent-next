@@ -145,7 +145,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
     const mcp = workspace ? await createAgentMcp({ pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
-      turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null }), cwd: workspace.scope.root }) : null;
+      turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
