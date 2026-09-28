@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
-import { createMcpServer, type McpApplications } from '#surfaces/index.js';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 
 // MCP `structuredContent` must be a JSON object; a list result (list_approvals answers an array of records) travels as text only,
 // otherwise a validating client rejects the whole tools/call (found by the C12 G4 MCP stdio acceptance: list → decide → resubmit).

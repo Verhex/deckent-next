@@ -1,6 +1,9 @@
-import { SERVER_INFO_META_KEY, type CallToolResult, type RequestId } from '@modelcontextprotocol/server';
+import type { CallToolResult, RequestId } from '@modelcontextprotocol/server';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { mcpToolResultDeliveryCapacity, type ModelInvocationDelivery } from '#engine/index.js';
+// The SDK's `SERVER_INFO_META_KEY`, inlined so this module does not load the whole server SDK at import time (~105 ms in every process; STARTUP-COST).
+// tests/contracts/composition/startup-graph.test.ts fails when the SDK's value ever differs.
+const SERVER_INFO_META_KEY = 'io.modelcontextprotocol/serverInfo';
 
 /**
  * Mirrors surfaces/core/mcp's own empty-result envelope exactly (SESSION-RESULT-LIMIT-2026-09-28 review): a
