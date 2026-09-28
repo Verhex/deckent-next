@@ -10,7 +10,7 @@ export interface ShellRiskClassification { readonly risk: ShellRisk; readonly re
  * always-ask floor that no mode lowers; output redirection, tee and anything unparseable are `modify`. `safe-read` is owned by the
  * read-only classifier alone: the scanner here can never promote a command to it.
  */
-interface ShellScan {
+export interface ShellScan {
   segments: string[];
   outputRedirect: boolean;
   malformed: boolean;
@@ -51,7 +51,7 @@ function combine(current: ShellRiskClassification, candidate: ShellRiskClassific
  * command substitutions as independent segments. The scanner intentionally does
  * not try to execute or expand shell syntax: malformed input remains conservative.
  */
-function scanShell(command: string): ShellScan {
+export function scanShell(command: string): ShellScan {
   const scan: ShellScan = { segments: [], outputRedirect: false, malformed: false };
   let segment = '';
   let quote: "'" | '"' | null = null;
@@ -160,7 +160,7 @@ function scanShell(command: string): ShellScan {
   return scan;
 }
 
-function shellWords(segment: string): string[] | null {
+export function shellWords(segment: string): string[] | null {
   const words: string[] = [];
   let word = '';
   let started = false;

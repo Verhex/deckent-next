@@ -1,5 +1,5 @@
 import { evaluatePolicy, identitySchema, modeEligibleApproval, policyResources, principalPermissionMode, type PermissionMode,
-  type VerifiedPrincipal } from '#domain/index.js';
+  type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -18,10 +18,21 @@ const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'shell-re
  * mutating shell set in full-auto only. Everything else — read tools, the write floor, `low`, destructive, always-ask, other
  * `modify`, and (conservatively) a read-only shell command under require-approval — asks in every mode.
  */
-const RELAXABLE: Readonly<Partial<Record<AgentToolCallCell, { readonly modes: readonly PermissionMode[]; readonly audit: 'edit-non-floor' | 'shell-modify' }>>> = {
+type Relaxable = { readonly modes: readonly PermissionMode[]; readonly audit: 'edit-non-floor' | 'shell-modify' };
+const RELAXABLE: Readonly<Partial<Record<AgentToolCallCell, Relaxable>>> = {
   edit: { modes: ['auto-edit', 'full-auto'], audit: 'edit-non-floor' },
   'shell-narrow-mutating': { modes: ['full-auto'], audit: 'shell-modify' },
 };
+/**
+ * SHELL-AUTONOMY (owner 2026-09-28): inside an enforced sandbox realm the realm is the boundary, so full-auto may also lower the shell
+ * cells the classifier could not bound — read-only (any reach), other modifications and the strict scanner's refusals (compound,
+ * expansion) — when the command is `contained` (no program floor, no protected name). Never the destructive table; never on the
+ * host, a host fallback or a degraded sandbox. Audited under the existing `shell-modify` cell (checkpoint C2: no realm in the record).
+ */
+const SANDBOX_RELAXABLE: ReadonlySet<AgentToolCallCell> = new Set(['shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-other-modify', 'shell-always-ask']);
+const SANDBOX_RELAXATION: Relaxable = { modes: ['full-auto'], audit: 'shell-modify' };
+const relaxableFor = (request: AgentToolCallRequest): Relaxable | undefined => RELAXABLE[request.cell]
+  ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
 
 export interface AgentToolCallRequest {
   readonly principal: VerifiedPrincipal;
@@ -30,6 +41,8 @@ export interface AgentToolCallRequest {
   /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`, `network.fetch`), or null for a read tool. */
   readonly operation: { readonly id: string } | null;
   readonly cell: AgentToolCallCell;
+  /** A shell call only: where its plan runs (the realm's containment) and whether the command is contained (`classifyShellContainment`). */
+  readonly shell?: { readonly realm: ShellRealmContainment; readonly contained: boolean };
 }
 export interface PermissionModeRelaxation {
   readonly mode: Exclude<PermissionMode, 'ask'>;
@@ -51,7 +64,8 @@ export interface AgentToolCallDecision {
  * 1. the stricter of the `agent-tool`/`invoke` and the operation/`execute` decisions (`deny` ends here);
  * 2. the floor raise: a raising cell turns `allow` into `require-approval`;
  * 3. the mode lowering, only when the policy decision itself is `require-approval`, every matching `require-approval` rule on each
- *    side that asks is company-marked `modeEligible`, the cell is relaxable in the person's mode, and the person has exactly one
+ *    side that asks is company-marked `modeEligible`, the cell is relaxable in the person's mode (for the sandbox cells: in an enforced
+ *    sandbox realm and contained), and the person has exactly one
  *    mode entry for the scope. Allow rules never lower anything; a raised `allow` is never lowered (no eligible rule produced it).
  * The turn's authorization and the effect gate call this same function; it throws on an invalid snapshot (callers fail closed).
  */
@@ -66,7 +80,7 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   if (decided.some(entry => entry.decision.decision === 'deny')) return done('deny');
   const strict = decided.every(entry => entry.decision.decision === 'allow') ? 'allow' : 'require-approval';
   if (strict === 'allow') return done(RAISING.has(request.cell) ? 'require-approval' : 'allow');
-  const relaxable = RELAXABLE[request.cell];
+  const relaxable = relaxableFor(request);
   if (!relaxable) return done('require-approval');
   const person = principalPermissionMode(policy, request.principal, request.scopeId);
   if (!person || person.mode === 'ask' || !relaxable.modes.includes(person.mode)) return done('require-approval');

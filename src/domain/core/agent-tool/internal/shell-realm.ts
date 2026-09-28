@@ -1,5 +1,11 @@
 /** Shell execution port: implementations own isolation, process lifetime and bounded output; callers retain policy/effect authority. */
 export type ShellRealmMode = 'require-sandbox' | 'prefer-sandbox' | 'host';
+/**
+ * What a chosen realm contains (SHELL-AUTONOMY, owner 2026-09-28): `sandbox` — an enforced sandbox (bubblewrap, Landlock at full ABI);
+ * `degraded` — a sandbox with typed gaps (Landlock below ABI 6); `host` — no sandbox. A permission decision input: only `sandbox`
+ * lets full-auto run a command the classifier cannot bound without asking.
+ */
+export type ShellRealmContainment = 'sandbox' | 'degraded' | 'host';
 export interface ShellRealm {
   readonly kind: 'host' | 'bubblewrap' | 'landlock';
   run(request: ShellRealmRequest): Promise<ShellRealmResult>;
@@ -20,6 +26,9 @@ export interface ShellRealmRequest {
   /** Source of the copied variables (defaults to the service's own environment). */
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly resultMaxBytes?: number;
+  /** A call the owner did not approve (a mode relaxation or a silent decision): a sandbox realm keeps the write floor's existing paths
+   * read-only (SHELL-AUTONOMY: the floor never goes silent). The host realm cannot and does not: it is never silent for such commands. */
+  readonly writeFloorReadOnly?: boolean;
 }
 export interface ShellRealmResult {
   /** `exited` with its code (or the signal that ended it), `timed-out` / `cancelled` after the group was killed, `spawn-failed`. */

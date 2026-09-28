@@ -45,8 +45,11 @@ export async function gitWorktreeRepository(root: string): Promise<string | null
  * Symbolic links take no rule (access through one resolves to its target's own rule). Ignored directories (node_modules, dist, …)
  * are not scanned and are read-write as a whole. Past a bound the set is refused, never cut.
  */
-export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {}): Promise<LandlockRuleSet> {
+export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {}, writeFloorReadOnly = false): Promise<LandlockRuleSet> {
   const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied, ignoredDirs } = input.project;
+  // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees take read-only rules (their
+  // directory is carved, so the entry cannot be replaced or removed either). A floor path that does not exist yet is not covered here.
+  const floored = writeFloorReadOnly && input.writeFloor ? input.writeFloor : () => false;
   let seen = 0;
   let gitSeen = 0;
   /**
@@ -93,7 +96,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     }
     return rules;
   };
-  const scan = async (rel: string, depth: number): Promise<readonly LandlockRule[] | null> => {
+  /** `cls`: the class clean entries take here — `w`, or `r` inside a write-floor tree. */
+  const scan = async (rel: string, depth: number, cls: 'w' | 'r' = 'w'): Promise<readonly LandlockRule[] | null> => {
     let entries: Dirent[];
     try { entries = await readdir(rel === '.' ? root : join(root, rel), { withFileTypes: true }); } catch { return []; }
     if ((seen += entries.length) > limit.maxEntries) throw new BoundExceeded(`the project has more than ${limit.maxEntries} entries to scan`);
@@ -110,15 +114,21 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); return { carve: false }; }
       if (denied(child)) return { carve: true };
       if (entry.isDirectory()) {
-        if (ignoredDirs.has(entry.name)) return hasProtectedBeneath(child) ? { rules: await carveProtected(child, depth + 1), carve: true } : { clean: child, carve: false };
+        const floor = cls === 'w' && floored(`${child}/-`);
+        if (ignoredDirs.has(entry.name)) {
+          if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1), carve: true };
+          return floor ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
+        }
         if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);
-        const inner = await scan(child, depth + 1);
+        const inner = await scan(child, depth + 1, floor ? 'r' : cls);
+        if (floor) return { rules: inner ?? [['r', child]], carve: true };
         return inner === null ? { clean: child, carve: false } : { rules: inner, carve: true };
       }
-      return entry.isFile() && await lstat(join(root, child)).then(info => info.nlink === 1, () => false) ? { clean: child, carve: false } : { carve: true };
+      if (!entry.isFile() || !await lstat(join(root, child)).then(info => info.nlink === 1, () => false)) return { carve: true };
+      return cls === 'w' && floored(child) ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
     }));
     if (!verdicts.some(verdict => verdict.carve)) return null;
-    return [['l', rel], ...verdicts.flatMap(verdict => verdict.clean ? [['w', verdict.clean] as const] : []), ...verdicts.flatMap(verdict => verdict.rules ?? [])];
+    return [['l', rel], ...verdicts.flatMap(verdict => verdict.clean ? [[cls, verdict.clean] as const] : []), ...verdicts.flatMap(verdict => verdict.rules ?? [])];
   };
   try {
     const project = await scan('.', 0) ?? [['w', '.'] as const];
@@ -154,7 +164,7 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
       if (!await exists(HELPER, 'any')) return refuse('the sandbox helper is not installed (native build missing)');
-      const built = await buildLandlockRules(input);
+      const built = await buildLandlockRules(input, {}, request.writeFloorReadOnly === true);
       if (!built.ok) return refuse(built.reason);
       const prefix = ['--abi', String(abi), '--root', input.project.root, ...built.rules.flatMap(([cls, path]) => ['--rule', cls, path]), '--'];
       return runShellProcess({ file: HELPER, args: command => [...prefix, BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)], statusChannel: true },
@@ -164,14 +174,14 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
 }
 
 /** Landlock ABI 6 scopes signals and abstract unix sockets; below it the realm is typed DEGRADED and says what is left open. */
-function landlockPosture(abi: number): { readonly marker: string; readonly posture: string; readonly notice: string | null } {
+function landlockPosture(abi: number): { readonly marker: string; readonly posture: string; readonly notice: string | null; readonly containment: 'sandbox' | 'degraded' } {
   const gaps = [...(abi < 6 ? ['signals to other processes of your user are not blocked'] : []),
     ...(abi < 3 ? ['read-only files can be truncated'] : []), ...(abi < 4 ? ['TCP is refused by the socket filter, not by Landlock'] : [])];
   const notice = gaps.length ? `[deckent] sandbox: landlock DEGRADED (kernel Landlock ABI ${abi} < 6): ${gaps.join('; ')}.` : null;
   const posture = `Runs in the Landlock sandbox (ABI ${abi}): read-write only in the project and the conversation scratch area (the project root and `
     + 'folders holding protected files cannot gain or lose entries); .git read-only; protected files, your home directory and other paths '
     + 'unreachable; system paths read-only; no network (sockets refused).';
-  return { marker: notice ? 'sandbox: degraded' : 'sandbox: landlock', notice, posture: notice ? `${posture}\n${notice}` : posture };
+  return { marker: notice ? 'sandbox: degraded' : 'sandbox: landlock', notice, posture: notice ? `${posture}\n${notice}` : posture, containment: notice ? 'degraded' : 'sandbox' };
 }
 
 /** Landlock as a sandbox provider (S11) for the realm list: usable when the host measurement found a Landlock ABI ≥ 1. */

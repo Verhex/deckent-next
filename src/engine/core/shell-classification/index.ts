@@ -6,3 +6,4 @@ export type { ShellReasonCode, ShellWord } from './internal/scanner.js';
 export type { ShellReadRisk } from './internal/programs.js';
 export { classifyShellMutation, NETWORK_PROGRAMS, PACKAGE_PROGRAMS, shellPermissionTier, type ShellMutationReason, type ShellMutationVerdict,
   type ShellPermissionTier, type ShellWriteKind, type ShellWritePathContext } from './internal/mutation.js';
+export { classifyShellContainment, type ShellContainmentReason, type ShellContainmentVerdict } from './internal/containment.js';

@@ -210,3 +210,17 @@ export function createShellWriteContext(project: WorkspaceScope, roots: readonly
     },
   };
 }
+
+/**
+ * SHELL-AUTONOMY: whether a word of a command names a protected path — the write floor or the product state (its glob patterns,
+ * relative to the project root) — by name only, lexically (no file system): as resolved from the project root when it lies inside,
+ * and with leading `./`/`../` segments dropped (a `cd` earlier in the same command moves the base). A path or its directory form
+ * (`.github` for `.github/**`) counts. A name is not a boundary: the sandbox realm keeps existing floor paths read-only itself.
+ */
+export function createShellProtectedNames(root: string, productState: readonly ((rel: string) => boolean)[]): (text: string) => boolean {
+  const named = (rel: string) => rel.length > 0 && [rel, `${rel}/-`].some(path => isWriteApprovalFloored(path) || productState.some(match => match(path)));
+  return text => {
+    const inside = posix.relative(root, posix.resolve(root, text)), stripped = posix.normalize(text).replace(/^(?:\.\.?\/)+/u, '');
+    return (!inside.startsWith('..') && !posix.isAbsolute(inside) && named(inside)) || (!posix.isAbsolute(stripped) && named(stripped.replace(/\/+$/u, '')));
+  };
+}

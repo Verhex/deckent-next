@@ -8,6 +8,8 @@ import { closeModeRuntimes, me, modeRuntime, rule, type Mode } from '../support/
 // sealed `permission-mode` audit event before the effect, and never touches deny, the write floor, `low`, destructive or always-ask.
 afterEach(closeModeRuntimes);
 const MODES: readonly Mode[] = ['ask', 'auto-edit', 'full-auto'];
+/** The classifier's own matrix runs on the host realm; inside an enforced sandbox full-auto lowers more (runtime-shell-autonomy.test.ts). */
+const HOST = { shell: { schemaVersion: 1, realm: 'host' } };
 type Effect = 'allow' | 'deny' | 'require-approval';
 const edit = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: boolean } = {}) => [
   rule('edit-tools', 'agent-tool', ['edit_file', 'write_file'], tool, eligible.tool), rule('file-write', 'operation', ['workspace.file.write'], op, eligible.op)];
@@ -17,7 +19,7 @@ const setA = (to: number) => ({ path: 'src/a.ts', old_string: `a = ${to - 1}`, n
 
 describe.skipIf(process.platform !== 'linux')('permission modes through the runtime service (T-L4 slice 4a)', () => {
   it('lowers an eligible require-approval on an ordinary edit in auto-edit and full-auto, with one audit event each; ask still shows the card', async () => {
-    const f = await modeRuntime({ grants: edit('require-approval', 'allow', { tool: true }), mode: 'ask' });
+    const f = await modeRuntime({ ...HOST, grants: edit('require-approval', 'allow', { tool: true }), mode: 'ask' });
     const asked = await f.call('edit_file', setA(2));
     expect(asked).toMatchObject({ card: true, status: 'denied' });
     let expected = 1;
@@ -40,7 +42,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('never lowers a require-approval the company did not mark mode-eligible, nor lets a second allow grant pass it (M6, M7)', async () => {
-    const f = await modeRuntime({ grants: [...edit('require-approval', 'allow'), rule('edit-allow', 'agent-tool', ['edit_file'], 'allow')], mode: 'full-auto' });
+    const f = await modeRuntime({ ...HOST, grants: [...edit('require-approval', 'allow'), rule('edit-allow', 'agent-tool', ['edit_file'], 'allow')], mode: 'full-auto' });
     expect(await f.call('edit_file', setA(2))).toMatchObject({ card: true, status: 'denied' });
     // Operation side required but not eligible, tool side eligible: the stricter side is not eligible → card.
     await f.writeAuthority(edit('require-approval', 'require-approval', { tool: true }), 'full-auto', 'r2');
@@ -50,7 +52,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 60_000);
 
   it('answers a denied tool or operation as denied in every mode: no card, no event, nothing written (M2)', async () => {
-    const f = await modeRuntime({ grants: edit('deny', 'require-approval', { op: true }), mode: 'ask' });
+    const f = await modeRuntime({ ...HOST, grants: edit('deny', 'require-approval', { op: true }), mode: 'ask' });
     for (const mode of MODES) {
       await f.writeAuthority(edit('deny', 'require-approval', { op: true }), mode, `tool-${mode}`);
       expect(await f.call('edit_file', setA(2))).toMatchObject({ card: false, status: 'denied' });
@@ -63,7 +65,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('asks for a floor path in every mode, with an allow grant and with an eligible require-approval (M1)', async () => {
-    const f = await modeRuntime({ grants: edit('allow', 'allow'), mode: 'ask' });
+    const f = await modeRuntime({ ...HOST, grants: edit('allow', 'allow'), mode: 'ask' });
     for (const grants of [edit('allow', 'allow'), edit('require-approval', 'require-approval', { tool: true, op: true })]) {
       for (const mode of MODES) {
         await f.writeAuthority(grants, mode, `${mode}-${grants[0]!.effect}`);
@@ -75,7 +77,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('keeps a silent allow silent in every mode: no event, one summary count per call (q5)', async () => {
-    const f = await modeRuntime({ grants: [...shell('allow', 'allow'), ...edit('allow', 'allow')], mode: 'ask' });
+    const f = await modeRuntime({ ...HOST, grants: [...shell('allow', 'allow'), ...edit('allow', 'allow')], mode: 'ask' });
     for (const mode of MODES) {
       await f.writeAuthority([...shell('allow', 'allow'), ...edit('allow', 'allow')], mode, mode);
       expect(await f.call('run_shell', { command: 'cat src/a.ts' })).toMatchObject({ card: false, status: 'ok' });
@@ -86,7 +88,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('asks in full-auto for low, destructive and always-ask commands, and for an eligible read tool (M5)', async () => {
-    const f = await modeRuntime({ grants: [...shell('require-approval', 'require-approval', { tool: true, op: true }),
+    const f = await modeRuntime({ ...HOST, grants: [...shell('require-approval', 'require-approval', { tool: true, op: true }),
       rule('read', 'agent-tool', ['read_file'], 'require-approval', true)], mode: 'full-auto' });
     for (const command of ['find .', 'rg a', 'git show HEAD:.env', 'rm -rf src', 'git reset --hard', 'python3 -c 1', 'sudo true', 'npm install left-pad',
       'curl http://127.0.0.1:9/', 'touch a | cat', 'touch $HOME/x', 'rm src/a.ts']) {
@@ -98,7 +100,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 120_000);
 
   it('runs a narrow mutating command silently only in full-auto, with one audit event; auto-edit and ask show the card (q1)', async () => {
-    const f = await modeRuntime({ grants: shell('require-approval', 'allow', { tool: true }), mode: 'auto-edit' });
+    const f = await modeRuntime({ ...HOST, grants: shell('require-approval', 'allow', { tool: true }), mode: 'auto-edit' });
     expect(await f.call('run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
     await f.writeAuthority(shell('require-approval', 'allow', { tool: true }), 'ask', 'ask');
     expect(await f.call('run_shell', { command: 'touch made.txt' })).toMatchObject({ card: true, status: 'denied' });
@@ -114,7 +116,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('asks for a compound command in full-auto: an earlier part must not turn a later target into a floor path (Astra 2133)', async () => {
-    const f = await modeRuntime({ grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
+    const f = await modeRuntime({ ...HOST, grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
       mode: 'full-auto' });
     await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
     // Astra's case: `mkdir out` makes the copy target a directory, so `cp` would write `out/package.json` (write floor `**/package.json`).
@@ -133,7 +135,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 90_000);
 
   it('Astra 2134 R1 repro: compound narrow commands must not bypass the package manifest write floor', async () => {
-    const f = await modeRuntime({ grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto' });
+    const f = await modeRuntime({ ...HOST, grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto' });
     await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
     const result = await f.call('run_shell', { command: 'mkdir out && cp package.json out' });
     const content = await readFile(join(f.project, 'out/package.json'), 'utf8').catch(() => null);
@@ -143,7 +145,7 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
   }, 60_000);
 
   it('runs nothing when the audit event cannot be written: the relaxation is not applied (M3)', async () => {
-    const f = await modeRuntime({ grants: [...edit('require-approval', 'allow', { tool: true }), ...shell('require-approval', 'allow', { tool: true })], mode: 'full-auto' });
+    const f = await modeRuntime({ ...HOST, grants: [...edit('require-approval', 'allow', { tool: true }), ...shell('require-approval', 'allow', { tool: true })], mode: 'full-auto' });
     f.exec("CREATE TRIGGER audit_refuses BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT,'unavailable'); END;");
     const edited = await f.call('edit_file', setA(2));
     expect(edited).toMatchObject({ card: false, status: 'error' });

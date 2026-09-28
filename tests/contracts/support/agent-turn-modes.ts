@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { openSqliteModelActivationStore } from '#adapters/index.js';
+import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -43,11 +43,14 @@ const baseGrants = [
   { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'scope', ids: ['scope'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 
-export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null }) {
+export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null;
+  /** SHELL-AUTONOMY: the `terminal.shell` section (realm) and the sandbox providers (code-only port) when a test pins them. */
+  shell?: Record<string, unknown>; sandboxes?: ShellSandboxFactory; dataRoot?: string }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-modes-')); roots.push(root);
-  const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
+  const project = join(root, 'project'), data = input.dataRoot ? join(project, input.dataRoot) : join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
-    mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
+    mkdir(home, { mode: 0o700 })]);
+  await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
   const state = { requests: 0, script: [] as { name: string; arguments: string }[] };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
@@ -77,7 +80,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     allocation: { id: 'allocation', maxCalls: null, maxInFlight: 2 }, limits: { requestMaxBytes: 262144, responseMaxBytes: 65536, timeoutMs: 5000 } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
-    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
+    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 }, ...(input.shell ? { shell: input.shell } : {}) },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
@@ -95,7 +98,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   };
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
-  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env });
+  const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, input.sandboxes ? { shellSandboxes: input.sandboxes } : {});
   services.push(service);
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const exec = (sql: string) => { const db = new DatabaseSync(ledger); try { db.exec(sql); } finally { db.close(); } };

@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellMutation,
+import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
+import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
   HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
@@ -18,7 +18,8 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  */
 export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
-type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }> }
+type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
+  readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
 
 /**
@@ -38,7 +39,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** Astra 2162 (owner F2): deny patterns of the product's own state — a command that names one is refused, never offered for approval. */
   readonly productState: readonly string[] }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
-  const productState = input.productState.map(createGlobMatcher);
+  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();
@@ -59,7 +60,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
+    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };
@@ -67,6 +68,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     plan,
     /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
     tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
+    /** SHELL-AUTONOMY: the planned realm's containment and whether the command is contained (the decision's `shell` input). */
+    containment(tool: string, args: Record<string, unknown>) { const planned = plans.get(key(tool, args)); return planned?.ok ? { realm: planned.realm.containment, contained: planned.contained } : undefined; },
     /** The approval card: the exact command, its risk and why, and what running it means. */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
@@ -75,7 +78,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
-      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
+      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, approved = false): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: planned.text };
@@ -103,7 +106,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       };
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput,
+      // A call the owner did not approve sees the write floor read-only inside a sandbox (SHELL-AUTONOMY: the floor never goes silent).
+      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly: !approved,
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {

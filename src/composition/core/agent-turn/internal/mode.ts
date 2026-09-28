@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
-import { AuditApplication, PolicyAuthorizationError, agentToolArgumentsDigest, decideAgentToolCall, type AgentToolCallCell, type AgentToolCallDecision,
+import { AuditApplication, PolicyAuthorizationError, agentToolArgumentsDigest, decideAgentToolCall, type AgentToolCallCell, type AgentToolCallDecision, type AgentToolCallRequest,
   type EffectApprovalGate, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
@@ -22,7 +22,8 @@ export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent
 export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string) =>
   sha256(`permission-mode:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
-type Stored = { readonly cell: AgentToolCallCell; readonly decision: AgentToolCallDecision } | { readonly planError: string };
+type Shell = AgentToolCallRequest['shell'];
+type Stored = { readonly cell: AgentToolCallCell; readonly shell: Shell; readonly decision: AgentToolCallDecision } | { readonly planError: string };
 type Relaxed = AgentToolCallDecision & { readonly relaxation: NonNullable<AgentToolCallDecision['relaxation']> };
 /**
  * Whether a decision taken at an effect admission is the one the audit event recorded (Astra 2133): allow, on the same effective policy
@@ -54,9 +55,9 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : fetches(tool) ? NETWORK_FETCH_OPERATION.operation : null;
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
-  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown): Promise<AgentToolCallDecision | null> => {
+  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, shellInput?: Shell): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell }); }
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell, ...(shellInput ? { shell: shellInput } : {}) }); }
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
@@ -80,16 +81,16 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const snapshot = await load();
       const first = await decide(tool, 'read', snapshot);
       if (!first || first.decision === 'deny') return 'deny';
-      if (tool.toolClass === 'read') { stored.set(key, { cell: 'read', decision: first }); return first.decision; }
+      if (tool.toolClass === 'read') { stored.set(key, { cell: 'read', shell: undefined, decision: first }); return first.decision; }
       const area = tool.toolClass === 'edit' ? edits(tool.name) : null;
       const planned = area ? await area.plan(tool.name, args).then(plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)
         : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args).then(plan => plan.ok ? null : plan.text)
         : fetches(tool) && fetch ? (plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)(fetch.plan(args)) : `[deckent] ${tool.name}: error=unknown-tool`;
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? `[deckent] ${tool.name}: error=failed` }); return 'require-approval'; }
-      const decision = await decide(tool, cell, snapshot);
+      const shellInput = tool.toolClass === 'shell' ? shell?.containment(tool.name, args) : undefined, decision = await decide(tool, cell, snapshot, shellInput);
       if (!decision) return 'deny';
-      stored.set(key, { cell, decision });
+      stored.set(key, { cell, shell: shellInput, decision });
       return decision.decision;
     },
     /** The loop's prepare: the plan's error, or the kept decision (a call without a kept decision asks). */
@@ -104,12 +105,12 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      * nothing runs), a mode relaxation is audited first, and a silent decision is counted.
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
-      run: (gate: EffectApprovalGate) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      run: (gate: EffectApprovalGate, approved: boolean) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
-        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner);
-        const fresh = await decide(tool, kept.cell);
+        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, true);
+        const fresh = await decide(tool, kept.cell, undefined, kept.shell);
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };
         const relaxation = fresh.relaxation;
@@ -117,7 +118,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
           if (!fetches(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
-          return await run(inner);
+          return await run(inner, false);
         }
         const argsDigest = agentToolArgumentsDigest(tool.name, args), path = edits(tool.name)?.target(tool.name, args) ?? null, command = String(args['command'] ?? '');
         const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: permissionModeEventId(scopeId, turnId, execution, argsDigest), scopeId,
@@ -136,14 +137,14 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
               if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               // The same decision again on the policy as it is now: a deny since wins; anything but the audited relaxation (a lost one,
               // another mode or revision, a plain allow) asks, and nothing runs here.
-              const again = await decide(tool, kept.cell);
+              const again = await decide(tool, kept.cell, undefined, kept.shell);
               if (!again || again.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
               if (!isAuditedDecision({ ...fresh, relaxation }, again)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               return inner.admit(descriptor, 'allow', command, principal, context);
             }
             return inner.admit(descriptor, decision, command, principal, context);
           },
-        });
+        }, false);
       } finally { await close(); }
     },
   };

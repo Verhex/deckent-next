@@ -65,18 +65,20 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, marker: null, notice: null, posture: expect.stringContaining('not a sandbox') });
+    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, marker: null, notice: null, posture: expect.stringContaining('not a sandbox'),
+      containment: 'host' });
   });
   it('S9: takes sandbox providers in preference order, names why each was unusable in the visible fallback, and host mode never picks one', async () => {
     const capabilities = await probeShellCapabilities(linux(undefined, true));
     const realm = { kind: 'bubblewrap' as const, run: vi.fn() };
     const unusable = { kind: 'landlock' as const, usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
-    const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture: 'in a bubblewrap sandbox', notice: null })) };
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture: 'in a bubblewrap sandbox' });
+    const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture: 'in a bubblewrap sandbox', notice: null, containment: 'sandbox' as const })) };
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture: 'in a bubblewrap sandbox',
+      containment: 'sandbox' });
     expect(resolveShellRealm('require-sandbox', capabilities, [usable])).toMatchObject({ ok: true, realm });
     expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: null, notice: null });
     expect(usable.usable).toHaveBeenCalledWith(capabilities);
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: 'sandbox: none',
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: 'sandbox: none', containment: 'host',
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*landlock: no-abi/u) });
     expect(resolveShellRealm('require-sandbox', capabilities, [unusable])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
   });
@@ -87,15 +89,15 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     const both = await probeShellCapabilities(linux({ userNamespace: true, landlockAbi: 7, landlockErrno: 0 }, true));
     const bwrapUsable = providers[0]!.usable(both).ok;
     expect(resolveShellRealm('prefer-sandbox', both, providers)).toMatchObject(bwrapUsable
-      ? { ok: true, realm: { kind: 'bubblewrap' }, marker: 'sandbox: bubblewrap', notice: null }
-      : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock' });
+      ? { ok: true, realm: { kind: 'bubblewrap' }, marker: 'sandbox: bubblewrap', notice: null, containment: 'sandbox' }
+      : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', containment: 'sandbox' });
     const noBwrap = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 7, landlockErrno: 0 }, false));
     expect(resolveShellRealm('require-sandbox', noBwrap, providers)).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null,
-      posture: expect.stringContaining('Landlock') });
+      posture: expect.stringContaining('Landlock'), containment: 'sandbox' });
     expect(resolveShellRealm('prefer-sandbox', await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 3, landlockErrno: 0 }, false)), providers))
-      .toMatchObject({ realm: { kind: 'landlock' }, marker: 'sandbox: degraded', notice: expect.stringContaining('DEGRADED') });
+      .toMatchObject({ realm: { kind: 'landlock' }, marker: 'sandbox: degraded', notice: expect.stringContaining('DEGRADED'), containment: 'degraded' });
     const neither = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: -1, landlockErrno: 38 }, false));
-    expect(resolveShellRealm('prefer-sandbox', neither, providers)).toMatchObject({ ok: true, realm: { kind: 'host' }, marker: 'sandbox: none',
+    expect(resolveShellRealm('prefer-sandbox', neither, providers)).toMatchObject({ ok: true, realm: { kind: 'host' }, marker: 'sandbox: none', containment: 'host',
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; running on host \(bubblewrap: bubblewrap unavailable; landlock: landlock unavailable\)/u) });
     expect(resolveShellRealm('require-sandbox', neither, providers)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
   });

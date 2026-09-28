@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
+import { openSqliteModelActivationStore, probeShellCapabilities, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -19,6 +19,8 @@ import { fixtureBudget } from '../../fixtures/priced-provider.js';
 // service (the terminal touches no file), the next turn's eligible edit runs without a card and is audited, and a narrow terminal
 // drops the mode segment from the status row.
 const execute = promisify(execFile);
+const measured = await probeShellCapabilities();
+const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
@@ -97,7 +99,8 @@ async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promis
 }
 
 /** A local model that asks for one `edit_file` call, then answers `Mode turn done.`; a v2 company policy with a mode-eligible edit rule. */
-async function modeProject() {
+async function modeProject(options: { readonly call?: { readonly name: string; readonly arguments: Record<string, unknown> }; readonly shell?: boolean; readonly mode?: string } = {}) {
+  const call = options.call ?? { name: 'edit_file', arguments: { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' } };
   await access(cli).catch(() => { throw new Error('BUILD_REQUIRED'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-mode-pty-')); roots.push(root);
   const projectRoot = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -112,10 +115,10 @@ async function modeProject() {
   const server = createServer((req, res) => {
     req.resume();
     req.on('end', () => {
-      const call = requests++ % 2 === 0;
+      const round = requests++ % 2 === 0;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end((call ? [chunk({ role: 'assistant', content: '' }), chunk({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'edit_file', arguments: '' } }] }),
-        chunk({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' }) } }] }), chunk({}, 'tool_calls'), usage]
+      res.end((round ? [chunk({ role: 'assistant', content: '' }), chunk({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: call.name, arguments: '' } }] }),
+        chunk({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify(call.arguments) } }] }), chunk({}, 'tool_calls'), usage]
         : [chunk({ role: 'assistant', content: 'Mode turn done.' }), chunk({}, 'stop'), usage]).join('') + 'data: [DONE]\n\n');
     });
   });
@@ -151,9 +154,12 @@ async function modeProject() {
     grant('scope', 'allow', ['inspect'], 'scope', ['scope']), grant('decide', 'allow', ['inspect', 'decide'], 'approval', 'all'),
     grant('edit-tools', 'require-approval', ['invoke'], 'agent-tool', ['edit_file', 'write_file'], { modeEligible: true }),
     grant('file-write', 'allow', ['execute'], 'operation', ['workspace.file.write']),
+    ...(options.shell ? [grant('shell-tool', 'require-approval', ['invoke'], 'agent-tool', ['run_shell'], { modeEligible: true }),
+      grant('shell-run', 'allow', ['execute'], 'operation', ['host.shell.run'])] : []),
     grant('mode-set', 'allow', ['set'], 'permission-mode', ['ask', 'auto-edit', 'full-auto'])] }), { mode: 0o600 });
   const theirs = { id: 'their-mode', principal: { issuer: 'another-host', subject: '4242' }, scopes: ['scope'], mode: 'full-auto' };
-  await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [theirs] }), { mode: 0o600 });
+  const mine = options.mode ? [{ id: 'my-mode', principal: me, scopes: ['scope'], mode: options.mode }] : [];
+  await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [theirs, ...mine] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   const audit = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT kind, record FROM audit_events ORDER BY sequence').all(); } finally { db.close(); } };
@@ -190,5 +196,20 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     expect(narrow.output.split('auto-edit').length - 1).toBe(1);
+  }, 180_000);
+  // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
+  // realm is the default `prefer-sandbox` (bubblewrap here): no approval card, the command ran in the sandbox, one audit event.
+  it.skipIf(!bwrapReady)('full-auto inside bubblewrap runs the owner\'s compound command without a card', async () => {
+    const command = 'echo "full-auto otonom test: run_shell otomatik mi?" && date && whoami';
+    const f = await modeProject({ call: { name: 'run_shell', arguments: { command } }, shell: true, mode: 'full-auto' });
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Mode turn done.', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).not.toContain('Approval requested');
+    expect(run.output).toContain('run_shell');
+    const events = f.audit().map(row => JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } });
+    expect(events.map(record => record.event.subject)).toEqual([expect.objectContaining({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify',
+      summary: expect.objectContaining({ kind: 'shell', head: command }) })]);
   }, 180_000);
 });

@@ -89,8 +89,11 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
  * too). Over the entry/mask bounds the view is refused (the command will not run), never left unmasked.
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
-  options: Pick<BubblewrapOptions, 'maxEntries'> = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+  options: Pick<BubblewrapOptions, 'maxEntries'> = {}, writeFloorReadOnly = false): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
   const maxEntries = options.maxEntries ?? BUBBLEWRAP_WALK_MAX_ENTRIES;
+  // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:
+  // no write, rename or unlink lands); the deny masks inside them still follow. A floor path that does not exist yet is not covered here.
+  const floored = writeFloorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
   const root = layout.project.root;
   const readOnly = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
   let entries = 0, gitEntries = 0;
@@ -169,9 +172,10 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       if (entry.name === '.git') { const refused = await gitEntry(path, rel, entry.isDirectory(), entry.isFile()); if (refused) return refused; continue; }
       if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }
       // Another name of a protected inode (a hard link) is closed with the inode; a regular single-link file stays open.
-      if (entry.isFile()) { if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path); continue; }
+      if (entry.isFile()) { if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path); else if (floored(entryRel)) readOnly.add(path); continue; }
       if (!entry.isDirectory()) continue;
       if (layout.project.denied(`${entryRel}/`)) { maskedDirectories.push(path); continue; }
+      if (floored(`${entryRel}/-`)) readOnly.add(path);
       // Generated/vendored trees are not entered (their content is not secret-bearing by the floor's definition and can be huge); a
       // directory ignored only by the project's .gitignore (e.g. `.brain/`) is, so `.brain/memory.db*` is masked.
       if (BASELINE_IGNORED_DIRS.has(entry.name)) {
@@ -203,7 +207,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
 export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: BubblewrapOptions = {}): ShellSandbox {
   const run = (bwrap: string): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
     const started = performance.now();
-    const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options);
+    const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options, request.writeFloorReadOnly === true);
     if (!view.ok) {
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
@@ -216,6 +220,6 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       if (capabilities.bubblewrap !== 'available') return { ok: false, reason: `bubblewrap ${capabilities.bubblewrap}` };
       if (capabilities.userNamespace !== 'available') return { ok: false, reason: `user namespace ${capabilities.userNamespace}` };
       const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
-      return binary.ok ? { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null } : { ok: false, reason: binary.reason };
+      return binary.ok ? { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null, containment: 'sandbox' } : { ok: false, reason: binary.reason };
     } });
 }

@@ -11,7 +11,7 @@ import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  bubblewrapShellSandbox, landlockShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
+  bubblewrapShellSandbox, isWriteApprovalFloored, landlockShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
   type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
@@ -144,7 +144,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout),
-      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null }) }) : null;
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor: isWriteApprovalFloored }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
@@ -280,8 +280,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
         if ((tool.toolClass === 'edit' && editsOf(tool.name)) || (tool.toolClass === 'shell' && shell)) {
-          return decisions.execute(tool, args, execution, callId, gate => tool.toolClass === 'edit'
-            ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate));
+          return decisions.execute(tool, args, execution, callId, (gate, approved) => tool.toolClass === 'edit'
+            ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, approved));
         }
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
