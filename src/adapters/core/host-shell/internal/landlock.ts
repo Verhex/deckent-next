@@ -101,8 +101,11 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       const child = `${rel}/${entry.name}`;
       if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); continue; }
       if (denied(child)) continue;
-      if (entry.isDirectory() && hasProtectedBeneath(child)) rules.push(...await carveProtected(child, depth + 1, cls));
-      else if (entry.isDirectory() || entry.isFile()) rules.push([cls, child]);
+      // The write floor holds inside a carved tree too (merge Astra 2170 x MODES-3: a full-access turn's floor, the configuration file,
+      // lies under the carved `.deckent`): a floored entry takes a read-only rule, a floored directory's subtree is read-only.
+      const inner = cls === 'w' && floored(entry.isDirectory() ? `${child}/-` : child) ? 'r' as const : cls;
+      if (entry.isDirectory() && hasProtectedBeneath(child)) rules.push(...await carveProtected(child, depth + 1, inner));
+      else if (entry.isDirectory() || entry.isFile()) rules.push([inner, child]);
     }
     return rules;
   };
@@ -127,7 +130,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (entry.isDirectory()) {
         const floor = cls === 'w' && floored(`${child}/-`);
         if (ignoredDirs.has(entry.name)) {
-          if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1, cls), carve: true };
+          if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1, floor ? 'r' : cls), carve: true };
           return floor ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
         }
         if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);

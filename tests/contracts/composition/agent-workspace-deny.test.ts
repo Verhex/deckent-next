@@ -142,6 +142,28 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
       expect(rules.ok && rules.rules.some(([cls, path]) => cls === 'w' && (path === '.' || p.rel.startsWith(`${path}/`)))).toBe(false);
     });
   }
+  // Merge Astra 2170 x MODES-3: the write floor holds inside a carved ignored ancestor too. With `.deckent/` ignored and the data root beneath it,
+  // the Landlock carve used to grant every other `.deckent` entry read-write, floor or not (the full-access configuration file included).
+  it('keeps the write floor read-only inside a carved ignored ancestor, in both realms, for the approval floor and the full-access floor', async () => {
+    const p = await layoutAt('.deckent/live-data', '.deckent/\n');
+    await writeFile(join(p.root, '.deckent', 'config.json'), 'CONFIG\n'); await writeFile(join(p.root, '.deckent', 'notes.md'), 'NOTES\n');
+    const approvalFloor = (rel: string) => rel === '.deckent/-' || rel.startsWith('.deckent/'), configOnly = (rel: string) => rel.startsWith('.deckent/config.json');
+    for (const [label, writeFloor, notes] of [['approval floor', approvalFloor, 'r'], ['full-access floor', configOnly, 'w']] as const) {
+      const layout = { ...p.sandbox, writeFloor };
+      const rules = await buildLandlockRules(layout, {}, undefined, { floorReadOnly: true });
+      const classOf = (path: string) => rules.ok ? rules.rules.find(([, rule]) => rule === path)?.[0] : 'refused';
+      expect({ label, config: classOf('.deckent/config.json'), notes: classOf('.deckent/notes.md') }).toEqual({ label, config: 'r', notes });
+      for (const provider of [bubblewrapShellSandbox(layout), landlockShellSandbox(layout)]) {
+        const usable = provider.usable(capabilities); if (!usable.ok) throw new Error(usable.reason);
+        const ran = await usable.realm.run({ command: 'echo X >> .deckent/config.json; echo "config=$?"; echo Y >> .deckent/notes.md; echo "notes=$?"', cwd: p.root, environment,
+          fixedEnv: { TMPDIR: p.scratch }, timeoutMs: 20_000, writeFloorReadOnly: true });
+        expect({ label, kind: provider.kind, config: ran.output.includes('config=0') }).toEqual({ label, kind: provider.kind, config: false });
+        expect({ label, kind: provider.kind, notes: ran.output.includes('notes=0') }).toEqual({ label, kind: provider.kind, notes: notes === 'w' });
+        expect(await readFile(join(p.root, '.deckent', 'config.json'), 'utf8')).toBe('CONFIG\n');
+        await writeFile(join(p.root, '.deckent', 'notes.md'), 'NOTES\n');
+      }
+    }
+  });
   it('derives anchors with the deny matcher\'s own wildcard language: brackets are literal, `*`/`?` cut (Astra 2164)', async () => {
     const scope = await createWorkspaceScope((await layoutAt('.cache/deckent[1]', null)).root, ['.cache/deckent[1]/state/ledger.db*', '.cache/deckent[1]/state/ledger.db/**',
       '.cache/deckent[1]/state/.ledger.db*', '**/.env', '.env', 'a/b?c/d*', 'plain/dir/']);
