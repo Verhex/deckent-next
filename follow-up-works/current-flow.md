@@ -3,7 +3,8 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `dd63fd9` (beşinci parti). Canlı servis hâlâ `4346081` build'iyle (instance `46d6473f…`), ledger v41, protokol v16 penceresi
+- `origin/main` = `dd63fd9` (beşinci parti). Canlı servis `dd63fd9` build'iyle (instance `5c266b90…`, ledger v42, layout 4; kanıt
+  `proof/LIVE-SWITCH-BATCH5-2026-09-28`). Önceki canlı: (instance `46d6473f…`), ledger v41, protokol v16 penceresi
   [16, 15], layout registry 3. Qwen3.8 bağlaması v5 (`chat-template-enable-thinking`) canlıda etkin. Canlı policy v1 (herkes `ask`). DOGFOOD OFF.
 - Ana checkout'ta Astra/owner WIP'i (core-memory `MEMORY.md`, `law_local_verification.md`, manifest, `hemen-donulecek-is.md`) korunuyor;
   canlı geçişte stash/yama ile saklanır, atılmaz.
@@ -19,7 +20,7 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Tam verify `599a0fc` exit 0 (402/2659, native 26+1, host 62, smoke). Astra 2149 REVISE: R1 temizlik ↔ yeni tur yarışı, R2 eşzamanlı yazımda
   kota aşımı → `lane/fix-2149` `deb2b7d` birleşti (tur açmadan önce tutar, temizlik silme boyunca sahip, kapanış drain; tek yazım sırası).
 - Tam verify `dd63fd9` exit 0 (403/2669, native 26+1, host 62, smoke); Astra 2152 PASS @dd63fd9; `origin/main` = `dd63fd9` (push 2026-09-28).
-- Sıradaki: canlı geçiş (owner izni gerekli: ledger v41→v42 göçü + layout 3→4).
+- Canlı geçiş yapıldı (owner onayı): workline turu çalışıyor; açık bulgu: satır modu `terminal session` `MODEL_INVOCATION_RESULT_LIMIT`.
 
 ## Altıncı parti (`integrate/2026-09-28-g`, worktree `/home/alperen/deckent-next-integrate-g`, taban dd63fd9)
 - Fetch birleşti (`lane/fetch` `e6bc551`; S6/S7/S10; Q1 Jev ee030c0e: `allowlist` katı, `approval` kart; `deposit` 2149 yazım şeridinde, eşzamanlı
