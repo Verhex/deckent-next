@@ -729,19 +729,30 @@ System prompt **v4** (TERM-FEEDBACK-1): one line naming the running model from t
 model reference with versions; "running inside Deckent"; answer identity questions with it), and the data-root line no longer points at
 the ledger and saved conversations: Deckent's own state and authority, keys and credential files are named protected (the tools and the
 shell refuse them); the configuration is named readable. Every turn's request digest changes again.
-**Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and shell path classification, the bubblewrap and Landlock deny views,
-`@file`) deny the Core floor plus every product resource of the layout that lies inside the project except the configuration
-(`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for resources added later; TERM-FEEDBACK-1: the owner's live session
-listed and read other saved conversations): each resource, anything under it, its sidecars (`rel*`: `ledger.db-wal`,
-`terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary (`.policy.json.<id>.tmp`). Policy and bindings are authority
-sources and stay closed; config names credentials only by reference and edits of it stay on the write floor. In a bubblewrap shell the
-runtime socket inside the project is masked too (no connection). The glob matcher tests a pattern's literal head first (20k paths, 97
-patterns: 1617 ms without it, 199 ms with the shipped matcher; the old 28 patterns 197 ms). Open limits: the agent can no longer read
-or `@`-attach saved conversations, the ledger, logs or policy (owner reads them outside the agent); Landlock does not restrict
-connect() to a pathname socket; a data root equal to the project root would also close same-named project files. History: previously a data root moved inside the project (`.deckent/live-data`) left approval records, the integrity key directory
-and whole pending diffs readable, and `state/approval-previews` was readable even in the default layout. `@file` candidates and attachments use the same `agentWorkspaceDeny(projectRoot, layout)` (OPEN-REASONING-FILE): approval records
-and pending diffs are neither listed nor attachable (`refused`/`path-denied`); the candidate index is cached per project root and
-deny list.
+**Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
+shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
+layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
+resources added later; TERM-FEEDBACK-1: the owner's live session listed and read other saved conversations): each resource, anything
+under it, its sidecars (`rel*`: `ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a writer's hidden temporary
+(`.policy.json.<id>.tmp`). The deny list's nested literal heads (`WorkspaceScope.protectedAnchors`:
+`.deckent/live-data/state/ledger.db`, `.deckent/host`, …) are protected together with their ancestors by both sandboxes even under an
+ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) — the ignored-tree exception never reaches Deckent's own state; a chain
+through a symbolic link refuses the call. In the shell plan a `PATH_PROTECTED` verdict on one of these patterns is a hard floor
+(`PRODUCT_STATE_PROTECTED`, no card, no effect intent): product management is not opened by any approval (owner F2); the Core floor's
+other paths (`.env`, keys) keep asking and are then refused by the sandbox. Policy and bindings are authority sources and stay closed;
+config names credentials only by reference and edits of it stay on the write floor. In a bubblewrap shell the runtime socket inside the
+project is masked too (no connection). The glob matcher tests a pattern's literal head first (20k paths, 97 patterns: 1617 ms without
+it, 199 ms with the shipped matcher; the old 28 patterns 197 ms). Open limits: the agent can no longer read or `@`-attach saved
+conversations, the ledger, logs or policy (owner reads them outside the agent); Landlock does not restrict connect() to a pathname
+socket, but the realm's seccomp filter refuses every `socket()` except AF_INET/AF_INET6 stream sockets (measured on ABI 7: a unix
+socket otherwise reached `/var/run/docker.sock`), so the runtime socket inside the project is unreachable in both realms., but the
+realm's seccomp filter refuses every `socket()` except AF_INET/AF_INET6 stream sockets (measured on ABI 7: a unix socket otherwise
+reached `/var/run/docker.sock`), so the runtime socket inside the project is unreachable in both realms.; a data root equal to the
+project root would also close same-named project files. History: previously a data root moved inside the project (`.deckent/live-data`)
+left approval records, the integrity key directory and whole pending diffs readable, and `state/approval-previews` was readable even in
+the default layout. `@file` candidates and attachments use the same `agentWorkspaceDeny(projectRoot, layout)` (OPEN-REASONING-FILE):
+approval records and pending diffs are neither listed nor attachable (`refused`/`path-denied`); the candidate index is cached per
+project root and deny list.
 **No-progress note (TL-C D7).** A round is without progress when it has tool calls, every call ended `duplicate`,
 `invalid-arguments` or `error`, and the model wrote no text; `denied`, approval outcomes and `cancelled` are not the model's failure.
 At the second consecutive such round the engine appends one `user` message `[deckent] The last two rounds made no progress: …`
@@ -955,11 +966,14 @@ are hashed once; ≈ 180 ms with the withdrawn directory cache, ≈ 145 ms befor
 limits: masked files read "Permission denied" rather than ENOENT; ignored-tree exception (both realms): `node_modules`/`dist`-class
 directories are not scanned, so a `node_modules/pkg/.env` is readable and a nested `node_modules/pkg/.git/config` writable inside
 (Astra 2154 measured both; owner option: mask/carve every `.git` and deny match inside ignored trees at the cost of scanning them);
-`.git` read-only means `git commit`/`git add` fail inside (owner decision); a data root inside the project keeps its ledger reachable
-(only approvals/previews/scratch are on the floor, as on the host); user-namespace-restricted hosts (AppArmor) not measured (the
-probe's `unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known
-paths (a service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the
-service dies (candidate for the "Host shell execution" orphan item) — untested.
+`.git` read-only means `git commit`/`git add` fail inside (owner decision); the product's own state inside the project (ledger, policy,
+sessions, audit, keys — every resource but the configuration, TERM-FEEDBACK-1) is closed in the sandbox in every layout, an ignored
+ancestor included (Astra 2162: the deny list's nested literal heads are `WorkspaceScope.protectedAnchors`; an ignored directory holding
+one is listed, its denied entries masked and only the ancestors entered — siblings stay unscanned; a symbolic link on that chain
+refuses the call; a `.gitignore` change cannot lift this); user-namespace-restricted hosts (AppArmor) not measured (the probe's
+`unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known paths (a
+service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the service dies
+(candidate for the "Host shell execution" orphan item) — untested.
 **Landlock realm (S11).** Second provider (chosen when bubblewrap is not usable): each call builds a rule set from a fresh scan of the
 project (`host-shell/internal/landlock.ts`) and runs bash through the native helper `shell-sandbox`
 (`host-shell/native/shell_sandbox.c`), which applies it and execs bash in the same process. Landlock only adds access and a directory
@@ -990,8 +1004,10 @@ holding a protected path or `.git` cannot gain, lose or rename entries inside th
 file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories
 are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 310 ms rule-set
 build on this repository after Astra 2158 (≈ 125 ms with the withdrawn directory cache, ≈ 90 ms before 2156; per-entry object rules for
-a carved `objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); a data root
-inside the project keeps its ledger writable.
+a carved `objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); the product's own
+state inside the project is closed in every layout, an ignored ancestor included (Astra 2162: an ignored directory holding a protected
+anchor is carved — listing only, denied entries no rule, the ancestors carved in turn, every other entry keeps its read-write grant
+unscanned; a symbolic link on the chain refuses the set).
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
