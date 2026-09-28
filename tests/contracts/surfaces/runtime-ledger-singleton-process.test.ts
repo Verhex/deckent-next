@@ -114,7 +114,7 @@ async function installation() {
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference, catalogRevision: catalog.revision,
     expectedBinding: binding, nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
-  const query = <T>(statement: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(statement).all() as T[]; } finally { db.close(); } };
+  const query = <T>(statement: string) => { const db = new DatabaseSync(ledger, { readOnly: true, timeout: 5_000 }); try { return db.prepare(statement).all() as T[]; } finally { db.close(); } };
   const invoke = async (commandId: string) => {
     const input = join(root, `${commandId}.json`); await writeFile(input, JSON.stringify(command(commandId)), { mode: 0o600 });
     const child = spawn(process.execPath, [cli, 'models', 'invoke', '--input', input, '--json'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
