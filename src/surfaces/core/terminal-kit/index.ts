@@ -1,3 +1,4 @@
+export * from './internal/decision-keys.js';
 export * from './internal/ink-palette-context.js';
 export * from './internal/ink-palette.js';
 export * from './internal/slash-registry.js';

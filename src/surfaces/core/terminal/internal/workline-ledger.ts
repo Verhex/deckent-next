@@ -1,6 +1,7 @@
 import type { RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
-import type { ListApprovalPage, StandingScope, WorklineApproval } from './approval-watch.js';
+import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
+import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
 
 export interface WorklineLedgerPorts {

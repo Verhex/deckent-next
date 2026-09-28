@@ -21,8 +21,8 @@ export { loadRunViewsForWatch } from './internal/workline-ledger.js';
 export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry, WorkerAttemptIdentity, WorkerLiveActivity, WorkerLivePhase } from './internal/work-ledger.js';
 export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type WorkerLine, type WorkerLineLabels } from './internal/worker-line.js';
 export { WORKER_PANEL_ROWS, type WorkerPanelLabels } from './internal/worker-panel.js';
-export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, decisionKey, EMPTY_APPROVAL_WATCH, scopedDecisionKey, scanPendingApprovals,
-  type StandingScope, type WorklineApproval, type WorklineApprovalPage } from './internal/approval-watch.js';
+export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, EMPTY_APPROVAL_WATCH, scanPendingApprovals, type WorklineApproval, type WorklineApprovalPage } from './internal/approval-watch.js';
+export { decisionKey, scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 export { resolveWorkerRef, type WorkSurfaceLabels } from './internal/workline-actions.js';
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from './internal/work-ledger.js';
 export type { WorklineLedgerPorts } from './internal/workline-ledger.js';

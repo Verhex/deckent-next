@@ -240,7 +240,8 @@
         "src/platform/core/managed-files",
         "src/composition/core/runs",
         "src/composition/core/model-invocation",
-        "src/composition/core/agent-turn"
+        "src/composition/core/agent-turn",
+        "src/composition/core/approvals"
       ],
       "plan": "SURFACES"
     },
@@ -1517,7 +1518,9 @@
         "src/domain/core/audit",
         "src/engine/core/audit",
         "src/adapters/core/audit-store",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/adapters/core/attempt-store",
+        "src/composition/core/policy"
       ],
       "plan": "SECURITY"
     },

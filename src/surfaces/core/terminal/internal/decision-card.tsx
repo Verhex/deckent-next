@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { scopedDecisionKey, type StandingScope } from './approval-watch.js';
+import { scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 
 export interface DecisionCardProps {
   readonly title: string;
