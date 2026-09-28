@@ -13,7 +13,8 @@ const VALUE_MAX = 48, LIST_MAX = 6;
 /** Control (C0/C1), invisible and bidirectional-formatting code points: none of them can reach a card. */
 const unsafe = (code: number) => code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0xad || code === 0x61c || code === 0x180e || (code >= 0x200b && code <= 0x200f)
   || (code >= 0x2028 && code <= 0x202e) || (code >= 0x2060 && code <= 0x206f) || code === 0xfeff;
-const text = (value: string) => { const clean = [...value].map(char => unsafe(char.codePointAt(0)!) ? '?' : char).join(''); return clean.length > VALUE_MAX ? `${clean.slice(0, VALUE_MAX - 1)}…` : clean; };
+const cut = (value: string, length: number) => [...value].slice(0, length).join('');
+const text = (value: string) => { const clean = [...value].map(char => unsafe(char.codePointAt(0)!) ? '?' : char); return clean.length > VALUE_MAX ? `${clean.slice(0, VALUE_MAX - 1).join('')}…` : clean.join(''); };
 type Selection = 'all' | readonly string[];
 const list = (selection: Selection) => selection === 'all' ? '*' : `[${selection.slice(0, LIST_MAX).map(text).join(',')}${selection.length > LIST_MAX ? `,+${selection.length - LIST_MAX}` : ''}]`;
 const people = (principals: 'all' | readonly { readonly issuer: string; readonly subject: string }[]) =>
@@ -45,7 +46,7 @@ export function describePolicyChange(files: { readonly policy: unknown; readonly
     if (next.length + (left > 0 ? more(left).length : 0) <= budget) { out = next; continue; }
     // The line does not fit: cut it to the room left (a card always shows what it can), then count the rest.
     const room = budget - out.length - 1 - more(left + 1).length;
-    if (room > 16) return `${out}\n${line.slice(0, room - 1)}…${left > 0 ? more(left) : ''}`;
+    if (room > 16) return `${out}\n${cut(line, room - 1)}…${left > 0 ? more(left) : ''}`;
     return `${out}${more(left + 1)}`;
   }
   return out;
