@@ -6,5 +6,8 @@
     "platforms": ["linux"],
     "artifacts": ["build/Release/shell-capabilities"]
   },
-  "scripts": { "build": "node build.mjs" }
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs && node --test test/*.mjs"
+  }
 }
