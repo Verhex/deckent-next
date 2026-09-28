@@ -293,13 +293,29 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
-    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v3\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v4\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
     expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
     expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
     // The summary call never carries the switch when the model does not declare it (TL-C D8).
     expect(f.state.requests[0]!['chat_template_kwargs']).toBeUndefined();
     expect(events.filter(event => event.kind === 'context').map(event => event.kind === 'context' && event.promptTokens)).toEqual([90_000, 900]);
   }, 30_000);
+
+  // TERM-FEEDBACK-1 (live turn 975da614): the recorded summary answer (list fields as strings) compacts and the turn goes on; an unreadable
+  // answer compacts with Deckent's labelled mechanical excerpt and the turn's note says so.
+  it('continues the turn with the live summary answer, and with a labelled mechanical excerpt when the answer is unreadable', async () => {
+    const live = JSON.parse(await readFile(join(import.meta.dirname, '../../fixtures/agent-turn/compaction-response-975da614.json'), 'utf8')) as { content: string };
+    const history = [...Array.from({ length: 16 }, (_, i) => i % 2 ? { role: 'assistant' as const, content: `answer ${i}`, toolCalls: [] }
+      : { role: 'user' as const, content: `question ${i}` }), { role: 'user' as const, content: 'go on' }];
+    for (const [summary, note, kept] of [[live.content, null, 'arch.json: tier order'], ['I summarized it.', engine.AGENT_TURN_MECHANICAL_COMPACTION_NOTE, 'not written by the model']] as const) {
+      const f = await runtime({ tokenize: true, windowTokens: 100_000, count: body => body.messages.length > 12 ? 90_000 : 900 }); await f.start();
+      f.state.script = [{ summary }, { content: 'Going on.' }];
+      const events: AgentTurnStreamEvent[] = [];
+      expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-summary', messages: history }, event => events.push(event)))
+        .toMatchObject({ finish: 'stop', answer: 'Going on.', note });
+      expect(events.flatMap(event => event.kind === 'compacted' ? [event.messages[0]!.content] : [])).toEqual([expect.stringContaining(kept)]);
+    }
+  }, 60_000);
 
   // TL-C (D4): the model-facing system prompt is the service's, in code, versioned; the client's catalog text follows it.
   it('sends one system message: the service segment with the workspace layout and tool rules, then the client prompt, with no contradiction (D4)', async () => {
@@ -313,10 +329,10 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
     expect(sent.map(message => message.role)).toEqual(['system', 'user']);
     const system = sent[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v3]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v4]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
     expect(system).toContain(`Project root: ${f.project}`);
-    expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).toContain('.deckent/live-data/state/terminal-sessions');
-    expect(system).toContain('.deckent/config.json');
+    expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).not.toContain('terminal-sessions'); expect(system).toMatch(/saved conversations[^\n]*protected/);
+    expect(system).toContain('.deckent/config.json'); expect(system).toContain('you are native-chat (Deckent catalog: provider local-openai v1, model chat v1), running inside Deckent');
     expect(system).toContain('Read tools: read_file, list_dir, grep, glob'); expect(system).toContain('Edit tools: edit_file, write_file');
     expect(system).toContain('Shell tool: run_shell'); expect(system).toContain('hasMore=true'); expect(system).toMatch(/one short line/);
     // The old catalog sentence contradicted the declared tools; neither the segment nor the proposed client text says it.
@@ -336,18 +352,27 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
     await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
     await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    // TERM-FEEDBACK-1: another saved conversation of the same scope; the ledger is the fixture's own.
+    await mkdir(join(f.data, 'state', 'terminal-sessions'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'state', 'terminal-sessions', 'other.json'), '{"messages":[{"role":"user","content":"owner-only other conversation"}]}', { mode: 0o600 });
     await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/approval-previews/diff.txt"}' } },
       { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/approvals/held.txt"}' } },
       { toolCall: { name: 'grep', arguments: '{"pattern":"owner-only","path":".deckent/live-data"}' } },
-      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/notes.txt"}' } }, { content: 'Done.' }];
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/notes.txt"}' } },
+      { toolCall: { name: 'list_dir', arguments: '{"path":".deckent/live-data/state/terminal-sessions"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/terminal-sessions/other.json"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/live-data/state/ledger.db"}' } },
+      { toolCall: { name: 'read_file', arguments: '{"path":".deckent/config.json"}' } }, { content: 'Done.' }];
     const events: AgentTurnStreamEvent[] = [];
     expect(await f.client().chatTurn(ask('turn-deny', 'read the approvals'), event => events.push(event))).toMatchObject({ finish: 'stop', answer: 'Done.' });
     const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
-    expect(results).toHaveLength(4);
+    expect(results).toHaveLength(8);
     expect(results[0]).toContain('error=path-denied'); expect(results[1]).toContain('error=path-denied');
     expect(results.join('\n')).not.toContain('owner-only'.concat(' full diff')); expect(results.join('\n')).not.toContain('owner-only approval record');
-    expect(results[3]).toContain('ordinary data file');
+    expect(results.join('\n')).not.toContain('owner-only other conversation');
+    expect(results[3]).toContain('ordinary data file'); expect(results[7]).toContain('"provider_catalog"');
+    for (const index of [4, 5, 6]) expect(results[index]).toContain('error=path-denied');
   }, 30_000);
 
   // TL-C (D8): the compaction call runs without thinking when (and only when) the catalog declares the switch.
@@ -1319,14 +1344,18 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
     await writeFile(join(f.data, 'approvals', 'held.txt'), 'owner-only approval record', { mode: 0o600 });
     await writeFile(join(f.data, 'state', 'approval-previews', 'diff.txt'), 'owner-only full diff', { mode: 0o600 });
     await writeFile(join(f.data, 'notes.txt'), 'ordinary data file', { mode: 0o600 });
+    // TERM-FEEDBACK-1: a saved conversation is product state too (explicit limit: the owner no longer attaches one with `@`).
+    await mkdir(join(f.data, 'state', 'terminal-sessions'), { recursive: true, mode: 0o700 });
+    await writeFile(join(f.data, 'state', 'terminal-sessions', 'other.json'), '{}', { mode: 0o600 });
     await f.start();
-    const held = '.deckent/live-data/approvals/held.txt', diff = '.deckent/live-data/state/approval-previews/diff.txt';
-    for (const query of ['', 'held', 'diff', 'approval', 'live-data']) {
+    const held = '.deckent/live-data/approvals/held.txt', diff = '.deckent/live-data/state/approval-previews/diff.txt', session = '.deckent/live-data/state/terminal-sessions/other.json';
+    for (const query of ['', 'held', 'diff', 'approval', 'live-data', 'other', 'sessions']) {
       const found = await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query, limit: 50 });
-      expect(found.paths).not.toContain(held); expect(found.paths).not.toContain(diff);
+      expect(found.paths).not.toContain(held); expect(found.paths).not.toContain(diff); expect(found.paths).not.toContain(session);
+      expect(found.paths.some(path => path.startsWith('.deckent/live-data/state/') || path === '.deckent/live-data/policy.json')).toBe(false);
     }
     expect((await f.client().findWorkspaceFiles({ schemaVersion: 1, scopeId: 'scope', query: 'notes', limit: 50 })).paths).toContain('.deckent/live-data/notes.txt');
-    for (const path of [held, diff]) {
+    for (const path of [held, diff, session]) {
       expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path, maxBytes: 1024 })).toEqual({ schemaVersion: 1, path, status: 'refused', reason: 'path-denied' });
     }
     expect(await f.client().attachWorkspaceFile({ schemaVersion: 1, scopeId: 'scope', path: '.deckent/live-data/notes.txt', maxBytes: 1024 }))

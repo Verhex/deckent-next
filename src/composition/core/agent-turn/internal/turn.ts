@@ -6,7 +6,8 @@ import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PRE
   agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
   requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
+  type ProductResource } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
@@ -52,14 +53,26 @@ const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
 export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
 /**
- * The Core read floor plus the owner-only product directories of this layout (TL-C D4): approvals (records, integrity key) and
- * approval previews (whole pending diffs). The floor names them under the default `.deckent`; a data root moved inside the project
- * (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and shell paths.
+ * The only product resources the agent tools may read (TERM-FEEDBACK-1): the installation's configuration, which the model is told
+ * about and which names credentials only by reference (the keys live under `approvals`). Every other resource of the layout is
+ * product state or authority (ledger and its sidecars, backups, saved conversations and history, logs, the runtime socket, approvals
+ * and their key, previews, audit, policy and bindings, runs, workspaces, scratch, ...) and is never opened to the agent tools; a
+ * resource added to the registry is protected until it is listed here.
+ */
+export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Object.freeze(['config']);
+/**
+ * The Core read floor plus every product resource of this layout inside the project except the readable ones (TL-C D4,
+ * TERM-FEEDBACK-1): the resource, anything under it, its sidecars (`ledger.db-wal`, `terminal-history.jsonl.<pid>.tmp`) and a
+ * writer's hidden temporary beside it (`.policy.json.<id>.tmp`). The floor names them under the default `.deckent`; a data root
+ * moved inside the project (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and
+ * shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
  */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
-  const owned = (['approvals', 'approvalPreviews', 'scratch'] as const).flatMap(resource => {
+  const owned = (Object.keys(layout.resources) as ProductResource[]).filter(resource => !AGENT_READABLE_PRODUCT_RESOURCES.includes(resource)).flatMap(resource => {
     const rel = relative(projectRoot, productResourcePath(layout, resource));
-    return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split(sep).join('/'), `${rel.split(sep).join('/')}/**`];
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return [];
+    const path = rel.split(sep).join('/'), slash = path.lastIndexOf('/');
+    return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
   });
   return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...owned]);
 }
@@ -127,6 +140,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
     // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
+      model: { ...chat.reference, nativeId: binding.definition.model.nativeId },
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' } });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
@@ -241,7 +255,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
         const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
         if (result?.receipt.outcome?.state !== 'responded') return null;
-        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result));
+        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result)) ?? 'unreadable';
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);

@@ -34,7 +34,11 @@ export function createGlobMatcher(pattern: string): (path: string) => boolean {
     else if (char === '?') tokens.push({ kind: 'one' });
     else tokens.push({ kind: 'literal', char });
   }
+  // The literal head before the first wildcard must start the path: a cheap exact test first, so a long deny list (TERM-FEEDBACK-1:
+  // every product resource of the layout) costs a string compare per pattern for most paths.
+  const wildcard = pattern.search(/[*?]/), head = wildcard < 0 ? pattern : pattern.slice(0, wildcard);
   return (path: string) => {
+    if (!path.startsWith(head)) return false;
     let current = new Uint8Array(path.length + 1);
     current[0] = 1;
     for (const token of tokens) {

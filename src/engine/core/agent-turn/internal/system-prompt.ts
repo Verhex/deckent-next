@@ -1,12 +1,13 @@
 import { isAbsolute, relative, sep } from 'node:path';
 import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
-import { productResourcePath, type ProductLayout } from '#platform/index.js';
+import type { ProductLayout } from '#platform/index.js';
 
 /**
- * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access). The text is protocol, like tool descriptions:
+ * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
+ * model's identity, and Deckent's own state named as protected instead of pointed at). The text is protocol, like tool descriptions:
  * English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 3;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 4;
 /** Allowlisted hosts named in the prompt; past this the prompt gives their count only. */
 const NAMED_HOSTS_MAX = 32;
 
@@ -18,17 +19,20 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
 }
 
 /**
- * The service's instructions for an agent turn: where the model works (project root, Deckent data root and state, configuration, the
- * conversation's scratch area), which tools exist by class and that policy and the permission mode decide each call, how bounded
- * results continue, and one progress line between tool rounds. Deterministic for one project, layout, scratch area and tool set.
+ * The service's instructions for an agent turn: which model runs (its catalog reference), where the model works (project root, Deckent
+ * data root, configuration, the conversation's scratch area) and that Deckent's own state is protected, which tools exist by class and
+ * that policy and the permission mode decide each call, how bounded results continue, and one progress line between tool rounds.
+ * Deterministic for one model, project, layout, scratch area and tool set.
  */
 export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: string; readonly layout: ProductLayout; readonly tools: readonly AgentToolSpec[];
   readonly scratch?: { readonly dir: string; readonly retentionDays: number } | null;
   /** FETCH: the declared fetch tool's allowlist and what happens to other hosts; absent or null = no network access (egress none). */
-  readonly network?: { readonly allowedHosts: readonly string[]; readonly others: 'ask' | 'refused' } | null }): string {
-  const { projectRoot, layout, tools, scratch, network } = input;
+  readonly network?: { readonly allowedHosts: readonly string[]; readonly others: 'ask' | 'refused' } | null;
+  /** TERM-FEEDBACK-1: the bound catalog model (provider and model reference, native id) the turn runs on. */
+  readonly model: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number; readonly nativeId: string } }): string {
+  const { projectRoot, layout, tools, scratch, network, model } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
-  const data = shown(projectRoot, layout.root), at = (resource: 'ledger' | 'terminalSessions') => shown(projectRoot, productResourcePath(layout, resource)).text;
+  const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
   const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
     ['Shell tool', named('shell'), ' It runs in the project root on the user\'s machine.']] as const;
@@ -36,16 +40,19 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
     `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
     'These instructions come from the Deckent runtime service, not from the user. You are the coding assistant of the Deckent operator'
       + ' terminal and work on the user\'s project.',
+    `- Model: you are ${model.nativeId} (Deckent catalog: provider ${model.providerId} v${model.providerVersion}, model ${model.modelId} v${model.modelVersion}),`
+      + ' running inside Deckent. When asked who or which model you are, answer with this; do not claim another model or vendor.',
     '', 'Workspace:',
     `- Project root: ${projectRoot}. Tool paths are relative to it; paths outside it are refused.`,
-    `- Deckent data root: ${data.text}${data.inside ? '' : ' (outside the project root: the tools cannot read it)'}. Its ledger ${at('ledger')}`
-      + ` is an SQLite database, not text; saved terminal conversations are in ${at('terminalSessions')}.`,
-    `- Deckent configuration: ${shown(projectRoot, layout.bootstrapConfigPath).text}.`,
+    `- Deckent data root: ${data.text}${data.inside ? '' : ' (outside the project root: the tools cannot read it)'}.`,
+    `- Deckent configuration: ${shown(projectRoot, layout.bootstrapConfigPath).text} (readable).`,
     ...(scratch ? [`- Scratch area: ${scratch.dir}. Your own temporary space for this conversation, outside the project: put notes, drafts,`
       + ' intermediate data and diagrams (Mermaid .mmd or SVG source as text) there with scratch_write, and read them with scratch_read and'
       + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
       + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
-    '- Approvals, approval previews, keys and credential files are protected: the read tools refuse them; do not try to read them another way.',
+    '- Deckent\'s own state and authority (its ledger, saved conversations and history, logs, the runtime socket, approvals and their previews,'
+      + ' audit, policy, runs and workspaces), keys and credential files are protected: the tools and the shell refuse them; do not try to read'
+      + ' them another way.',
     network ? `- Network: fetch_url fetches one https:// URL (GET, no credentials). ${hosts ? `Allowlisted hosts (${hosts}) run at once;` : 'No host is allowlisted;'}`
       + ` ${network.others === 'ask' ? 'any other host waits for the operator\'s approval' : 'any other host is refused'}. The body is saved in the scratch area under`
       + ' fetch/ and the result shows its first 16 KiB; read the rest with scratch_read.'

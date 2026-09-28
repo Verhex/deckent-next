@@ -38,9 +38,12 @@ export interface AgentTurnPorts {
     signal: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null; readonly quality: AgentContextQuality }>;
   /**
    * The model's summary of older messages for compaction (T-L5b): a governed, tools-off invocation whose command id derives from the
-   * turn and `sequence`. Null when it failed; the loop then keeps the history and closes the turn with a typed note.
+   * turn and `sequence`. Null when the call failed (no answer): the loop then keeps the history and closes the turn with a typed note.
+   * `unreadable` when it answered with no usable summary (TERM-FEEDBACK-1): the loop compacts with Deckent's labelled mechanical
+   * excerpt instead, and the turn's note says so.
    */
-  summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal): Promise<AgentCompactionSummary | null>;
+  summarize?(input: { readonly sequence: number; readonly messages: readonly AgentTurnMessage[] }, signal: AbortSignal):
+    Promise<AgentCompactionSummary | 'unreadable' | null>;
   /**
    * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
    * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call.
@@ -59,6 +62,12 @@ export interface AgentTurnPorts {
  */
 export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made no progress: every tool call was a duplicate, had invalid'
   + ' arguments or failed, and no text was written. Do not repeat those calls; write what you know so far, try another approach, or ask the user.';
+/**
+ * Closure-note sentence of a turn that compacted without a model summary (TERM-FEEDBACK-1): the model answered the summary call with
+ * nothing readable, so the older messages became Deckent's labelled mechanical excerpt.
+ */
+export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = '[deckent] Earlier messages were compacted without a model summary (its summary could'
+  + ' not be read): they are kept as a shortened excerpt, and details from them may be missing. Repeat what still matters, or start a new conversation.';
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
 
 /** A tool call's position in its turn: the model round and its index in that round's response. */
@@ -133,7 +142,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
   const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
-  let rounds = 0, toolCalls = 0, compactions = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
+  let rounds = 0, toolCalls = 0, compactions = 0, mechanical = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
   const push = (message: AgentTurnMessage) => {
@@ -141,7 +150,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     emit({ kind: 'message', message });
     return message;
   };
-  const finish = (value: AgentTurnFinish, note: string | null): AgentTurnResult => {
+  const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
+    // A mechanical compaction is never silent: the turn's note says what the kept context is and what to do.
+    const note = mechanical ? [closure, AGENT_TURN_MECHANICAL_COMPACTION_NOTE].filter(Boolean).join(' ') : closure;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;
     const answer = final?.role === 'assistant' && final.toolCalls.length === 0 && final.content ? final.content : null;
@@ -175,15 +186,17 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
     if (plan && ports.summarize) {
       compactions++;
-      let summaryOf: AgentCompactionSummary | null;
+      let summaryOf: AgentCompactionSummary | 'unreadable' | null;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
       if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
       if (!summaryOf) {
         const reached = tokenPressure && current ? `${current.promptTokens} of ${current.windowTokens} context tokens` : `the request size bound (${byteBound} bytes)`;
         return finish('error', `The conversation reached ${reached} and could not be`
-          + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`);
+          + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`
+          + ' Send the message again to retry, or start a new conversation (this one stays saved).');
       }
-      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf), ...plan.tail];
+      if (summaryOf === 'unreadable') mechanical++;
+      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf), ...plan.tail];
       messages.splice(0, messages.length, ...next);
       const visible = new Set<AgentTurnMessage>(plan.tail);
       for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
