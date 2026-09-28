@@ -6,3 +6,4 @@ export { HOST_SHELL_POSTURE, hostShellRealm, resolveShellRealm, type ShellRealmR
   type ShellSandboxLayout } from './internal/realm.js';
 export { describeHostShellResult, hostShellCleanupNote } from './internal/result.js';
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
+export { isVerifiedGitObject, scanGitDirectory, type GitDirectoryScan } from './internal/git-objects.js';

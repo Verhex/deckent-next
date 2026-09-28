@@ -6,12 +6,13 @@ import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/in
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout } from './realm.js';
 import { BASH_LAUNCH, runShellProcess } from './run.js';
+import { scanGitDirectory } from './git-objects.js';
 
 /** Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
  * `l` list the directory only, `d` a device file (read/write). */
 export type LandlockRuleClass = 'x' | 'r' | 'w' | 'l' | 'd';
 export type LandlockRule = readonly [LandlockRuleClass, string];
-export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
+export const LANDLOCK_RULE_BOUNDS = Object.freeze({ maxEntries: 20_000, maxGitEntries: 200_000, maxDepth: 32, maxRules: 8_192, maxBytes: 1_048_576 });
 export type LandlockRuleSet = { readonly ok: true; readonly rules: readonly LandlockRule[] } | { readonly ok: false; readonly reason: string };
 
 const HELPER = fileURLToPath(new URL('../native/build/Release/shell-sandbox', import.meta.url));
@@ -47,6 +48,29 @@ export async function gitWorktreeRepository(root: string): Promise<string | null
 export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {}): Promise<LandlockRuleSet> {
   const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied, ignoredDirs } = input.project;
   let seen = 0;
+  let gitSeen = 0;
+  /**
+   * Git metadata (a `.git` tree, a worktree's common repository) read-only under the inode floor (Astra 2156): a directory whose subtree
+   * holds only single-link regular files and readable directories takes one `r` rule; otherwise it is carved (listing only) and its
+   * entries take rules one by one — a multi-linked file, a symbolic link, a special file, an unreadable or too deep directory none.
+   * `rulePath` is relative under the root (opened beneath it) or absolute for the common repository. A hard-linked local clone's shared
+   * objects stay readable when their content verifies against their name; any other multi-linked file is closed (`scanGitDirectory`).
+   */
+  const scanGit = async (dir: string, rulePath: string, depth: number): Promise<readonly LandlockRule[]> => {
+    const scanned = await scanGitDirectory(dir);
+    if (!scanned.readable) return [];
+    if ((gitSeen += scanned.suspectFiles.length + scanned.cleanFiles.length + scanned.directories.length) > limit.maxGitEntries) {
+      throw new BoundExceeded(`the git metadata has more than ${limit.maxGitEntries} entries to scan`);
+    }
+    if (depth + 1 > limit.maxDepth) return [['l', rulePath]];
+    const inner = await Promise.all(scanned.directories.map(async name => {
+      const childRule = `${rulePath}/${name}`, rules = await scanGit(join(dir, name), childRule, depth + 1);
+      return rules.length === 1 && rules[0]![0] === 'r' && rules[0]![1] === childRule ? { clean: childRule } : { rules };
+    }));
+    // Every entry clean (a single-link or verified file, a clean directory) → the directory itself is one read-only rule.
+    if (scanned.suspectFiles.length === 0 && inner.every(verdict => verdict.clean !== undefined)) return [['r', rulePath]];
+    return [['l', rulePath], ...scanned.cleanFiles.map(name => ['r', `${rulePath}/${name}`] as const), ...inner.flatMap(verdict => verdict.clean ? [['r', verdict.clean] as const] : verdict.rules ?? [])];
+  };
   const scan = async (rel: string, depth: number): Promise<readonly LandlockRule[] | null> => {
     let entries: Dirent[];
     try { entries = await readdir(rel === '.' ? root : join(root, rel), { withFileTypes: true }); } catch { return []; }
@@ -54,8 +78,13 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     // One verdict per entry, siblings (and their subtrees) examined concurrently: a clean path, carved rules, or nothing (no rule).
     const verdicts = await Promise.all(entries.map(async (entry): Promise<{ readonly clean?: string; readonly rules?: readonly LandlockRule[]; readonly carve: boolean }> => {
       const child = rel === '.' ? entry.name : `${rel}/${entry.name}`;
-      // `.git` (a directory, or a worktree/submodule file) is read-only; a `.git` link is not followed and takes no rule.
-      if (entry.name === '.git') return { rules: entry.isSymbolicLink() ? [] : [['r', child]], carve: true };
+      // `.git`: the inode floor first (Astra 2156) — a multi-linked `.git` file is another name of something and takes no rule; a `.git` link
+      // takes none; a `.git` directory is read-only through carved rules (`scanGit`), never one grant over an unchecked tree.
+      if (entry.name === '.git') {
+        if (entry.isSymbolicLink()) return { rules: [], carve: true };
+        if (entry.isDirectory()) return { rules: await scanGit(join(root, child), child, 0), carve: true };
+        return { rules: await lstat(join(root, child)).then(info => info.nlink === 1, () => false) ? [['r', child]] : [], carve: true };
+      }
       if (entry.isSymbolicLink()) return { carve: false };
       if (denied(child)) return { carve: true };
       if (entry.isDirectory()) {
@@ -78,9 +107,11 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     for (const path of [...SYSTEM_EXEC, ...(prefix ? [join(prefix, 'bin'), join(prefix, 'lib')] : [])]) if (await exists(path, 'dir')) system.push(['x', path]);
     for (const path of SYSTEM_READ) if (await exists(path, 'dir')) system.push(['r', path]);
     for (const path of DEVICES) if (await exists(path, 'any')) system.push(['d', path]);
-    const common = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
+    // The common repository of a worktree (root `.git` file with its own read rule, in the verified shape): read-only under the same floor.
+    const commonDir = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
+    const common = commonDir ? await scanGit(commonDir, commonDir, 0) : [];
     const scratch = input.scratchDir && isAbsolute(input.scratchDir) && await exists(input.scratchDir, 'dir') ? await realpath(input.scratchDir) : null;
-    const rules = [...system, ...project, ...(common ? [['r', common] as const] : []), ...(scratch ? [['w', scratch] as const] : [])];
+    const rules = [...system, ...project, ...common, ...(scratch ? [['w', scratch] as const] : [])];
     if (rules.length > limit.maxRules) return { ok: false, reason: `the rule set needs more than ${limit.maxRules} rules` };
     if (rules.reduce((sum, [, path]) => sum + Buffer.byteLength(path) + 10, 0) > limit.maxBytes) return { ok: false, reason: 'the rule set is too large to pass' };
     return { ok: true, rules };
