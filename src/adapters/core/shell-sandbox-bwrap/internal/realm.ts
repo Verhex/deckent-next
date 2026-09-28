@@ -2,7 +2,7 @@ import { statSync } from 'node:fs';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
-import { BASH_LAUNCH, gitWorktreeRepository, runShellProcess, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
+import { BASH_LAUNCH, gitWorktreeRepository, runShellProcess, scanGitDirectory, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
 
@@ -12,6 +12,8 @@ export const BUBBLEWRAP_POSTURE = 'Runs in a bubblewrap sandbox: the project is 
   + 'and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
+/** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
+export const BUBBLEWRAP_GIT_WALK_MAX_ENTRIES = 200_000;
 export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
@@ -91,7 +93,43 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const maxEntries = options.maxEntries ?? BUBBLEWRAP_WALK_MAX_ENTRIES;
   const root = layout.project.root;
   const readOnly = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
-  let entries = 0;
+  let entries = 0, gitEntries = 0;
+  const overMasks = () => maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX ? `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})` : null;
+  /**
+   * The inode floor over Git metadata (Astra 2156): a `.git` tree or a worktree's common repository is bound read-only, but read-only
+   * does not hide another name of a protected inode, so every regular file with more than one link inside it is masked, an unreadable
+   * or too deep directory is masked, and a symbolic link takes nothing. Only this floor applies inside (the deny floor names `.git/**`
+   * as a whole). A hard-linked local clone's shared objects stay readable when their content verifies against their name; any other
+   * multi-linked file is closed (`scanGitDirectory`: verification cached per inode, directory scans cached by directory change time).
+   */
+  const walkGit = async (dir: string, depth: number): Promise<string | null> => {
+    const scan = await scanGitDirectory(dir);
+    if (!scan.readable) { maskedDirectories.push(dir); return null; }
+    if ((gitEntries += scan.suspectFiles.length + scan.cleanFiles.length + scan.directories.length) > BUBBLEWRAP_GIT_WALK_MAX_ENTRIES) {
+      return `git metadata walk over its bound (${BUBBLEWRAP_GIT_WALK_MAX_ENTRIES} entries)`;
+    }
+    for (const name of scan.suspectFiles) { const over = overMasks(); if (over) return over; maskedFiles.push(join(dir, name)); }
+    for (const name of scan.directories) {
+      const over = overMasks(); if (over) return over;
+      if (depth + 1 > MAX_DEPTH) { maskedDirectories.push(join(dir, name)); continue; }
+      const refused = await walkGit(join(dir, name), depth + 1);
+      if (refused) return refused;
+    }
+    return null;
+  };
+  /** A `.git` entry: the inode floor first (a multi-linked `.git` file is another name of something and is masked, never a grant), then the
+   * read-only grant: a directory anywhere; the root file (a worktree) itself and, in the verified worktree shape, its common repository. */
+  const gitEntry = async (path: string, rel: string, isDirectory: boolean, isFile: boolean): Promise<string | null> => {
+    if (isDirectory) { readOnly.add(path); return walkGit(path, 0); }
+    if (!isFile) return null;
+    if (await lstat(path).then(info => info.nlink, () => 2) > 1) { maskedFiles.push(path); return null; }
+    if (rel !== '') return null;
+    readOnly.add(path);
+    const common = await gitWorktreeRepository(root);
+    if (!common) return null;
+    readOnly.add(common);
+    return walkGit(common, 0);
+  };
   const walk = async (dir: string, rel: string, depth: number): Promise<string | null> => {
     let names;
     try { names = await readdir(dir, { withFileTypes: true }); }
@@ -101,17 +139,12 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       [entry.name, await lstat(join(dir, entry.name)).then(info => info.nlink, () => 2)] as const)));
     for (const entry of names) {
       if (++entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`;
-      if (maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX) return `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})`;
+      const over = overMasks(); if (over) return over;
       const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
       if (entry.isSymbolicLink()) continue;
-      // `.git`: a directory is bound read-only wherever it is; the root `.git` file (a worktree) is bound read-only itself and, only in the
-      // verified worktree shape, opens its common repository read-only. A nested `.git` file — a pointer the sandboxed command could have
-      // written — opens nothing (a submodule loses `git status` inside; documented).
-      if (entry.name === '.git') {
-        if (entry.isDirectory()) readOnly.add(path);
-        else if (entry.isFile() && rel === '') { readOnly.add(path); const common = await gitWorktreeRepository(root); if (common) readOnly.add(common); }
-        continue;
-      }
+      // `.git`: see `gitEntry` — the inode floor, then the read-only grant (a nested `.git` file, a pointer the sandboxed command could have
+      // written, opens nothing: a submodule loses `git status` inside; documented).
+      if (entry.name === '.git') { const refused = await gitEntry(path, rel, entry.isDirectory(), entry.isFile()); if (refused) return refused; continue; }
       if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }
       // Another name of a protected inode (a hard link) is closed with the inode; a regular single-link file stays open.
       if (entry.isFile()) { if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path); continue; }

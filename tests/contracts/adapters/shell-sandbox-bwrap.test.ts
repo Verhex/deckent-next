@@ -214,6 +214,49 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     const result = await f.run(`git status --short; echo "status=$?"; git log --oneline -1 | wc -l; echo x >> "${gitdir}/config" 2>&1; echo "gitdir=$?"; echo x >> "${f.main}/.git/config" 2>&1; echo "common=$?"`);
     expect(result.output).toMatch(/status=0\n1\n/u); expect(result.output).toMatch(/gitdir=1/u); expect(result.output).toMatch(/common=1/u);
   });
+  // Astra 2156: the inode floor applies before the git grants — a hard link to the protected `.env` named `.git` (root or nested), placed
+  // inside `.git`, or inside a worktree's common repository is unreadable and unwritable; genuine git keeps working, a hard-linked local
+  // clone's shared objects included.
+  it('closes another name of a protected inode wherever git metadata would grant it (Astra 2156)', async () => {
+    const f = await fixture({ worktree: true });
+    await mkdir(join(f.project, 'sub')); await writeFile(join(f.project, '.env'), 'SECRET-WORKTREE\n');
+    await link(join(f.project, '.env'), join(f.project, 'sub', '.git'));
+    await link(join(f.project, '.env'), join(f.main, '.git', 'sentinel-alias'));
+    await link(join(f.project, '.env'), join(f.main, '.git', 'worktrees', 'worktree', 'sentinel-alias'));
+    const view = await resolveBubblewrapView(f.layout, f.environment);
+    if (!view.ok) throw new Error(view.reason);
+    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.project, 'sub', '.git'), join(f.main, '.git', 'sentinel-alias'), join(f.main, '.git', 'worktrees', 'worktree', 'sentinel-alias')]));
+    const ran = await f.run(`for p in sub/.git ${f.main}/.git/sentinel-alias ${f.main}/.git/worktrees/worktree/sentinel-alias; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done;`
+      + ' git status --short; echo "status=$?"; git log --oneline -1 | wc -l');
+    expect(ran.output).not.toContain('SECRET');
+    expect(ran.output.match(/Permission denied/gu)?.length).toBe(6); expect(ran.output.match(/w=1/gu)?.length).toBe(3);
+    expect(ran.output).toMatch(/status=0\n1\n$/u);
+    expect(await readFile(join(f.project, '.env'), 'utf8')).toBe('SECRET-WORKTREE\n');
+    // A root `.git` file that is another name of `.env` grants nothing (no worktree resolution, no read-only bind).
+    const forged = join(f.root, 'forged'); await mkdir(forged); await writeFile(join(forged, '.env'), 'SECRET-FORGED\n'); await link(join(forged, '.env'), join(forged, '.git'));
+    const forgedScope = await createWorkspaceScope(forged);
+    const forgedView = await resolveBubblewrapView({ project: forgedScope, scratchDir: f.scratch }, f.environment);
+    if (!forgedView.ok) throw new Error(forgedView.reason);
+    expect(forgedView.view.readOnlyPaths).toEqual([]); expect(forgedView.view.maskedFiles).toEqual(expect.arrayContaining([join(forged, '.env'), join(forged, '.git')]));
+  });
+  it('keeps a hard-linked local clone usable: verified objects stay readable, an alias among them does not (Astra 2156)', async () => {
+    const f = await fixture();
+    const clone = join(f.root, 'clone');
+    execFileSync('git', ['clone', '-q', f.main, clone], { env: { ...process.env, HOME: f.home }, stdio: 'pipe' });
+    const objects = execFileSync('find', [join(clone, '.git', 'objects'), '-type', 'f', '-links', '+1'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    expect(objects.length).toBeGreaterThan(0);
+    await writeFile(join(clone, '.env'), 'SECRET-CLONE\n'); await link(join(clone, '.env'), join(clone, '.git', 'objects', 'aa', 'a'.repeat(38)).replace(/\/aa\/a{38}$/u, '/aa/' + 'a'.repeat(38)))
+      .catch(async () => { await mkdir(join(clone, '.git', 'objects', 'aa'), { recursive: true }); await link(join(clone, '.env'), join(clone, '.git', 'objects', 'aa', 'a'.repeat(38))); });
+    const scope = await createWorkspaceScope(clone), layout = { project: scope, scratchDir: f.scratch };
+    const view = await resolveBubblewrapView(layout, f.environment);
+    if (!view.ok) throw new Error(view.reason);
+    expect(view.view.maskedFiles.filter(path => path.includes('/.git/'))).toEqual([join(clone, '.git', 'objects', 'aa', 'a'.repeat(38))]);
+    const usable = bubblewrapShellSandbox(layout).usable(capabilities);
+    if (!usable.ok) throw new Error(usable.reason);
+    const ran = await usable.realm.run({ command: `git log --oneline -1 | wc -l; git fsck --connectivity-only 2>&1 | grep -c "Could not read" ; cat .git/objects/aa/${'a'.repeat(38)} 2>&1`, cwd: scope.root, environment: f.environment,
+      fixedEnv: { TMPDIR: f.scratch }, timeoutMs: 60_000 });
+    expect(ran.output).toMatch(/^1\n0\n.*Permission denied\n$/u); expect(ran.output).not.toContain('SECRET');
+  });
   it('has no network: a port the host reaches is unreachable from the sandbox', async () => {
     const f = await fixture();
     const server = createServer(socket => socket.end('hello')); servers.push(server);

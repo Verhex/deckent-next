@@ -204,6 +204,32 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
       expect(ran.output, root).not.toContain('refs/heads');
     }
   });
+  it.skipIf(!gitAvailable)('closes another name of a protected inode wherever git metadata would grant it; a hard-linked clone stays usable (Astra 2156)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-landlock-alias-')); roots.push(base);
+    const main = join(base, 'main'), tree = join(base, 'tree'), clone = join(base, 'clone'), scratch = join(base, 'scratch');
+    const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } });
+    await mkdir(scratch); await mkdir(main); git(main, 'init', '-q'); await writeFile(join(main, 'a.txt'), 'a\n'); git(main, 'add', 'a.txt'); git(main, 'commit', '-qm', 'a');
+    git(main, 'worktree', 'add', '-q', tree); git(base, 'clone', '-q', main, clone);
+    // (a) root `.git` file alias, (b)/(c) nested `.git` file alias, (d) alias inside `.git`, (e) alias inside the worktree's common repository.
+    const forged = join(base, 'forged'); await mkdir(forged); await writeFile(join(forged, '.env'), 'ALIAS_SECRET\n'); await link(join(forged, '.env'), join(forged, '.git'));
+    await writeFile(join(tree, '.env'), 'ALIAS_SECRET\n'); await mkdir(join(tree, 'sub')); await link(join(tree, '.env'), join(tree, 'sub', '.git'));
+    await link(join(tree, '.env'), join(main, '.git', 'sentinel-alias')); await link(join(tree, '.env'), join(main, '.git', 'worktrees', 'tree', 'sentinel-alias'));
+    await writeFile(join(clone, '.env'), 'ALIAS_SECRET\n'); await mkdir(join(clone, '.git', 'objects', 'aa'), { recursive: true }); await link(join(clone, '.env'), join(clone, '.git', 'objects', 'aa', 'a'.repeat(38)));
+    const forgedRules = await buildLandlockRules({ project: await createWorkspaceScope(forged), scratchDir: scratch });
+    expect(forgedRules.ok && forgedRules.rules.some(([, path]) => path === '.git')).toBe(false);
+    for (const [root, aliases] of [[tree, ['sub/.git', join(main, '.git', 'sentinel-alias'), join(main, '.git', 'worktrees', 'tree', 'sentinel-alias')]], [clone, [`.git/objects/aa/${'a'.repeat(38)}`]]] as const) {
+      const scope = await createWorkspaceScope(root);
+      const resolution = resolveShellRealm('prefer-sandbox', caps(kernelAbi), [landlockShellSandbox({ project: scope, scratchDir: scratch })]);
+      if (!resolution.ok) throw new Error('realm expected');
+      const ran = await resolution.realm.run({ command: `for p in ${aliases.map(alias => `'${alias}'`).join(' ')}; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done; git status --short; echo "status=$?"; git log --oneline -1 | wc -l`,
+        cwd: scope.root, environment: { PATH: '/usr/bin:/bin' }, fixedEnv: { TMPDIR: scratch }, timeoutMs: 60_000 });
+      expect(ran.output, root).not.toContain('ALIAS_SECRET');
+      expect(ran.output.match(/Permission denied/gu)?.length, root).toBe(aliases.length * 2); expect(ran.output.match(/w=1/gu)?.length, root).toBe(aliases.length);
+      expect(ran.output, root).toMatch(/status=0\n1\n$/u);
+    }
+    expect(execFileSync('find', [join(clone, '.git', 'objects'), '-type', 'f', '-links', '+1'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length).toBeGreaterThan(1);
+  });
   it('keeps the process-group contract: a timeout ends the sandboxed group, background children included', async () => {
     const r = await realm();
     const ran = await r.run('sleep 30 & echo $! > "$TMPDIR/child.pid"; wait', 700);
