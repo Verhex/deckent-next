@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
-  readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, type McpClientSettings, type McpLiveTool } from '#adapters/index.js';
+  readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
+  type McpLiveTool } from '#adapters/index.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
 // and 2026-07-28 `server/discover`), the pinned tool list, bounded redacted results, timeouts and a bounded restart. Every server here is a
@@ -19,14 +20,14 @@ afterEach(async () => {
 const echo: McpLiveTool & { behavior?: string } = { name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
   annotations: { readOnlyHint: true } };
 const tool = (name: string, behavior: string, extra: Partial<McpLiveTool> = {}) => ({ name, description: `${name} tool`, inputSchema: { type: 'object', properties: {} }, behavior, ...extra });
-function fixture(mode: 'legacy' | 'dual' | 'modern', tools: unknown[] = [echo]) {
+function fixture(mode: 'legacy' | 'dual' | 'modern', tools: unknown[] = [echo], extraArgs: string[] = []) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-client-')); roots.push(root);
   const toolsFile = join(root, 'tools.json'), logFile = join(root, 'log.jsonl');
   writeFileSync(toolsFile, JSON.stringify(tools)); appendFileSync(logFile, '');
-  const events = () => readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { event: string; name?: string; arguments?: unknown; aborted?: boolean; pid: number });
+  const events = () => readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { event: string; name?: string; cursor?: string | null; arguments?: unknown; aborted?: boolean; pid: number });
   return { root, toolsFile, events, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)),
     server: (pins: readonly { name: string; digest: string; alwaysAsk?: boolean }[], id = 'fx') => ({ id, command: process.execPath,
-      args: [FIXTURE, '--mode', mode, '--tools', toolsFile, '--log', logFile], env: {}, realm: 'host' as const,
+      args: [FIXTURE, '--mode', mode, '--tools', toolsFile, '--log', logFile, ...extraArgs], env: {}, realm: 'host' as const,
       tools: pins.map(pin => ({ alwaysAsk: false, ...pin })) }) };
 }
 const settings = (servers: McpClientSettings['servers'], extra: Partial<McpClientSettings> = {}): McpClientSettings => ({ connectTimeoutMs: 10_000,
@@ -138,6 +139,39 @@ describe('MCP client: calls, bounds and failures', () => {
     expect(opened.ok && opened.posture).toContain('sandbox: none');
     await expect.poll(() => p.stderr('fx'), { timeout: 5_000 }).toContain('fixture stderr');
     expect(p.stderr('fx')).not.toContain('abcdef0123456789abcdef');
+  }, 30_000);
+});
+
+describe('MCP client: paginated tool lists (SDK 2.2.0 follows nextCursor; the pool bounds the walk)', () => {
+  const many = (count: number) => Array.from({ length: count }, (_, index) => tool(`t${index}`, 'echo'));
+  it.each(['legacy', 'dual'] as const)('a %s server listing over several pages is read to its end and every page is verified against the pins', async mode => {
+    const tools = many(7), f = fixture(mode, tools, ['--page-size', '3']), server = f.server([tools[0]!, tools[4]!, tools[6]!].map(pinOf));
+    const state = await pool().open(server, settings([server]), context(f.root));
+    expect(state.ok && Object.fromEntries(state.tools.map(entry => [entry.name, entry.status]))).toEqual({ t0: 'pinned', t4: 'pinned', t6: 'pinned',
+      t1: 'unpinned', t2: 'unpinned', t3: 'unpinned', t5: 'unpinned' });
+    expect(f.events().filter(event => event.event === 'list').map(event => event.cursor)).toEqual([null, '3', '6']);
+  }, 30_000);
+
+  it('a tool that drifts on a later page is not offered, and a call on a tool from a later page uses the pin of that page', async () => {
+    const tools = many(5), f = fixture('dual', tools, ['--page-size', '2']), server = f.server(tools.map(pinOf)), p = pool(), all = settings([server]);
+    f.setTools([...tools.slice(0, 4), { ...tools[4]!, description: 'changed on the last page' }]);
+    const state = await p.open(server, all, context(f.root));
+    expect(state.ok && state.tools.map(entry => entry.status)).toEqual(['pinned', 'pinned', 'pinned', 'pinned', 'drifted']);
+    f.setTools(tools);
+    await p.open(server, all, context(f.root));
+    expect(await p.call('fx', 't4', pinOf(tools[4]!).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal })).toMatchObject({ outcome: 'answered' });
+  }, 30_000);
+
+  it('a server that never stops sending a cursor ends at the page bound (a typed failure, not a hang or unbounded memory)', async () => {
+    const f = fixture('dual', many(2), ['--page-size', '1', '--endless']), server = f.server([]);
+    const state = await pool().open(server, settings([server]), context(f.root));
+    expect(state).toMatchObject({ ok: false, reason: 'too-many-tools' });
+    expect(f.events().filter(event => event.event === 'list').length).toBeLessThanOrEqual(MCP_CLIENT_LIST_PAGES_MAX + 1);
+  }, 30_000);
+
+  it('more tools than the total bound is refused across pages (the bound is not per page)', async () => {
+    const f = fixture('dual', many(MCP_CLIENT_TOOLS_MAX + 1), ['--page-size', '100']), server = f.server([]);
+    expect(await pool().open(server, settings([server]), context(f.root))).toMatchObject({ ok: false, reason: 'too-many-tools' });
   }, 30_000);
 });
 

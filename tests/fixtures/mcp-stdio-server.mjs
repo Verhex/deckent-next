@@ -7,7 +7,8 @@ import { parseArgs } from 'node:util';
 import { Server } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
-const { values } = parseArgs({ options: { mode: { type: 'string' }, tools: { type: 'string' }, log: { type: 'string' }, token: { type: 'string' } }, strict: true });
+const { values } = parseArgs({ options: { mode: { type: 'string' }, tools: { type: 'string' }, log: { type: 'string' }, token: { type: 'string' },
+  'page-size': { type: 'string' }, endless: { type: 'boolean' } }, strict: true });
 const mode = values.mode ?? 'dual';
 const log = event => appendFileSync(values.log, `${JSON.stringify({ ...event, pid: process.pid })}\n`);
 const definitions = () => JSON.parse(readFileSync(values.tools, 'utf8'));
@@ -17,7 +18,16 @@ process.stderr.write('fixture stderr: token=abcdef0123456789abcdef\n');
 function build() {
   const server = new Server({ name: 'deckent-mcp-fixture', version: '1.0.0' }, { capabilities: { tools: {} },
     ...(mode === 'legacy' ? { supportedProtocolVersions: ['2025-11-25', '2025-06-18'] } : {}) });
-  server.setRequestHandler('tools/list', async () => ({ tools: definitions().map(tool => Object.fromEntries(Object.entries(tool).filter(([key]) => key !== 'behavior'))) }));
+  // `--page-size N` serves `tools/list` in pages (an opaque numeric cursor); `--endless` never stops sending a cursor (a hostile server).
+  server.setRequestHandler('tools/list', async request => {
+    const all = definitions().map(tool => Object.fromEntries(Object.entries(tool).filter(([key]) => key !== 'behavior')));
+    const size = values['page-size'] ? Number(values['page-size']) : 0, cursor = request.params?.cursor;
+    log({ event: 'list', cursor: cursor ?? null });
+    if (!size) return { tools: all };
+    const from = cursor ? Number(cursor) : 0, page = all.slice(from, from + size);
+    return { tools: values.endless ? all.slice(0, size).map(tool => ({ ...tool, name: `${tool.name}_${from}` })) : page,
+      ...(values.endless || from + size < all.length ? { nextCursor: String(from + size) } : {}) };
+  });
   server.setRequestHandler('tools/call', async (request, context) => {
     const tool = definitions().find(entry => entry.name === request.params.name);
     log({ event: 'call', name: request.params.name, arguments: request.params.arguments ?? {} });
