@@ -5,4 +5,4 @@ export { probeShellCapabilities, shellSandboxCapabilities, type ShellCapabilitie
 export { HOST_SHELL_POSTURE, hostShellRealm, resolveShellRealm, type ShellRealmResolution, type ShellSandbox, type ShellSandboxFactory,
   type ShellSandboxLayout } from './internal/realm.js';
 export { describeHostShellResult, hostShellCleanupNote } from './internal/result.js';
-export { buildLandlockRules, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
+export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';

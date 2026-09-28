@@ -1,8 +1,8 @@
 import { statSync } from 'node:fs';
-import { readdir, readFile, realpath, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { readdir, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
-import { BASH_LAUNCH, runShellProcess, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
+import { BASH_LAUNCH, gitWorktreeRepository, runShellProcess, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
 
@@ -36,19 +36,6 @@ function findBubblewrap(paths: readonly string[]): { readonly ok: true; readonly
     } catch { /* not here */ }
   }
   return { ok: false, reason: `bwrap not found at a known path (${paths.join(', ')})` };
-}
-
-/** A `.git` file (worktree, submodule): its gitdir and that gitdir's common dir, when they exist. */
-async function gitDirsOf(gitFile: string): Promise<string[]> {
-  const text = await readFile(gitFile, 'utf8').catch(() => '');
-  const match = /^gitdir:\s*(.+?)\s*$/mu.exec(text);
-  if (!match) return [];
-  const gitdir = resolve(dirname(gitFile), match[1]!);
-  const dirs: string[] = [];
-  for (const candidate of [gitdir]) { try { dirs.push(await realpath(candidate)); } catch { /* absent */ } }
-  const common = (await readFile(join(gitdir, 'commondir'), 'utf8').catch(() => '')).trim();
-  if (common) { try { dirs.push(await realpath(resolve(gitdir, common))); } catch { /* absent */ } }
-  return dirs;
 }
 
 /** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
@@ -101,9 +88,12 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       if (maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX) return `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})`;
       const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
       if (entry.isSymbolicLink()) continue;
+      // `.git`: a directory is bound read-only wherever it is; the root `.git` file (a worktree) is bound read-only itself and, only in the
+      // verified worktree shape, opens its common repository read-only. A nested `.git` file — a pointer the sandboxed command could have
+      // written — opens nothing (a submodule loses `git status` inside; documented).
       if (entry.name === '.git') {
         if (entry.isDirectory()) readOnly.add(path);
-        else if (entry.isFile()) for (const gitDir of await gitDirsOf(path)) readOnly.add(gitDir);
+        else if (entry.isFile() && rel === '') { readOnly.add(path); const common = await gitWorktreeRepository(root); if (common) readOnly.add(common); }
         continue;
       }
       if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }

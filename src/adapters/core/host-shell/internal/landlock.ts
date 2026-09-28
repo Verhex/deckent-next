@@ -23,8 +23,9 @@ class BoundExceeded extends Error {}
 const exists = async (path: string, kind: 'dir' | 'any') => { try { const info = await stat(path); return kind === 'any' || info.isDirectory(); } catch { return false; } };
 
 /** A git worktree's `.git` file (at the project root only) opens its repository read-only, and only when it has the worktree shape:
- * `gitdir: <common>/worktrees/<name>` whose `commondir` names `<common>` again. Any other `.git` file opens nothing outside. */
-async function worktreeCommonDir(root: string): Promise<string | null> {
+ * `gitdir: <common>/worktrees/<name>` whose `commondir` names `<common>` again (the gitdir lies inside it). Any other `.git` file — a
+ * pointer a sandboxed command could write — opens nothing outside. Shared by the Landlock and bubblewrap realms. */
+export async function gitWorktreeRepository(root: string): Promise<string | null> {
   try {
     const text = (await readFile(join(root, '.git'), 'utf8')).slice(0, 4_096);
     const match = /^gitdir: (.+)$/mu.exec(text);
@@ -77,7 +78,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     for (const path of [...SYSTEM_EXEC, ...(prefix ? [join(prefix, 'bin'), join(prefix, 'lib')] : [])]) if (await exists(path, 'dir')) system.push(['x', path]);
     for (const path of SYSTEM_READ) if (await exists(path, 'dir')) system.push(['r', path]);
     for (const path of DEVICES) if (await exists(path, 'any')) system.push(['d', path]);
-    const common = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await worktreeCommonDir(root) : null;
+    const common = project.some(([cls, path]) => cls === 'r' && path === '.git') && (await lstat(join(root, '.git'))).isFile() ? await gitWorktreeRepository(root) : null;
     const scratch = input.scratchDir && isAbsolute(input.scratchDir) && await exists(input.scratchDir, 'dir') ? await realpath(input.scratchDir) : null;
     const rules = [...system, ...project, ...(common ? [['r', common] as const] : []), ...(scratch ? [['w', scratch] as const] : [])];
     if (rules.length > limit.maxRules) return { ok: false, reason: `the rule set needs more than ${limit.maxRules} rules` };

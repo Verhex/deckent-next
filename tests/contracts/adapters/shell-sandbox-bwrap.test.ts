@@ -140,7 +140,18 @@ describe('bubblewrap realm selection (S9)', () => {
     const f = await fixture({ worktree: true });
     const view = await resolveBubblewrapView(f.layout, f.environment);
     if (!view.ok) throw new Error(view.reason);
-    expect(view.view.readOnlyPaths).toEqual(expect.arrayContaining([join(f.main, '.git', 'worktrees', 'worktree'), join(f.main, '.git')]));
+    expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git'), join(f.main, '.git')]);
+  });
+  it('a forged .git pointer opens nothing outside: nested files are ignored, the root file only in the verified worktree shape', async () => {
+    const f = await fixture({ worktree: true });
+    await mkdir(join(f.project, 'sub')); await writeFile(join(f.project, 'sub', '.git'), `gitdir: ${f.home}\n`);
+    await mkdir(join(f.project, 'fake')); await writeFile(join(f.project, 'fake', 'commondir'), `${f.home}\n`);
+    await writeFile(join(f.project, '.git'), 'gitdir: ./fake\n');
+    const view = await resolveBubblewrapView(f.layout, f.environment);
+    if (!view.ok) throw new Error(view.reason);
+    expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
+    const bound = bubblewrapArguments(view.view).flatMap((arg, i, args) => ['--bind', '--ro-bind', '--ro-bind-try'].includes(arg) ? [args[i + 2]] : []);
+    expect(bound.some(path => path === f.home || path!.startsWith(`${f.home}/`) && !path!.startsWith(join(f.home, 'tools')))).toBe(false);
   });
 });
 
@@ -170,8 +181,11 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
     expect(await readFile(join(f.project, '.git', 'config'), 'utf8')).toBe(before);
     expect(existsSync(join(f.home, 'marker'))).toBe(false); expect(existsSync('/etc/deckent-probe')).toBe(false);
   });
-  it('reads a worktree through its read-only gitdir and refuses writes there', async () => {
+  it('reads a worktree through its read-only gitdir and refuses writes there; a forged nested .git pointer still opens nothing', async () => {
     const f = await fixture({ worktree: true });
+    await mkdir(join(f.project, 'sub')); await writeFile(join(f.project, 'sub', '.git'), `gitdir: ${f.home}\n`);
+    const forged = await f.run('cat ~/note.txt 2>&1; echo x > .git 2>&1; echo "gitfile=$?"');
+    expect(forged.output).toMatch(/note\.txt: No such file or directory\n.*\.git: Read-only file system\ngitfile=1/u); expect(forged.output).not.toContain('SECRET');
     const gitdir = join(f.main, '.git', 'worktrees', 'worktree');
     const result = await f.run(`git status --short; echo "status=$?"; git log --oneline -1 | wc -l; echo x >> "${gitdir}/config" 2>&1; echo "gitdir=$?"; echo x >> "${f.main}/.git/config" 2>&1; echo "common=$?"`);
     expect(result.output).toMatch(/status=0\n1\n/u); expect(result.output).toMatch(/gitdir=1/u); expect(result.output).toMatch(/common=1/u);
