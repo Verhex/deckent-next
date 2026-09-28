@@ -9,7 +9,7 @@ import { inflateSync } from 'node:zlib';
  * file's content hashes to its own name — a loose object (`objects/xx/yyyy…`, inflated `<type> <size>\0<content>`), a pack
  * (`pack-<hash>.pack`: the trailer is the hash of everything before it and is the name) or its index (`pack-<hash>.idx`: its own
  * trailer checksum holds, and the pack checksum before it is the name). Another name of a protected inode can be given any name
- * but not the matching content, so it never verifies. Results are cached per inode (device, inode, size, mtime) for the process;
+ * but not the matching content, so it never verifies. Results are cached per inode and expected identity (see `isVerifiedGitObject`);
  * a file too large to hash within the bound is not verified (masked).
  */
 const LOOSE = /\/objects\/([0-9a-f]{2})\/([0-9a-f]{38}|[0-9a-f]{62})$/u;
@@ -42,10 +42,25 @@ async function verify(path: string): Promise<boolean> {
   return pack![2] === 'pack' ? trailer === name : raw.subarray(raw.length - 2 * digestBytes, raw.length - digestBytes).toString('hex') === name;
 }
 
-/** True only for a file whose content hashes to its Git object/pack name (see above); false for anything else or on any error. */
+/** The object or pack identity a path promises (its name), with the file kind; null when the path is not an object/pack path. */
+function expectedIdentity(path: string): string | null {
+  const loose = LOOSE.exec(path);
+  if (loose) return `loose:${loose[1]}${loose[2]}`;
+  const pack = PACK.exec(path);
+  return pack ? `${pack[2]}:${pack[1]}` : null;
+}
+
+/**
+ * True only for a file whose content hashes to its Git object/pack name (see above); false for anything else or on any error. The
+ * result is cached per process under the inode's device, inode number, size, mtime, **ctime** and the identity the path promises
+ * (Astra 2158 R2): content cannot change without the kernel advancing ctime (a user may set mtime back with `utime`, never ctime),
+ * and the same inode under another object name is another question. A ctime change from any cause re-hashes the file.
+ */
 export async function isVerifiedGitObject(path: string): Promise<boolean> {
+  const identity = expectedIdentity(path);
+  if (identity === null) return false;
   let key: string;
-  try { const info = await stat(path); key = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}`; } catch { return false; }
+  try { const info = await stat(path); key = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}:${identity}`; } catch { return false; }
   const cached = verified.get(key);
   if (cached !== undefined) return cached;
   const result = await verify(path).catch(() => false);
@@ -63,20 +78,17 @@ export interface GitDirectoryScan {
   readonly directories: readonly string[];
 }
 const UNREADABLE: GitDirectoryScan = Object.freeze({ readable: false, suspectFiles: [], cleanFiles: [], directories: [] });
-const SCAN_CACHE_MAX = 100_000;
-const scans = new Map<string, { readonly key: string; readonly scan: GitDirectoryScan }>();
 
 /**
- * Scans one directory of Git metadata (names only; symbolic links and special files are neither clean nor listed), cached per
- * process by the directory's identity and change times. The cache is sound for the alias threat: another name of a protected inode
- * enters a directory only as a new entry (link, rename), which changes that directory's mtime/ctime and so misses the cache; a
- * link added elsewhere to a file already listed here changes nothing this directory exposes (its content was already readable).
+ * Scans one directory of Git metadata (names only; symbolic links and special files are neither clean nor listed). The security
+ * verdict is taken afresh on every call: the directory is listed and every regular file's link count is read (`lstat`) each time
+ * (Astra 2158 R1 — a directory-level cache cannot carry a child's verdict: a single-link file can gain another name elsewhere and be
+ * rewritten through it without the directory's times changing). Only the content hash of a verified object is cached, under the
+ * inode's ctime and expected identity (`isVerifiedGitObject`). Timestamp bounds: ctime is kernel-set at nanosecond resolution; a
+ * change landing in the same tick as the cached ctime, or a component swapped between this scan and the mount, is outside what
+ * the scan can see.
  */
 export async function scanGitDirectory(dir: string): Promise<GitDirectoryScan> {
-  let key: string;
-  try { const info = await lstat(dir); if (!info.isDirectory()) return UNREADABLE; key = `${info.dev}:${info.ino}:${info.mtimeMs}:${info.ctimeMs}`; } catch { return UNREADABLE; }
-  const cached = scans.get(dir);
-  if (cached && cached.key === key) return cached.scan;
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return UNREADABLE; }
   const suspectFiles: string[] = [], cleanFiles: string[] = [], directories: string[] = [];
@@ -87,8 +99,5 @@ export async function scanGitDirectory(dir: string): Promise<GitDirectoryScan> {
     const links = await lstat(path).then(info => info.nlink, () => 2);
     (links === 1 || await isVerifiedGitObject(path) ? cleanFiles : suspectFiles).push(entry.name);
   }));
-  const scan: GitDirectoryScan = Object.freeze({ readable: true, suspectFiles: suspectFiles.sort(), cleanFiles: cleanFiles.sort(), directories: directories.sort() });
-  if (scans.size >= SCAN_CACHE_MAX) scans.clear();
-  scans.set(dir, { key, scan });
-  return scan;
+  return Object.freeze({ readable: true, suspectFiles: suspectFiles.sort(), cleanFiles: cleanFiles.sort(), directories: directories.sort() });
 }
