@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import type { ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';

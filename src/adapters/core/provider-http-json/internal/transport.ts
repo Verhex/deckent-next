@@ -4,11 +4,13 @@ import { createModelInvocationResponseEvidence } from '#engine/index.js';
 import { splitModelInvocationDelta, type ModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResponse,
   type ModelInvocationNativeResult, type ModelInvocationRejectionReason } from '#domain/index.js';
 import { CredentialEchoGuard } from './credential-guard.js';
-import { NativeJsonHttpError, nativeJsonHttpAdapterSchema, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits,
+import { NativeJsonHttpError, nativeJsonHttpAdapterSchema, nativeJsonHttpStaticHeadersSchema, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits,
   type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from './contract.js';
 
 export type NativeJsonHttpRequest = Readonly<{ definition: NativeJsonHttpDefinition; limits: NativeJsonHttpLimits;
-  body: string; adapter: Readonly<{ id: string; version: number }> }>;
+  body: string; adapter: Readonly<{ id: string; version: number }>;
+  /** Optional static non-secret headers (validated: bounded, lower-case names, no transport-owned names). */
+  headers?: Readonly<Record<string, string>> }>;
 export type NativeJsonHttpParsed = { response: ModelInvocationNativeResponse } | { reason: ModelInvocationRejectionReason };
 /**
  * Incremental parser for a streamed (for example SSE) response. The transport keeps the same credential guards,
@@ -58,7 +60,7 @@ async function resolveBearer(definition: NativeJsonHttpDefinition, options: Nati
     signal.addEventListener('abort', abort, { once: true }); remove = () => signal.removeEventListener('abort', abort);
   });
   try {
-    const value = await Promise.race([Promise.resolve().then(() => resolver(definition.authentication.type === 'bearer'
+    const value = await Promise.race([Promise.resolve().then(() => resolver(definition.authentication.type !== 'none'
       ? definition.authentication.credentialRef : '', signal)), stopped]);
     if (signal.aborted) throw new NativeJsonHttpError(timeout.aborted ? 'NATIVE_JSON_HTTP_TIMEOUT' : 'NATIVE_JSON_HTTP_CANCELLED');
     return credentialValue(value);
@@ -119,11 +121,14 @@ class DeltaGate {
 
 export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, options: NativeJsonHttpSendOptions,
   outerSignal?: AbortSignal): Promise<ModelInvocationNativeResult> {
-  const request = ownData(requestInput, ['definition', 'limits', 'body', 'adapter']);
+  const request = ownData(requestInput, ['definition', 'limits', 'body', 'adapter'], ['headers']);
   const optionValues = ownData(options, [], ['parseResponse', 'resolveCredential', 'stream', 'onDelta']);
   const definition = parseNativeJsonHttpDefinition(request.definition);
   const limits = parseNativeJsonHttpLimits(request.limits);
   const adapter = nativeJsonHttpAdapterSchema.safeParse(ownData(request.adapter, ['id', 'version']));
+  const staticHeaders = request.headers === undefined ? { success: true as const, data: {} as Record<string, string> }
+    : nativeJsonHttpStaticHeadersSchema.safeParse(ownData(request.headers, [], request.headers !== null && typeof request.headers === 'object' ? Object.keys(request.headers) : []));
+  if (!staticHeaders.success) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_INVALID');
   const body = request.body, parseResponse = optionValues.parseResponse, resolveCredential = optionValues.resolveCredential;
   const stream = optionValues.stream as NativeJsonHttpStream | undefined, onDelta = optionValues.onDelta;
   if (!adapter.success || typeof body !== 'string' || (parseResponse === undefined) === (stream === undefined)
@@ -179,7 +184,9 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
     const send = secure ? httpsRequest : httpRequest;
     const req = send(endpoint, { agent, method: 'POST', headers: { 'content-type': 'application/json',
       'content-length': String(Buffer.byteLength(body, 'utf8')), accept: stream ? stream.accept : 'application/json',
-      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }) } }, incoming => {
+      ...staticHeaders.data,
+      ...(credential === undefined ? {} : definition.authentication.type === 'header'
+        ? { [definition.authentication.name]: credential } : { authorization: `Bearer ${credential}` }) } }, incoming => {
       response = incoming; const currentStatus = statusOf(incoming.statusCode); status = currentStatus;
       if (currentStatus === null) { done(new NativeJsonHttpError('NATIVE_JSON_HTTP_TRANSPORT_UNKNOWN')); return; }
       // Only a successful streamed body is parsed incrementally. Its wire bound replaces the retention cap, which then

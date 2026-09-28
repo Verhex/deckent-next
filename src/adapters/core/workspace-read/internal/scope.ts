@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { constants, open, readdir, readFile, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { GLOB_WILDCARD, globLiteralHead } from '#platform/index.js';
 
 /** Generated/vendored directory names skipped by walks (legacy baseline), plus unambiguous directory names from the root .gitignore. */
 export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', 'out', 'coverage',
@@ -19,12 +20,29 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '.git', '**/.git']);
 
 type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
+// The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation
+// and the product layout admission share it (Astra 2164/2166) — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets.
+export { globLiteralHead } from '#platform/index.js';
 /**
  * Glob matcher without backtracking (Astra 2078 R2): `**` followed by a slash is any run of whole directories, `**` anything,
  * `*` any run within a segment, `?` one non-slash character. Matching is a dynamic program over (pattern token, path position),
  * so its cost is bounded by pattern length × path length for any pattern — a hostile pattern cannot stall the service.
  */
 export function createGlobMatcher(pattern: string): (path: string) => boolean {
+  // Shapes the deny list is made of match without the dynamic program (every shell call asks thousands of paths against every pattern):
+  // `**/<segment glob>` matches the path's last segment (its `**/` is any run of whole directories, so the rest is exactly the final
+  // segment); a literal is an equality; a literal head with one trailing `*` (`.brain/memory.db*`) or `**` (`.git/**`) is a prefix
+  // test, `*` also requiring no slash after it. Equivalence with the general matcher is the oracle test's subject.
+  if (pattern.startsWith('**/') && !/[/]|\*\*/u.test(pattern.slice(3))) {
+    const last = createGlobMatcher(pattern.slice(3));
+    return (path: string) => last(path.slice(path.lastIndexOf('/') + 1));
+  }
+  if (!GLOB_WILDCARD.test(pattern)) return (path: string) => path === pattern;
+  const tail = /^([^*?]*)(\*\*|\*)$/u.exec(pattern);
+  if (tail) {
+    const [, literal = '', kind] = tail;
+    return kind === '**' ? (path: string) => path.startsWith(literal) : (path: string) => path.startsWith(literal) && !path.includes('/', literal.length);
+  }
   const tokens: GlobToken[] = [];
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i]!;
@@ -36,7 +54,7 @@ export function createGlobMatcher(pattern: string): (path: string) => boolean {
   }
   // The literal head before the first wildcard must start the path: a cheap exact test first, so a long deny list (TERM-FEEDBACK-1:
   // every product resource of the layout) costs a string compare per pattern for most paths.
-  const wildcard = pattern.search(/[*?]/), head = wildcard < 0 ? pattern : pattern.slice(0, wildcard);
+  const head = globLiteralHead(pattern);
   return (path: string) => {
     if (!path.startsWith(head)) return false;
     let current = new Uint8Array(path.length + 1);
@@ -115,7 +133,7 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
     }
   } catch { /* no readable .gitignore: the baseline stands */ }
   const protectedAnchors = new Set(deny.flatMap(pattern => {
-    const head = pattern.slice(0, pattern.search(/[*?[]/u) < 0 ? pattern.length : pattern.search(/[*?[]/u)).replace(/\/$/u, '');
+    const head = globLiteralHead(pattern).replace(/\/$/u, '');
     return head.includes('/') ? [head] : [];
   }));
   const inside = (abs: string, allowRoot: boolean) => { const rel = relative(root, abs); return rel === '' ? allowRoot : !rel.startsWith('..') && !isAbsolute(rel); };

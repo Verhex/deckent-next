@@ -1,3 +1,4 @@
+import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { WATCH_SEEN_LIMIT } from './worker-watch.js';
 
 /** Terminal projection of an approval record returned by the runtime approval application (display fields only). */
@@ -11,6 +12,8 @@ export interface WorklineApproval {
   readonly status: 'pending' | 'decided' | 'expired';
   readonly decision: 'allow' | 'deny' | null;
   readonly expiresAt: number;
+  /** Set when the decision asked for a standing scope: what the service answered (never assumed by the view). */
+  readonly standing?: { readonly scope: StandingScope; readonly saved: boolean; readonly reason?: string };
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */
@@ -67,19 +70,4 @@ export function approvalWatchStep(state: ApprovalWatchState, page: WorklineAppro
   }
   for (const id of notified) { if (notified.size <= WATCH_SEEN_LIMIT) break; notified.delete(id); }
   return { state: Object.freeze({ cursor: page.nextAfter, notified }), fresh: Object.freeze(fresh) };
-}
-
-/**
- * Key mapping for a decision card. Only a single typed `y`/`Y` says yes; `n`/`N`, Enter, Esc and Ctrl+C say no (the safe
- * default; Ctrl+C closes the card instead of leaving the operator stuck, it never exits the terminal from a card).
- * Pasted or multi-character input, control sequences and every other key leave the card waiting. There is no
- * "always"/remember key: every gated item is decided one by one (legacy `a` is deliberately absent).
- */
-export function decisionKey(input: string, key: { readonly return?: boolean; readonly escape?: boolean; readonly ctrl?: boolean; readonly meta?: boolean }):
-  'yes' | 'no' | null {
-  if (key.return || key.escape || (key.ctrl && input === 'c')) return 'no';
-  if (key.ctrl || key.meta || input.length !== 1) return null;
-  if (input === 'y' || input === 'Y') return 'yes';
-  if (input === 'n' || input === 'N') return 'no';
-  return null;
 }

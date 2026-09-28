@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote,
   type ModelBindingDefinition, type ModelInvocationProfile, type ModelInvocationNativeResponse, type ProviderSpendQuote } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
+import { modelInvocationNativeResponseUpperBound, modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest,
   providerSpendQuoteDigest, parseProviderSpendReportedMeasurement, modelInvocationResponseContentDescriptor,
   type ModelInvocationNativePort, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { parseNativeJsonHttpLimits, sendNativeJsonHttp, type NativeJsonHttpRequest } from '#adapters/core/provider-http-json/index.js';
@@ -80,8 +80,8 @@ export function createOpenRouterPricedNative(options: OpenRouterNativeOptions): 
       tokens.set(token, Object.freeze({ profile, binding, request, wire, observation, reservation })); return token;
     },
     responseBytesUpperBound(token: unknown) {
-      const cap = BigInt(read(token).wire.limits.responseMaxBytes);
-      return BigInt(Buffer.byteLength(JSON.stringify({ schemaVersion: 1, native: null, usage: null }), 'utf8')) - 8n + cap + (cap > 4n ? cap : 4n);
+      // Shared formula (SESSION-RESULT-LIMIT-2026-09-28): usage cannot be proven smaller than native.
+      return modelInvocationNativeResponseUpperBound(read(token).wire.limits.responseMaxBytes);
     },
     async send(token: unknown, signal?: AbortSignal) {
       const value = read(token); tokens.delete(token as object); fresh(value);

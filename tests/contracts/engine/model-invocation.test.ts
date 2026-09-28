@@ -7,7 +7,8 @@ import { ModelInvocationControllers, ModelInvocationApplication, ModelInvocation
   createModelInvocationEvidenceRecord, createModelInvocationResponseEvidence, createModelInvocationResponseRecord,
   createModelInvocationPreventedRecord, createModelInvocationUnknownRecord, modelInvocationRequestDigest, modelInvocationTargetId, type ModelInvocationAdmission,
   type ModelInvocationPurgeAdmission, type ModelInvocationPurgeResult, type ModelInvocationRecord,
-  type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
+  modelInvocationNativeResponseUpperBound, type ModelInvocationStore } from '#engine/core/model-invocation/index.js';
+import { runtimeServiceResultCapacity } from '#engine/core/runtime/index.js';
 
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const definition = resolveModelBindingDefinition({ schemaVersion: 1, revision: 'catalog', providers: [{ id: 'p', version: 1,
@@ -272,6 +273,34 @@ describe('model invocation application', () => {
     expect(f.calls).toMatchObject({ claims: 0, sends: 0 });
   });
 
+});
+
+describe('model invocation application delivery capacity (SESSION-RESULT-LIMIT-2026-09-28)', () => {
+  it('a profile whose native response cap equals the live default is refused before any claim or send, and delivers once the wire capacity widens past it', async () => {
+    // Live config default (2026-09-28): service.responseMaxBytes and the profile's own limits.responseMaxBytes are
+    // both 1048576 (the openai-chat-completions schema default). modelInvocationNativeResponseUpperBound is always
+    // ~2x its input (usage cannot be proven smaller than native), so a wire capacity computed from the SAME default
+    // can never fit it — the exact live `terminal session` MODEL_INVOCATION_RESULT_LIMIT, fail-before-send.
+    const LIVE_DEFAULT_RESPONSE_MAX_BYTES = 1_048_576, requestId = '11111111-1111-4111-8111-111111111111';
+    const responseBound = modelInvocationNativeResponseUpperBound(LIVE_DEFAULT_RESPONSE_MAX_BYTES);
+    // Pinned measured value (SESSION-RESULT-LIMIT-2026-09-28 reproduction), not just a derived inequality: catches a
+    // wrong multiplier (e.g. dropping the usage-subtree double-count) even when the mismatch shrinks but survives.
+    expect(responseBound).toBe(2_097_190n);
+    const tightCapacity = runtimeServiceResultCapacity(requestId, LIVE_DEFAULT_RESPONSE_MAX_BYTES, undefined);
+    expect(tightCapacity).toBe(1_048_485);
+    expect(Number(responseBound)).toBeGreaterThan(tightCapacity);
+    const unfit = fixture({ responseLimit: LIVE_DEFAULT_RESPONSE_MAX_BYTES, responseBound });
+    await expect(unfit.app.invoke(command, undefined, undefined, { maxResultBytes: tightCapacity }))
+      .rejects.toMatchObject({ code: 'MODEL_INVOCATION_RESULT_LIMIT' });
+    expect(unfit.calls).toMatchObject({ claims: 0, sends: 0 });
+    // Same profile, a wire capacity comfortably past the requirement (e.g. a widened service.responseMaxBytes): delivers.
+    const wideCapacity = runtimeServiceResultCapacity(requestId, 4 * 1024 * 1024, undefined);
+    expect(Number(responseBound)).toBeLessThan(wideCapacity);
+    const fit = fixture({ responseLimit: LIVE_DEFAULT_RESPONSE_MAX_BYTES, responseBound });
+    const result = await fit.app.invoke(command, undefined, undefined, { maxResultBytes: wideCapacity });
+    expect(result.receipt.outcome?.state).toBe('responded');
+    expect(fit.calls).toMatchObject({ claims: 1, sends: 1 });
+  });
 });
 
 describe('model invocation send permission', () => {

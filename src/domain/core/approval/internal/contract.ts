@@ -59,5 +59,5 @@ export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type ApprovalActor = z.infer<typeof approvalActorSchema>;
 export class ApprovalError extends Error {
   constructor(readonly code: 'APPROVAL_INVALID' | 'APPROVAL_DENIED' | 'APPROVAL_MISSING' | 'APPROVAL_CONFLICT'
-    | 'APPROVAL_EXPIRED' | 'APPROVAL_INTEGRITY' | 'APPROVAL_STALE' | 'APPROVAL_REQUIRED' | 'APPROVAL_UNSETTLED') { super(code); this.name = 'ApprovalError'; }
+    | 'APPROVAL_EXPIRED' | 'APPROVAL_INTEGRITY' | 'APPROVAL_STALE' | 'APPROVAL_REQUIRED' | 'APPROVAL_UNSETTLED' | 'APPROVAL_SURFACE_RESTRICTED') { super(code); this.name = 'ApprovalError'; }
 }

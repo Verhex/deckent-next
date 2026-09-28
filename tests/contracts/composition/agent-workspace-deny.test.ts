@@ -119,7 +119,9 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
     return { root, scope, scratch, ledger, rel, sandbox: { project: scope, scratchDir: scratch } };
   }
   const environment = { PATH: '/usr/bin:/bin', HOME: '/nonexistent-home' };
-  for (const [name, dataRel, gitignore] of [['a .gitignore entry for the data root parent', '.deckent/live-data', '.deckent/\n'], ['a baseline-ignored data root parent', '.cache/deckent', null]] as const) {
+  // Astra 2164: `[` is a plain character in the deny matcher's language; an anchor is cut only at the matcher's own wildcards (`*`, `?`).
+  for (const [name, dataRel, gitignore] of [['a .gitignore entry for the data root parent', '.deckent/live-data', '.deckent/\n'], ['a baseline-ignored data root parent', '.cache/deckent', null],
+    ['a baseline-ignored parent with brackets in the data root', '.cache/deckent[1]', null], ['a bracketed and braced custom resource ancestor', '.cache/x[a]/y{z}/deckent', null]] as const) {
     it(`refuses the ledger to both realms under ${name}, keeps the project and the scratch area writable`, async () => {
       const p = await layoutAt(dataRel, gitignore);
       expect(p.scope.denied(p.rel)).toBe(true);
@@ -140,6 +142,12 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
       expect(rules.ok && rules.rules.some(([cls, path]) => cls === 'w' && (path === '.' || p.rel.startsWith(`${path}/`)))).toBe(false);
     });
   }
+  it('derives anchors with the deny matcher\'s own wildcard language: brackets are literal, `*`/`?` cut (Astra 2164)', async () => {
+    const scope = await createWorkspaceScope((await layoutAt('.cache/deckent[1]', null)).root, ['.cache/deckent[1]/state/ledger.db*', '.cache/deckent[1]/state/ledger.db/**',
+      '.cache/deckent[1]/state/.ledger.db*', '**/.env', '.env', 'a/b?c/d*', 'plain/dir/']);
+    expect([...scope.protectedAnchors].sort()).toEqual(['.cache/deckent[1]/state/.ledger.db', '.cache/deckent[1]/state/ledger.db', 'a/b', 'plain/dir']);
+    expect(scope.protectedAnchors.has('.cache/deckent')).toBe(false);
+  });
   it('refuses the call when the product state lies behind a symbolic link on its ancestor chain', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dn-ignored-link-')); roots.push(base);
     const root = join(base, 'project'), real = join(base, 'elsewhere'); await mkdir(join(real, 'deckent'), { recursive: true }); await mkdir(join(root, '.cache'), { recursive: true });

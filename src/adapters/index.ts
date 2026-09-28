@@ -36,6 +36,7 @@ export { initializeInstallationLedger, verifyInstallationLedger, InstallationLed
 export { openSqliteModelActivationStore, openSqliteModelActivationReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';
 export * from '#adapters/core/provider-openai-chat/index.js';
+export * from '#adapters/core/provider-anthropic-messages/index.js';
 export * from '#adapters/core/provider-openrouter-chat/index.js';
 export * from '#adapters/core/provider-openrouter-pricing/index.js';
 export * from '#adapters/core/npm-registry/index.js';
@@ -45,7 +46,7 @@ export * from '#adapters/core/terminal-history/index.js';
 export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
-export { createBoundedMcpTransport } from '#adapters/core/mcp-transport/index.js';
+export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
@@ -66,3 +67,4 @@ export * from '#adapters/core/host-shell/index.js';
 export * from '#adapters/core/shell-sandbox-bwrap/index.js';
 export * from '#adapters/core/scratch-store/index.js';
 export * from '#adapters/core/http-fetch/index.js';
+export * from '#adapters/core/mcp-client/index.js';

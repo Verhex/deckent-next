@@ -44,7 +44,9 @@ export type TurnDelta =
   | { readonly kind: 'compacted'; readonly messages: readonly AgentChatMessage[]; readonly replacedMessages: number }
   /** A tool call waits for the owner's decision (T-L4): the surface shows a decision card; the approval binds the exact call. */
   | { readonly kind: 'approval'; readonly phase: 'requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
-    readonly summary: string; readonly preview: string; readonly expiresAt: number }
+    readonly summary: string; readonly preview: string; readonly expiresAt: number;
+    /** The standing scopes the service offers on this card (v17; absent on every v16 service) and exactly what they cover. */
+    readonly standing?: { readonly scopes: readonly ('session' | 'always')[]; readonly pattern: string } }
   | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */

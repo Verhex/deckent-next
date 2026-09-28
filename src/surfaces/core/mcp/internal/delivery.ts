@@ -1,6 +1,9 @@
-import { SERVER_INFO_META_KEY, type CallToolResult, type RequestId } from '@modelcontextprotocol/server';
+import type { CallToolResult, RequestId } from '@modelcontextprotocol/server';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { ModelInvocationStoreError, type ModelInvocationDelivery, type RuntimeServiceDelivery } from '#engine/index.js';
+import { mcpToolResultDeliveryCapacity, ModelInvocationStoreError, type ModelInvocationDelivery, type RuntimeServiceDelivery } from '#engine/index.js';
+// The SDK's `SERVER_INFO_META_KEY`, inlined so this module does not load the whole server SDK at import time (~105 ms in every process; STARTUP-COST).
+// tests/contracts/composition/startup-graph.test.ts fails when the SDK's value ever differs.
+const SERVER_INFO_META_KEY = 'io.modelcontextprotocol/serverInfo';
 
 /** Author fields that the pinned SDK would otherwise add after tools/call returns.
  * tools/call is not cacheable. Both supported codec eras preserve these authored fields. */
@@ -30,7 +33,7 @@ export function boundedToolDelivery(id: RequestId, maximum: number): RuntimeServ
   const overhead = wireBytes(id, completeToolResult({ content: [{ type: 'text', text: '' }], structuredContent: {} }));
   // Serialized inner JSON has no raw controls: quoting it adds at most one byte per byte.
   // Text therefore costs <=2n and its structured duplicate <=n. Empty placeholders remain slack.
-  const available = (BigInt(maximum) - overhead) / 3n;
-  if (available <= 0n) return null;
-  return Object.freeze({ maxResultBytes: Number(available) });
+  // Shared arithmetic (SESSION-RESULT-LIMIT-2026-09-28): a static profile check below this layer
+  // (composition doctor/activation, via the mcp-transport adapter) reuses the same engine formula.
+  return mcpToolResultDeliveryCapacity(maximum, overhead);
 }

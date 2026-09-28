@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir, userInfo, hostname } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { getPolicyVocabulary, inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';

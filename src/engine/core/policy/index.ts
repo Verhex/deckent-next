@@ -12,7 +12,9 @@ export { ModelActivationPolicyAuthorization } from './internal/model-activation.
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
 export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';
 export { AgentToolPolicyAuthorization } from './internal/agent-tool.js';
-export { decideAgentToolCall } from './internal/permission-mode.js';
-export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation } from './internal/permission-mode.js';
+export { decideAgentToolCall, standingWouldLower } from './internal/permission-mode.js';
+export type { AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, PermissionModeRelaxation, StandingApproval } from './internal/permission-mode.js';
 export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from './internal/permission-mode-admin.js';
+export { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision } from './internal/authority.js';
+export type { AuthorityDocumentStore, AuthorityLookup, AuthorityWrite } from './internal/authority.js';

@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 const connected: { client: Client; close(): Promise<void> }[] = [];
 afterEach(async () => { await Promise.all(connected.splice(0).map(value => value.close())); });

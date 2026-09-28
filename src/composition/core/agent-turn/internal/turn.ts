@@ -8,14 +8,15 @@ import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PRE
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
   type ProductResource } from '#platform/index.js';
-import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
+import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  bubblewrapShellSandbox, isWriteApprovalFloored, landlockShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
-  type WorkspaceEditArea } from '#adapters/index.js';
+  bubblewrapShellSandbox, isWriteApprovalFloored, landlockShellSandbox, MCP_PROJECT_REGISTRY_PATH, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
+  type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentFetch } from './fetch.js';
+import { createAgentMcp } from './mcp.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -35,11 +36,13 @@ export interface RuntimeChatTurnHost {
   readonly fetchTransport: HttpFetchTransport;
   /** S9/S11: the sandbox providers a shell call may pick, in preference order (bubblewrap, then Landlock); only an in-process test passes another list. */
   readonly shellSandboxes: ShellSandboxFactory;
+  /** MCP-CLIENT: the owner's local MCP servers, started by the turns that need them and closed with the service. */
+  readonly mcp: McpClientPool;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
   fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = layout => [bubblewrapShellSandbox(layout), landlockShellSandbox(layout)]): RuntimeChatTurnHost {
   void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
-  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal) });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -68,7 +71,9 @@ export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Obje
  * shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
  */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
-  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...agentProductStateDeny(projectRoot, layout)]);
+  // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
+  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
+    MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
 }
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
@@ -114,7 +119,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
-  const declares = (id: string) => binding.definition.model.protocols.some(protocol => protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY
+  const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
     && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);
   // Catalog evidence that the served template reads `enable_thinking` (TL-C D8): the compaction call then runs without thinking.
@@ -138,8 +143,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says there is no network.
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
+    // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
+    const mcp = workspace ? await createAgentMcp({ pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
+      turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
-      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : [])] : [];
+      ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
@@ -151,7 +159,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...chat.reference, nativeId: binding.definition.model.nativeId },
-      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' } });
+      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
@@ -169,9 +177,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
           parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
 
-    const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
+    const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
+    const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
+    const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher });
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp });
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
 
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
@@ -211,7 +221,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       authorize: (tool, args) => decisions.authorize(tool, args),
       async prepare(tool, args) {
-        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool)) return decisions.prepare(tool, args);
+        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
@@ -234,7 +244,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
             summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
-              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : undefined) ?? chatTurnApprovalPreview(tool.name, args),
+              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
+                : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
@@ -275,7 +286,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
         return { promptTokens: openAiChatPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
       },
-      describe: describeAgentCall,
+      describe,
       async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
@@ -284,6 +295,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, approved));
         }
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
+        if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
         return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       now: () => clock.sample().wallMs,

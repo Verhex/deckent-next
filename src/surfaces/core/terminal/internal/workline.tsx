@@ -17,7 +17,7 @@ import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort, type ResumePickerItem } from './workline-sessions.js';
-import { ArrowPicker } from './arrow-picker.js';
+import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
 import { useSingleFlightPoll } from './use-poll.js';
@@ -91,6 +91,8 @@ export interface WorklineProps {
   readonly permissionMode?: WorklinePermissionModePort;
   /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
   readonly scratch?: WorklineScratchPort;
+  /** `/mcp` (MCP-CLIENT): the project's MCP servers and their trust — list, approve (ask again), reconnect, remove — as notice lines. */
+  readonly mcp?: (args: string) => Promise<readonly string[]>;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -276,6 +278,13 @@ export function WorklineApp(props: WorklineProps) {
       try { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); } finally { setBusy(false); }
       return true;
     }
+    if (slash.command === 'mcp') {
+      setBusy(true);
+      try { push((props.mcp ? await props.mcp(slash.args) : ['mcp: not available in this terminal']).map(line => notice('info', line))); }
+      catch (error) { push([notice('error', errorText(error))]); }
+      finally { setBusy(false); }
+      return true;
+    }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
       setBusy(true);
       try {
@@ -312,7 +321,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the

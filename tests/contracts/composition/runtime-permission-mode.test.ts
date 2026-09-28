@@ -1,6 +1,7 @@
 import { chmod, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { withConfigWriteLock } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { closeModeRuntimes, me, modeRuntime, rule } from '../support/agent-turn-modes.js';
 
@@ -63,11 +64,22 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     expect((await bindings(f)).modes).toEqual([theirs, lookalike]);
   }, 90_000);
 
+  it('answers a held authority write lock with its own typed refusal (PERMISSION_MODE_LOCKED) that names the lock; nothing is written or audited', async () => {
+    const f = await modeRuntime({ grants: [], mode: null });
+    await authority(f, [...editEligible, setGrant()]);
+    const runtime = client(f), text = await readFile(join(f.data, 'bindings.json'), 'utf8');
+    const outcome = await withConfigWriteLock(join(f.data, 'policy.json'), () =>
+      runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'auto-edit', expectedRevision: 'p1+b1' }).then(() => null, (error: unknown) => error), 2_000);
+    expect(outcome).toMatchObject({ code: 'PERMISSION_MODE_LOCKED', params: { pid: process.pid } });
+    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(text);
+    expect(changes(f)).toEqual([]);
+  }, 90_000);
+
   it('refuses without a set grant, and on a require-approval grant, with a typed refusal: the file stays byte-identical and the refusal is audited', async () => {
     const f = await modeRuntime({ grants: [], mode: null });
     await authority(f, editEligible);
     const runtime = client(f), text = await readFile(join(f.data, 'bindings.json'), 'utf8');
-    await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'PERMISSION_MODE_DENIED', params: { mode: 'full-auto' } });
     await authority(f, [...editEligible, setGrant('require-approval')]);
     await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(text);
@@ -85,7 +97,7 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
       modes: [theirs, lookalike, { id: 'mine', principal: me[0], scopes: ['scope'], mode: 'auto-edit' }] }), { mode: 0o600 });
     const runtime = client(f);
     expect(await runtime.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' })).toMatchObject({ mode: 'auto-edit', revision: 'p1+b1' });
-    await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1+b1' })).rejects.toMatchObject({ code: 'PERMISSION_MODE_DENIED', params: { mode: 'full-auto' } });
     const cleared = await runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'ask', expectedRevision: 'p1+b1' });
     expect(cleared).toMatchObject({ mode: 'ask', previous: 'auto-edit', changed: true });
     const file = await bindings(f);

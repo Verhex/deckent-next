@@ -54,5 +54,10 @@ export function terminalSessionLabels(locale: Locale): ConversationSessionLabels
   return { entry: t('terminal.session.entry', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),
     resumed: t('terminal.session.resumed', {}, locale), started: t('terminal.session.started', {}, locale),
-    context: t('terminal.session.context', {}, locale), contextNone: t('terminal.session.contextNone', {}, locale) };
+    context: t('terminal.session.context', {}, locale), contextNone: t('terminal.session.contextNone', {}, locale),
+    history: { omitted: t('terminal.session.history.omitted', {}, locale), toolResults: t('terminal.session.history.toolResults', {}, locale),
+      summarized: t('terminal.session.history.summarized', {}, locale) },
+    view: { bar: t('terminal.context.bar', {}, locale), threshold: t('terminal.context.threshold', {}, locale), split: t('terminal.context.split', {}, locale),
+      compacted: t('terminal.context.compacted', {}, locale), compactedNone: t('terminal.context.compactedNone', {}, locale), largest: t('terminal.context.largest', {}, locale),
+      suggestNew: t('terminal.context.suggestNew', {}, locale), suggestTools: t('terminal.context.suggestTools', {}, locale) } };
 }

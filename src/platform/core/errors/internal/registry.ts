@@ -77,6 +77,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_ACTIVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_UNAVAILABLE', p, l) }) },
   MODEL_ACTIVATION_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_OUTCOME_UNKNOWN', p, l) }) },
   MODEL_ACTIVATION_CATALOG_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_CATALOG_CONFLICT', p, l) }) },
+  MODEL_ACTIVATION_DELIVERY_UNFIT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_DELIVERY_UNFIT', p, l) }) },
   TASK_EVALUATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_INVALID', p, l) }) },
   TASK_EVALUATION_STALE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_STALE', p, l) }) },
   TASK_EVALUATION_NOT_READY: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_NOT_READY', p, l) }) },
@@ -157,6 +158,23 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EFFECT_NOT_COMPENSABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_NOT_COMPENSABLE', p, l) }) },
   EFFECT_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_REJECTED', p, l) }) },
   EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },
+  // POLICY-ADMIN I5-i: a generic producer refused an authority operation before any policy, ledger or target access.
+  OPERATION_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.OPERATION_SURFACE_RESTRICTED', p, l) }) },
+  // POLICY-HARDEN K3: only the authority surface may allow an approval of an authority operation; a deny stays open everywhere.
+  APPROVAL_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_SURFACE_RESTRICTED', p, l) }) },
+  // MCP-CLIENT scoped registry and approval (`deckent mcp add|add-json|list|get|remove|approve`).
+  MCP_SERVER_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_UNKNOWN', p, l) }) },
+  MCP_SERVER_EXISTS: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_EXISTS', p, l) }) },
+  MCP_SERVER_SCOPE_AMBIGUOUS: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_SCOPE_AMBIGUOUS', p, l) }) },
+  MCP_SERVER_ENTRY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_SERVER_ENTRY_INVALID', p, l) }) },
+  MCP_SERVER_NAME_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NAME_INVALID', p, l) }) },
+  MCP_SANDBOX_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SANDBOX_UNAVAILABLE', p, l) }) },
+  MCP_SERVER_START_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SERVER_START_FAILED', p, l) }) },
+  MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
+  MCP_APPROVAL_NEEDS_TERMINAL: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_APPROVAL_NEEDS_TERMINAL', p, l) }) },
+  MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
+  MCP_SERVER_NOT_TRUSTED: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NOT_TRUSTED', p, l) }) },
+  MCP_TRUST_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TRUST_STORE_UNAVAILABLE', p, l) }) },
   EFFECT_TARGET_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_UNAVAILABLE', p, l) }) },
   EFFECT_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_CORRUPT', p, l) }) },
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },
@@ -212,8 +230,15 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED;
   // text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
+  // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
+  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
+  POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
+  POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
+  POLICY_ADMINISTER_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_ADMINISTER_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
+  PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
+  PERMISSION_MODE_LOCKED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_LOCKED', p, l) }) },
   PERMISSION_MODE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.PERMISSION_MODE_INVALID', p, l) }) },
   AUDIT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INVALID', p, l) }) },
   AUDIT_INTEGRITY: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INTEGRITY', p, l) }) },

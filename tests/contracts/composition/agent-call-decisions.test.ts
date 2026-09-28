@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
-import type { EffectApprovalGate } from '#engine/index.js';
+import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createAgentCallDecisions } from '#composition/core/agent-turn/index.js';
@@ -26,7 +26,7 @@ const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mod
 mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: modeEntry, principal: me, scopes: ['scope'], mode }] });
 
 /** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
-async function fixture(loads: unknown[]) {
+async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-call-decisions-')); roots.push(root);
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
@@ -34,14 +34,14 @@ async function fixture(loads: unknown[]) {
   const context = { principal, policy: { async load() { return loads[Math.min(loaded++, loads.length - 1)]; } }, path: async () => ledger,
     layout: resolveProductLayout({ projectRoot: root, root: data }), config: { storage: { sqlite }, approvals: { keyFile: 'authority.key' } } };
   let plans = 0;
-  const edits = { async plan() { plans++; return { ok: true }; }, floored: () => false, target: () => 'src/a.ts' };
+  const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
   const inner: EffectApprovalGate = { async admit(_descriptor, decision) { if (decision !== 'allow') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); } };
   const approvals = { gate: () => ({ gate: inner, async close() {} }) };
   const decisions = createAgentCallDecisions({ context: context as never, clock: new SystemTrustedClock(), scopeId: 'scope', turnId: 'turn', edits: (() => edits) as never,
-    shell: null, approvals: approvals as never });
+    shell: null, approvals: approvals as never, fetch: null, ...(options.standing ? { standing: options.standing } : {}) });
   const events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT event_id FROM audit_events').all().length; } finally { db.close(); } };
   const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
-    return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string } } });
+    return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string; kind: string; phase?: string; source?: string; approvalId?: string | null } } });
   } finally { db.close(); } };
   /** Runs the call as the effect application does: two admissions (submit, then before the first claim), recording what each saw. */
   const execute = async () => {
@@ -128,5 +128,69 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     const broken = await fixture([{ schemaVersion: 9 }]);
     expect(await broken.decisions.authorize(edit, args)).toBe('deny');
     expect(broken.decisions.prepare(edit, args)).toEqual({ ok: true, requireApproval: true });
+  });
+
+  // PERSISTENT-APPROVALS G6: a standing approval lowers the owner approval of an ordinary edit exactly like a mode relaxation does — audited
+  // before the effect, re-decided on every admission, admitted only as audited — and "this session" is remembered only after its audit.
+  const KEY = 'v1:edit_file:directory:src/*';
+  const asks = snapshot('require-approval', null);
+  const withGrant = (id = 'standing-1', revision = 'p-grant') => {
+    const base = snapshot('require-approval', null, revision) as { grants: unknown[] } & Record<string, unknown>;
+    return resolvePolicyBindings({ schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants, { id, effect: 'allow', actions: ['invoke'], scopes: ['scope'],
+      principals: [me], resource: { kind: 'agent-tool-call', ids: [KEY] } }] }, { schemaVersion: 2, revision: 'b', bindings: [], modes: [] });
+  };
+
+  it('this session: asks until the card answer is remembered (audited first), then lowers the call, audits its use before the effect, and is gone after a restart', async () => {
+    const memory = new SessionStanding(), session = 'conversation-1';
+    const f = await fixture([asks], { standing: { memory, session } });
+    expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1')).toBe(true);
+    expect(f.auditRecords().map(record => [record.event.subject.kind, record.event.subject.phase, record.event.subject.source, record.event.subject.approvalId]))
+      .toEqual([['standing-approval', 'remembered', 'session', 'approval-1']]);
+    expect(memory.has(session, KEY)).toBe(true);
+    expect(await f.decisions.authorize(edit, args)).toBe('allow');
+    expect(await f.execute()).toEqual({ outcome: { status: 'ok', text: 'ran' }, eventsAtRun: 2, admissions: ['admitted', 'admitted'] });
+    expect(f.auditRecords().map(record => record.event.subject.phase)).toEqual(['remembered', 'used']);
+    // A restarted service holds nothing: the same call asks again.
+    const restarted = await fixture([asks], { standing: { memory: new SessionStanding(), session } });
+    expect(await restarted.decisions.authorize(edit, args)).toBe('require-approval');
+  });
+
+  it('a call the standing approval does not name, another conversation, or the write floor still asks; nothing is remembered without an audit', async () => {
+    const memory = new SessionStanding();
+    memory.remember('conversation-1', KEY);
+    const other = await fixture([asks], { standing: { memory, session: 'conversation-2' } });
+    expect(await other.decisions.authorize(edit, args)).toBe('require-approval');
+    const elsewhere = await fixture([asks], { standing: { memory, session: 'conversation-1' } });
+    expect(await elsewhere.decisions.authorize(edit, { ...args, path: 'docs/a.md' })).toBe('require-approval');
+    const floored = await fixture([asks], { standing: { memory, session: 'conversation-1' }, floored: true });
+    expect(await floored.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(await floored.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1')).toBe(false);
+    expect(floored.events()).toBe(0);
+  });
+
+  it('the persisted grant lowers the call and is audited as a grant; losing the session memory or the grant before an admission stops the effect', async () => {
+    const granted = await fixture([withGrant()]);
+    expect(await granted.decisions.authorize(edit, args)).toBe('allow');
+    expect(await granted.execute()).toMatchObject({ outcome: { status: 'ok' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
+    expect(granted.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'used', source: 'grant', grantId: 'standing-1' });
+    // Revoked, replaced by another grant id, or the policy revision changed (same grant) between the audit and an admission: the audited decision is gone.
+    for (const later of [asks, withGrant('standing-2'), withGrant('standing-1', 'p-edited')]) {
+      const f = await fixture([withGrant(), withGrant(), later]);
+      expect(await f.decisions.authorize(edit, args)).toBe('allow');
+      expect(await f.execute()).toMatchObject({ outcome: { status: 'error', text: 'EFFECT_APPROVAL_REQUIRED' }, admissions: ['EFFECT_APPROVAL_REQUIRED'] });
+    }
+    const memory = new SessionStanding();
+    memory.remember('c', KEY);
+    const dropped = await fixture([asks], { standing: { memory, session: 'c' } });
+    expect(await dropped.decisions.authorize(edit, args)).toBe('allow');
+    const seen: string[] = [];
+    await dropped.decisions.execute(edit, args, { round: 1, index: 0 }, 'call_1', async gate => {
+      memory.forget('c');
+      try { await gate.admit({ approval: 'policy' } as never, 'require-approval', {} as never, principal as never, { record: null } as never); seen.push('admitted'); }
+      catch (error) { seen.push((error as { code: string }).code); }
+      return { status: 'ok', text: 'x' };
+    });
+    expect(seen).toEqual(['EFFECT_APPROVAL_REQUIRED']);
   });
 });

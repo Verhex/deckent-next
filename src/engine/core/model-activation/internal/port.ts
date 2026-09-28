@@ -23,7 +23,8 @@ export interface ModelActivationStore {
 }
 export class ModelActivationStoreError extends Error {
   constructor(readonly code: 'MODEL_ACTIVATION_COMMAND_CONFLICT' | 'MODEL_ACTIVATION_CORRUPT'
-    | 'MODEL_ACTIVATION_UNAVAILABLE' | 'MODEL_ACTIVATION_OUTCOME_UNKNOWN' | 'MODEL_ACTIVATION_CATALOG_CONFLICT') {
+    | 'MODEL_ACTIVATION_UNAVAILABLE' | 'MODEL_ACTIVATION_OUTCOME_UNKNOWN' | 'MODEL_ACTIVATION_CATALOG_CONFLICT'
+    | 'MODEL_ACTIVATION_DELIVERY_UNFIT') {
     super(code); this.name = 'ModelActivationStoreError';
   }
 }

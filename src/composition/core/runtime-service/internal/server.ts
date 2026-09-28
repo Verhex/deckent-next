@@ -138,9 +138,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const controller = new AbortController();
   let recovery: Promise<void> = Promise.resolve();
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => {
-    // A scratch removal in flight ends before the endpoint and ledger custody are released (finalize runs after this settles).
+    // A scratch removal in flight, and every MCP server the turns started (stdin closed, then SIGTERM/SIGKILL), end before the endpoint and ledger
+    // custody are released (finalize runs after this settles).
     controller.abort(); turnStop.abort();
-    return Promise.allSettled([recovery, scratchActivity.close()]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
+    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close()]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
   }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });

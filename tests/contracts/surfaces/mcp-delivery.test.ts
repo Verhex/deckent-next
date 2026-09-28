@@ -1,6 +1,6 @@
 import { InMemoryTransport, CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY, type JSONRPCMessage } from '@modelcontextprotocol/server';
 import { expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import type { ModelInvocationResult } from '#engine/index.js';
 const reference = { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 };
 const command = { schemaVersion: 1, commandId: 'c', scopeId: 's', reference, catalogRevision: 'catalog',

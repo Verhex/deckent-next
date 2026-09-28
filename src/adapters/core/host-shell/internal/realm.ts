@@ -32,8 +32,13 @@ export interface ShellSandboxLayout {
 export interface ShellSandbox {
   readonly kind: Exclude<ShellRealm['kind'], 'host'>;
   usable(capabilities: ShellCapabilities): { readonly ok: true; readonly realm: ShellRealm; readonly marker: string; readonly posture: string;
-    readonly notice: string | null; readonly containment: Exclude<ShellRealmContainment, 'host'> } | { readonly ok: false; readonly reason: string };
+    readonly notice: string | null; readonly containment: Exclude<ShellRealmContainment, 'host'>; readonly launch?: ShellSandboxLaunch }
+    | { readonly ok: false; readonly reason: string };
 }
+/** A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
+ * the view resolved now; the caller appends `--`, the command and its arguments. Absent: the mechanism only runs one command at a time. */
+export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>) =>
+  Promise<{ readonly ok: true; readonly file: string; readonly args: readonly string[] } | { readonly ok: false; readonly reason: string }>;
 /** Composition's (code-only) port: the providers a turn may pick, in preference order, built for the turn's layout. */
 export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly ShellSandbox[];
 

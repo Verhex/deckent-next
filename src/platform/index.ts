@@ -64,3 +64,4 @@ export { SystemTrustedClock, MAX_WALL_SKEW_MS } from '#platform/core/clock/index
 export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
 export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
 export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
+export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard } from '#platform/core/common/index.js';

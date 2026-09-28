@@ -18,6 +18,8 @@ export interface OperationApprovalBrokerOptions {
   readonly requestTtlMs: number;
   /** Admission window of an `allow` when the descriptor declares no `admitWithinMs`. */
   readonly defaultAdmitWithinMs: number;
+  /** A bounded, redacted, human-readable description of this command for the card (≤ 2048), instead of the default id + digest line; null keeps the default. */
+  readonly describe?: (command: EffectCommand, budget: number) => Promise<string | null> | string | null;
 }
 
 /**
@@ -47,7 +49,7 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     const actionDigest = operationApprovalActionDigest(command.scopeId, subject, requester);
     const now = this.clock.sample().wallMs;
     const found = this.store.findOperation(command.scopeId, actionDigest);
-    if (!found) return { pending: this.pending(await this.open(command.scopeId, subject, requester, actionDigest, now)) };
+    if (!found) return { pending: this.pending(await this.open(command, command.scopeId, subject, requester, actionDigest, now)) };
     let current = verifyApproval(found, this.integrity);
     if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
     if (current.status === 'pending') return { pending: this.pending(current) };
@@ -73,10 +75,13 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     return reference;
   }
 
-  private async open(scopeId: string, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
+  private async open(command: EffectCommand, scopeId: string, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
     let revision: string;
     try { revision = policySchema.parse(await this.policy.load()).revision; } catch { throw new ApprovalError('APPROVAL_INVALID'); }
-    const summary = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
+    const fallback = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
+    let described: string | null = null;
+    try { described = await this.options.describe?.(command, 2048 - fallback.length - 1) ?? null; } catch { /* the card falls back to the digest line */ }
+    const summary = described !== null && described.length > 0 ? `${described}\n${fallback}`.slice(0, 2048) : fallback;
     const request = approvalRequestSchema.parse({ schemaVersion: 2, approvalId: randomUUID(), scopeId, subject, requester, actionDigest,
       policyRevision: revision, summary, createdAt: now, expiresAt: now + this.options.requestTtlMs });
     // `create` is idempotent on the digest: a concurrent open of the same command returns the one stored request.

@@ -10,3 +10,12 @@ export { parsePermissionModeCommand, parsePermissionModeQuery, permissionModeCha
 export type { PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from './internal/mode.js';
 export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';
 export type { CorePolicyResource, CorePolicyAction } from './internal/vocabulary.js';
+export { authorityDocuments, DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
+  policyChangeSchema } from './internal/administer.js';
+export type { DelegatedRule, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
+export { describePolicyChange, POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
+export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';
+export type { PolicyBinding } from './internal/schema.js';
+export { isStandingGrantId, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, STANDING_PATTERN_MAX_CHARS, standingCell, standingCovers, standingGrantChange, standingGrantId,
+  standingPattern, standingRevokeChange } from './internal/standing.js';
+export type { StandingCell, StandingPattern, StandingPatternResult, StandingRefusal } from './internal/standing.js';

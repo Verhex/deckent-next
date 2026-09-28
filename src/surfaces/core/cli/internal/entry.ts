@@ -7,9 +7,10 @@ import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
 import { toolchainsCommand } from './toolchains.js';
+import { mcpCommand } from './mcp.js';
 import { operationCommand } from './operation.js';
+import { policyGrantsCommand } from './policy-grants.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
-import { terminalCommand } from './terminal.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
@@ -50,7 +51,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     context.initialize?.();
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     if (argv.length === 0 && interactiveTerminal(context)) {
-      await terminalCommand(['terminal'], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      await (await import('./terminal.js')).terminalCommand(['terminal'], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
     if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
@@ -59,6 +60,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'toolchains') { await toolchainsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'mcp') { await mcpCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
@@ -71,7 +73,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'runtime') { await runtimeCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'models') { await modelsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'inference') { await inferenceCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'terminal') { await terminalCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'terminal') { await (await import('./terminal.js')).terminalCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'policy' && (argv[1] === 'grants' || argv[1] === 'revoke')) { await policyGrantsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'policy' || argv[0] === 'config' || argv[0] === 'doctor' || argv[0] === 'paths') {
       await runKernelCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;

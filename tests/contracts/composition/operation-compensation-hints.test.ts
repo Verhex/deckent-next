@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createMcpServer } from '#surfaces/index.js';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
 import { createConfiguredRuntimeClient } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';

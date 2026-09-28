@@ -1,57 +1,46 @@
-# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-28, Opus 5.5 lead)
+# Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-29, Opus 5.5 lead)
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `dd63fd9` (beşinci parti). Canlı servis `dd63fd9` build'iyle (instance `5c266b90…`, ledger v42, layout 4; kanıt
-  `proof/LIVE-SWITCH-BATCH5-2026-09-28`). Önceki canlı: (instance `46d6473f…`), ledger v41, protokol v16 penceresi
-  [16, 15], layout registry 3. Qwen3.8 bağlaması v5 (`chat-template-enable-thinking`) canlıda etkin. Canlı policy v1 (herkes `ask`). DOGFOOD OFF.
-- Ana checkout'ta Astra/owner WIP'i (core-memory `MEMORY.md`, `law_local_verification.md`, manifest, `hemen-donulecek-is.md`) korunuyor;
-  canlı geçişte stash/yama ile saklanır, atılmaz.
+- `origin/main` = `0e0ca63` (altıncı parti; Astra 2167 PASS, kanal REVIEW 2168). Canlı servis `0e0ca63` build'iyle (instance `f810508e…`, owner onayı
+  "Şimdi geç"; kanıt `proof/LIVE-SWITCH-BATCH5-2026-09-28/BATCH6-README.md`), ledger v42, `service.responseMaxBytes` 4 MiB → satır modu yanıt veriyor;
+  canlı policy v2. Geri dönüş: `dd63fd9` build'i + `config-before-batch6.json`. DOGFOOD OFF.
+- Canlı geçişte görülen küçük bulgular: bwrap içinde `ls .deckent/live-data/state` giriş adlarını listeliyor (içerik maskeli, ad düzeyinde meta veri);
+  terminal kapanınca onay bekleyen tur onay TTL'i (9 dk) dolana kadar `running` kalıyor.
+- Ana checkout `dd63fd9` + `0e0ca63` ff; Astra/owner WIP'i (core-memory, `hemen-donulecek-is.md`, `auto-edit-test.txt`) korunuyor; Astra 2167 notları
+  yamada (`.deckent/host/reviews/astra-main-notes-2026-09-29-live6.patch`) ve aşağıya işlendi.
 
-## Beşinci parti (`integrate/2026-09-28-f`, worktree `/home/alperen/deckent-next-integrate-f`)
-- İçerik: B06-2b (ledger v42 benimseme intent v2 + v1→v2 göçü), B09-2 (yapılandırılmış worker raporu), B06-2c (doğrulama önkoşulu,
-  CLI, salt-okunur bağımlılık bind'i), TERM-PICKERS, S5 (`terminal.shell.realm` + yetenek yoklaması), SCR-A (scratch alanı, layout 4,
-  `/scratch`, sistem istemi v2), SCR-B (`init policy` ilk çalıştırma şablonu), COMP-BUDGET-2 (composition 4826/5000), Astra Jev bağlam
-  kalitesi uyarı denetimi (host tooling), LEDGER-SINGLETON (ledger başına tek servis), main `4346081` birleşmesi.
-- Birleştirmede lead düzeltmeleri: şablon araç/operasyon adları gerçek kataloğa sözleşme testiyle bağlandı (ters kanıt: ad bozulunca
-  kırmızı); Astra 2145 iki-soket testi artık ikinci servisin `LOCAL_RUNTIME_ALREADY_RUNNING` ile reddini bekliyor; S5 native yoklamasının
-  manifestine test betiği eklendi (`test:native` onu reddediyordu → tam verify düşerdi).
-- Tam verify `599a0fc` exit 0 (402/2659, native 26+1, host 62, smoke). Astra 2149 REVISE: R1 temizlik ↔ yeni tur yarışı, R2 eşzamanlı yazımda
-  kota aşımı → `lane/fix-2149` `deb2b7d` birleşti (tur açmadan önce tutar, temizlik silme boyunca sahip, kapanış drain; tek yazım sırası).
-- Tam verify `dd63fd9` exit 0 (403/2669, native 26+1, host 62, smoke); Astra 2152 PASS @dd63fd9; `origin/main` = `dd63fd9` (push 2026-09-28).
-- Canlı geçiş yapıldı (owner onayı): workline turu çalışıyor; açık bulgu: satır modu `terminal session` `MODEL_INVOCATION_RESULT_LIMIT`.
+## Astra 2167/2168 (2026-09-29)
+- Aday `0e0ca63`: kapsamlı olmayan bağımsız **PASS** (2166 wildcard ürün yolu kapandı: desteklenmeyen etkili yol typed admission reddi; normal/bracket/brace
+  desteği korunuyor). İzole build + native, lint-arch 0, 95/95 hedefli test; gerçek servis başlangıcı ve iki realm'de onaylı tur kanıtı. Opus tam verify logu
+  okundu (412/2763, exit 0; bağımsız tekrar yok). Kanıt `proof/ASTRA-2167-2026-09-29/review.md`; Jev 540a8645 PASS 0,99, yeterlilik 0,79 (tavsiye).
+- Takip: `model-invocation-process` geçici 45 s sınırı yedinci partide kaldırıldı (`3bb8058`, STARTUP-COST sonrası ≈24 s ölçüldü) — tam verify ile
+  doğrulanacak; `LAYOUT_*` typed kodlarının i18n metni küçük takip.
 
-## Altıncı parti (`integrate/2026-09-28-g`, worktree `/home/alperen/deckent-next-integrate-g`, taban dd63fd9)
-- Fetch birleşti (`lane/fetch` `e6bc551`; S6/S7/S10; Q1 Jev ee030c0e: `allowlist` katı, `approval` kart; `deposit` 2149 yazım şeridinde, eşzamanlı
-  deposit regresyonu tabanda 3/3 kırmızı → yeşil).
-- Sandbox birleşti (`lane/bwrap` `7e1281e` ⊃ `lane/landlock`): S9 bubblewrap → S11 Landlock → host (prefer notu) / ret (require); `sandbox: kısmi`
-  etiketi bağlandı. arch delta'lar uygulandı (lint-arch 0), composition 4912/5000.
-- Tam verify 646065c exit 0 (409/2731). Astra 2154 REVISE: bwrap R1 toolchain kardeş bağı HOME'a, R2 hard link takma adı, R3 okunamayan/derin
-  dizin maskesiz → `lane/bwrap` `985d82a` birleşti (canonical bind, nlink>1 maskesi, eksik tarama tmpfs/ret; bwrap ~145 ms/çağrı).
-- Astra 2156 REVISE: R2 sınıfı Git özel yollarında (korunan inode'a hard link `.git` dosyası / `.git/` içi takma ad iki realm'de okunuyor,
-  bwrap'ta yazılıyor) → `lane/bwrap` `dd36e3d` birleşti (inode tabanı Git grant'lerinden önce ve tüm Git metadata'sına; doğrulanmış nesne muafiyeti;
-  bwrap ~178 ms, Landlock ~124 ms/çağrı).
-- Astra 2158 REVISE (entry 2157 incelemesi; notları ana checkout PLAN/current-flow WIP'inde, yedek `.deckent/host/reviews/astra-main-notes-2026-09-28-2158.patch`):
-  R1 dizin önbelleği çocuk nlink/içerik değişimini görmüyordu (sıcak çağrı korunan yeni içeriği okudu), R2 nesne önbelleği anahtarında ctime/kimlik yoktu →
-  `lane/bwrap` `4fdd645` birleşti: hüküm her çağrıda (`lstat`), yalnız hash önbelleği (anahtar dev/ino/size/mtime/ctime/beklenen kimlik). Bedel: bu depoda bwrap
-  ~420 ms, Landlock ~310 ms/çağrı (hızlandırma ayrı dilim).
-- TERM-FEEDBACK-1 birleşti (`ab8baf0` özetleme, `50bca7e` ürün durumu ajana/sandbox'a kapalı — bwrap'ta runtime soketine bağlanma açığını da kapatır, `946464b`
-  sistem istemi v4); Astra'ya ek bulgu olarak bildirildi (2160).
-- Astra 2162 REVISE (ignored üst dizinde ürün durumu korumasızdı; test akış sırası) → `lane/bwrap` `424fcb2` birleşti (`protectedAnchors` ata koruması iki realm,
-  shell planında `PRODUCT_STATE_PROTECTED` sert taban). Saat testi `lane/flake-clock` `20598e5` (Sonnet 5.5) birleşti; açık bulgu: operasyon onay penceresi
-  yalnız duvar saatiyle ölçülüyor (geri adımda ≤ adım kadar uzar) — süreç içi monotonic koruma önerisi, ayrı dilim. CLAUDE.md/AGENTS.md güncel kaynak kuralı eklendi.
-- Canlı policy owner onayıyla v2'ye yükseltildi (servis yeniden başlatılmadan). Sıradaki: tam verify → Astra → PASS'te push → canlı geçiş (owner onayı; 4 MiB teslim sınırı).
-- Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
-  bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
-
-## Canlı geçişte yapılacaklar (PASS sonrası)
-- Ledger v41 → v42 yedekli göç; layout 3 → 4 (`state/scratch`): geçişten önce kabul edilmiş Run'ların görevleri `RUN_STORE_CONFLICT`
-  ile reddedilir (owner kabulü). Scratch sessizliği için canlı policy'ye `scratch_*` araç ve `workspace.scratch.write` operasyon izinleri
-  (şablon ya da owner betiği); yoksa scratch çağrıları sorar. Ledger kilidi (`<ledger>-lock`) ilk başlangıçta oluşur.
+## Yedinci parti (`integrate/2026-09-28-h`, worktree `/home/alperen/deckent-next-integrate-h`, taban `5b267a9` + main `0e0ca63`)
+- Birleşenler (her biri `--no-ff`):
+  - SESSION-RESULT-LIMIT `c67302c` (doctor `modelInvocationDelivery`, `MODEL_ACTIVATION_DELIVERY_UNFIT`).
+  - POLICY-ADMIN P1–P3 `6e76c42` → POLICY-HARDEN P3-R `3e01b90` (yetki onayı yalnız yetki yüzeyinde `APPROVAL_SURFACE_RESTRICTED`, settle anında ret,
+    `authority-refusal` audit, redakte kart farkı).
+  - MCP-CLIENT `4cc7ca0` → `afb7518` (kapsamlı kayıt dosyaları, `mcp.clients` config'ten kalktı) → `db5121d` (add = güven, ilk kullanım kartı, `/mcp`).
+  - MCP SDK 2.2.0 + sayfalı araç listesi `d934c5b`; STARTUP-COST `3f879c6` (Ink ve MCP server SDK statik grafikten çıktı).
+  - MODE-UX G3 `fd3c5e4`; PERSISTENT-APPROVALS G6 `d389bee` (kapsam seçmeli kalıcı onay; tel v17 ve servis kablosu açık).
+  - SANDBOX-SPEED G2 `1ed884d`; TERM-UX-1 `3dbbed7`; ANTHROPIC-PROVIDER G8 `50d86ce` (checkpoint A/B açık).
+- **Birleştirilmedi: SHELL-AUTONOMY `e627273`** — PERSISTENT-APPROVALS ile aynı yetki fonksiyonunu farklı değiştiriyor (`decideAgentToolCall`: kalıcı onay
+  adımı ↔ sandbox hücre gevşetmesi; `mode.ts` `decide()` imzası ve `run(inner, ownerApproved)`), birleşik davranış için test yok. Lead kararı bekliyor;
+  realm dosyalarının çözümü hazır (şerit + SANDBOX-SPEED `fs-ops` birlikte).
+- Lead düzeltmeleri: MCP client SDK'sı tembel yükleniyor (`e7d6553`); 0e0ca63 ↔ MCP kayıt dosyası ajan deny listesi (ürün durumu deny'ı + `.deckent/mcp.json`);
+  `surfaces/core/terminal` birim bütçesi (2000) aşımı iki bağımlılıksız parçanın taşınmasıyla çözüldü (kart tuş eşlemesi → `terminal-kit`, `ArrowPicker` →
+  `terminal-render`); deny eşleyicisi hızlı yolu platformun tek `GLOB_WILDCARD` tanımını kullanıyor; `APPROVAL_SURFACE_RESTRICTED` ve MCP güven/`/mcp`,
+  TERM-UX-1 metinleri en/tr + kayıt; MCP güven deposu okunamazsa typed hata.
+- Composition 5202/5500; lint-arch 0.
+- Sıradaki: lead SHELL-AUTONOMY kararı → tam verify (lead) → Astra incelemesi → PASS'te push → canlı geçiş (owner onayı).
 
 ## Açık kalanlar
-- LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek (ayrı dilim); ret kodunda uç nokta/ledger ayrımı.
-- Terminal hattı: fetch (S6, S7, S10) → sandbox (S9 bubblewrap — owner `bwrap` kurar — ve S11 Landlock); dilim 4d, `/compact`, satır modu, plan aracı.
+- Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).
+- SHELL-AUTONOMY açık owner soruları: C1 program tabanı sandbox'ta, C2 audit event v2 (realm/hücre), C3 `unrestricted` modu (bindings v3), C4 onaylı çağrıda
+  taban yazılabilir; `run_shell` model açıklaması sürümü.
+- LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek; ret kodunda uç nokta/ledger ayrımı.
 - Dogfood hattı: canlı execution/adoption profili ve doğrulama config'i; Deckent verify'ının sandbox'ta ölçümü; tek komut döngü; operatör aktivasyonu.
 - Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` + biten şeritler, stash'ler.

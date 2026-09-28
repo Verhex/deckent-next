@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { approvalRecordSchema, approvalSubject, type ApprovalRecord } from '#domain/index.js';
+import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
 import type { WorkerObservationHandler } from './workers.js';
@@ -74,11 +75,13 @@ export function createWorklineLedgerPorts(input: {
         const items = records.map(approvalView);
         return Object.freeze({ items: Object.freeze(items), nextAfter: items.length >= pageSize ? items.at(-1)!.approvalId : null });
       },
-      async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision'>, decision: 'allow' | 'deny') {
+      async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision'>, decision: 'allow' | 'deny', standing?: StandingScope) {
         const record = approvalRecordSchema.parse(await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
           commandId: `terminal-${randomUUID()}`, expectedRevision: approval.revision, decision,
           reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) }));
-        return approvalView(record);
+        // The runtime protocol (v16) has no standing-scope field yet (v17 checkpoint): the answer is allowed once, and the view is told the
+        // scope was not saved rather than left to assume it.
+        return standing ? { ...approvalView(record), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record);
       },
     } : {}),
     // Same governed cancellation as `deckent run cancel`, against the revision the operator confirmed.

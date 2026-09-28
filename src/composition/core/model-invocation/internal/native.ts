@@ -7,7 +7,8 @@ import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HT
   parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID,
   OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition,
   type OpenRouterPricedNative, fetchOpenRouterTariff, type OpenRouterMetadataObservation,
-  providerSpendingSchema, quoteOpenAiChatOperatorTariff } from '#adapters/index.js';
+  providerSpendingSchema, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition,
+  ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
@@ -32,9 +33,16 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
   const now = () => clock.sample().wallMs;
   let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative;
     cell: { observation?: OpenRouterMetadataObservation } } | undefined;
+  let anthropic: { profile: ModelInvocationProfile; priced: AnthropicMessagesPricedNative } | undefined;
   const natives = Object.freeze({
     resolve(profileInput: ModelInvocationProfile): ModelInvocationNativePort | null {
       const profile = modelInvocationProfileSchema.parse(profileInput);
+      if (profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
+        const definition = parseAnthropicMessagesDefinition(profile.adapter.definition);
+        const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
+        anthropic = { profile, priced };
+        return priced.native;
+      }
       if (profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
         const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition);
         return createOpenAiChatNativePort({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
@@ -74,6 +82,12 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
         const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
         return Object.freeze({ budget, quote: quoteOpenAiChatOperatorTariff(input) });
+      }
+      if (input.profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && input.profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
+        // Published tariff from the profile: the same scope budget and reservation as priced providers (settlement limit: review.md, checkpoint A).
+        if (!anthropic || !isDeepStrictEqual(input.profile, anthropic.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+        const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
+        return Object.freeze({ budget, quote: anthropic.priced.quote(input) });
       }
       const current = selected;
       if (!current || input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID
