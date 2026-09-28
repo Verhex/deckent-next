@@ -126,5 +126,8 @@ describe('network.fetch is a Core operation of the one catalog (FETCH S7)', () =
     for (const version of [1, 2]) {
       expect(issues({ catalog: [{ ...NETWORK_FETCH_OPERATION, operation: { id: 'network.fetch', version } }] })).toContain('OPERATION_CORE_REDEFINED');
     }
+    const claim = { adapter: 'http-conditional', options: { kind: 'network-fetch', baseUrl: 'https://erp.example/api', timeoutMs: 1_000, responseMaxBytes: 1_024,
+      idempotencyLookup: true } };
+    expect(issues({ catalog: [], targets: [claim] })).toEqual(['OPERATION_TARGET_KIND_RESERVED']);
   });
 });
