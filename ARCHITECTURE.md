@@ -911,29 +911,35 @@ bound read-only and then walked: every multi-linked file inside is masked unless
 (`isVerifiedGitObject`: loose objects inflated and hashed, packs/indexes by their trailer checksum; a hard-linked local clone keeps its
 objects), an unreadable or too deep directory inside is masked; any other `.git` file opens nothing (a forged pointer a sandboxed
 command wrote cannot bind HOME; a submodule loses `git status` inside). The per-directory scan is shared with Landlock
-(`scanGitDirectory`) and cached by the directory's change times (an alias enters a directory only as a new entry), verification per
-inode; git metadata has its own walk budget (200 000 entries; over it, or over 4 096 masks — e.g. a hard-linked clone whose objects do
-not verify — the call is refused), the deny floor masked (denied directories and fully-denied subtrees as empty tmpfs; denied files as
-a read-only `/dev/null` bind that opens with EACCES — protected, not absent; a regular file with more than one link is masked the same
-way, since another name of a protected inode would open it (Astra 2154 R2; single-link files stay open; inside Git metadata the same
-rule applies with the verified-object exemption above — the multi-link protection covers the whole project view including `.git`, not
-only the working tree); symlinks neither followed nor masked; `node_modules`/`dist`-class directories not entered), the conversation's
-scratch area read-write (TMPDIR unchanged). What the walk could not see is closed, never left read-write (Astra 2154 R3): a directory
-it could not read, or one beyond depth 32, is masked as an empty tmpfs (a `chmod` inside changes the tmpfs, not the host directory); an
-unreadable project root refuses the call. Deny walk bounded (50 000 entries / 4 096 masks; over it the call is refused). The PID
-namespace ends every process the command started with the call, a `setsid` escapee included (measured: without `--die-with-parent` it
-survives); the outer `bwrap` exits on SIGTERM, so cancellation and the timeout end the namespace. Result marker `sandbox: bubblewrap`;
-card "Runs in a bubblewrap sandbox: …". Cost on this machine ≈ 180 ms per call warm (Astra 2156: the common repository's 6.2 k-entry
-`.git` is walked from the directory cache; the first call after service start ≈ 700 ms while 797 hard-linked objects are verified once;
-≈ 145 ms before 2156, ≈ 90 ms before 2154) vs ≈ 2 ms on the host. Open limits: masked files read "Permission denied" rather than
-ENOENT; ignored-tree exception (both realms): `node_modules`/`dist`-class directories are not scanned, so a `node_modules/pkg/.env` is
-readable and a nested `node_modules/pkg/.git/config` writable inside (Astra 2154 measured both; owner option: mask/carve every `.git`
-and deny match inside ignored trees at the cost of scanning them); `.git` read-only means `git commit`/`git add` fail inside (owner
-decision); a data root inside the project keeps its ledger reachable (only approvals/previews/scratch are on the floor, as on the
-host); user-namespace-restricted hosts (AppArmor) not measured (the probe's `unavailable` makes the realm unusable); the availability
-gate is the probe's PATH scan while the launcher comes from known paths (a service PATH without `/usr/bin` → unusable, fail-closed);
-`--die-with-parent` should also end a sandboxed command when the service dies (candidate for the "Host shell execution" orphan item) —
-untested.
+(`scanGitDirectory`) and its security verdict is taken **afresh on every call** — the directory is listed and every regular file's link
+count is read each time; no directory-level cache carries a child's verdict (Astra 2158 R1: a single-link file can gain another name
+elsewhere and be rewritten through it without its directory's times changing). Only a verified object's content hash is cached, under
+the inode's device, number, size, mtime, **ctime** and the identity its path promises (Astra 2158 R2: content cannot change without the
+kernel advancing ctime — a user can put mtime back with `utime`, never ctime; the same inode under another object name is re-verified).
+Bounds of that cache, stated honestly: ctime is kernel-set at nanosecond resolution, so a change landing in the same tick as the cached
+ctime, or a component swapped between the scan and the mount, is outside what the scan can see. Git metadata has its own walk budget
+(200 000 entries; over it, or over 4 096 masks — e.g. a hard-linked clone whose objects do not verify — the call is refused), the deny
+floor masked (denied directories and fully-denied subtrees as empty tmpfs; denied files as a read-only `/dev/null` bind that opens with
+EACCES — protected, not absent; a regular file with more than one link is masked the same way, since another name of a protected inode
+would open it (Astra 2154 R2; single-link files stay open; inside Git metadata the same rule applies with the verified-object exemption
+above — the multi-link protection covers the whole project view including `.git`, not only the working tree); symlinks neither followed
+nor masked; `node_modules`/`dist`-class directories not entered), the conversation's scratch area read-write (TMPDIR unchanged). What
+the walk could not see is closed, never left read-write (Astra 2154 R3): a directory it could not read, or one beyond depth 32, is
+masked as an empty tmpfs (a `chmod` inside changes the tmpfs, not the host directory); an unreadable project root refuses the call.
+Deny walk bounded (50 000 entries / 4 096 masks; over it the call is refused). The PID namespace ends every process the command started
+with the call, a `setsid` escapee included (measured: without `--die-with-parent` it survives); the outer `bwrap` exits on SIGTERM, so
+cancellation and the timeout end the namespace. Result marker `sandbox: bubblewrap`; card "Runs in a bubblewrap sandbox: …". Cost on
+this machine ≈ 420 ms per call (Astra 2158: the common repository's 6.2 k-entry `.git` is listed and its ≈ 5.1 k files `lstat`ed on
+every call — the thread-pool round trips dominate, ≈ 220 ms; the first call after service start ≈ 700 ms while 797 hard-linked objects
+are hashed once; ≈ 180 ms with the withdrawn directory cache, ≈ 145 ms before 2156, ≈ 90 ms before 2154) vs ≈ 2 ms on the host. Open
+limits: masked files read "Permission denied" rather than ENOENT; ignored-tree exception (both realms): `node_modules`/`dist`-class
+directories are not scanned, so a `node_modules/pkg/.env` is readable and a nested `node_modules/pkg/.git/config` writable inside
+(Astra 2154 measured both; owner option: mask/carve every `.git` and deny match inside ignored trees at the cost of scanning them);
+`.git` read-only means `git commit`/`git add` fail inside (owner decision); a data root inside the project keeps its ledger reachable
+(only approvals/previews/scratch are on the floor, as on the host); user-namespace-restricted hosts (AppArmor) not measured (the
+probe's `unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known
+paths (a service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the
+service dies (candidate for the "Host shell execution" orphan item) — untested.
 **Landlock realm (S11).** Second provider (chosen when bubblewrap is not usable): each call builds a rule set from a fresh scan of the
 project (`host-shell/internal/landlock.ts`) and runs bash through the native helper `shell-sandbox`
 (`host-shell/native/shell_sandbox.c`), which applies it and execs bash in the same process. Landlock only adds access and a directory
@@ -942,29 +948,30 @@ rule — clean files and trees read-write, protected paths (the turn's deny list
 directories no rule; symbolic links none; ignored directories read-write as a whole and not scanned. Git metadata is read-only under
 the same inode floor **before any grant (Astra 2156)**: a multi-linked `.git` file takes no rule; a `.git` directory and a worktree's
 common repository (root `.git` file in the verified shape only) are not one read grant but carved read rules from the shared
-`scanGitDirectory`: a directory whose subtree holds only single-link files, verified objects (`isVerifiedGitObject`) and readable
-directories takes one `r` rule, otherwise listing only and per-entry rules — a multi-linked unverified file, a symbolic link, an
-unreadable or too deep directory none (git metadata budget 200 000 entries; over it the set is refused). No other `.git` file opens
-anything outside. System directories (`/usr /bin /sbin /lib* /opt`, the running Node's `bin`/`lib`) read + execute, `/etc` and `/proc`
-read, `/dev/{null,zero,full,random,urandom}` read-write; the scratch area read-write and the command's `HOME`; HOME, `/tmp`, `/mnt`,
-`/run`, `/var`, `/sys` and everything else unreachable (`stat` is not restricted by Landlock). Bounds: 20 000 scanned entries, depth
-32, 8 192 rules, 1 MiB of rule arguments — past a bound nothing runs (beyond depth 32 the whole set is refused; a directory the scan
-cannot read takes no rule and stays unreachable even after a `chmod` inside — pinned by tests after Astra 2154 R3). The helper opens
-relative rule paths beneath the root with `openat2 RESOLVE_BENEATH|NO_SYMLINKS`, requires the announced kernel ABI, sets
-`PR_SET_NO_NEW_PRIVS`, restricts itself (ABI ≥ 4: TCP bind/connect handled with no rule; ABI ≥ 6: signal and abstract-unix scopes),
-then installs a seccomp filter (foreign-architecture/x32 calls kill; `io_uring_setup` refused; `socket()` refused except
-AF_INET/AF_INET6 stream sockets when Landlock handles TCP — ABI < 4: every socket refused; `listen()` and MSG_FASTOPEN sends refused:
-measured on ABI 7 that a unix socket reached `/var/run/docker.sock`, UDP left the machine, and the Landlock TCP rule missed a
-`listen()` autobind and a TCP Fast Open connect). Any setup failure is one line on fd 3 (close-on-exec), exit 125, no exec; the runner
-turns it into `spawn-failed` (effect refused), so a command cannot forge one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 →
-typed DEGRADED: marker `sandbox: degraded` and a notice naming what is open (signals ABI < 6, truncation ABI < 3, TCP by the socket
-filter ABI < 4) on the card, the live stream, the result and the finished line. Network is closed at every ABI. Open limits: the
-project root and every directory holding a protected path or `.git` cannot gain, lose or rename entries inside the sandbox (`touch
-new-at-root`, `sed -i` of a root file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected
-files inside ignored directories are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the
-Landlock domain); ≈ 125 ms rule-set build on this repository after Astra 2156 (≈ 90 ms before; per-entry object rules for a carved
-`objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); a data root inside the
-project keeps its ledger writable.
+`scanGitDirectory` (verdicts re-read every call, only object hashes cached under ctime and expected identity — Astra 2158): a directory
+whose subtree holds only single-link files, verified objects (`isVerifiedGitObject`) and readable directories takes one `r` rule,
+otherwise listing only and per-entry rules — a multi-linked unverified file, a symbolic link, an unreadable or too deep directory none
+(git metadata budget 200 000 entries; over it the set is refused). No other `.git` file opens anything outside. System directories
+(`/usr /bin /sbin /lib* /opt`, the running Node's `bin`/`lib`) read + execute, `/etc` and `/proc` read,
+`/dev/{null,zero,full,random,urandom}` read-write; the scratch area read-write and the command's `HOME`; HOME, `/tmp`, `/mnt`, `/run`,
+`/var`, `/sys` and everything else unreachable (`stat` is not restricted by Landlock). Bounds: 20 000 scanned entries, depth 32, 8 192
+rules, 1 MiB of rule arguments — past a bound nothing runs (beyond depth 32 the whole set is refused; a directory the scan cannot read
+takes no rule and stays unreachable even after a `chmod` inside — pinned by tests after Astra 2154 R3). The helper opens relative rule
+paths beneath the root with `openat2 RESOLVE_BENEATH|NO_SYMLINKS`, requires the announced kernel ABI, sets `PR_SET_NO_NEW_PRIVS`,
+restricts itself (ABI ≥ 4: TCP bind/connect handled with no rule; ABI ≥ 6: signal and abstract-unix scopes), then installs a seccomp
+filter (foreign-architecture/x32 calls kill; `io_uring_setup` refused; `socket()` refused except AF_INET/AF_INET6 stream sockets when
+Landlock handles TCP — ABI < 4: every socket refused; `listen()` and MSG_FASTOPEN sends refused: measured on ABI 7 that a unix socket
+reached `/var/run/docker.sock`, UDP left the machine, and the Landlock TCP rule missed a `listen()` autobind and a TCP Fast Open
+connect). Any setup failure is one line on fd 3 (close-on-exec), exit 125, no exec; the runner turns it into `spawn-failed` (effect
+refused), so a command cannot forge one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 → typed DEGRADED: marker `sandbox:
+degraded` and a notice naming what is open (signals ABI < 6, truncation ABI < 3, TCP by the socket filter ABI < 4) on the card, the
+live stream, the result and the finished line. Network is closed at every ABI. Open limits: the project root and every directory
+holding a protected path or `.git` cannot gain, lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root
+file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories
+are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 310 ms rule-set
+build on this repository after Astra 2158 (≈ 125 ms with the withdrawn directory cache, ≈ 90 ms before 2156; per-entry object rules for
+a carved `objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); a data root
+inside the project keeps its ledger writable.
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
