@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { mountWorkline, settle, until } from '../support/workline-harness.js';
 import { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS } from '#surfaces/core/terminal/index.js';
 
 const user = (content: string) => ({ role: 'user' as const, content });
@@ -30,5 +31,27 @@ describe('resumed conversation replay (TERM-UX-1 b)', () => {
   it('uses catalog templates when provided', () => {
     const rows = texts(resumedHistoryEntries([user('q'), tool('r')], { omitted: 'O{count}', toolResults: 'T{count}', summarized: 'S' }));
     expect(rows).toEqual(['user:q', 'notice:T1']);
+  });
+});
+
+const views: Array<ReturnType<typeof mountWorkline>> = [];
+afterEach(() => { for (const view of views.splice(0)) view.instance.unmount(); });
+
+describe('/resume through the real workline (TERM-UX-1 b)', () => {
+  it('prints the resumed conversation after the notice and sends it with the next turn', async () => {
+    const earlier = { sessionId: '11111111-2222-4333-8444-555555555555', updatedAtMs: 0, messages: 2, preview: 'old question' };
+    const sent: (readonly { role: string; content: string }[])[] = [];
+    const streamTurn = async function* (messages: readonly { role: string; content: string }[]) {
+      sent.push(messages); yield { kind: 'text' as const, text: 'fresh' }; yield { kind: 'done' as const, finish: 'stop' as const, note: null };
+    };
+    const view = mountWorkline({ completeTurn: async () => 'unused', streamTurn: streamTurn as never, historyMessages: 20,
+      sessions: { async save() {}, async list() { return [earlier]; }, async load() { return [user('old question'), assistant('OLD-ANSWER-TEXT')]; } } });
+    views.push(view);
+    await until(() => view.stdout.text.includes('READY'), 'ready');
+    view.stdin.write('/resume 11111111\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
+    await until(() => view.stdout.text.includes('OLD-ANSWER-TEXT'), 'earlier answer printed');
+    await settle(20);
+    view.stdin.write('next\r'); await until(() => sent.length === 1, 'turn sent');
+    expect(sent[0]!.map(message => message.content)).toEqual(['SYSTEM', 'old question', 'OLD-ANSWER-TEXT', 'next']);
   });
 });
