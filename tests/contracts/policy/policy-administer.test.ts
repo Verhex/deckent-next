@@ -40,8 +40,9 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
   const journal = openSqliteApprovalStore(ledger, sqlite); closers.push(() => journal.close());
   const auditStore = await openSqliteAuditStore(ledger, sqlite, 'forbid'); closers.push(() => auditStore.close());
   const audit = new AuditApplication(auditStore, integrity);
-  const admin = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
-    requestTtlMs: 60_000, audit: (event: AuditEvent) => { audit.record(event); } });
+  const deps = { authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
+    requestTtlMs: 60_000, audit: (event: AuditEvent) => { audit.record(event); } };
+  const admin = new PolicyAdministrationApplication(deps);
   // Another local person decides through their own live session (a test witness with the session shape; the OS witness is the caller's).
   const witness = (decider: VerifiedPrincipal) => decider === principal ? sessions : { revoke: async () => undefined, isSessionActive: async () => true,
     verifySession: async () => ({ principal: decider, session: { schemaVersion: 1 as const, sessionId: `session-${decider.subject}`, authorityRef: `authority-${decider.subject}`,
@@ -57,7 +58,7 @@ async function fixture(grantsFor: (me: Actor) => unknown[], bindingsFor: (me: Ac
     finally { db.close(); }
   };
   const person = (subject: string): VerifiedPrincipal => ({ id: `os:${subject}`, issuer: principal.issuer, subject, assurance: 'os-user', scopeIds: ['s'] }) as VerifiedPrincipal;
-  return { root, me, principal, person, source, admin, decide, command, files, events, journal, effects, clock, sessions, archive, integrity };
+  return { root, me, principal, person, source, admin, deps, decide, command, files, events, journal, effects, clock, sessions, archive, integrity };
 }
 const addRead = (id: string, to: Actor) => ({ schemaVersion: 1, changes: [{ kind: 'grant.add', grant: readTool(id, to) }] });
 const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
@@ -122,6 +123,24 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     await writeFile(join(f.root, 'bindings.json'), JSON.stringify({ ...bindings, revision: 'b9' }), { mode: 0o600 });
     await expect(f.admin.submit(f.command('s1', addRead('share', f.me)))).rejects.toMatchObject({ code: 'EFFECT_PRECONDITION_CHANGED' });
     expect((await f.files()).policy.grants).toEqual([]);
+  });
+
+  it('refuses a change that lands between the observation and the write, inside the write lock: terminal refusal, nothing written', async () => {
+    const f = await fixture(() => [], ownerRoot);
+    const pending = await f.admin.submit(f.command('w1', addRead('share', f.me)));
+    if (pending.status !== 'approval-pending') throw new Error('pending expected');
+    await f.decide(f.principal, pending.approval.approvalId);
+    // Another writer replaces bindings after the C11 observation passed and before this write takes the store's window.
+    const racing = { load: () => f.source.load(), identity: () => f.source.identity(), lookupAuthority: (key: string) => f.source.lookupAuthority(key),
+      updateAuthority: async <T>(work: Parameters<typeof f.source.updateAuthority<T>>[0], key?: string) => {
+        const bindings = (await f.files()).bindings;
+        await writeFile(join(f.root, 'bindings.json'), JSON.stringify({ ...bindings, revision: 'b-race' }), { mode: 0o600 });
+        return f.source.updateAuthority(work, key);
+      } };
+    const raced = new PolicyAdministrationApplication({ ...f.deps, authority: racing });
+    await expect(raced.submit(f.command('w1', addRead('share', f.me)))).rejects.toMatchObject({ code: 'EFFECT_PRECONDITION_CHANGED' });
+    expect((await f.files()).policy.grants).toEqual([]);
+    expect(await f.effects.loadEffect('s', 'w1')).toMatchObject({ state: 'refused', refusal: 'EFFECT_PRECONDITION_CHANGED' });
   });
 
   it('is refused by the generic operation producer before any approval, ledger or file access (surface: authority), even with a reachable target', async () => {
