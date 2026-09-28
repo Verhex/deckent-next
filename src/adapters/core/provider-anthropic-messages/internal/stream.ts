@@ -4,7 +4,7 @@ import type { ModelInvocationDelta } from '#domain/index.js';
 import type { NativeJsonHttpParsed, NativeJsonHttpStream } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_MAX_TOOL_CALLS, openAiChatWireObjectSchema, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { anthropicUsageSchema, assembleAnthropicMessage, mergeUsage, stopReasonSchema, type AnthropicUsage, type Reject } from './assemble.js';
-import type { AnthropicContentBlock } from './continuation.js';
+import type { AnthropicContentBlock, AnthropicContinuationScope } from './continuation.js';
 
 /**
  * Wire bound for one streamed response: a fixed multiple of the retained-result bound plus a per-token framing allowance.
@@ -38,7 +38,7 @@ type Open = { type: string; index: number; text: string; signature: string; json
  * cumulative. A mid-stream `error` event (HTTP 200 already sent, for example `overloaded_error`) ends the read as `interrupted`,
  * an uncertain outcome that is never retried; usage past it is not trusted. Without `message_stop` the stream is interrupted.
  */
-export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, scopeId: string): NativeJsonHttpStream {
+export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, events = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [], eventName: string | null = null;
@@ -159,7 +159,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
       if (lineBytes > 0 || data.length > 0 || current) return { reason: stopped ? 'invalid-response' : 'interrupted' };
       if (!stopped || !head || stopReason === null) return { reason: 'interrupted' };
       return assembleAnthropicMessage({ id: head.id, model: head.model, blocks, stopReason, usage,
-        deckent: { stream: { schemaVersion: 1, events, wireBytes, wireSha256: hash.digest('hex') } } }, request, limits, scopeId);
+        deckent: { stream: { schemaVersion: 1, events, wireBytes, wireSha256: hash.digest('hex') } } }, request, limits, memory);
     },
   });
 }

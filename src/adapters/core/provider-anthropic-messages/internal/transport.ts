@@ -6,6 +6,7 @@ import { OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABIL
   openAiChatWireObjectSchema, parseOpenAiChatTextRequest, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_MESSAGES_FAMILY, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, ANTHROPIC_MESSAGES_PROTOCOL_VERSION,
   parseAnthropicMessagesDefinition, parseAnthropicMessagesLimits, type AnthropicMessagesDefinition } from './contract.js';
+import { anthropicPrefixDigest } from './continuation.js';
 import { anthropicMessagesBody } from './messages.js';
 import { parseAnthropicMessageResponse } from './response.js';
 import { createAnthropicMessagesStream } from './stream.js';
@@ -15,7 +16,7 @@ export interface AnthropicMessagesNativeOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
 }
 export type PreparedAnthropicRequest = Readonly<{ definition: AnthropicMessagesDefinition; limits: OpenAiChatHttpLimits; request: OpenAiChatTextRequest;
-  body: string; wire: Record<string, unknown>; scopeId: string }>;
+  body: string; wire: Record<string, unknown>; scopeId: string; prefixDigest: string }>;
 const VERSION_HEADERS = Object.freeze({ 'anthropic-version': ANTHROPIC_MESSAGES_PROTOCOL_VERSION });
 const adapter = Object.freeze({ id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION });
 const countSchema = z.object({ input_tokens: z.number().int().nonnegative().safe() }).passthrough();
@@ -50,8 +51,8 @@ async function sendPrepared(prepared: PreparedAnthropicRequest, options: Anthrop
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
     return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter, headers: VERSION_HEADERS },
       prepared.request.stream === true
-        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, prepared.scopeId), ...(onDelta ? { onDelta } : {}) }
-        : { ...options, parseResponse: body => parseAnthropicMessageResponse(body, prepared.request, prepared.limits, prepared.scopeId) }, signal);
+        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }), ...(onDelta ? { onDelta } : {}) }
+        : { ...options, parseResponse: body => parseAnthropicMessageResponse(body, prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;
     throw new OpenAiChatHttpError(error.code.replace('NATIVE_JSON_HTTP_', 'OPENAI_CHAT_') as OpenAiChatHttpErrorCode, error.status);
@@ -103,7 +104,8 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
       const wire = anthropicMessagesBody(request, adapterDefinition, parsedProfile.data.scopeId);
       const body = JSON.stringify(wire);
       if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
-      const prepared: PreparedAnthropicRequest = Object.freeze({ definition: adapterDefinition, limits, request, body, wire, scopeId: parsedProfile.data.scopeId });
+      const prepared: PreparedAnthropicRequest = Object.freeze({ definition: adapterDefinition, limits, request, body, wire, scopeId: parsedProfile.data.scopeId,
+        prefixDigest: anthropicPrefixDigest(wire['system'], wire['tools'], wire['messages']) });
       const token = Object.freeze({});
       tokens.set(token, prepared);
       if (adapterDefinition.tokenCountEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(token);

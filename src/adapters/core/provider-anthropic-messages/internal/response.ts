@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { NativeJsonHttpParsed } from '#adapters/core/provider-http-json/index.js';
 import { openAiChatWireObjectSchema, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
+import type { AnthropicContinuationScope } from './continuation.js';
 import { anthropicUsageSchema, assembleAnthropicMessage, stopReasonSchema } from './assemble.js';
 
 const block = z.discriminatedUnion('type', [
@@ -13,7 +14,7 @@ const responseSchema = z.object({ id: z.string().min(1), type: z.literal('messag
   content: z.array(block), stop_reason: stopReasonSchema, usage: anthropicUsageSchema }).passthrough();
 
 /** Non-streamed Messages response (compaction and other one-shot calls) with the same validation as the assembled stream. */
-export function parseAnthropicMessageResponse(body: Buffer, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, scopeId: string): NativeJsonHttpParsed {
+export function parseAnthropicMessageResponse(body: Buffer, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope): NativeJsonHttpParsed {
   let raw: unknown;
   try { raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { return { reason: 'invalid-response' }; }
   const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success && responseSchema.safeParse(copied.data);
@@ -21,5 +22,5 @@ export function parseAnthropicMessageResponse(body: Buffer, request: OpenAiChatT
   if (parsed.data.model !== request.model) return { reason: 'model-mismatch' };
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > limits.responseMaxBytes) return { reason: 'response-limit' };
   return assembleAnthropicMessage({ id: parsed.data.id, model: parsed.data.model, blocks: parsed.data.content, stopReason: parsed.data.stop_reason,
-    usage: parsed.data.usage }, request, limits, scopeId);
+    usage: parsed.data.usage }, request, limits, memory);
 }

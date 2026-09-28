@@ -127,7 +127,7 @@ export async function sendNativeJsonHttp(requestInput: NativeJsonHttpRequest, op
   const limits = parseNativeJsonHttpLimits(request.limits);
   const adapter = nativeJsonHttpAdapterSchema.safeParse(ownData(request.adapter, ['id', 'version']));
   const staticHeaders = request.headers === undefined ? { success: true as const, data: {} as Record<string, string> }
-    : nativeJsonHttpStaticHeadersSchema.safeParse(ownData(request.headers, [], Object.keys(request.headers as object)));
+    : nativeJsonHttpStaticHeadersSchema.safeParse(ownData(request.headers, [], request.headers !== null && typeof request.headers === 'object' ? Object.keys(request.headers) : []));
   if (!staticHeaders.success) throw new NativeJsonHttpError('NATIVE_JSON_HTTP_REQUEST_INVALID');
   const body = request.body, parseResponse = optionValues.parseResponse, resolveCredential = optionValues.resolveCredential;
   const stream = optionValues.stream as NativeJsonHttpStream | undefined, onDelta = optionValues.onDelta;

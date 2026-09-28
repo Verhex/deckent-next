@@ -88,7 +88,7 @@ it('sends a header credential verbatim in its own header, never as Authorization
   expect(seen[0]!.authorization).toBeUndefined();
   // Static headers can never shadow what the transport owns, carry control characters, or exceed the bound.
   for (const headers of [{ authorization: 'Bearer x' }, { 'x-api-key': 'k' }, { accept: '*/*' }, { 'content-length': '1' }, { host: 'evil' }, { 'proxy-authorization': 'x' },
-    { 'Upper-Case': 'x' }, { good: 'line\r\nbreak' }, { good: '' }, Object.fromEntries(Array.from({ length: 9 }, (_v, index) => [`h${index}`, 'v']))]) {
+    { 'Upper-Case': 'x' }, { good: 'line\r\nbreak' }, { good: '' }, Object.fromEntries(Array.from({ length: 9 }, (_v, index) => [`h${index}`, 'v'])), null as never, 'x' as never]) {
     await expect(sendNativeJsonHttp({ ...base, headers }, options), JSON.stringify(headers)).rejects.toMatchObject({ code: 'NATIVE_JSON_HTTP_REQUEST_INVALID' });
   }
   expect(seen).toHaveLength(1);

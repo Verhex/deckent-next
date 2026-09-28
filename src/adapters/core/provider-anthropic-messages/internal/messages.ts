@@ -1,6 +1,6 @@
 import { OpenAiChatHttpError, type OpenAiChatTextMessage, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import type { AnthropicMessagesDefinition } from './contract.js';
-import { recallAnthropicContent, type AnthropicContentBlock } from './continuation.js';
+import { anthropicPrefixDigest, recallAnthropicContent, type AnthropicContentBlock } from './continuation.js';
 
 type Block = Record<string, unknown> & { type: string };
 type Wire = { role: 'user' | 'assistant'; content: string | Block[] };
@@ -24,10 +24,10 @@ function sameAssistant(blocks: readonly AnthropicContentBlock[], content: string
     && use['name'] === calls[index]!.function.name && JSON.stringify(use['input']) === JSON.stringify(toolInput(calls[index]!.function.arguments)));
 }
 
-function assistantBlocks(message: Extract<OpenAiChatTextMessage, { role: 'assistant' }>, scopeId: string): string | Block[] {
+function assistantBlocks(message: Extract<OpenAiChatTextMessage, { role: 'assistant' }>, scopeId: string, prefix: () => string): string | Block[] {
   const calls = (message.tool_calls ?? []) as readonly ToolCall[];
   if (calls.length === 0) return (message.content ?? '').trim() === '' ? invalid() : message.content!;
-  const recalled = recallAnthropicContent(scopeId, calls[0]!.id);
+  const recalled = recallAnthropicContent({ scopeId, prefixDigest: prefix() }, calls[0]!.id);
   if (recalled && sameAssistant(recalled, message.content, calls)) return structuredClone(recalled) as Block[];
   return [...(message.content !== null && message.content.trim() !== '' ? [{ type: 'text', text: message.content }] : []),
     ...calls.map(call => ({ type: 'tool_use', id: call.id, name: call.function.name, input: toolInput(call.function.arguments) }))];
@@ -52,6 +52,9 @@ function thinkingOf(request: OpenAiChatTextRequest, definition: AnthropicMessage
  */
 export function anthropicMessagesBody(request: OpenAiChatTextRequest, definition: AnthropicMessagesDefinition, scopeId: string, stream = request.stream === true) {
   const system: string[] = [], wire: Wire[] = [];
+  const tools = request.tools?.map(tool => ({ name: tool.function.name,
+    ...(tool.function.description === undefined ? {} : { description: tool.function.description }), input_schema: tool.function.parameters }));
+  const prefix = () => anthropicPrefixDigest(system.length ? system.join('\n\n') : undefined, tools, wire);
   const push = (role: Wire['role'], content: string | Block[]) => {
     const last = wire.at(-1);
     if (last && last.role === role) last.content = [...blocksOf(last), ...(typeof content === 'string' ? [{ type: 'text', text: content }] : content)];
@@ -60,7 +63,7 @@ export function anthropicMessagesBody(request: OpenAiChatTextRequest, definition
   request.messages.forEach((message, index) => {
     if (message.role === 'system' || message.role === 'developer') { if (wire.length > 0 || index > system.length) invalid(); system.push(message.content); return; }
     if (message.role === 'user') return push('user', message.content);
-    if (message.role === 'assistant') return push('assistant', assistantBlocks(message, scopeId));
+    if (message.role === 'assistant') return push('assistant', assistantBlocks(message, scopeId, prefix));
     if (message.role !== 'tool') return invalid();
     push('user', [{ type: 'tool_result', tool_use_id: message.tool_call_id, ...(message.content === '' ? {} : { content: message.content }) }]);
   });
@@ -70,8 +73,7 @@ export function anthropicMessagesBody(request: OpenAiChatTextRequest, definition
   const maxTokens = request.max_completion_tokens;
   if (thinking?.['type'] === 'enabled' && Number(thinking['budget_tokens']) >= maxTokens) invalid();
   return { model: request.model, max_tokens: maxTokens, stream, ...(system.length ? { system: system.join('\n\n') } : {}), messages: wire,
-    ...(request.tools ? { tools: request.tools.map(tool => ({ name: tool.function.name,
-      ...(tool.function.description === undefined ? {} : { description: tool.function.description }), input_schema: tool.function.parameters })) } : {}),
+    ...(tools ? { tools } : {}),
     ...(request.tool_choice ? { tool_choice: { type: request.tool_choice } } : {}),
     ...(thinking ? { thinking } : {}),
     ...(definition.cache && definition.cache !== 'none' ? { cache_control: definition.cache === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' } } : {}) };

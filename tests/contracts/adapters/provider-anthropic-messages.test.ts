@@ -89,6 +89,19 @@ it('maps the neutral request onto the Messages wire: system lifted, tool calls a
   expect(() => anthropicMessagesBody({ ...plain, messages: [{ role: 'user', content: 'x' }, { role: 'system', content: 'late' }] }, definition, 'scope')).toThrow();
 });
 
+it('maps a compacted history (summary as the first user message, kept tail after it) without breaking alternation', () => {
+  const definition = parseAnthropicMessagesDefinition(profile('https://api.anthropic.com/v1/messages').adapter.definition);
+  const call = { id: 'toolu_9', type: 'function' as const, function: { name: 'read_file', arguments: '{"path":"x"}' } };
+  // The loop's shape after compaction: system, one user summary, then a tail that may start with a user or an assistant message.
+  for (const tail of [[{ role: 'user' as const, content: 'question' }], [{ role: 'assistant' as const, content: 'answer' }, { role: 'user' as const, content: 'next' }],
+    [{ role: 'assistant' as const, content: null, tool_calls: [call] }, { role: 'tool' as const, tool_call_id: 'toolu_9', content: 'body' }]]) {
+    const body = anthropicMessagesBody({ model: MODEL, max_completion_tokens: 64, tools: [tool], messages: [{ role: 'system', content: 'sys' },
+      { role: 'user', content: '[Deckent context summary: replaces 4 earlier messages ...]' }, ...tail] }, definition, 'scope', true);
+    expect(body.system).toBe('sys'); expect(body.messages[0]!.role).toBe('user'); expect(body.messages.at(-1)!.role).toBe('user');
+    expect(body.messages.every((message, index, all) => index === 0 || message.role !== all[index - 1]!.role)).toBe(true);
+  }
+});
+
 it('sends the key only in x-api-key with the pinned version, streams text and summarized thinking, and assembles bounded evidence', async () => {
   let headers: IncomingMessage['headers'] = {}, sent = '';
   const wire = startEvent({ input_tokens: 25, cache_creation_input_tokens: 10, cache_read_input_tokens: 100, output_tokens: 1, cache_creation: { ephemeral_5m_input_tokens: 10, ephemeral_1h_input_tokens: 0 } })
@@ -125,7 +138,7 @@ it('assembles a tool turn from input_json_delta and replays the received thinkin
   const message = (result.native as { choices: { finish_reason: string; message: { content: string; tool_calls: unknown[] } }[] }).choices[0]!;
   expect(message.finish_reason).toBe('tool_calls');
   expect(message.message.tool_calls).toEqual([{ id: 'toolu_01', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.ts"}' } }]);
-  const followUp = (args: string) => streamed({ tools: [tool], tool_choice: 'auto', messages: [{ role: 'user', content: 'hi' },
+  const followUp = (args: string, earlier = 'hi') => streamed({ tools: [tool], tool_choice: 'auto', messages: [{ role: 'system', content: 'be brief' }, { role: 'user', content: earlier },
     { role: 'assistant', content: 'Reading.', tool_calls: [{ id: 'toolu_01', type: 'function', function: { name: 'read_file', arguments: args } }] },
     { role: 'tool', tool_call_id: 'toolu_01', content: 'file body' }] });
   await run(endpoint, followUp('{"path":"a.ts"}'));
@@ -135,6 +148,10 @@ it('assembles a tool turn from input_json_delta and replays the received thinkin
   // History edited since the block was issued: it is never replayed against different content.
   await run(endpoint, followUp('{"path":"b.ts"}'));
   expect(JSON.stringify(JSON.parse(calls[2]!).messages[1])).not.toContain('SIG-A');
+  // Nor when the history before it changed (a compaction, an edit): the API binds a replayed block to its prefix.
+  await run(endpoint, followUp('{"path":"a.ts"}', 'hi, but rewritten by a compaction'));
+  expect(JSON.stringify(JSON.parse(calls[3]!).messages[1])).not.toContain('SIG-A');
+  expect(JSON.parse(calls[3]!).messages[1].content).toEqual([{ type: 'text', text: 'Reading.' }, { type: 'tool_use', id: 'toolu_01', name: 'read_file', input: { path: 'a.ts' } }]);
 });
 
 it('rejects protocol defects without trusting usage: mid-stream error, missing stop, mismatch, bad order, tool defects', async () => {

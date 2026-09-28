@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { JsonObject, ModelInvocationRejectionReason } from '#domain/index.js';
 import { checkedToolCalls, openAiChatUsageSchema, openAiChatWireObjectSchema, type OpenAiChatHttpLimits,
   type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
-import { rememberAnthropicContent, type AnthropicContentBlock } from './continuation.js';
+import { rememberAnthropicContent, type AnthropicContentBlock, type AnthropicContinuationScope } from './continuation.js';
 
 const count = z.number().int().nonnegative().safe();
 const nullableCount = count.nullable().optional();
@@ -33,7 +33,7 @@ type Done = { response: Readonly<{ schemaVersion: 1; native: JsonObject; usage: 
  * tool_use blocks as function calls validated against the declared tools, usage with the provider's cache classes preserved
  * under `anthropic` (`prompt_tokens` counts every input class). The result is bounded provenance, not the provider body.
  */
-export function assembleAnthropicMessage(input: Assembly, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, scopeId: string): Done {
+export function assembleAnthropicMessage(input: Assembly, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope): Done {
   const finish = (FINISH as Record<string, string | undefined>)[input.stopReason];
   const usage = input.usage;
   if (!finish || !usage || usage.output_tokens === undefined || usage.input_tokens === null || usage.input_tokens === undefined) return { reason: 'invalid-response' };
@@ -61,6 +61,6 @@ export function assembleAnthropicMessage(input: Assembly, request: OpenAiChatTex
   const copied = openAiChatWireObjectSchema.safeParse(native);
   if (!copied.success) return { reason: 'invalid-response' };
   if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > limits.responseMaxBytes) return { reason: 'response-limit' };
-  rememberAnthropicContent(scopeId, input.blocks);
+  rememberAnthropicContent(memory, input.blocks);
   return { response: Object.freeze({ schemaVersion: 1 as const, native: copied.data, usage: copied.data['usage'] as JsonObject }) };
 }
