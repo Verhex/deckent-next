@@ -47,13 +47,18 @@ export async function gitWorktreeRepository(root: string): Promise<string | null
  * are not scanned and are read-write as a whole. Past a bound the set is refused, never cut.
  */
 export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {},
-  fsOps: (path: string) => FsOps = fsOpsFor, writeFloorReadOnly = false): Promise<LandlockRuleSet> {
+  fsOps: (path: string) => FsOps = fsOpsFor, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean } = {}): Promise<LandlockRuleSet> {
   const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied, ignoredDirs } = input.project;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees take read-only rules (their
   // directory is carved, so the entry cannot be replaced or removed either). A floor path that does not exist yet is not covered here.
-  const floored = writeFloorReadOnly && input.writeFloor ? input.writeFloor : () => false;
+  // Fail closed (Astra 2170 R2): a read-only floor asked of a layout that does not know the floor is refused, never run with it writable.
+  if (write.floorReadOnly && !input.writeFloor) return { ok: false, reason: 'the write floor is not known to this sandbox view' };
+  const floored = write.floorReadOnly && input.writeFloor ? input.writeFloor : () => false;
+  // Astra 2170 R1: an unbounded unattended call sees the whole project read-only (only the scratch area stays writable).
+  const projectClass: 'w' | 'r' = write.projectReadOnly ? 'r' : 'w';
   // MODES-3: a full-access turn writes Git metadata (commit, branch): its clean entries take `w` rules; the inode floor is unchanged.
-  const git = input.repositoryWritable ? 'w' as const : 'r' as const;
+  // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3).
+  const git = input.repositoryWritable && !write.projectReadOnly ? 'w' as const : 'r' as const;
   let seen = 0;
   let gitSeen = 0;
   /**
@@ -85,7 +90,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   const anchors = [...input.project.protectedAnchors];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
-  const carveProtected = async (rel: string, depth: number): Promise<readonly LandlockRule[]> => {
+  const carveProtected = async (rel: string, depth: number, cls: 'w' | 'r'): Promise<readonly LandlockRule[]> => {
     let entries: Dirent[];
     const path = join(root, rel);
     try { entries = await fsOps(path).readdir(path); } catch { return []; }
@@ -96,8 +101,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       const child = `${rel}/${entry.name}`;
       if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); continue; }
       if (denied(child)) continue;
-      if (entry.isDirectory() && hasProtectedBeneath(child)) rules.push(...await carveProtected(child, depth + 1));
-      else if (entry.isDirectory() || entry.isFile()) rules.push(['w', child]);
+      if (entry.isDirectory() && hasProtectedBeneath(child)) rules.push(...await carveProtected(child, depth + 1, cls));
+      else if (entry.isDirectory() || entry.isFile()) rules.push([cls, child]);
     }
     return rules;
   };
@@ -122,7 +127,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (entry.isDirectory()) {
         const floor = cls === 'w' && floored(`${child}/-`);
         if (ignoredDirs.has(entry.name)) {
-          if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1), carve: true };
+          if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1, cls), carve: true };
           return floor ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
         }
         if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);
@@ -137,7 +142,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
     return [['l', rel], ...verdicts.flatMap(verdict => verdict.clean ? [[cls, verdict.clean] as const] : []), ...verdicts.flatMap(verdict => verdict.rules ?? [])];
   };
   try {
-    const project = await scan('.', 0) ?? [['w', '.'] as const];
+    const project = await scan('.', 0, projectClass) ?? [[projectClass, '.'] as const];
     const system: LandlockRule[] = [];
     // The Node runtime the service runs on (its bin and lib, not its etc): `node`/`npm` work inside the sandbox. Only an installation
     // prefix (`<prefix>/bin/node`); a node elsewhere (e.g. `~/bin/node`) must not open its parent directory.
@@ -170,7 +175,7 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
       if (!await exists(HELPER, 'any')) return refuse('the sandbox helper is not installed (native build missing)');
-      const built = await buildLandlockRules(input, {}, fsOpsFor, request.writeFloorReadOnly === true);
+      const built = await buildLandlockRules(input, {}, fsOpsFor, { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true });
       if (!built.ok) return refuse(built.reason);
       const prefix = ['--abi', String(abi), '--root', input.project.root, ...built.rules.flatMap(([cls, path]) => ['--rule', cls, path]), '--'];
       return runShellProcess({ file: HELPER, args: command => [...prefix, BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)], statusChannel: true },

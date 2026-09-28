@@ -5,6 +5,8 @@
 export interface BubblewrapView {
   /** The project root: read-write (the one place a command changes). */
   readonly projectRoot: string;
+  /** Astra 2170 R1: the project bound read-only (an unbounded call the owner did not approve); absent = read-write. */
+  readonly projectReadOnly?: boolean;
   /** The conversation's scratch area (SCR-A; the command's TMPDIR): read-write. */
   readonly scratchDir: string | null;
   /** The service user's HOME: an empty tmpfs (never bound — `~/.ssh`, `~/.aws`, tokens and the product ledger stay invisible). */
@@ -42,7 +44,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   if (view.home) args.push('--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home);
   for (const path of view.systemPaths) args.push('--ro-bind-try', path, path);
   for (const path of view.toolchainPaths) args.push('--ro-bind-try', path, path);
-  args.push('--bind', view.projectRoot, view.projectRoot);
+  args.push(view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot);
   for (const path of view.writablePaths ?? []) args.push('--bind', path, path);
   for (const path of view.readOnlyPaths) args.push('--ro-bind', path, path);
   for (const path of view.maskedDirectories) args.push('--tmpfs', path);

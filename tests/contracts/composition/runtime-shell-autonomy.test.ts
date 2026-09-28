@@ -152,4 +152,33 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     expect(approved.text).toContain('./package.json');
     expect(f.audit().map(record => record.event.subject)).toEqual([expect.objectContaining({ kind: 'standing-approval', phase: 'used', source: 'grant', grantId: 'standing-1' })]);
   }, 120_000);
+
+  // Astra 2170 R1: a name the classifier cannot see (built at run time) must not create a write-floor path without a card. A full-auto sandbox
+  // relaxation runs with the whole project read-only (only the scratch area and bubblewrap's private /tmp stay writable): a boundary, not a
+  // list of names. The narrow set keeps writing (its literal targets pass the write check); an owner-approved call writes the floor.
+  for (const realm of ['bubblewrap', 'landlock'] as const) {
+    it.skipIf(realm === 'bubblewrap' ? !bwrapReady : landlockAbi < 6)(`${realm}: no new floor path (or any project file) appears from an unattended unbounded run; the narrow set still writes`, async () => {
+      const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
+      const created = ['src/package.json', '.github/workflows/x.yml', 'Makefile', 'sub/Dockerfile', 'notes.txt'];
+      for (const command of ['f=pack; echo X > src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x > ${d}hub/workflows/x.yml', 'm=Make; echo x > ${m}file',
+        'mkdir -p sub && d=Docker; echo x > sub/${d}file', 'echo hi > notes.txt && cat notes.txt']) {
+        const result = await f.call('run_shell', { command });
+        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: 'error' });
+        expect(result.text).toContain('the project was read-only for this unattended run');
+      }
+      for (const path of created) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(access(join(f.project, 'sub'))).rejects.toMatchObject({ code: 'ENOENT' });
+      // Reading and writing outside the project stay silent and work; the narrow set writes the project as before.
+      expect(await f.call('run_shell', { command: 'cat src/a.ts && echo "$(date +%s)" > "$TMPDIR/stamp" 2>/dev/null; ls src' })).toMatchObject({ card: false });
+      // (`src/`: the Landlock realm's project root cannot gain entries — its carve, unchanged by this slice.)
+      expect(await f.call('run_shell', { command: 'cp src/a.ts src/out.ts' })).toMatchObject({ card: false, status: 'ok' });
+      expect(await readFile(join(f.project, 'src/out.ts'), 'utf8')).toBe('export const a = 1;\n');
+    }, 120_000);
+  }
+
+  it.skipIf(!bwrapReady)('bubblewrap: an owner-approved compound command still writes a new floor path', async () => {
+    const f = await modeRuntime({ grants: LIVE, mode: 'ask', ...REALMS.bubblewrap });
+    expect(await f.call('run_shell', { command: 'f=pack; echo \'{}\' > src/${f}age.json' }, 'allow')).toMatchObject({ card: true, status: 'ok' });
+    expect(await readFile(join(f.project, 'src/package.json'), 'utf8')).toBe('{}\n');
+  }, 60_000);
 });

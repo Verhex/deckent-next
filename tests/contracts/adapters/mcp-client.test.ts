@@ -206,7 +206,8 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
     const listener = createServer(socket => socket.destroy()); listeners.push(listener);
     await new Promise<void>(done => listener.listen(0, '127.0.0.1', done));
     const port = (listener.address() as { port: number }).port;
-    const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null })];
+    // Astra 2170 R2: a server view always carries the write floor; a layout without it is refused (fail closed).
+    const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
     const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const probe = { name: 'probe', description: 'What can I reach', inputSchema: { type: 'object', properties: {} } };
     const run = async (realm: 'require-sandbox' | 'host') => {
@@ -247,9 +248,9 @@ describe.skipIf(!sandboxReady)('MCP client: the write floor in the server\'s bub
     const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
     const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const tool = { name: 'write', description: 'Append to files', inputSchema: { type: 'object', properties: {} } };
-    const run = async (realm: 'require-sandbox' | 'host') => {
-      const server = { id: realm === 'host' ? 'writer-host' : 'writer-caged', command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'),
-        join(project, 'package.json'), join(project, 'src', 'notes.txt')], env: {}, realm, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
+    const run = async (realm: 'require-sandbox' | 'host', floor = join(project, 'package.json')) => {
+      const server = { id: `${realm === 'host' ? 'writer-host' : 'writer-caged'}-${floor.length}`, command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'),
+        floor, join(project, 'src', 'notes.txt')], env: {}, realm, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
       const p = pool(), opened = await p.open(server, settings([server], { connectTimeoutMs: 20_000 }), { cwd: project, environment, sandboxes });
       expect(opened).toMatchObject({ ok: true, sandboxed: realm !== 'host' });
       const answer = await p.call(server.id, 'write', pinOf(tool).digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
@@ -257,7 +258,19 @@ describe.skipIf(!sandboxReady)('MCP client: the write floor in the server\'s bub
     };
     expect(await run('require-sandbox')).toEqual({ floor: 'EROFS', plain: 'written' });
     expect(readFileSync(join(project, 'package.json'), 'utf8')).toBe('{}\n');
+
+    // Measured residual (Astra 2170, overlay checkpoint): a long-lived server keeps the project writable, so a floor name that does not exist
+    // yet can still be created by it — only the existing floor paths are read-only in its view.
+    expect(await run('require-sandbox', join(project, 'src', 'package.json'))).toEqual({ floor: 'written', plain: 'written' });
+    expect(existsSync(join(project, 'src', 'package.json'))).toBe(true);
     expect(await run('host')).toEqual({ floor: 'written', plain: 'written' });
+    // Fail closed (Astra 2170 R2): a server view built without the write floor does not start at all.
+    const bare = { id: 'writer-bare', command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'), join(project, 'package.json'), join(project, 'src', 'notes.txt')],
+      env: {}, realm: 'require-sandbox' as const, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
+    writeFileSync(join(project, 'package.json'), '{}\n');
+    expect(await pool().open(bare, settings([bare], { connectTimeoutMs: 20_000 }), { cwd: project, environment,
+      sandboxes: [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: null })] })).toMatchObject({ ok: false });
+    expect(readFileSync(join(project, 'package.json'), 'utf8')).toBe('{}\n');
   }, 60_000);
 });
 

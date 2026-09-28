@@ -60,7 +60,8 @@ export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
     },
   };
 }
-/** The shipped sandbox providers for a server started outside the service (`inspect`): the shell's, in its order, without a scratch area. */
-export const mcpInspectSandboxes = (project: ShellSandboxLayout['project']) => [bubblewrapShellSandbox({ project, scratchDir: null }),
-  landlockShellSandbox({ project, scratchDir: null })];
+/** The shipped sandbox providers for a server started outside the service (`inspect`: trust, health, restart): the shell's, in its order,
+ * without a scratch area, with the same write floor as a turn's launch (Astra 2170 R2: one contract for every server start). */
+export const mcpInspectSandboxes = (project: ShellSandboxLayout['project'], writeFloor: NonNullable<ShellSandboxLayout['writeFloor']>) =>
+  [bubblewrapShellSandbox({ project, scratchDir: null, writeFloor }), landlockShellSandbox({ project, scratchDir: null, writeFloor })];
 

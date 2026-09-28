@@ -24,8 +24,9 @@ export interface ShellSandboxLayout {
   readonly project: { readonly root: string; readonly ignoredDirs: ReadonlySet<string>; readonly protectedAnchors: ReadonlySet<string>; denied(rel: string): boolean };
   readonly scratchDir: string | null;
   /** SHELL-AUTONOMY: the write floor over a workspace-relative path (a call the owner did not approve sees its existing paths read-only). */
-  readonly writeFloor?: (rel: string) => boolean;
-  /** MODES-3: a full-access turn — `.git` (and a worktree's common repository) is writable (commit, branch); the inode floor still holds. */
+  readonly writeFloor: ((rel: string) => boolean) | null;
+  /** MODES-3: a full-access turn — `.git` (and a worktree's common repository) is writable (commit, branch) unless the call's project is
+   * read-only; the inode floor still holds. */
   readonly repositoryWritable?: boolean;
 }
 /** A sandbox mechanism (S9 bubblewrap, S11 Landlock) as a realm provider: usable on the measured host — then its realm, marker,
