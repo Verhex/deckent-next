@@ -29,6 +29,10 @@ export interface ShellRealmRequest {
   /** A call the owner did not approve (a mode relaxation or a silent decision): a sandbox realm keeps the write floor's existing paths
    * read-only (SHELL-AUTONOMY: the floor never goes silent). The host realm cannot and does not: it is never silent for such commands. */
   readonly writeFloorReadOnly?: boolean;
+  /** A call whose command the classifier could not bound and the owner did not approve (a full-auto sandbox relaxation): a sandbox realm
+   * keeps the whole project read-only — only the scratch area (and bubblewrap's private `/tmp`) are writable — so no name, existing or
+   * new, can appear in the project without a card (Astra 2170 R1). */
+  readonly projectReadOnly?: boolean;
 }
 export interface ShellRealmResult {
   /** `exited` with its code (or the signal that ended it), `timed-out` / `cancelled` after the group was killed, `spawn-failed`. */

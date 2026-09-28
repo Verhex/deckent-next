@@ -91,11 +91,13 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
  * too). Over the entry/mask bounds the view is refused (the command will not run), never left unmasked.
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
-  options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, writeFloorReadOnly = false): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+  options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
   const maxEntries = options.maxEntries ?? BUBBLEWRAP_WALK_MAX_ENTRIES, fsOps = options.fsOps ?? fsOpsFor;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:
   // no write, rename or unlink lands); the deny masks inside them still follow. A floor path that does not exist yet is not covered here.
-  const floored = writeFloorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
+  // Fail closed (Astra 2170 R2): a read-only floor asked of a layout that does not know the floor is refused, never run with it writable.
+  if (write.floorReadOnly && !layout.writeFloor) return { ok: false, reason: 'the write floor is not known to this sandbox view' };
+  const floored = write.floorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
   const root = layout.project.root;
   const readOnly = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
   let entries = 0, gitEntries = 0;
@@ -199,7 +201,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const scratchDir = layout.scratchDir;
   const homeDir = home && isAbsolute(home) ? home : null;
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
-  return { ok: true, view: Object.freeze({ projectRoot: root, scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
+  return { ok: true, view: Object.freeze({ projectRoot: root, ...(write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     toolchainPaths, readOnlyPaths: [...readOnly], maskedDirectories, maskedFiles }) };
 }
 
@@ -211,7 +213,8 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
 export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: BubblewrapOptions = {}): ShellSandbox {
   const run = (bwrap: string): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
     const started = performance.now();
-    const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options, request.writeFloorReadOnly === true);
+    const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options,
+      { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true });
     if (!view.ok) {
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
@@ -228,7 +231,7 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
       // third-party code no card approves call by call, so its view keeps the write floor's existing paths read-only (SHELL-AUTONOMY, lead).
       const launch = async (environment: Readonly<Record<string, string | undefined>>) => {
-        const view = await resolveBubblewrapView(layout, environment, options, true);
+        const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: true });
         return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view) } : { ok: false as const, reason: view.reason };
       };
       return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null, containment: 'sandbox', launch };

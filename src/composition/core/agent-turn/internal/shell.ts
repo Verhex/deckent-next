@@ -18,6 +18,8 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  */
 export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
+/** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */
+const PROJECT_READ_ONLY_NOTE = '[deckent] the project was read-only for this unattended run: change project files with the edit tools, or with a command the owner approves.';
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
@@ -106,8 +108,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       };
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      // A call the owner did not approve sees the write floor read-only inside a sandbox (SHELL-AUTONOMY: the floor never goes silent).
-      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly: !approved,
+      // A call the owner did not approve sees the write floor read-only inside a sandbox; one the classifier could not bound (anything but
+      // the narrow set) sees the whole project read-only, so no new floor name can appear either (SHELL-AUTONOMY, Astra 2170 R1).
+      const projectReadOnly = !approved && planned.tier !== 'narrow-mutating';
+      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly: !approved, projectReadOnly,
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
@@ -121,7 +125,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm), cleanup: ran.cleanup };
+        const note = projectReadOnly && ran.exitCode !== 0 && planned.realm.containment !== 'host' ? `\n${PROJECT_READ_ONLY_NOTE}` : '';
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${note}`, cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
