@@ -40,8 +40,6 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   scratch?: Record<string, unknown>; shell?: Record<string, unknown>;
   /** FETCH: the `terminal.fetch` section, and the test-only transport handed to the in-process service (never config or env). */
   fetch?: Record<string, unknown>; fetchTransport?: HttpFetchTransport;
-  /** MCP-CLIENT: the `mcp.clients` section (the owner's local MCP servers and their pinned tools). */
-  mcpClients?: Record<string, unknown>;
   /** S9/S11: the sandbox providers a shell call may pick (code-only port); `() => []` is the "no sandbox mechanism usable" host. */
   sandboxes?: ShellSandboxFactory } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
@@ -103,7 +101,6 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
-    ...(options.mcpClients ? { mcp: { clients: options.mcpClients } } : {}),
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
       maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);

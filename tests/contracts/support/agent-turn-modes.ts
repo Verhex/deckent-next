@@ -43,8 +43,7 @@ const baseGrants = [
   { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'scope', ids: ['scope'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 
-/** `config` adds top-level configuration sections (MCP-CLIENT: `mcp.clients`). */
-export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null; config?: Record<string, unknown> }) {
+export async function modeRuntime(input: { grants: Record<string, unknown>[]; mode: Mode | null }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-modes-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }),
@@ -82,7 +81,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 262144, responseMaxBytes: 65536, maxConnections: 8, maxConcurrentRequests: 4,
-      maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 }, ...(input.config ?? {}) }), { mode: 0o600 });
+      maxConcurrentExecutions: 2, headerTimeoutMs: 1000, responseTimeoutMs: 1000, shutdownGraceMs: 50 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
     new ModelBindingApplication({ async read() { return catalog; } }), async () => openSqliteModelActivationStore(ledger, sqlite), () => 1)

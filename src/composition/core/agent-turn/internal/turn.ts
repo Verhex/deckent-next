@@ -11,7 +11,7 @@ import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  bubblewrapShellSandbox, landlockShellSandbox, McpClientPool, readMcpClientSettings, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel,
+  bubblewrapShellSandbox, landlockShellSandbox, loadMcpRegistry, MCP_PROJECT_REGISTRY_PATH, McpClientPool, mcpClientSettings, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel,
   type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
@@ -77,7 +77,8 @@ export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): 
     const path = rel.split(sep).join('/'), slash = path.lastIndexOf('/');
     return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
   });
-  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...owned]);
+  // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
+  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...owned, `${MCP_PROJECT_REGISTRY_PATH}*`, MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
 }
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
@@ -132,8 +133,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says there is no network.
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
-    // MCP-CLIENT: only pinned tools of the owner's servers whose definition still matches; a server runs in its realm (shell's sandboxes, no scratch).
-    const mcpSettings = workspace ? readMcpClientSettings(config) : null, mcp = workspace && mcpSettings?.servers.length ? await createAgentMcp({ pool: host.mcp,
+    // MCP-CLIENT: approved servers of the scoped registry files, pinned tools whose definition still matches; each in its realm (no scratch).
+    const mcpSettings = workspace && mcpClientSettings(await loadMcpRegistry({ projectRoot, layout: context.layout, environment: options.env ?? process.env,
+      secret: async name => options.secretResolver ? options.secretResolver(name) : (options.env ?? process.env)[name] }), { resultMaxBytes: chat.readResultMaxBytes,
+      inputMaxBytes: context.config.mcp.inputMaxBytes }), mcp = workspace && mcpSettings ? await createAgentMcp({ pool: host.mcp,
       settings: mcpSettings, launch: { cwd: workspace.scope.root, environment: options.env ?? process.env, sandboxes: host.shellSandboxes({ project: workspace.scope,
         scratchDir: null }) }, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,

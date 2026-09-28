@@ -8,25 +8,6 @@ type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: r
 function field<T extends z.ZodTypeAny>(descriptionKey: string, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
   return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since }) });
 }
-/** Deckent as an MCP client (MCP-CLIENT, owner 2026-09-28 S6 a): the owner's local stdio servers and the tools pinned by name and
- * definition digest (`mcp.clients`). Optional and versioned on its own (additive; the config schema version is unchanged). Variable names only,
- * never values. */
-export const MCP_CLIENTS_SETTINGS = z.object({
-  schemaVersion: z.literal(1),
-  connectTimeoutMs: z.number().int().min(1_000).max(120_000).default(15_000),
-  callTimeoutMs: z.number().int().min(1_000).max(3_600_000).default(120_000),
-  resultMaxBytes: z.number().int().min(1_024).max(1_048_576).default(65_536),
-  maxRestarts: z.number().int().min(0).max(20).default(3),
-  servers: z.array(z.object({
-    id: z.string().regex(/^[a-z][a-z0-9]{0,15}$/),
-    command: z.string().min(1).max(4_096),
-    args: z.array(z.string().max(4_096)).max(64).default([]),
-    environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
-    realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).default('prefer-sandbox'),
-    tools: z.array(z.object({ name: z.string().min(1).max(128), digest: z.string().regex(/^[a-f0-9]{64}$/), alwaysAsk: z.boolean().default(false) }).strict())
-      .max(256).refine(tools => new Set(tools.map(tool => tool.name)).size === tools.length, 'MCP_TOOL_PIN_DUPLICATE').default([]),
-  }).strict()).max(32).refine(servers => new Set(servers.map(server => server.id)).size === servers.length, 'MCP_SERVER_DUPLICATE').default([]),
-}).strict();
 const providerId = z.string().trim().min(1).nullable().default(null);
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
 export const CONFIG_FIELDS = Object.freeze({
@@ -63,7 +44,6 @@ export const CONFIG_FIELDS = Object.freeze({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
-    clients: MCP_CLIENTS_SETTINGS.optional(),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   service: field('config.field.service', z.object({
     identity: z.object({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).strict().nullable().default(null),

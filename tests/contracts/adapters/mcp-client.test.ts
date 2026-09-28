@@ -4,8 +4,8 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
-  readMcpClientSettings, verifyMcpTools, type McpClientSettings, type McpLiveTool } from '#adapters/index.js';
+import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
+  readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, type McpClientSettings, type McpLiveTool } from '#adapters/index.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
 // and 2026-07-28 `server/discover`), the pinned tool list, bounded redacted results, timeouts and a bounded restart. Every server here is a
@@ -26,7 +26,7 @@ function fixture(mode: 'legacy' | 'dual' | 'modern', tools: unknown[] = [echo]) 
   const events = () => readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { event: string; name?: string; arguments?: unknown; aborted?: boolean; pid: number });
   return { root, toolsFile, events, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)),
     server: (pins: readonly { name: string; digest: string; alwaysAsk?: boolean }[], id = 'fx') => ({ id, command: process.execPath,
-      args: [FIXTURE, '--mode', mode, '--tools', toolsFile, '--log', logFile], environment: [], realm: 'host' as const,
+      args: [FIXTURE, '--mode', mode, '--tools', toolsFile, '--log', logFile], env: {}, realm: 'host' as const,
       tools: pins.map(pin => ({ alwaysAsk: false, ...pin })) }) };
 }
 const settings = (servers: McpClientSettings['servers'], extra: Partial<McpClientSettings> = {}): McpClientSettings => ({ connectTimeoutMs: 10_000,
@@ -50,18 +50,9 @@ describe('MCP client: pin and names (pure)', () => {
     expect(mcpToolWireName('files', 'x'.repeat(60))).toBeNull();
     expect(mcpToolWireName('files', '')).toBeNull();
   });
-  it('config: absent → null; servers keep their pins; ids are unique', () => {
-    expect(readMcpClientSettings({ mcp: {} })).toBeNull();
-    const read = readMcpClientSettings({ mcp: { inputMaxBytes: 65_536, clients: { schemaVersion: 1, servers: [{ id: 'files', command: 'node', args: ['s.mjs'],
-      tools: [{ name: 'echo', digest: 'a'.repeat(64) }] }] } } });
-    expect(read).toMatchObject({ connectTimeoutMs: 15_000, callTimeoutMs: 120_000, resultMaxBytes: 65_536, maxRestarts: 3, inputMaxBytes: 65_536,
-      servers: [{ id: 'files', realm: 'prefer-sandbox', environment: [], tools: [{ name: 'echo', digest: 'a'.repeat(64), alwaysAsk: false }] }] });
-    expect(() => readMcpClientSettings({ mcp: { clients: { schemaVersion: 1, servers: [{ id: 'a', command: 'x' }, { id: 'a', command: 'y' }] } } })).toThrow();
-    expect(() => readMcpClientSettings({ mcp: { clients: { schemaVersion: 1, servers: [{ id: 'Bad_Id', command: 'x' }] } } })).toThrow();
-  });
   it('verification offers only pinned, matching, mappable tools; the floor comes from the pin or an explicit destructive hint', () => {
     const destructive = tool('drop', 'echo', { annotations: { destructiveHint: true } }), plain = tool('plain', 'echo'), odd = { name: 'odd', inputSchema: { type: 'string' } };
-    const verdicts = verifyMcpTools({ id: 'fx', command: 'x', args: [], environment: [], realm: 'host', tools: [
+    const verdicts = verifyMcpTools({ id: 'fx', command: 'x', args: [], env: {}, realm: 'host', tools: [
       { ...pinOf(echo), alwaysAsk: false }, { ...pinOf(destructive), alwaysAsk: false }, { ...pinOf(plain), alwaysAsk: true },
       { name: 'gone', digest: 'b'.repeat(64), alwaysAsk: false }, { name: 'odd', digest: mcpToolPinDigest(odd as McpLiveTool), alwaysAsk: false }] },
     [{ ...echo, description: 'changed' }, destructive, plain, odd as McpLiveTool, tool('extra', 'echo')]);
@@ -186,7 +177,7 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
     const probe = { name: 'probe', description: 'What can I reach', inputSchema: { type: 'object', properties: {} } };
     const run = async (realm: 'require-sandbox' | 'host') => {
       const server = { id: realm === 'host' ? 'raw' : 'caged', command: process.execPath, args: [join(project, 'tools', 'raw-mcp.mjs'), join(home, 'secret.txt'), String(port)],
-        environment: [], realm, tools: [{ ...pinOf(probe), alwaysAsk: false }] };
+        env: {}, realm, tools: [{ ...pinOf(probe), alwaysAsk: false }] };
       const p = pool(), opened = await p.open(server, settings([server], { connectTimeoutMs: 20_000 }), { cwd: project, environment, sandboxes });
       expect(opened).toMatchObject({ ok: true, era: 'legacy', sandboxed: realm !== 'host', tools: [{ name: 'probe', status: 'pinned' }] });
       const answer = await p.call(server.id, 'probe', pinOf(probe).digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
@@ -197,4 +188,56 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
     const caged = await run('require-sandbox');
     expect(caged.home).toBe('ENOENT'); expect(caged.network).not.toBe('reached');
   }, 60_000);
+});
+
+// Scoped registry files (owner 2026-09-28): servers live outside configuration, trust and pins in product state.
+describe('MCP registry: scopes, precedence, expansion and the trust record', () => {
+  const entry = (command: string, extra: Record<string, unknown> = {}) => ({ command, ...extra });
+  it('each name comes whole from its highest scope — managed > local > project > user; an invalid override blocks the name; company lists apply', () => {
+    const sources = [{ scope: 'user' as const, file: 'u', servers: { a: entry('user-a'), b: entry('user-b'), c: entry('user-c'), d: entry('user-d') } },
+      { scope: 'project' as const, file: 'p', servers: { a: entry('project-a'), b: entry('project-b'), c: entry('project-c'), e: entry('project-e') } },
+      { scope: 'local' as const, file: 'l', servers: { a: entry('local-a'), c: { command: 'local-c', trusted: true } } }];
+    const plain = resolveMcpRegistry(sources, null);
+    const by = Object.fromEntries(plain.servers.map(server => [server.name, server]));
+    expect(by['a']).toMatchObject({ scope: 'local', entry: { command: 'local-a' }, shadows: ['project', 'user'] });
+    expect(by['b']).toMatchObject({ scope: 'project', entry: { command: 'project-b' }, shadows: ['user'] });
+    expect(by['d']).toMatchObject({ scope: 'user' }); expect(by['c']).toBeUndefined();
+    expect(plain.problems).toEqual([expect.objectContaining({ name: 'c', scope: 'local', reason: 'invalid-entry' })]);
+    const managed = resolveMcpRegistry(sources, { servers: { b: entry('company-b') }, allowed: ['a', 'b'], denied: ['a'] });
+    const company = Object.fromEntries(managed.servers.map(server => [server.name, server]));
+    expect(company['b']).toMatchObject({ scope: 'managed', entry: { command: 'company-b' }, shadows: ['project', 'user'] });
+    expect(company['a']).toBeUndefined(); expect(company['d']).toBeUndefined(); expect(company['e']).toBeUndefined();
+    expect(managed.problems.map(problem => [problem.name, problem.reason])).toEqual(expect.arrayContaining([['a', 'denied-by-company'], ['d', 'not-allowed-by-company'],
+      ['e', 'not-allowed-by-company']]));
+  });
+
+  it('${VAR} expands; a project file reads credential-shaped names as empty and may not use a secret reference; unset without default is invalid', async () => {
+    const env = { TOOL_HOME: '/opt/tool', GITHUB_TOKEN: 'ghp_realtokenvalue', PORT: '9' };
+    const secret = async (name: string) => name === 'VAULT_KEY' ? 'from-vault' : undefined;
+    const template = { command: '${TOOL_HOME}/bin/server', args: ['--port', '${PORT:-8080}', '--region', '${REGION:-eu}'], env: { TOKEN: '${GITHUB_TOKEN}' } };
+    expect(await expandMcpEntry(template, 'local', env, secret)).toEqual({ ok: true, command: '/opt/tool/bin/server', args: ['--port', '9', '--region', 'eu'],
+      env: { TOKEN: 'ghp_realtokenvalue' } });
+    expect(await expandMcpEntry(template, 'project', env, secret)).toMatchObject({ ok: true, env: { TOKEN: '' } });
+    expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'user', env, secret)).toMatchObject({ ok: true, env: { KEY: 'from-vault' } });
+    expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'project', env, secret)).toEqual({ ok: false, reason: 'secret-reference-in-project-file' });
+    expect(await expandMcpEntry({ command: '${NOPE}' }, 'local', env, secret)).toEqual({ ok: false, reason: 'variable-unset:NOPE' });
+  });
+
+  it('registry files: absent is empty, a personal file must be private, local entries are keyed by the real project path; the trust record is private and atomic', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-registry-')); roots.push(root);
+    expect(await readMcpRegistryFile(join(root, 'none.json'), 'project')).toMatchObject({ ok: true, user: {} });
+    const personal = join(root, 'mcp.json');
+    writeFileSync(personal, JSON.stringify({ mcpServers: { u: { command: 'u' } }, projects: { '/p': { mcpServers: { l: { command: 'l' } } } } }), { mode: 0o644 });
+    expect(await readMcpRegistryFile(personal, 'personal', '/p')).toEqual({ ok: false, reason: 'permissions-too-open' });
+    writeFileSync(personal, JSON.stringify({ mcpServers: { u: { command: 'u' } }, projects: { '/p': { mcpServers: { l: { command: 'l' } } } } }), { mode: 0o600 });
+    const { chmodSync, statSync } = await import('node:fs'); chmodSync(personal, 0o600);
+    expect(await readMcpRegistryFile(personal, 'personal', '/p')).toMatchObject({ ok: true, user: { u: { command: 'u' } }, local: { l: { command: 'l' } } });
+    expect(await readMcpTrust(root)).toEqual({ ok: true, state: { schemaVersion: 1, revision: 0, servers: [] } });
+    const record = { scope: 'project' as const, name: 'fx', definitionDigest: 'a'.repeat(64), tools: [{ name: 'echo', digest: 'b'.repeat(64), alwaysAsk: false }],
+      approvedAtMs: 1, principal: { issuer: 'h', subject: '1' } };
+    expect(await updateMcpTrust(root, () => [record])).toMatchObject({ revision: 1, servers: [record] });
+    expect(statSync(join(root, 'mcp-trust.json')).mode & 0o777).toBe(0o600);
+    chmodSync(join(root, 'mcp-trust.json'), 0o644);
+    expect(await readMcpTrust(root)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
+  });
 });

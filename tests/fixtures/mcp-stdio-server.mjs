@@ -7,7 +7,7 @@ import { parseArgs } from 'node:util';
 import { Server } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
-const { values } = parseArgs({ options: { mode: { type: 'string' }, tools: { type: 'string' }, log: { type: 'string' } }, strict: true });
+const { values } = parseArgs({ options: { mode: { type: 'string' }, tools: { type: 'string' }, log: { type: 'string' }, token: { type: 'string' } }, strict: true });
 const mode = values.mode ?? 'dual';
 const log = event => appendFileSync(values.log, `${JSON.stringify({ ...event, pid: process.pid })}\n`);
 const definitions = () => JSON.parse(readFileSync(values.tools, 'utf8'));

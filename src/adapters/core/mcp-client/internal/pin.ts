@@ -1,19 +1,22 @@
 import { createHash } from 'node:crypto';
 import { agentToolSpecSchema, type AgentToolSpec } from '#domain/index.js';
-import { MCP_CLIENTS_SETTINGS } from '#platform/index.js';
 
 /**
- * Deckent as an MCP client (MCP-CLIENT, owner 2026-09-28 S6 a): the owner's local stdio servers (`mcp.clients`) and their pinned tools.
- * A tool is offered to the agent only when its name is pinned and its definition digest still matches the pin: a definition that changes
- * under a running server is never accepted silently (the owner writes the new digest, which `deckent mcp servers inspect` prints).
+ * Deckent as an MCP client (MCP-CLIENT, owner 2026-09-28 S6 a): a server's tools are offered to the agent only when the owner approved the
+ * server's exact definition and pinned its tools (product state, `trust.ts`) and each live tool definition still matches its pin: a definition
+ * that changes under a running server is never accepted silently (`deckent mcp approve` pins again).
  */
 export interface McpClientServerSettings {
   readonly id: string;
   readonly command: string;
   readonly args: readonly string[];
-  /** Variable names copied from the service environment when present (values never live in configuration). */
-  readonly environment: readonly string[];
+  /** The expanded `env` of the registry entry (the SDK adds its own safe defaults: HOME, LOGNAME, PATH, SHELL, TERM, USER). */
+  readonly env: Readonly<Record<string, string>>;
   readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host';
+  /** Per-server call deadline (`timeoutMs` of the entry); the settings' default otherwise. */
+  readonly timeoutMs?: number;
+  /** The command line as the registry entry writes it (`${VAR}` unexpanded): what cards show, so an expanded secret never reaches one. */
+  readonly label?: string;
   readonly tools: readonly { readonly name: string; readonly digest: string; readonly alwaysAsk: boolean }[];
 }
 export interface McpClientSettings {
@@ -25,16 +28,8 @@ export interface McpClientSettings {
   readonly inputMaxBytes: number;
   readonly servers: readonly McpClientServerSettings[];
 }
-/** The `mcp.clients` section as the adapter uses it, or null when it is absent. Throws on an invalid section (configuration validation). */
-export function readMcpClientSettings(config: Record<string, unknown>): McpClientSettings | null {
-  const mcp = (config['mcp'] ?? {}) as { clients?: unknown; inputMaxBytes?: unknown };
-  if (mcp.clients === undefined) return null;
-  const clients = MCP_CLIENTS_SETTINGS.parse(mcp.clients);
-  const inputMaxBytes = typeof mcp.inputMaxBytes === 'number' && Number.isSafeInteger(mcp.inputMaxBytes) && mcp.inputMaxBytes > 0 ? mcp.inputMaxBytes : 1_048_576;
-  return Object.freeze({ connectTimeoutMs: clients.connectTimeoutMs, callTimeoutMs: clients.callTimeoutMs, resultMaxBytes: clients.resultMaxBytes,
-    maxRestarts: clients.maxRestarts, inputMaxBytes, servers: Object.freeze(clients.servers.map(server => Object.freeze({ ...server,
-      args: Object.freeze([...server.args]), environment: Object.freeze([...server.environment]), tools: Object.freeze(server.tools.map(tool => Object.freeze({ ...tool }))) }))) });
-}
+/** Code defaults of the MCP client (the registry entry's `timeoutMs` overrides the call deadline per server). */
+export const MCP_CLIENT_DEFAULTS = Object.freeze({ connectTimeoutMs: 15_000, callTimeoutMs: 120_000, resultMaxBytes: 65_536, maxRestarts: 3, inputMaxBytes: 1_048_576 });
 
 /** A tool as a server lists it (the fields a pin binds; anything else a server adds is not part of the definition the model sees). */
 export interface McpLiveTool {
@@ -79,6 +74,9 @@ export interface McpToolVerdict {
   /** The agent tool, only for a `pinned` tool. */
   readonly spec: AgentToolSpec | null;
   readonly reason?: string;
+  /** What the live definition says (shown on the approval card; the digest binds it). */
+  readonly description?: string;
+  readonly annotations?: Record<string, unknown>;
 }
 const DESCRIPTION_MAX = 2_000;
 /**
@@ -91,7 +89,8 @@ export function verifyMcpTools(server: McpClientServerSettings, live: readonly M
   for (const tool of live) { const wire = mcpToolWireName(server.id, tool.name); if (wire) wires.set(wire, (wires.get(wire) ?? 0) + 1); }
   const verdicts = live.map((tool): McpToolVerdict => {
     const pin = server.tools.find(entry => entry.name === tool.name) ?? null, digest = mcpToolPinDigest(tool), display = mcpToolDisplay(server.id, tool.name);
-    const wireName = mcpToolWireName(server.id, tool.name), base = { name: tool.name, display, wireName, digest, pinnedDigest: pin?.digest ?? null };
+    const wireName = mcpToolWireName(server.id, tool.name), base = { name: tool.name, display, wireName, digest, pinnedDigest: pin?.digest ?? null,
+      ...(tool.description !== undefined ? { description: tool.description } : {}), ...(tool.annotations !== undefined ? { annotations: tool.annotations } : {}) };
     if (!pin) return { ...base, status: 'unpinned', cell: null, spec: null };
     if (pin.digest !== digest) return { ...base, status: 'drifted', cell: null, spec: null, reason: 'the live definition does not match the pinned digest; pin the live digest (re-approval) to offer it' };
     if (!wireName || (wires.get(wireName) ?? 0) > 1) return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'no unique provider-safe name' };
