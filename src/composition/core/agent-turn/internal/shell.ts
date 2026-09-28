@@ -1,14 +1,13 @@
 import { createHash } from 'node:crypto';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, classifyReadOnlyShellCommand, classifyShellMutation, classifyShellRisk,
+import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellMutation, classifyShellRisk,
   shellPermissionTier, type EffectApprovalGate, type ShellPathVerdict, type ShellPermissionTier, type ShellRiskClassification,
   type ShellWritePathContext } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { ABSENT_FILE_VERSION, createLocalPeerSession, createShellPathContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
+import { ABSENT_FILE_VERSION, createLocalPeerSession, createShellPathContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
   HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, isWriteApprovalFloored, openSqliteAttemptStore, readWritableFile, resolveWritable, type HostShellResult, type LocalPeerIdentity,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
-import { boundApprovalPreview } from './preview.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 /**
@@ -18,20 +17,6 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  */
 export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
-/**
- * What the result says about processes the command left behind (Astra 2124), within the host shell's process-group contract:
- * `clean` adds nothing; `group-ended` names members of the command's group that were ended (the group was then observed empty);
- * `unverified` says the output may be incomplete and a process the command started may still run, possibly outside its group.
- * Nothing here claims a process outside the group was seen or ended.
- */
-function cleanupNote(cleanup: HostShellResult['cleanup']): string | null {
-  if (cleanup === 'unverified') {
-    return '[deckent] cleanup unverified: the output may be incomplete, and a process the command started may still be running, possibly '
-      + 'outside its process group (that everything ended could not be verified); this is not a sandbox.';
-  }
-  return cleanup === 'group-ended' ? '[deckent] cleanup: processes the command left running in its process group were ended; '
-    + 'a process that left the group is not observed.' : null;
-}
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }> }
   | { readonly ok: false; readonly text: string };
 
@@ -87,13 +72,6 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     plans.set(key(tool, args), planned);
     return planned;
   };
-  const describeResult = (command: string, result: HostShellResult, notice: string | null) => {
-    const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
-    const note = cleanupNote(result.cleanup);
-    return `[deckent] run_shell: ${notice ? 'sandbox: none; ' : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
-      + (notice ? `\n${notice}` : '')
-      + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
-  };
   return {
     plan,
     /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
@@ -118,7 +96,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       let result: HostShellResult | null = null, skipped = false;
       // The owner sees the cleanup note on the call's streamed output (the display surfaces show for the call), before the result.
       const showCleanup = async (ran: HostShellResult) => {
-        const note = cleanupNote(ran.cleanup);
+        const note = hostShellCleanupNote(ran.cleanup);
         if (!note) return;
         channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${note}\n` });
         await channel.drained();
@@ -149,14 +127,14 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran, planned.realm.notice), cleanup: ran.cleanup };
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm.notice), cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
         if (ran && ran.status !== 'exited') {
-          return { status: 'error', text: `${describeResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'

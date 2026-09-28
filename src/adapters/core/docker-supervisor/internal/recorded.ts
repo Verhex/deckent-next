@@ -1,11 +1,11 @@
-import { DockerSupervisor } from '#adapters/index.js';
+import { DockerSupervisor } from './docker.js';
 import { supervisorProfileSchema, type ExecutionSupervisor, type SupervisorProfileSource, type SupervisorProfile } from '#engine/index.js';
 
 /** Management uses private persisted custody, not mutable execution configuration.
  * Restore is lazy so denied, prevented or already-terminal operations never contact the daemon.
  * Docker is the currently installed execution adapter; its restore rejects unknown adapter/version.
  */
-export function recordedSupervisor(input: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource {
+export function recordedDockerSupervisor(input: SupervisorProfile): ExecutionSupervisor & SupervisorProfileSource {
   const profile = supervisorProfileSchema.parse(input);
   let restored: Promise<DockerSupervisor> | undefined;
   const get = () => restored ??= DockerSupervisor.restoreProfile(profile);

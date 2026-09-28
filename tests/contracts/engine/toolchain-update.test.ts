@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { assessToolchain, buildToolchainCurrencyReport, insertHistoryLine, nextImageVersion, planToolchainUpdate, proposeProfileRevisions } from '#engine/index.js';
+import { affectedToolchainProfiles, assessToolchain, buildToolchainCurrencyReport, insertHistoryLine, nextImageVersion, planToolchainUpdate, proposeProfileRevisions } from '#engine/index.js';
 
 const recipe = { schemaVersion: 2, repository: 'deckent/worker', imageVersion: 'r2-20260922', previousVersion: 'r1-20260921', baseImage: 'node:24-trixie-slim', npmProviders: [], cursor: {} };
 const published = (version: string) => ({ kind: 'published' as const, published: { version, source: 'fixture', observedAt: '2026-09-23T08:00:00.000Z' } });
@@ -44,4 +44,18 @@ it('derives exact profile changes from a build receipt and refuses mismatched or
   expect(() => proposeProfileRevisions(plan, { ...receipt, manifest: { providers: [] } }, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
   const noChange = planToolchainUpdate({ report: report('0.155.1'), recipe, plannedAt: '2026-09-23T08:00:00.000Z', affectedProfiles: affected });
   expect(() => proposeProfileRevisions(noChange, receipt, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
+});
+
+// COMPOSITION-BUDGET-2: update candidates are derived from the admission registry next to the planner that reads them.
+it('derives update candidates from prepared native profiles of the admission registry, keeping only an immutable image id', () => {
+  const digest = `sha256:${'a'.repeat(64)}`;
+  const native = (id: string, provider: string, imageId?: string, preflight: object | null = { cliVersion: `${provider}-cli 1.0.0` }) =>
+    ({ id, version: 2, parameters: { ...(imageId === undefined ? {} : { imageId }), nativeSubscription: { provider, ...(preflight ? { preflight } : {}) } } });
+  const registry = { profiles: [native('codex-a', 'codex', digest), native('codex-b', 'codex', 'worker:latest'), native('claude-a', 'claude'),
+    native('unknown-a', 'no-such-provider', digest), native('codex-c', 'codex', digest, null), { id: 'plain', version: 1, parameters: {} }, 'junk'] };
+  expect(affectedToolchainProfiles({ admission: { registry } })).toEqual([
+    { profile: { id: 'codex-a', version: 2 }, provider: 'codex', cliVersion: 'codex-cli 1.0.0', imageId: digest },
+    { profile: { id: 'codex-b', version: 2 }, provider: 'codex', cliVersion: 'codex-cli 1.0.0', imageId: null },
+    { profile: { id: 'claude-a', version: 2 }, provider: 'claude', cliVersion: 'claude-cli 1.0.0', imageId: null }]);
+  expect(affectedToolchainProfiles({})).toEqual([]); expect(affectedToolchainProfiles({ admission: { registry: { profiles: 'no' } } })).toEqual([]);
 });

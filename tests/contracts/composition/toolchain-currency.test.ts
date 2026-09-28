@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { inspectToolchainCurrency, prepareNativeCodingProfile } from '../../../src/index.js';
-import { admittedToolchains } from '#composition/core/toolchains/index.js';
+import { admittedToolchains } from '#engine/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 

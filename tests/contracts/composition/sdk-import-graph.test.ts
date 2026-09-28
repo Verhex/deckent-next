@@ -35,6 +35,8 @@ it('the SDK entry reaches no surface module and neither Ink nor React, staticall
   const surfaces = [...graph.files].filter(file => relative(dist, file).startsWith('surfaces/'));
   expect(surfaces.map(graph.chain)).toEqual([]);
   expect([...graph.packages].filter(name => name === 'ink' || name === 'react')).toEqual([]);
-  // The walk really covers composition's runtime service and the terminal chat stream it serves.
-  expect(graph.files.has(resolve(dist, 'composition/core/terminal-chat/internal/agent-stream.js'))).toBe(true);
+  // The walk really covers composition's runtime service and the agent turn it serves. Since COMPOSITION-BUDGET-2 the turn reads the
+  // OpenAI wire shape from its adapter, so the terminal chat stream is no longer on this path at all.
+  expect(graph.files.has(resolve(dist, 'composition/core/agent-turn/internal/turn.js'))).toBe(true);
+  expect(graph.files.has(resolve(dist, 'adapters/core/provider-openai-chat/internal/invocation.js'))).toBe(true);
 });

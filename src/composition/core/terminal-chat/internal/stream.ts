@@ -2,7 +2,7 @@ import type { ModelInvocationCancellationCommand, ModelInvocationCommand, ModelI
 import type { ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
-import { openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from './extract-text.js';
+import { openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#adapters/index.js';
 import { prepareTerminalChatCommand, terminalChatCancellation, type TerminalChatTurnInput } from './turn.js';
 
 /** Streamed governed invocation (runtime `invokeModelStream`) and the same governed cancellation as the plain turn. */

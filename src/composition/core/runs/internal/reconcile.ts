@@ -1,8 +1,7 @@
-import { recordedSupervisor } from './recorded-supervisor.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, recordedDockerSupervisor } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, DispatchError, type DispatchStore, type RunBoundDispatchStore, type DispatchAuthorization, type DispatchIdentityAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -24,7 +23,7 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
       const recorded = await dispatchStore.loadBoundDispatch(identity);
       if (!recorded) throw new DispatchError('DISPATCH_NOT_ADMITTED');
       const artifactRoot = await inspectProductDirectory(layout, 'artifacts');
-      const supervisor = recordedSupervisor(recorded.profile);
+      const supervisor = recordedDockerSupervisor(recorded.profile);
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
       const app = new DispatchApplication(dispatchStore, supervisor, verifier, authorization, principal.id, artifacts);
       const result = await app.reconcile(recorded.request);
