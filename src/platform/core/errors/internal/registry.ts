@@ -77,10 +77,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_ACTIVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_UNAVAILABLE', p, l) }) },
   MODEL_ACTIVATION_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_OUTCOME_UNKNOWN', p, l) }) },
   MODEL_ACTIVATION_CATALOG_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_CATALOG_CONFLICT', p, l) }) },
-  // SESSION-RESULT-LIMIT-2026-09-28: neutral text equal to the proposed `en` catalog value until the lead wires `error.MODEL_ACTIVATION_DELIVERY_UNFIT`.
-  MODEL_ACTIVATION_DELIVERY_UNFIT: { category: 'error', render: () => ({ message: 'A declared invocation profile for this '
-    + 'reference cannot deliver its worst-case result on every surface. Activation was refused; run `deckent doctor` for '
-    + 'which profile and surface, widen the surface capacity or narrow the profile\'s own response limit, then retry.' }) },
+  MODEL_ACTIVATION_DELIVERY_UNFIT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_DELIVERY_UNFIT', p, l) }) },
   TASK_EVALUATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_INVALID', p, l) }) },
   TASK_EVALUATION_STALE: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_STALE', p, l) }) },
   TASK_EVALUATION_NOT_READY: { category: 'error', render: (p, l) => ({ message: t('error.TASK_EVALUATION_NOT_READY', p, l) }) },
@@ -161,6 +158,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EFFECT_NOT_COMPENSABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_NOT_COMPENSABLE', p, l) }) },
   EFFECT_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_REJECTED', p, l) }) },
   EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },
+  // POLICY-ADMIN I5-i: a generic producer refused an authority operation before any policy, ledger or target access.
+  OPERATION_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.OPERATION_SURFACE_RESTRICTED', p, l) }) },
   EFFECT_TARGET_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_UNAVAILABLE', p, l) }) },
   EFFECT_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_CORRUPT', p, l) }) },
   ADOPTION_TARGET_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_TARGET_DENIED', p, l) }) },
@@ -216,6 +215,11 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED;
   // text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
+  // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
+  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
+  POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
+  POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
+  POLICY_ADMINISTER_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_ADMINISTER_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.PERMISSION_MODE_INVALID', p, l) }) },

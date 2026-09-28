@@ -20,7 +20,11 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Tam verify `599a0fc` exit 0 (402/2659, native 26+1, host 62, smoke). Astra 2149 REVISE: R1 temizlik ↔ yeni tur yarışı, R2 eşzamanlı yazımda
   kota aşımı → `lane/fix-2149` `deb2b7d` birleşti (tur açmadan önce tutar, temizlik silme boyunca sahip, kapanış drain; tek yazım sırası).
 - Tam verify `dd63fd9` exit 0 (403/2669, native 26+1, host 62, smoke); Astra 2152 PASS @dd63fd9; `origin/main` = `dd63fd9` (push 2026-09-28).
-- Canlı geçiş yapıldı (owner onayı): workline turu çalışıyor; açık bulgu: satır modu `terminal session` `MODEL_INVOCATION_RESULT_LIMIT`.
+- Canlı geçiş yapıldı (owner onayı): workline turu çalışıyor; açık bulgu: satır modu `terminal session`
+  `MODEL_INVOCATION_RESULT_LIMIT` (kök neden ölçüldü — `proof/SESSION-RESULT-LIMIT-2026-09-28/review.md`: canlı profilin
+  `limits.responseMaxBytes` (1 048 576) `service.responseMaxBytes` (1 048 576) ile eşit; gereken teslim ≈2× profil limiti
+  (≈2 097 190) tel kapasitesini (≈1 048 485) hep aşıyor; canlı config tarafı 2026-09-25 F26-T-L3-LIVE-ACTIVATION'da tetiklendi. Lead kararı
+  `config_plus_guard` (Jev 3109eb1e 0,96 / yeterlilik 0,75): ürün koruması yedinci partide, canlı `service.responseMaxBytes` 4 MiB geçişte).
 
 ## Altıncı parti (`integrate/2026-09-28-g`, worktree `/home/alperen/deckent-next-integrate-g`, taban dd63fd9)
 - Fetch birleşti (`lane/fetch` `e6bc551`; S6/S7/S10; Q1 Jev ee030c0e: `allowlist` katı, `approval` kart; `deposit` 2149 yazım şeridinde, eşzamanlı
@@ -41,6 +45,20 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB + policy v2 şablonu ile).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
+
+## Yedinci parti (`integrate/2026-09-28-h`, worktree `/home/alperen/deckent-next-integrate-h`, taban `5b267a9`)
+- SDK: `@modelcontextprotocol/server|client` 2.0.0 → 2.1.0 (npm 2026-09-23T15:45Z; `core` 2.1.0 geçişli), client `dependencies`'e
+  taşındı (geçişli `cross-spawn`, `jose`, `eventsource`, `pkce-challenge`, `which` … artık ürün). 2.1.0: stdio sunucusu stdin EOF'ta kapanır,
+  HTTP 4 MiB gövde sınırı, DPoP/OAuth. 2.2.0 bugün çıktı (2026-09-28T19:09Z; sayfalı `listTools()`) — ayrı dilim.
+- Birleşenler: `lane/session-limit` `c67302c` (Sonnet; doctor `modelInvocationDelivery` + `MODEL_ACTIVATION_DELIVERY_UNFIT`),
+  `lane/policy-admin` `6e76c42` (Opus; `policy.administer@1`, delegasyon sınırı, yetki yazarı + arşiv + kilit), `lane/mcp-client` `4cc7ca0`
+  (Opus; yerel stdio MCP istemcisi, `mcp.tool.call@1`, iki dönem). Tek metin çakışması: `core-operations.ts`/`operations.ts` Core modül
+  kaydı — iki modül de korundu. Anlamsal çakışma yok (`EffectApplication` yeni isteğe bağlı `surface` parametresi; MCP üreticisi genel kalır).
+- Paylaşılan dosyalar: arch delta'ları (lint-arch 0), composition bütçesi 5000 → 5500 (owner onaylı; ölçülen 5067), i18n en/tr yeni hata
+  kodları (`MODEL_ACTIVATION_DELIVERY_UNFIT`, `OPERATION_SURFACE_RESTRICTED`, `POLICY_DELEGATION_EXCEEDS`, `POLICY_CHANGE_INVALID`,
+  `POLICY_CHANGE_TOO_LARGE`, `POLICY_ADMINISTER_UNSUPPORTED`; `CONFIG_WRITE_LOCKED` zaten vardı), `config.field.mcp`, `cli.help`
+  `mcp servers` satırı; ARCHITECTURE/PLAN/CHANGELOG.
+- Sıradaki: altıncı partinin `lane/bwrap` REVISE düzeltmesi bu dala → tam verify (lead) → Astra incelemesi → PASS'te push → canlı geçiş.
 
 ## Canlı geçişte yapılacaklar (PASS sonrası)
 - Ledger v41 → v42 yedekli göç; layout 3 → 4 (`state/scratch`): geçişten önce kabul edilmiş Run'ların görevleri `RUN_STORE_CONFLICT`

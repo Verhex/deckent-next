@@ -407,8 +407,8 @@ worker inspection and patch/integration operations use direct composition. MCP s
 Run/Task/approval/model/spend and direct composition for catalog/activation. SDK exposes both configured
 applications and a runtime client. One application/state owner does not imply one transport; direct SDK
 access alone is not evidence of a policy bypass. Further custody/parity changes need their own proof.
-Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped here; Desktop/HTTP, external MCP
-client and IFS connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
+Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped here; the MCP client reaches only the owner's
+local stdio servers (MCP-CLIENT); Desktop/HTTP, remote MCP servers and IFS connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
@@ -523,6 +523,14 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
+- **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
+  `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
+  `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
+  clean) against the runtime-service and MCP surfaces; `models activate` refuses the admission when a profile is already declared for
+  the reference and can never deliver on some surface (`MODEL_ACTIVATION_DELIVERY_UNFIT`, before `app.admit()`, no claim or ledger
+  effect). The check lives in `engine/core/model-activation` / `engine/core/model-invocation`; composition only wires the surfaces
+  (the MCP capacity comes from `adapters/core/mcp-transport`, never from the surface layer). A profile declared later, or a
+  `service.responseMaxBytes` lowered after activation, is reported by doctor only (the one ongoing authority).
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
   `/runs` reads that same inventory page and appends one inspection card per id; it does not create or cancel a run.
   Chat text is not run truth. Watches are single-flight polls with bounded memory. The Ink `Static`
@@ -1223,6 +1231,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-28 | FOUNDATION: `budgets.packageLines.composition` 5000 → 5500 (owner-approved increase; earlier decision "raise to 5500 if the pressure returns"). | MCP client + policy administration wiring (seventh batch, measured 5067 lines after the SESSION-RESULT-LIMIT, POLICY-ADMIN and MCP-CLIENT merges). The next pressure is answered by moving responsibility out of composition, not by another raise. |
 | 2026-09-22 | Operator **Terminal Contract v1**: regions, motor-agnostic events, colour tiers, Ink + line adapters; every chat turn is a governed model invocation in the caller's scope; chat ≠ run ledger. | One contract across Terminal/MCP/Desktop; Ink is the Node rich-TTY adapter, not product authority. Integration removed an unmanaged HTTP chat path and a global Run-capacity cap found in review. |
 | 2026-09-16 | Clean-room port into this repository instead of in-place refactor of the legacy codebase (587k lines, 24.8k-line spawn backend, 40.9k tests, 5,535 path-keyed lint baselines). | Every in-place move broke 8+ gates and preserved dead code; the owner chose deletion over archive. |
 | 2026-09-16 | File size is a mechanical gate (800 lines) in addition to cohesion-based boundaries. | Cohesion alone did not hold: one file tripled in two weeks. Supersedes legacy ADR-D-006 §2 wording. |
@@ -1597,6 +1606,38 @@ admitted but unexecuted Runs from before the update get `RUN_STORE_CONFLICT` at 
 Scope access mode is stated at every call (Astra 2126 R1): queries pass `read` and never pin a scope; only write admissions pin.
 The sealed adapter registry holds immutable snapshots of factories and manifests (Astra 2126 R2).
 
+**Governed policy administration (POLICY-ADMIN P1–P3, lead decision A1, 2026-09-28).** One Core catalog operation
+`policy.administer@1` (target kind `authority-document`, record `installation` = policy.json + bindings.json, version = the effective
+`policy+bindings` revision; `effectClass: write`, **`approval: required`**, `precondition: record-version`, no compensation — a revert is
+a new change). Input v1: 1–32 typed changes `grant.add|remove|replace`, `binding.add|remove|replace` (`domain/core/policy`
+`planPolicyChange`); roles, restrictions, separation of duties and persons' modes are not change kinds yet. **Delegation bound**
+(`delegationWithin`, pure): every touched rule — added, removed, both sides of a replacement; a binding touches each permission of each
+named role at its scopes — must lie in the bounding principal's own authority cell by cell (action × id × scope; `'all'` is one cell),
+in the evaluator's order: a deny/restriction meeting the cell refuses; no allow/require-approval covering it refuses; require-approval
+stays at most require-approval; `modeEligible` only from eligible rules; ≤ 4096 cells. The owner root is data: role
+`installation-owner` whose permissions `installationOwnerPermissions(kinds)` lists every kind (U2 form); kind matching is the single
+`kindCovers` (exact today; the joker kind of S2 = U1 changes only it). No evaluator branch for the owner; a restriction binds it too.
+**Never silent (owner M3):** `approval: required` opens a C12 request even on an allow grant, in every permission mode. **I3:** the
+bound is the decider's authority — `DelegationBoundGate` (engine/core/approval) loads the sealed approval, refuses a decider without
+the authority before any claim (`POLICY_DELEGATION_EXCEEDS`), and the target checks the bound again inside the store's write window on
+the exact snapshot it replaces (a claimed command is refused terminally there). **Surface class (I5-i):** descriptor field
+`surface: 'authority'`; `EffectApplication` is generic by default and refuses such a descriptor right after catalog resolution, before
+target/policy/approval/ledger access (`OPERATION_SURFACE_RESTRICTED`) — CLI `deckent operation`, SDK, the runtime service behind MCP
+`execute_operation` and the agent producers (including the MCP client's `mcp.tool.call@1` producer, whose one-entry catalog never
+resolves it); only `PolicyAdministrationApplication` passes `{ surface: 'authority' }`; generic `inspect` stays readable. **Audit:**
+subject `authority-change` (event v1 union, ledger unchanged): operation, commandId, approvalId, decider, input digest, revision
+before/after, change counts — recorded before any file changes. **Writer (P2):** `FilePolicySource.updateAuthority` is the one writer of
+both files for every product path (`/mode` included; its wire, grant rules, `permission-mode-change` event and `m-` revisions are
+unchanged): both files read under the usual guards, O_EXCL temporaries + fsync, identity of both files re-checked before each rename,
+order bindings→policy when the change removes/replaces, else policy→bindings (both intermediate states validated first), chained `a-`
+revisions, an archive record per write under the registered `audit` resource (`audit/authority-revisions`, `prepared` before the first
+rename, `committed` after the last, full documents before/after; keyed by the C11 wire key for `lookup`: committed or files at `after` →
+applied, files at `before` → absent, anything else → unknown), and a cross-process lock injected by composition (the platform directory
+lock `policy.json.write-lock`, 5 s bounded wait, typed `CONFIG_WRITE_LOCKED`). Measured (2–4 OS processes, 400–600 writes): without the
+lock 39–70 lost updates, with it 0. The `POLICY_*` refusal codes have en/tr texts but no surface maps them yet. Not yet: any surface
+(`/policy`, `deckent policy`, protocol v17), refusal audit events, last-owner guard, external-change detection, a sealed archive, MCP
+`decide_approval` refusal for authority subjects.
+
 **Company scope registry (H34 S1, ledger v39).** Every request scope resolves to a company or is refused with typed `SCOPE_UNKNOWN`;
 no flag relaxes this. Ledger v39 adds `companies(company_id)` and `scope_registry(scope_id PK, company_id FK, origin
 'migration'|'start'|'admission')`: one company per scope, insert-only pins, so the company of every scope-partitioned record is the
@@ -1620,7 +1661,40 @@ signature is refused until verification exists (A04-3, owner Q7). Config shape i
 registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: module
 loading, signature verification and a separately distributed Enterprise package (A04-3), public SDK export of module registration.
 
-**Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host` and `network` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
+**Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
+
+**MCP client (MCP-CLIENT, owner 2026-09-28 S6 a).** Deckent is an MCP client of the owner's local stdio servers (`mcp.clients`, own
+`schemaVersion: 1` inside the platform `mcp` field; config schema version unchanged; variable names only, never values). The service
+owns one pool (`RuntimeChatTurnHost.mcp`): a server starts with the first turn that needs it, negotiates the era with SDK
+`versionNegotiation: auto` (2026-07-28 via `server/discover`, else the 2025-11-25 `initialize`; on stdio the SDK probes with a sibling
+process), is listed every turn and kept for the service's life; a crash restarts on next use at most `maxRestarts` times; service stop
+awaits closing all of them (stdin, then SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the
+shell (`prefer-sandbox` default: bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network,
+HOME hidden; `require-sandbox` refuses without it; `host` explicit; Landlock is not offered for MCP servers). Pin = owner-written
+`tools[{name, digest, alwaysAsk}]`; digest = sha256 over name, title, description, input/output schema, annotations; only pinned tools
+whose live definition matches are offered (`mcp__<server>__<tool>`; display and audit `mcp:<server>/<tool>`); a changed definition is
+withdrawn until re-pinned (no silent acceptance). A call is a C11 effect of `mcp.tool.call@1` on `mcp-tool` (input: server, tool,
+digest, arguments), decided by `decideAgentToolCall` over `agent-tool/invoke` ∧ `operation/execute`; cells `mcp-call` (raising;
+relaxable in full-auto only) and `mcp-floor` (pin `alwaysAsk` or pinned `destructiveHint: true`; never relaxed). Nothing is sent before
+the decision; after sending, timeout/cancel/crash is `unknown` and never resent; answers are cut at `resultMaxBytes` and pass
+`redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
+`{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). `deckent mcp servers list` reads configuration; `inspect <id>`
+starts the server under its realm, lists, verifies and closes it (never `tools/call`). A `host`-realm server runs with the owner's
+rights and is outside the agent tools' product-state floor (the owner chooses that realm explicitly). Not yet: installing/pinning from
+the terminal or `/policy` (POLICY-ADMIN), MCP HTTP servers, resources/prompts, MRTR input requests from servers (no
+elicitation/sampling/roots handler is registered; behaviour with an `input_required` server is untested), `subscriptions/listen`/
+listChanged (the list is re-read each turn), paginated `tools/list` (SDK 2.1.0 `listTools()` returns the first page; 2.2.0 follows
+`nextCursor`), signed server bundles. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in
+legacy, auto and pinned-2026 modes (`mcp-eras-process.test.ts`).
+
+**MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
+changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,
+`ttlMs`/`cacheScope` on lists, `subscriptions/listen`, MRTR, Tasks as an extension). Deckent pins `@modelcontextprotocol/server` and
+`client` 2.1.0 (npm 2026-09-23T15:45Z; `core` 2.1.0 transitively): stdio server transport closes on stdin EOF and drops in-flight
+requests, HTTP gets a 4 MiB body limit and requires `MCP-Protocol-Version` on 2026-07-28 POSTs, DPoP and OAuth scope challenges are
+added. Implemented: stdio server both eras; stdio client `auto` negotiation. Not implemented: HTTP server/client in either era,
+`input_required`/MRTR, `subscriptions/listen`, Tasks, resources/prompts. SDK 2.2.0 (npm 2026-09-28T19:09Z) is not adopted yet
+(pagination-following `listTools()`, notification rejection fixes, OAuth issuer binding) — a separate upgrade slice.
 
 A replacement integration command explicitly names its predecessor and prepares a separate candidate;
 it never adopts the old directory or declares its writer dead. Git delivery has its own policy action

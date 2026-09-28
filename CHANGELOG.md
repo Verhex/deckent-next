@@ -4,6 +4,22 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (MCP-CLIENT, owner 2026-09-28 S6 a): Deckent is an MCP client of the owner's local stdio servers — `mcp.clients` pins tools by
+  definition digest (a changed tool is withdrawn until re-pinned), both protocol eras (2026-07-28 `server/discover`, 2025-11-25
+  `initialize`), realm per server (bubblewrap by default, host explicit), every call a C11 effect of Core `mcp.tool.call@1` that asks by
+  default (full-auto may lower a company-eligible call after a sealed audit event; `alwaysAsk`/destructive tools always ask), unknown
+  outcomes never resent, bounded redacted answers; `deckent mcp servers list|inspect`. The `deckent-mcp` server is proven with 2025 and
+  2026 SDK clients.
+- ADDED (POLICY-ADMIN P1–P3, Core): `policy.administer@1` catalog operation — typed grant/binding changes, conditional on the
+  effective policy revision, always approved on a card, bounded by the decider's own authority, audited (`authority-change`) and archived;
+  general operation paths refuse it (`OPERATION_SURFACE_RESTRICTED`). Authority writes (including `/mode`) now use one writer with a
+  cross-process lock and a revision archive.
+- FIX (SESSION-RESULT-LIMIT-2026-09-28): when a declared profile's worst-case result cannot be delivered on some surface
+  (runtime service, MCP), `deckent doctor` reports it (`modelInvocationDelivery`) and `models activate` refuses the activation
+  (`MODEL_ACTIVATION_DELIVERY_UNFIT`).
+- DEPS: `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.0.0 → 2.1.0 (npm 2026-09-23); the client is now a product
+  dependency. 2.1.0 stdio servers close on stdin end-of-file. FOUNDATION: composition package budget 5000 → 5500 (owner-approved).
+
 - FIX/SECURITY (TERM-FEEDBACK-1, owner live test 2026-09-28): compaction survives a summary answer in another shape and falls back
   to a labelled mechanical excerpt; the system prompt (v4) names the running model; every product state resource of the layout (saved
   conversations, ledger, logs, runtime socket, policy, …) except the configuration is refused to the agent tools, the shell and both

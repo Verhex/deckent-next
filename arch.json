@@ -117,7 +117,8 @@
         "src/platform/core/common",
         "src/platform/core/config",
         "src/adapters/core/scratch-store",
-        "src/adapters/core/http-fetch"
+        "src/adapters/core/http-fetch",
+        "src/adapters/core/mcp-client"
       ],
       "plan": "PROVIDERS"
     },
@@ -237,7 +238,9 @@
         "src/adapters/core/runtime-launcher",
         "src/platform/core/errors",
         "src/platform/core/managed-files",
-        "src/composition/core/runs"
+        "src/composition/core/runs",
+        "src/composition/core/model-invocation",
+        "src/composition/core/agent-turn"
       ],
       "plan": "SURFACES"
     },
@@ -302,7 +305,8 @@
     "src/composition/core/policy": {
       "dependencies": [
         "src/adapters/core/file-policy",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/config"
       ],
       "plan": "SECURITY"
     },
@@ -852,7 +856,8 @@
         "src/domain/core/approval",
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-kit",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/engine/core/model-invocation"
       ],
       "plan": "SURFACES"
     },
@@ -1002,7 +1007,8 @@
         "src/domain/core/principal",
         "src/domain/core/provider-catalog",
         "src/engine/core/authentication",
-        "src/engine/core/provider-catalog"
+        "src/engine/core/provider-catalog",
+        "src/domain/core/model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1040,7 +1046,9 @@
         "src/engine/core/model-activation",
         "src/engine/core/policy",
         "src/engine/core/provider-catalog",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/model-invocation",
+        "src/composition/core/model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1132,7 +1140,8 @@
         "src/platform/core/host",
         "src/adapters/core/scratch-store",
         "src/adapters/core/http-fetch",
-        "src/adapters/core/shell-sandbox-bwrap"
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/adapters/core/mcp-client"
       ],
       "plan": "SURFACES"
     },
@@ -1156,12 +1165,17 @@
         "src/engine/core/provider-catalog",
         "src/engine/core/provider-spend",
         "src/platform/core/clock",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/runtime",
+        "src/adapters/core/mcp-transport"
       ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/mcp-transport": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/common",
+        "src/engine/core/model-invocation"
+      ],
       "plan": "SURFACES"
     },
     "src/domain/core/provider-spend": {
@@ -1689,6 +1703,20 @@
         "src/domain/core/agent-tool"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/mcp-client": {
+      "dependencies": [
+        "src/adapters/core/host-shell",
+        "src/adapters/core/native-connection",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/domain/core/agent-tool",
+        "src/domain/core/effect",
+        "src/domain/core/primitives",
+        "src/engine/core/effect",
+        "src/platform/core/common",
+        "src/platform/core/config-fields"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {
@@ -1725,7 +1753,7 @@
       "engine": 60000,
       "adapters": 25000,
       "surfaces": 45000,
-      "composition": 5000
+      "composition": 5500
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
