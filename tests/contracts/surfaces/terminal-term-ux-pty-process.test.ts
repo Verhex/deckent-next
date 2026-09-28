@@ -53,7 +53,7 @@ def read_for(seconds):
 for wait, send in steps:
     deadline = time.time() + 25
     while wait.encode() not in out:
-        if time.time() > deadline or not read_for(0.1):
+        if time.time() > deadline or not read_for(0.01):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     seen_at = time.time()
     read_for(0.5)
@@ -108,6 +108,7 @@ async function project(extra: (root: string) => Promise<void> = async () => unde
     mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
   await writeFile(join(projectRoot, 'src', 'alpha-widget.ts'), 'export const a = 1;\n');
   await extra(projectRoot);
+  await writeFile(join(projectRoot, 'q.md'), 'first file of the empty query\n');
   const seen = { requests: [] as Array<Array<{ role: string; content: string }>> };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'termux-pty', object: 'chat.completion.chunk',
     created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
@@ -193,16 +194,19 @@ describe.skipIf(process.platform !== 'linux')('/resume in a real pseudo-terminal
 // that a walk takes measurable time; the terminal warmed the service's file list when it opened.
 describe.skipIf(process.platform !== 'linux')('first @ in a real pseudo-terminal (TERM-UX-1 a)', () => {
   it('offers a file at the first @ from the warmed list and records the delay', async () => {
+    // TERM_UX_TREE (measurement only): a directory whose files are copied into the project, for a real-sized tree.
+    const tree = process.env['TERM_UX_TREE'];
     const f = await project(async projectRoot => {
-      await Promise.all(Array.from({ length: 40 }, (_, index) => mkdir(join(projectRoot, 'pkg', `dir${index}`), { recursive: true })
-        .then(() => Promise.all(Array.from({ length: 50 }, (__, file) => writeFile(join(projectRoot, 'pkg', `dir${index}`, `f${file}.ts`), 'x'))))));
+      if (tree) { await execute('cp', ['-r', '--no-preserve=all', `${tree}/.`, projectRoot]); return; }
+      await Promise.all(Array.from({ length: 100 }, (_, index) => mkdir(join(projectRoot, 'pkg', `dir${index}`), { recursive: true })
+        .then(() => Promise.all(Array.from({ length: 60 }, (__, file) => writeFile(join(projectRoot, 'pkg', `dir${index}`, `f${file}.ts`), 'x'))))));
     });
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'look @'],       // the person types at once, not waiting for the open-time warm-up
-      ['alpha-widget.ts', '\u001b'],
-      ['alpha-widget.ts', '\u0003'],
-      ['alpha-widget.ts', '\u0003'],
+      ['q.md', '\u001b'],
+      ['q.md', '\u0003'],
+      ['q.md', '\u0003'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     const [, , typed] = run.marks![0]!, [, offered] = run.marks![1]!;
