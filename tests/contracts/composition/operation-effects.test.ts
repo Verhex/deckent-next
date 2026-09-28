@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation, configuredApproval } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { HttpConditionalEffectTarget, registerProviderConfig } from '#adapters/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { SystemTrustedClock, clearConfigCache, productResourcePath } from '#platform/index.js';
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
 
 const exec = promisify(execFile);
@@ -120,8 +120,11 @@ it('brokers a required operation approval: pending, decided allow, the same comm
   // Catalog admitWithinMs: an allow that is not used in time is refused; nothing is sent.
   const late = await f.execute(f.command('late', { operation: ref('approve-payment'), expectedVersion: null }));
   if (late.status !== 'approval-pending') throw new Error(late.status);
+  // The product measures the window on its trusted wall clock (process floor over Date.now), not on timers: the decision is stamped at a
+  // frozen instant and the admission runs 50 ms later, so the case never depends on how the host wall clock moves (WSL2 steps it back ~2 s).
+  const wall = vi.spyOn(Date, 'now'), decidedAt = new SystemTrustedClock().sample().wallMs; wall.mockReturnValue(decidedAt);
   await decide(late.approval.approvalId, 'allow-late', 'allow');
-  await new Promise(resolve => setTimeout(resolve, 15));
+  wall.mockReturnValue(decidedAt + 50);
   await expect(f.execute(f.command('late', { operation: ref('approve-payment'), expectedVersion: null }))).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
   expect(f.state('late')).toBeUndefined(); expect(f.server.operations).toHaveLength(1);
 });
