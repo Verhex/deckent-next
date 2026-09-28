@@ -6,7 +6,10 @@ import { PolicyAuthorizationError } from './authorize.js';
 import { AuthorityChangeError, chainAuthorityRevision, type AuthorityDocumentStore } from './authority.js';
 
 export class PermissionModeError extends Error {
-  constructor(readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID') { super(code); this.name = 'PermissionModeError'; }
+  /** `mode` names the refused target for `PERMISSION_MODE_DENIED` (the message says which grant is missing). */
+  constructor(readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID' | 'PERMISSION_MODE_DENIED', readonly mode?: string) {
+    super(code); this.name = 'PermissionModeError';
+  }
 }
 /** One guarded read of the authority files: the policy document and — for a v2 policy — the raw bindings document (null for v1). */
 export interface PermissionModeSnapshot { readonly policy: unknown; readonly bindings: unknown }
@@ -66,7 +69,8 @@ export class PermissionModeApplication {
       if (decision.decision !== 'allow') {
         // A refusal is recorded when possible; an unrecordable refusal is still a refusal.
         try { record(null); } catch { /* refused either way */ }
-        throw new PolicyAuthorizationError(decision.decision === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
+        // A refused mode is its own typed answer (which mode, which grant is missing), not the generic denial.
+        throw decision.decision === 'require-approval' ? new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED') : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
       }
       const modes = withPrincipalPermissionMode(bindings, actor, command.scopeId, command.mode,
         `m-${createHash('sha256').update(`permission-mode-entry:1\0${actor.issuer}\0${actor.subject}\0${command.mode}`).digest('hex').slice(0, 16)}`);

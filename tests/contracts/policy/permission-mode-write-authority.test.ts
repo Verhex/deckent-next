@@ -41,7 +41,7 @@ async function fixture(grants: readonly Grant[], modes: readonly unknown[] = [],
   const source = new FilePolicySource({ path: policyPath, bindingsPath, ownerUid: process.getuid!(), maxBytes: 4096 });
   const app = new PermissionModeApplication(source, event => { audit.record(event); afterAudit(root); }, Date.now);
   const set = (mode: 'ask' | 'auto-edit' | 'full-auto', expectedRevision = 'p1+b1') => app.set(principal, { schemaVersion: 1, scopeId: 'scope', mode, expectedRevision })
-    .then(result => ({ result }), (error: { code?: string }) => ({ code: error.code }));
+    .then(result => ({ result }), (error: { code?: string; mode?: string }) => ({ code: error.code, ...(error.mode === undefined ? {} : { mode: error.mode }) }));
   const bindings = async () => JSON.parse(await readFile(bindingsPath, 'utf8')) as { revision: string; modes: unknown[] };
   const events = () => {
     const db = new DatabaseSync(ledger, { readOnly: true });
@@ -85,7 +85,7 @@ describe.skipIf(process.platform === 'win32')('permission mode write authority (
     const f = await fixture([{ id: 'no-modes', effect: 'deny', modes: ['ask', 'auto-edit', 'full-auto'] }], [mine('auto-edit')]);
     expect(await f.set('ask')).toMatchObject({ result: { mode: 'ask', previous: 'auto-edit', changed: true } });
     const revision = `p1+${(await f.bindings()).revision}`;
-    expect(await f.set('auto-edit', revision)).toEqual({ code: 'POLICY_DENIED' });
+    expect(await f.set('auto-edit', revision)).toEqual({ code: 'PERMISSION_MODE_DENIED', mode: 'auto-edit' });
     expect((await f.bindings()).modes).toEqual([]);
     expect(f.events().map(event => (event.subject as { decision: unknown }).decision)).toEqual([{ effect: 'allow', ruleId: null }, { effect: 'deny', ruleId: 'no-modes' }]);
   });
@@ -93,8 +93,8 @@ describe.skipIf(process.platform === 'win32')('permission mode write authority (
   it('R4: relaxing without a set grant is still POLICY_DENIED (and require-approval unsupported), audited, nothing written', async () => {
     const f = await fixture([]);
     const before = await readFile(f.bindingsPath, 'utf8');
-    expect(await f.set('auto-edit')).toEqual({ code: 'POLICY_DENIED' });
-    expect(await f.set('full-auto')).toEqual({ code: 'POLICY_DENIED' });
+    expect(await f.set('auto-edit')).toEqual({ code: 'PERMISSION_MODE_DENIED', mode: 'auto-edit' });
+    expect(await f.set('full-auto')).toEqual({ code: 'PERMISSION_MODE_DENIED', mode: 'full-auto' });
     expect(await readFile(f.bindingsPath, 'utf8')).toBe(before);
     const g = await fixture([{ id: 'ask-first', effect: 'require-approval', modes: ['auto-edit'] }]);
     expect(await g.set('auto-edit')).toEqual({ code: 'POLICY_APPROVAL_UNSUPPORTED' });

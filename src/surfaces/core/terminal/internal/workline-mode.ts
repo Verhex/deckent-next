@@ -19,6 +19,10 @@ export interface WorklineModeLabels {
   readonly inert: string;
   readonly unsupported: string;
   readonly usage: string;
+  /** One sentence per catalog mode on what it changes; `switch` has `{options}` (the other modes with their sentences). Both optional: the
+   * neutral notice stays a bare mode line. */
+  readonly effect?: Readonly<Record<PermissionMode, string>>;
+  readonly switch?: string;
 }
 // Until the catalog carries these templates the notices stay language-neutral: the command, the catalog mode and the policy field.
 const NEUTRAL: WorklineModeLabels = { current: '/mode · {mode}', changed: '/mode · {previous} → {mode}', inert: ' · modeEligible: 0',
@@ -27,7 +31,14 @@ const NEUTRAL: WorklineModeLabels = { current: '/mode · {mode}', changed: '/mod
 function line(view: PermissionModeView, labels: WorklineModeLabels, previous?: PermissionMode): string {
   if (!view.supported) return fillTemplate(labels.unsupported, { mode: view.mode });
   const text = previous === undefined ? fillTemplate(labels.current, { mode: view.mode }) : fillTemplate(labels.changed, { previous, mode: view.mode });
-  return view.eligible ? text : `${text}${labels.inert}`;
+  const said = labels.effect ? `${text} — ${labels.effect[view.mode]}` : text;
+  return view.eligible ? said : `${said}${labels.inert}`;
+}
+/** What the person can try next: every other catalog mode with its sentence (relaxing needs a company grant; the service answers a refusal). */
+function options(view: PermissionModeView, labels: WorklineModeLabels): WorkLedgerEntry[] {
+  if (!view.supported || !labels.effect || !labels.switch) return [];
+  const others = PERMISSION_MODES.filter(mode => mode !== view.mode).map(mode => `/mode ${mode} (${labels.effect![mode]})`);
+  return [notice('info', fillTemplate(labels.switch, { options: others.join('; ') }))];
 }
 
 /** `/mode` shows the mode; `/mode <mode>` sets a catalog mode with the revision last read (read first when none is known). Anything else is
@@ -35,10 +46,12 @@ function line(view: PermissionModeView, labels: WorklineModeLabels, previous?: P
 export async function runModeCommand(args: string, port: WorklinePermissionModePort, known: PermissionModeView | null,
   labels: WorklineModeLabels = NEUTRAL): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null }> {
   const requested = args.trim();
-  if (!requested) { const view = await port.inspect(); return { entries: [notice('info', line(view, labels))], view }; }
+  if (!requested) { const view = await port.inspect(); return { entries: [notice('info', line(view, labels)), ...options(view, labels)], view }; }
   const mode = PERMISSION_MODES.find(value => value === requested);
   if (!mode) return { entries: [notice('error', labels.usage)], view: known };
   const base = known ?? await port.inspect();
+  // A v1 policy has no modes: there is nothing to set, so the service is not asked (it would only refuse, and the person needs the way forward).
+  if (!base.supported) return { entries: [notice('error', line(base, labels))], view: base };
   const changed = await port.set(mode, base.revision);
   const { previous, changed: wrote, ...view } = changed;
   return { entries: [notice('info', wrote ? line(view, labels, previous) : line(view, labels))], view };

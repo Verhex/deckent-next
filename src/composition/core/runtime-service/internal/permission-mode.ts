@@ -3,7 +3,7 @@ import { AuditError, PolicyError } from '#domain/index.js';
 import { AuditApplication, inspectPermissionMode, PermissionModeApplication, PermissionModeError, RuntimeServiceProtocolError, runtimeServiceResultCapacity,
   type RuntimeServiceRequest } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAuditStore, PolicyFileError, type LocalPeerIdentity } from '#adapters/index.js';
-import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
@@ -36,7 +36,10 @@ export async function executeConfiguredRuntimePermissionModeOperation(projectRoo
       } finally { store.close(); }
     } else throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_DELIVERY_INVALID');
   } catch (error) {
+    if (error instanceof PermissionModeError && error.code === 'PERMISSION_MODE_DENIED') throw ErrorRegistry.createError(error.code, { params: { mode: error.mode ?? '' } });
     if (error instanceof PermissionModeError || error instanceof AuditError) throw ErrorRegistry.createError(error.code);
+    // The authority write lock is held (another writer): the person's next step is to retry, so the lock's holder travels as parameters.
+    if (error instanceof DeckentError && error.code === 'CONFIG_WRITE_LOCKED') throw ErrorRegistry.createError('PERMISSION_MODE_LOCKED', error.params ? { params: error.params } : {});
     // An unreadable, unsafe or inconsistent authority file refuses the change like every other policy consumer (nothing written).
     if (error instanceof PolicyFileError || error instanceof PolicyError) throw ErrorRegistry.createError('POLICY_UNAVAILABLE');
     throw queryFailure(error);

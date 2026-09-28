@@ -4,14 +4,14 @@ import { createServer, type Server } from 'node:http';
 import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
-import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
 // T-L4 slice 4c at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process (protocol v15), the
@@ -97,7 +97,7 @@ async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promis
 }
 
 /** A local model that asks for one `edit_file` call, then answers `Mode turn done.`; a v2 company policy with a mode-eligible edit rule. */
-async function modeProject() {
+async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2') {
   await access(cli).catch(() => { throw new Error('BUILD_REQUIRED'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-mode-pty-')); roots.push(root);
   const projectRoot = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -146,14 +146,16 @@ async function modeProject() {
     .admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0, catalogRevision: 'catalog-1', expectedBinding: binding });
   const grant = (id: string, effect: string, actions: string[], kind: string, ids: string[] | 'all', extra: Record<string, unknown> = {}) =>
     ({ id, effect, actions, scopes: ['scope'], principals: [me], resource: { kind, ids }, ...extra });
-  await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 2, revision: 'p1', roles: [], separationOfDuties: [], restrictions: [], grants: [
+  const grants = [
     grant('invoke', 'allow', ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], 'model-invocation', [modelInvocationTargetId(reference)]),
     grant('scope', 'allow', ['inspect'], 'scope', ['scope']), grant('decide', 'allow', ['inspect', 'decide'], 'approval', 'all'),
     grant('edit-tools', 'require-approval', ['invoke'], 'agent-tool', ['edit_file', 'write_file'], { modeEligible: true }),
     grant('file-write', 'allow', ['execute'], 'operation', ['workspace.file.write']),
-    grant('mode-set', 'allow', ['set'], 'permission-mode', ['ask', 'auto-edit', 'full-auto'])] }), { mode: 0o600 });
+    ...policy === 'v2' ? [grant('mode-set', 'allow', ['set'], 'permission-mode', ['ask', 'auto-edit', 'full-auto'])] : []];
+  await writeFile(join(data, 'policy.json'), JSON.stringify(policy === 'v1' ? { schemaVersion: 1, revision: 'p1', restrictions: [], grants }
+    : { schemaVersion: 2, revision: 'p1', roles: [], separationOfDuties: [], restrictions: [], grants }), { mode: 0o600 });
   const theirs = { id: 'their-mode', principal: { issuer: 'another-host', subject: '4242' }, scopes: ['scope'], mode: 'full-auto' };
-  await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [theirs] }), { mode: 0o600 });
+  if (policy !== 'v1') await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [theirs] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   const audit = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT kind, record FROM audit_events ORDER BY sequence').all(); } finally { db.close(); } };
@@ -190,5 +192,59 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     expect(narrow.output.split('auto-edit').length - 1).toBe(1);
+  }, 180_000);
+});
+
+// MODE-UX (G3): what the person needs to do next is on the screen — never a bare "denied", never a call the service can only refuse.
+describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real pseudo-terminal (MODE-UX G3)', () => {
+  const modeLines = (output: string) => stripVTControlCharacters(output);
+  const changes = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().filter(row => (row as { kind: string }).kind === 'permission-mode-change');
+
+  it('shows the current mode with what it changes and the modes to try', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['Switch:', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    const text = modeLines(run.output);
+    expect(text).toContain('Permission mode: ask — every edit and shell call asks for approval');
+    expect(text).toContain('/mode auto-edit (edits the company marked mode-eligible run without an approval card)');
+    expect(text).toContain('/mode full-auto (');
+    expect(text).not.toContain('/mode ask (');
+  }, 180_000);
+
+  it('a v1 policy: /mode auto-edit says modes are off and asks the service for nothing (no file, no audit row)', async () => {
+    const f = await modeProject('v1');
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode auto-edit\r'], ['Permission modes are off', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(modeLines(run.output)).toContain('this policy is v1');
+    await expect(access(join(f.data, 'bindings.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(changes(f)).toEqual([]);
+  }, 180_000);
+
+  it('without a set grant the refusal names the mode and the missing grant; the file is untouched and the refusal is audited', async () => {
+    const f = await modeProject('no-set-grant');
+    await startRuntime(f.projectRoot, f.env);
+    const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode auto-edit\r'], ['No grant lets you set auto-edit', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(modeLines(run.output)).toContain('Add an allow grant (resource `permission-mode`, action `set`, id auto-edit)');
+    expect(modeLines(run.output)).not.toContain('Policy does not permit');
+    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
+    expect(changes(f).map(row => JSON.parse((row as { record: string }).record) as { event?: { subject?: { decision?: unknown } } })
+      .map(record => JSON.stringify(record).includes('"effect":"deny"'))).toEqual([true]);
+  }, 180_000);
+
+  it('a held authority write lock is explained as another process at work with a retry instruction; nothing is written', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
+    const run = await withConfigWriteLock(join(f.data, 'policy.json'), () => inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
+      [['Deckent workline', '/mode auto-edit\r'], ['Another Deckent process is changing the policy files', '/exit\r']]), 2_000);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(modeLines(run.output)).toContain('run /mode again');
+    expect(modeLines(run.output)).not.toContain('Configuration lock');
+    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
+    expect(changes(f)).toEqual([]);
   }, 180_000);
 });
