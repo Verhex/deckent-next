@@ -9,6 +9,8 @@ import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type Mc
 export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25']);
 /** Bounds of what one server may declare and of the stderr tail kept for `inspect`. */
 export const MCP_CLIENT_TOOLS_MAX = 512;
+/** Pages of one `tools/list` (SDK ≥ 2.2 follows `nextCursor` itself; `listMaxPages` is its hard cap, so a server that never stops paging ends here). */
+export const MCP_CLIENT_LIST_PAGES_MAX = 16;
 export const MCP_CLIENT_STDERR_TAIL_BYTES = 4_096;
 
 /** Where a server starts: the project root, the service environment (the source of the allowlisted names) and the sandbox providers. */
@@ -68,6 +70,9 @@ interface ServerState {
 /** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each). */
 let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
 const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
+/** Every page of the server's tool list (one deadline for the whole walk, each page also bounded); the pin then covers every page. */
+const listAllTools = async (client: Client, timeoutMs: number) =>
+  (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.timeout(timeoutMs * 2) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
 
 /**
@@ -107,8 +112,11 @@ export class McpClientPool {
     }
     const client = state.client!;
     let tools: McpLiveTool[];
-    try { tools = (await client.listTools(undefined, { cacheMode: 'bypass', timeout: settings.connectTimeoutMs })).tools as McpLiveTool[]; }
-    catch (error) { return { ok: false, reason: 'list-failed', detail: String(errorCode(error) ?? 'failed') }; }
+    try { tools = await listAllTools(client, settings.connectTimeoutMs); }
+    catch (error) {
+      if (errorCode(error) === 'LIST_PAGINATION_EXCEEDED') return { ok: false, reason: 'too-many-tools', detail: `more than ${MCP_CLIENT_LIST_PAGES_MAX} pages` };
+      return { ok: false, reason: 'list-failed', detail: String(errorCode(error) ?? 'failed') };
+    }
     if (tools.length > MCP_CLIENT_TOOLS_MAX) return { ok: false, reason: 'too-many-tools', detail: `${tools.length} > ${MCP_CLIENT_TOOLS_MAX}` };
     state.listing = { generation: state.generation, digests: new Map(tools.map(tool => [tool.name, mcpToolPinDigest(tool)])) };
     const info = client.getServerVersion();
@@ -127,7 +135,7 @@ export class McpClientPool {
     // Both eras: `server/discover` first (2026-07-28), the `initialize` handshake when the server is not modern (stdio: a sibling probe process).
     const negotiation: VersionNegotiationMode = 'auto';
     const client = new Client({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { supportedProtocolVersions: [...MCP_CLIENT_PROTOCOL_VERSIONS],
-      versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } } });
+      versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX });
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
@@ -148,7 +156,7 @@ export class McpClientPool {
     const state = this.states.get(serverId), client = state?.client;
     if (!state || !client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
-      try { const tools = (await client.listTools(undefined, { cacheMode: 'bypass', timeout: options.timeoutMs })).tools as McpLiveTool[];
+      try { const tools = await listAllTools(client, options.timeoutMs);
         state.listing = { generation: state.generation, digests: new Map(tools.map(entry => [entry.name, mcpToolPinDigest(entry)])) }; }
       catch { return { outcome: 'refused', reason: 'not-connected' }; }
     }
