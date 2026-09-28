@@ -160,6 +160,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },
   // POLICY-ADMIN I5-i: a generic producer refused an authority operation before any policy, ledger or target access.
   OPERATION_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.OPERATION_SURFACE_RESTRICTED', p, l) }) },
+  // POLICY-HARDEN K3: only the authority surface may allow an approval of an authority operation; a deny stays open everywhere.
+  APPROVAL_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_SURFACE_RESTRICTED', p, l) }) },
   // MCP-CLIENT scoped registry and approval (`deckent mcp add|add-json|list|get|remove|approve`).
   MCP_SERVER_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_UNKNOWN', p, l) }) },
   MCP_SERVER_EXISTS: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_EXISTS', p, l) }) },

@@ -964,6 +964,7 @@
   "error.EFFECT_REJECTED": "Hedef operasyonu herhangi bir etkiden önce reddetti.",
   "error.EFFECT_TARGET_CHANGED": "Bu etki kaydedildikten sonra operasyonun tanımı veya hedef ucu değişti (ya da kayıt sabitlenmiş hedeflerden önce). Hiçbir şey gönderilmedi; yeniden denemeden önce kayıtlı etkiyi özgün hedefinde uzlaştırın.",
   "error.OPERATION_SURFACE_RESTRICTED": "Bu operasyon kimin ne yapabileceğini değiştirir; genel operasyon yolları (deckent operation, SDK, MCP) onu çalıştıramaz. Hiçbir şey sorulmadı, kaydedilmedi ya da değiştirilmedi. Bunun yerine policy yönetim yüzeyini kullanın.",
+  "error.APPROVAL_SURFACE_RESTRICTED": "Bu onay kimin neyi yapabileceğini değiştiriyor. Yalnız yetki yönetimi yüzeyinde karar verilebilir, burada verilemez.",
   "error.MCP_SERVER_UNKNOWN": "Bu proje için {name} adlı MCP sunucusu kayıtlı değil.",
   "error.MCP_SERVER_EXISTS": "{scope} kapsamında {name} adlı MCP sunucusu zaten var; önce kaldırın.",
   "error.MCP_SERVER_SCOPE_AMBIGUOUS": "{name} birden çok kapsamda kayıtlı ({scopes}); --scope verin.",

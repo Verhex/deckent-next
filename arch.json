@@ -1480,7 +1480,8 @@
         "src/platform/core/clock",
         "src/platform/core/integrity",
         "src/domain/core/effect",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/domain/core/audit"
       ],
       "plan": "SECURITY"
     },
@@ -1512,7 +1513,11 @@
         "src/engine/core/approval",
         "src/engine/core/runtime",
         "src/composition/core/scoped-request",
-        "src/composition/core/query-errors"
+        "src/composition/core/query-errors",
+        "src/domain/core/audit",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/contract"
       ],
       "plan": "SECURITY"
     },

@@ -102,9 +102,7 @@ it('pages a hidden-subject view over visible approvals only: a page never comes 
 });
 
 // POLICY-HARDEN K3 at the runtime service: the peer behind MCP `decide_approval` (same uid) cannot allow an approval of an authority-surface
-// operation (`policy.administer@1`); the request stays pending. A deny is still accepted. KNOWN GAP (lead: registry entry): the service
-// answers with the stable code, but `APPROVAL_SURFACE_RESTRICTED` is not in `ErrorRegistry`, so the client maps it to the generic
-// RUNTIME_SERVICE_TRANSPORT (client.ts `ErrorRegistry.has`); once registered, tighten the first assertion to `{ code: 'APPROVAL_SURFACE_RESTRICTED' }`.
+// operation (`policy.administer@1`); the request stays pending. A deny is still accepted. The code is registered, so the client sees it as is.
 it('refuses an allow of a policy.administer approval from a runtime client (the MCP decide_approval path); the record stays pending', async () => {
   const f = await fixture();
   const layout = (await openConfiguredAttemptStore(f.project, { env: f.env }).then(opened => { opened.store.close(); return opened; }));
@@ -122,7 +120,7 @@ it('refuses an allow of a policy.administer approval from a runtime client (the 
     const client = createConfiguredRuntimeClient(f.project, { env: f.env });
     const decide = (approvalId: string, decision: 'allow' | 'deny') => client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `${decision}-${approvalId}`,
       expectedRevision: 0, decision, reason: 'Reviewed' });
-    await expect(decide('authority-a', 'allow')).rejects.toBeInstanceOf(Error);
+    await expect(decide('authority-a', 'allow')).rejects.toMatchObject({ code: 'APPROVAL_SURFACE_RESTRICTED' });
     expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'authority-a' })).toMatchObject({ status: 'pending', decision: null });
     await expect(decide('authority-b', 'deny')).resolves.toMatchObject({ status: 'decided', decision: { decision: 'deny' } });
     // An ordinary operation approval is still decidable on the same surface.
