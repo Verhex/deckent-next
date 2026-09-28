@@ -9,10 +9,11 @@ import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PRE
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
-  readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
+  readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
+  type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
+import { createAgentFetch } from './fetch.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -22,16 +23,19 @@ import { createAgentCallDecisions } from './mode.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
   openAiChatUsageFromInvocation } from '#adapters/index.js';
 
-/** Service-owned state of running turns: cancellation by the starting principal, service stop, and the scratch areas they hold (never swept). */
+/** Service-owned state of running turns: cancellation by the starting principal, service stop, the scratch areas they hold (never swept),
+ * and how `fetch_url` reaches the network (the system transport; only an in-process test passes another). */
 export interface RuntimeChatTurnHost {
   readonly model: RuntimeModelInvocationHost;
   readonly signal: AbortSignal;
   readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
   readonly scratch: ScratchActivity;
+  readonly fetchTransport: HttpFetchTransport;
 }
-export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity()): RuntimeChatTurnHost {
+export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT): RuntimeChatTurnHost {
   void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
-  return Object.freeze({ model, signal, running: new Map(), scratch });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -99,7 +103,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area.
   const scratch = workspace ? await openScratchSession(await prepareProductDirectory(context.layout, 'scratch'), scratchSessionKey({ scopeId: command.scopeId, principal: context.principal,
     turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), { maxResultBytes: chat.readResultMaxBytes }) : null;
-  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS] : [];
+  // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says there is no network.
+  const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
+    transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
+  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
+    ...(fetcher ? [FETCH_URL_TOOL_SPEC] : [])] : [];
   const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
   const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
   const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
@@ -108,7 +116,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
   // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
   // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
-  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays } });
+  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
+    network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' } });
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
     binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
     ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
@@ -128,7 +137,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
   const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
   // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals });
+  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher });
+  const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
 
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
@@ -172,7 +182,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       authorize: (tool, args) => decisions.authorize(tool, args),
       async prepare(tool, args) {
-        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name))) return decisions.prepare(tool, args);
+        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool)) return decisions.prepare(tool, args);
         return { ok: true };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
@@ -195,7 +205,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
             summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
-              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : undefined) ?? chatTurnApprovalPreview(tool.name, args),
+              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
@@ -244,6 +254,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           return decisions.execute(tool, args, execution, callId, gate => tool.toolClass === 'edit'
             ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate));
         }
+        if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       now: () => clock.sample().wallMs,

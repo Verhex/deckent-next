@@ -5,12 +5,14 @@ import { evaluatePolicy, identitySchema, modeEligibleApproval, policyResources, 
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
  * call); this module only decides. `edit`: a write outside the write floor; `edit-floor`: a write the floor always asks for;
  * shell cells come from the classifier's tiers (`shell-read-none` runs silently under allow; `shell-narrow-mutating` is the
- * owner's q1 set). `read` is a read tool.
+ * owner's q1 set). `read` is a read tool. A fetch (FETCH S7) is `fetch-listed` (an allowlisted host: the policy decision stands) or
+ * `fetch-unlisted` (any other host: allow asks); neither is ever relaxable, so no permission mode lowers a fetch (owner 2026-09-28).
  */
 export type AgentToolCallCell = 'read' | 'edit' | 'edit-floor' | 'shell-read-none' | 'shell-read-low' | 'shell-narrow-mutating' | 'shell-destructive'
-  | 'shell-always-ask' | 'shell-other-modify';
+  | 'shell-always-ask' | 'shell-other-modify' | 'fetch-listed' | 'fetch-unlisted';
 /** Cells that ask even when every policy says allow (the floor raise). A mode never removes this raise by itself. */
-const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive', 'shell-always-ask', 'shell-other-modify']);
+const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive', 'shell-always-ask', 'shell-other-modify',
+  'fetch-unlisted']);
 /**
  * The only cells a mode may lower, and in which modes (owner 2026-09-27): an ordinary edit in auto-edit and full-auto; the narrow
  * mutating shell set in full-auto only. Everything else — read tools, the write floor, `low`, destructive, always-ask, other
@@ -25,7 +27,7 @@ export interface AgentToolCallRequest {
   readonly principal: VerifiedPrincipal;
   readonly scopeId: string;
   readonly tool: { readonly name: string };
-  /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`), or null for a read tool. */
+  /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`, `network.fetch`), or null for a read tool. */
   readonly operation: { readonly id: string } | null;
   readonly cell: AgentToolCallCell;
 }

@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 const execute = promisify(execFile);
 /** Test-only CA, fresh private key per fixture. A bounded validity margin avoids a notBefore
  * race between certificate creation and TLS verification clocks. Trust verification stays enabled. */
-export async function createLocalTls(root: string): Promise<{ readonly key: string; readonly caPem: string }> {
+export async function createLocalTls(root: string, options: { readonly dnsNames?: readonly string[] } = {}): Promise<{ readonly key: string; readonly caPem: string }> {
   const directory = await mkdtemp(join(root, 'tls-'));
   const now = Date.now(), marginMs = 24 * 60 * 60 * 1000;
   const stamp = (value: number) => new Date(value).toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '') + 'Z';
@@ -25,7 +25,7 @@ x509_extensions=extensions
 [policy]
 commonName=supplied
 [extensions]
-subjectAltName=IP:127.0.0.1
+subjectAltName=IP:127.0.0.1${(options.dnsNames ?? []).map(name => `,DNS:${name}`).join('')}
 basicConstraints=critical,CA:TRUE
 `),
     ]);

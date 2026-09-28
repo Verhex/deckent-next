@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore } from '#adapters/index.js';
+import { openSqliteModelActivationStore, type HttpFetchTransport } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -37,7 +37,9 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
   thinkingSwitch?: boolean; dataInside?: boolean;
   /** SCR-A: the `terminal.scratch` and `terminal.shell` sections, when a test sets them. */
-  scratch?: Record<string, unknown>; shell?: Record<string, unknown> } = {}) {
+  scratch?: Record<string, unknown>; shell?: Record<string, unknown>;
+  /** FETCH: the `terminal.fetch` section, and the test-only transport handed to the in-process service (never config or env). */
+  fetch?: Record<string, unknown>; fetchTransport?: HttpFetchTransport } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
@@ -93,7 +95,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 }, ...(options.scratch ? { scratch: options.scratch } : {}),
-      ...(options.shell ? { shell: options.shell } : {}) },
+      ...(options.shell ? { shell: options.shell } : {}), ...(options.fetch ? { fetch: options.fetch } : {}) },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
@@ -119,7 +121,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
     const service = await startConfiguredRuntimeService(project, observed ? { async onPage() {}, async onError() {},
       onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); },
       onModelAllocationSlotsReleased(result) { released.push(result); }, onScratchSwept(result) { scratchSwept.push(result); } }
-      : { async onPage() {}, async onError() {} }, { env });
+      : { async onPage() {}, async onError() {} }, { env }, options.fetchTransport ? { fetchTransport: options.fetchTransport } : undefined);
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };

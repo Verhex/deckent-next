@@ -8,7 +8,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig,
-  startScratchSweeper, sweepScratch, type ScratchSweepResult } from '#adapters/index.js';
+  startScratchSweeper, sweepScratch, type HttpFetchTransport, type ScratchSweepResult } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -88,7 +88,7 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
 
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
 async function startService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
-  options: ConfigLoadOptions = {}) {
+  options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
@@ -96,12 +96,12 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   // Ledger custody, then endpoint custody, before the ledger is backed up or migrated: one service per ledger whatever its endpoint
   // (LEDGER-SINGLETON), so a second start fails here and never touches that host's schema; kept until the listener is up (Astra 2054 R1).
   const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
-  try { return await startUnderCustody(projectRoot, observer, options, config, guard); }
+  try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports); }
   catch (error) { await guard.release(); throw error; }
 }
 
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard) {
+  config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   await registerConfiguredScopesAtStart(config);
@@ -120,7 +120,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
-  const scratchActivity = createScratchActivity(), chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity);
+  const scratchActivity = createScratchActivity(), chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity, ports.fetchTransport);
   startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
   const workspaceFiles = createRuntimeWorkspaceFileHost();
@@ -238,8 +238,10 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, stop });
 }
 
+/** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport. */
+export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
-  options: ConfigLoadOptions = {}) {
-  try { return await startService(projectRoot, observer, options); }
+  options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
+  try { return await startService(projectRoot, observer, options, ports); }
   catch (error) { throw queryFailure(error); }
 }
