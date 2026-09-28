@@ -140,6 +140,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
     // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
+      model: { ...chat.reference, nativeId: binding.definition.model.nativeId },
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' } });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),

@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync as readFixture } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { AGENT_TURN_NO_PROGRESS_NOTE, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
-  type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { AGENT_TURN_NO_PROGRESS_NOTE, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
+  renderAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { resolveProductLayout } from '#platform/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
 const readFile: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a file.',
@@ -450,4 +451,16 @@ it('closes the turn with a note that says how to go on when the summary call its
   const result = await runAgentTurn({ messages: history, tools, signal: new AbortController().signal, emit: () => undefined },
     { ...failed.value, measure: async () => ({ promptTokens: 9000, windowTokens: 10_000, quality: 'provider-count' }), summarize: async () => null });
   expect(result.note).toMatch(/history is unchanged.*Send the message again to retry, or start a new conversation/);
+});
+
+// TERM-FEEDBACK-1 (v4): the owner asked the model who it is and it could not say; it also read other conversations it was pointed at.
+it('names the running model from its catalog reference and tells the model that Deckent state is protected, without naming its paths (v4)', () => {
+  const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
+  const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
+    model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' } });
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(4); expect(prompt.startsWith('[Deckent runtime instructions v4]')).toBe(true);
+  expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
+  expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
+  expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
+  expect(prompt).not.toMatch(/terminal-sessions|ledger\.db/); expect(prompt).toContain('Deckent configuration: .deckent/config.json (readable)');
 });
