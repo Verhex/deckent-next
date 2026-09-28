@@ -18,8 +18,8 @@ const shellGrants = [
 const toolText = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
 const ask = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content: 'show me the ledger' }] });
 
-async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, marker: string) {
-  const f = await runtime({ toolGrant: false, extraGrants: shellGrants, shell: { schemaVersion: 1, realm: 'require-sandbox' }, dataRoot: '.cache/deckent', ...(sandboxes ? { sandboxes } : {}) });
+async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, marker: string, dataRoot = '.cache/deckent') {
+  const f = await runtime({ toolGrant: false, extraGrants: shellGrants, shell: { schemaVersion: 1, realm: 'require-sandbox' }, dataRoot, ...(sandboxes ? { sandboxes } : {}) });
   await f.start();
   const client = f.client();
   const turn = async (turnId: string, command: string) => {
@@ -33,11 +33,11 @@ async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, mark
     await Promise.all(pending);
     return events;
   };
-  const literal = await turn('turn-product-literal', 'cat .cache/deckent/state/ledger.db');
+  const literal = await turn('turn-product-literal', `cat '${dataRoot}/state/ledger.db'`);
   expect(literal.some(event => event.kind === 'approval.requested')).toBe(false);
-  expect(toolText(literal)).toMatch(/^\[deckent\] run_shell: error=PRODUCT_STATE_PROTECTED \(\.cache\/deckent\/state\/ledger\.db\)/u);
+  expect(toolText(literal).startsWith(`[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${dataRoot}/state/ledger.db)`), toolText(literal)).toBe(true);
   expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([]);
-  const reached = await turn('turn-product-reached', 'cat "$(printf %s .cache/deckent/state/ledger.db)" 2>&1; echo "cat=$?"; echo x >> "$(printf %s .cache/deckent/state/ledger.db)" 2>&1; echo "append=$?"');
+  const reached = await turn('turn-product-reached', `cat "$(printf %s '${dataRoot}/state/ledger.db')" 2>&1; echo "cat=$?"; echo x >> "$(printf %s '${dataRoot}/state/ledger.db')" 2>&1; echo "append=$?"`);
   expect(reached.some(event => event.kind === 'approval.requested')).toBe(true);
   const text = toolText(reached), lines = text.split('\n');
   expect(text).toMatch(new RegExp(`^\\[deckent\\] run_shell: ${marker}; exit 0`, 'u')); expect(text).not.toContain('SQLite format');
@@ -48,4 +48,7 @@ async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, mark
 describe.skipIf(process.platform !== 'linux')('product state under an ignored ancestor through a real turn (Astra 2162)', () => {
   it.skipIf(!bwrapReady)('S9: plan refusal without a card, then the bubblewrap floor', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap'); }, 30_000);
   it.skipIf(landlockAbi < 1)('S11: plan refusal without a card, then the Landlock floor', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock'); }, 30_000);
+  // Astra 2164: a data root with brackets (`[` is literal to the deny matcher) is protected the same way in both realms.
+  it.skipIf(!bwrapReady)('S9: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap', '.cache/deckent[1]'); }, 30_000);
+  it.skipIf(landlockAbi < 1)('S11: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock', '.cache/deckent[1]'); }, 30_000);
 });
