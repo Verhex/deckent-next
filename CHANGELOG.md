@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (Astra 2145): a service started on another socket over the same ledger no longer settles a live service's open model call;
+  the terminal grep count comes from the tool's exact `matches=N` line (files with `:` in the name are counted correctly).
 - ADDED (protocol v16, owner 2026-09-28): `chatTurn` optional `reasoning: 'on' | 'off'`; lifecycle window [16, 15]; `/reasoning off`
   turns model thinking off for every round (models declaring `chat-template-enable-thinking`; others refuse the turn by name).
 - SECURITY: `@file` never lists or attaches the layout's approval records or approval previews.

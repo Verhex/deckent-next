@@ -457,7 +457,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   to configure identity and a shutdown grant) and the terminal banner says so. **Upgrade:** `runtime serve` upgrades an
   existing older ledger once at startup, before accepting connections and only under endpoint custody: the service first
   binds the kernel-owned abstract guard socket of its endpoint (held by any live host of any build, released by the kernel
-  when the process dies), so a second start against a live service fails `LOCAL_RUNTIME_ALREADY_RUNNING` before any
+  when the process dies), so a second start against a live service fails `LOCAL_RUNTIME_ALREADY_RUNNING` on the same endpoint (a start on another
+configured socket is not excluded — Astra 2145 open limit) before any
   backup or migration, and custody is kept until the listener is up (Astra 2054 R1). A consistent copy is written first
   (`VACUUM INTO` the `ledgerBackups` resource `state/backups/ledger-v<N>-<time>.db`, 0600, never over an existing file),
   then the normal single-transaction migration runs and the service reports from/to versions. A missing or current
@@ -641,12 +642,15 @@ settlement releases the slot. The `unknown` record, its evidence, its spending h
 effect and billing stay; only concurrency is corrected. Replay of a settlement never releases twice. The allocation integrity audit
 counts only open claims. `maxInFlight` therefore bounds locally open requests, not provider work that may continue after a disconnect
 (vLLM aborts a streamed request on disconnect; an API provider may keep computing — billing uncertainty is the spending hold's job).
-A claim left by a crashed **service** process is settled at the next start (FIX-2143-SLOTS, owner 2026-09-28): the service's model
-send owner is `runtime-service:<instanceId>` (minted only by `runtimeServiceModelOwnerId`, recognised by `isRuntimeServiceModelOwnerId`);
-holding endpoint custody proves no service instance of this installation is alive (the kernel frees the guard socket when a process
-dies; a clean stop releases it only after every admitted operation settled). An open call whose control is `permitted` with such an
+A claim left by a crashed **service** process is settled at the next start (FIX-2143-SLOTS, owner 2026-09-28): the service's model send owner is `runtime-service:<custodyId>:<instanceId>` (minted only by `runtimeServiceModelOwnerId`), where
+`custodyId` is the digest naming the endpoint custody the instance holds (`LocalRuntimeSocketGuard.custodyId`; the guard socket is
+`\0deckent-<custodyId>`, `custodyId = sha256(endpoint \0 uid)`). Holding one endpoint's custody proves only that no service instance is
+alive **on that endpoint** (the kernel frees the guard socket when a process dies; a clean stop releases it only after every admitted
+operation settled); the runtime socket is a configurable layout resource, so another endpoint may share the ledger (Astra 2145 R1).
+A start therefore proves ended only owners that name the custody it holds now (`endedRuntimeServiceModelOwner(custodyId)`; no
+prefix-only match exists). An open call whose control is `permitted` with such an
 owner settles `unknown` through the ordinary settlement (`transport-error`, no evidence; spending hold `unknown`, `lifetimeCalls`
-unchanged, slot freed). Untouched and still holding their slot: `pending` (claim without send permission), `unobserved` (v18
+unchanged, slot freed). Untouched and still holding their slot: `permitted` calls of an instance of another endpoint (proven only by a later start on that endpoint), the earlier unpublished owner shape without custody, `pending` (claim without send permission), `unobserved` (v18
 migrated), and `permitted` calls of any other owner (host-less direct call, a build before this one). The durable record does not
 carry "owner ended" as a separate reason (outcome schema v4 allows only `transport-error`); the start observer reports the count.
 **Start reconciliation.** Under endpoint custody (with the ledger upgrade and interrupted-turn close), per allocation, one
@@ -675,7 +679,12 @@ result summary ("12 matches", "243/269 lines, more available") client-side from 
 streams, with the derivation functions in `surfaces/core/terminal-kit`; the terminal agent stream in composition carries the engine's
 target only and imports surfaces as types only, so composition (SDK, runtime service) never loads the surface layer (Ink/React) at
 runtime — guarded by `tests/contracts/composition/sdk-import-graph.test.ts` over the built `dist/index.js` graph. Read results default to 64 KiB (`terminal.chat.readResultMaxBytes`,
-1 KiB–1 MiB, chat schema 1 unchanged); `grep` accepts `context` (0–5) and `maxHits` (≤ 200), `context=0` byte-identical to before.
+1 KiB–1 MiB, chat schema 1 unchanged); `grep` accepts `context` (0–5) and `maxHits` (≤ 200). `maxHits` caps **seed hits** (hits that open a context window); hits inside an
+opened window are shown, marked `:` and counted too; with `context=0` it is the number of hits shown. A grep result with hits ends
+with `[deckent] grep: matches=N` (`N` = `:`-marked hit lines actually returned, counted after the result byte cap; `N+` when fewer
+than found: hit cap, byte-cap cut, skipped or unscanned files). The terminal's grep count comes only from that last line, or 0 from
+the "no matches" line (`+` when the search was not complete); without it (older result, other producer, final byte-cap cut) no
+summary is shown — hit rows are never parsed back, since a workspace path may contain `:` (Astra 2145 R2). Tool `version` unchanged.
 **Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION = 1`),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable) with the ledger and terminal-session paths,
@@ -829,7 +838,9 @@ unsupported-platform (Windows). It is not a sandbox: the command has the service
 the command runs in its own process group so it can be killed, which also means a service crash leaves a running command orphaned
 (the turn is closed as interrupted at the next start, but nothing signals the group; legacy had the same property; Node has no
 parent-death signal) — candidate: record the group id in the effect journal and signal it at start.
-**Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. The follow-up `b596eee` review (2130) closes both C12 violations: protocol subject visibility now participates in SQL page selection before LIMIT/capacity, and fresh unconsumed approval admission is rechecked after observation before the first claim. Already-consumed intent recovery remains separate. I40-c in that candidate uses trusted producer/consumer time and a monotonic TTL; the decider subtracts usability, never adds lifetime, with a 5 s conservative allowance. A decider already 5 s ahead may reject about 10 s early relative to the producer, and small TTLs can be wholly unusable; a single expiry authority remains a separate owner option. These are reviewed integration properties, not claims that current main or the live service has been updated (PLAN).
+**Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. The follow-up `b596eee` review (2130) closes both C12 violations: protocol subject visibility now participates in SQL page selection before LIMIT/capacity, and fresh unconsumed approval admission is rechecked after observation before the first claim. Already-consumed intent recovery remains separate. I40-c in that candidate uses trusted producer/consumer time and a monotonic TTL; the decider subtracts usability, never adds lifetime, with a 5 s conservative allowance. A decider already 5 s ahead may reject about 10 s early relative to the producer, and small TTLs can be wholly unusable; a single expiry authority remains a separate owner option. These are reviewed integration properties, not claims that current main or the live service has been updated (PLAN). Open limit (Astra 2145): the ledger upgrade, interrupted-turn close, orphaned tool-call approval expiry and preview sweep still rely on
+endpoint custody alone; a service started on another socket over the same ledger is not excluded from them (ledger-level custody is
+the proposed class fix, owner decision).
 
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
