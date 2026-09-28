@@ -9,8 +9,8 @@ import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnSto
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
-  readTerminalShellConfig, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity, type LocalPeerIdentity,
-  type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
+  readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
+  type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
@@ -29,6 +29,7 @@ export interface RuntimeChatTurnHost {
   readonly scratch: ScratchActivity;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity()): RuntimeChatTurnHost {
+  void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
   return Object.freeze({ model, signal, running: new Map(), scratch });
 }
 

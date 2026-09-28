@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowPicker } from './arrow-picker.js';
 import type { AgentToolApprovalSettlement } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
-import { notice, type WorklineActionLabels } from './workline-actions.js';
+import { notice, type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import { APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval } from './approval-watch.js';
 import { fillTemplate, formatDuration } from './worker-line.js';
 import { WorkerPanel } from './worker-panel.js';
@@ -50,7 +51,21 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const [modal, setModal] = useState<Modal>(null);
+  const [picker, setPicker] = useState<readonly WorklineApproval[] | null>(null);
   const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
+  const mounted = useRef(true);
+  const approvalGate = useRef<((choice: { readonly index: number } | null) => void) | null>(null);
+  useEffect(() => () => {
+    mounted.current = false;
+    const resolve = approvalGate.current;
+    approvalGate.current = null;
+    resolve?.(null);
+  }, []);
+  const finishPicker = (choice: { readonly index: number } | null) => {
+    const resolve = approvalGate.current;
+    approvalGate.current = null;
+    resolve?.(choice);
+  };
   useEffect(() => { if (!watchingWorkers) setWorkers([]); }, [watchingWorkers]);
   const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => {
     setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker'));
@@ -78,13 +93,26 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     }
     const now = Date.now();
     const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage!, now);
-    const rows = pending.map((item, index) => notice('info', fillTemplate(work.approvalItem, { n: index + 1, id: item.approvalId, run: item.runId,
-      task: item.taskId, summary: clip(item.summary), duration: formatDuration(item.expiresAt - now, work.workerLine) })));
-    if (truncated) rows.push(notice('info', fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES })));
-    if (!pending.length) { push([...rows, notice('info', work.approvalsNone)]); return; }
-    const target = !ref ? pending[0] : /^[1-9][0-9]*$/.test(ref) ? pending[Number(ref) - 1] : pending.find(item => item.approvalId === ref);
-    if (!target) { push([...rows, notice('error', fillTemplate(work.approvalNotFound, { ref }))]); return; }
-    push(rows);
+    const rows = pending.map((item, index) => notice('info', approvalLine(item, index, now, work)));
+    const bound = truncated ? [notice('info', fillTemplate(work.approvalsTruncated, { pages: APPROVAL_SCAN_MAX_PAGES }))] : [];
+    if (!pending.length) { push([...bound, notice('info', work.approvalsNone)]); return; }
+    if (!ref) {
+      if (bound.length) push(bound);
+      setPicker(pending);
+      const choice = await new Promise<{ readonly index: number } | null>(resolve => { approvalGate.current = resolve; });
+      approvalGate.current = null;
+      if (!mounted.current) return;
+      setPicker(null);
+      if (!choice) return;
+      const picked = pending[choice.index];
+      if (!picked) return;
+      setModal({ kind: 'approval', approval: picked, remaining: pending.length - 1 });
+      return;
+    }
+    const target = /^[1-9][0-9]*$/.test(ref) ? pending[Number(ref) - 1] : pending.find(item => item.approvalId === ref);
+    if (!target) { push([...rows, ...bound, notice('error', fillTemplate(work.approvalNotFound, { ref }))]); return; }
+    push([...rows, ...bound]);
+    setPicker(null);
     setModal({ kind: 'approval', approval: target, remaining: pending.length - 1 });
   }, [labels.runNotFound, ledger, push, work]);
 
@@ -134,13 +162,21 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       pendingText={work.cancelPending} lines={[fillTemplate(work.cancelDetail, { revision: view.revision, scope: view.scopeId, phases: phaseCounts(view) }),
         ...(view.cancellationRequested ? [work.cancelAlreadyRequested] : [])]} onDecide={yes => void cancelRun(view, yes)} />;
   }
+  const pickerOpen = picker !== null && modal === null;
   const region = (
     <>
       {work ? <WorkerPanel workers={workers} labels={work.panel} line={work.workerLine} /> : null}
+      {picker && modal === null && work ? <ArrowPicker rows={picker.map((item, index) => approvalLine(item, index, Date.now(), work))}
+        onSelect={index => finishPicker({ index })} onCancel={() => finishPicker(null)} /> : null}
       {card}
     </>
   );
-  return { observeWorkers, run, askTurnApproval, settleTurnApproval, modalOpen: modal !== null, region };
+  return { observeWorkers, run, askTurnApproval, settleTurnApproval, modalOpen: modal !== null, pickerOpen, region };
+}
+
+function approvalLine(item: WorklineApproval, index: number, now: number, work: WorkSurfaceLabels): string {
+  return fillTemplate(work.approvalItem, { n: index + 1, id: item.approvalId, run: item.runId, task: item.taskId,
+    summary: clip(item.summary), duration: formatDuration(item.expiresAt - now, work.workerLine) });
 }
 
 /** A call preview is shown up to 24 lines; the rest is counted, never silently dropped. */

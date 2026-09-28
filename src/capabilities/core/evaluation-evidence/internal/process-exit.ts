@@ -38,3 +38,15 @@ export function evaluateProcessExit(parameters: unknown, terminalEvidence: unkno
   const terminal = processExitCauseSchema.parse(terminalEvidence);
   return terminal.signal === undefined && terminal.exitCode !== null && acceptedExitCodes.includes(terminal.exitCode) ? 'pass' : 'fail';
 }
+
+/** "Not weaker" for process-exit: a criterion accepting only exit codes the required bar accepts never passes a process the bar fails. */
+export function processExitWithin(required: unknown, actual: unknown): boolean {
+  const bar = parametersSchema.safeParse(required), criterion = parametersSchema.safeParse(actual);
+  return bar.success && criterion.success && criterion.data.acceptedExitCodes.every(code => bar.data.acceptedExitCodes.includes(code));
+}
+/** Per-implementation strictness rule used by the adoption verification bar (B06-2c). An implementation without a rule never
+ * satisfies a bar (fail-closed); other evaluators add their own rule here under their implementation identity. */
+export function criterionWithin(implementation: Readonly<{ id: string; version: number }>, required: unknown, actual: unknown): boolean {
+  return implementation.id === PROCESS_EXIT_EVALUATOR.implementation.id && implementation.version === PROCESS_EXIT_EVALUATOR.implementation.version
+    && processExitWithin(required, actual);
+}

@@ -30,6 +30,7 @@ export const terminalConfigSchema = z.object({
   shell: z.object({
     schemaVersion: z.literal(1),
     timeoutMs: z.number().int().min(1_000).max(3_600_000).default(300_000),
+    realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).default('prefer-sandbox'),
     environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
   }).strict().optional(),
   /** The agent's scratch area (SCR-A, owner 2026-09-28): per-write, per-session and installation-wide byte ceilings of the layout's
@@ -53,11 +54,11 @@ export function readTerminalChatConfig(config: Record<string, unknown>): Termina
   return terminalConfigSchema.parse(section).chat ?? null;
 }
 
-export type TerminalShellConfig = { readonly timeoutMs: number; readonly environment: readonly string[] };
+export type TerminalShellConfig = { readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host'; readonly timeoutMs: number; readonly environment: readonly string[] };
 /** The shell section, or its defaults when absent. */
 export function readTerminalShellConfig(config: Record<string, unknown>): TerminalShellConfig {
   const shell = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).shell;
-  return Object.freeze({ timeoutMs: shell?.timeoutMs ?? 300_000, environment: Object.freeze([...(shell?.environment ?? [])]) });
+  return Object.freeze({ realm: shell?.realm ?? 'prefer-sandbox', timeoutMs: shell?.timeoutMs ?? 300_000, environment: Object.freeze([...(shell?.environment ?? [])]) });
 }
 
 export type TerminalScratchConfig = { readonly writeMaxBytes: number; readonly sessionMaxBytes: number; readonly installationMaxBytes: number;

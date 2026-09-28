@@ -36,13 +36,19 @@ export interface ConversationSessionLabels {
   /** No measurement yet · `{count}` messages */
   readonly contextNone: string;
 }
+/** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
+export interface ResumePickerItem { readonly sessionId: string; readonly label: string }
+export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[] }>;
 type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
 const LISTED = 10;
+function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly ResumePickerItem[]): SessionCommandResult {
+  return resumePicker && resumePicker.length > 0 ? { entries, resumePicker } : { entries };
+}
 const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
 
 /**
  * The workline's conversation session (T-L5c): a fresh id per view (or per `/new`), the whole history saved after every turn,
- * `/resume` to list and load a previous one of this scope, `/context` for the latest measured prompt. A failed save is shown once
+ * `/resume` with no argument opens an arrow-key picker (a typed `/resume <n|id>` still loads one), `/context` for the latest measured prompt. A failed save is shown once
  * and never blocks the conversation.
  */
 export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined) {
@@ -61,35 +67,36 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     }
   }, [labels, port]);
   const run = useCallback(async (command: 'resume' | 'context' | 'new', args: string,
-    history: { current: readonly AgentChatMessage[] }): Promise<WorkLedgerEntry[]> => {
-    if (!labels) return [];
+    history: { current: readonly AgentChatMessage[] }): Promise<SessionCommandResult> => {
+    if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
     if (command === 'new') {
       history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null;
-      return [notice('info', labels.started)];
+      return done([notice('info', labels.started)]);
     }
     if (command === 'context') {
       const measured = context.current;
-      if (!measured) return [notice('info', fillTemplate(labels.contextNone, { count }))];
+      if (!measured) return done([notice('info', fillTemplate(labels.contextNone, { count }))]);
       const percent = measured.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : '?';
-      return [notice('info', fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: measured.promptTokens,
-        window: measured.windowTokens ?? '?', percent, count }))];
+      return done([notice('info', fillTemplate(labels.context, { approx: measured.quality === 'upper-bound' ? '~' : '', prompt: measured.promptTokens,
+        window: measured.windowTokens ?? '?', percent, count }))]);
     }
-    if (!port) return [notice('error', labels.unavailable)];
+    if (!port) return done([notice('error', labels.unavailable)]);
     if (!args) {
       listed.current = (await port.list()).filter(summary => summary.sessionId !== sessionId.current).slice(0, LISTED);
-      if (!listed.current.length) return [notice('info', labels.none)];
-      return listed.current.map((summary, index) => notice('info', fillTemplate(labels.entry, { index: index + 1, session: summary.sessionId.slice(0, 8),
-        when: when(summary.updatedAtMs), count: summary.messages, preview: summary.preview })));
+      if (!listed.current.length) return done([notice('info', labels.none)]);
+      // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
+      return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId, label: fillTemplate(labels.entry, {
+        index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs), count: summary.messages, preview: summary.preview }) })));
     }
     const byIndex = /^\d+$/.test(args) ? listed.current[Number(args) - 1] : undefined;
     const target = byIndex?.sessionId ?? (args.length >= 8 ? (listed.current.length ? listed.current : await port.list())
       .find(summary => summary.sessionId.startsWith(args.toLowerCase()))?.sessionId : undefined);
     const messages = target ? await port.load(target) : null;
-    if (!target || !messages) return [notice('error', labels.notFound)];
+    if (!target || !messages) return done([notice('error', labels.notFound)]);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
     sessionId.current = target; context.current = null;
-    return [notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) }))];
+    return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) }))]);
   }, [labels, port]);
   const id = useCallback(() => sessionId.current, []);
   return { noteContext, save, run, id };

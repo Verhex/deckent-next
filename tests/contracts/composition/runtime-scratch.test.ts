@@ -173,8 +173,9 @@ describe.skipIf(process.platform !== 'linux')('agent scratch area: shell, retent
       });
       await Promise.all(pending);
       const texts = toolTexts(events);
-      expect(texts[0]).toMatch(new RegExp(`exit 0 after [\\d.]+s \\(printenv TMPDIR\\)\\n${dir}\\n$`, 'u'));
-      expect(texts[2]).toMatch(/exit 0 [\s\S]*\nnoted\n$/u);
+      // SCR-C: under `prefer-sandbox` without a sandbox the result names the realm (`sandbox: none; ` and a closing notice line).
+      expect(texts[0]).toMatch(new RegExp(`: (sandbox: none; )?exit 0 after [\\d.]+s \\(printenv TMPDIR\\)\\n${dir}\\n`, 'u'));
+      expect(texts[2]).toMatch(/exit 0 [^\n]*\nnoted\n/u);
       expect(asked).toHaveLength(2); expect(asked[0]).toContain('run_shell'); expect(asked[1]).toContain('theirs');
       expect(finished(events).map(event => event.kind === 'tool.finished' && event.status)).toEqual(['ok', 'ok', 'ok', 'denied']);
       // The model was told: the shell's TMPDIR is the area.

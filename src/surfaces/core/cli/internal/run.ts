@@ -1,12 +1,14 @@
 import { cliUsage, shellIdentity } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
-import { runAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand } from '#engine/index.js';
+import { runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null }>>;
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+/** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
+export type RunDeliveryAdmissionHandler = (root: string, command: RunDeliveryAdmission, options: ConfigLoadOptions) => ReturnType<RunAdmissionHandler>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
 /** Human rendering of a typed cancellation delivery; shared by `run cancel` and the terminal `/cancel` card. */
@@ -37,7 +39,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
   if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
   const values = new Map<string, string>(); let json = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -53,7 +55,8 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   if (action === 'create') {
     const commandId = values.get('--command-id'); const source = values.get('--graph');
     if (!commandId || !source) throw usage(!commandId ? '--command-id' : '--graph');
-    if (!context.createRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const deliveryCommandId = values.get('--delivery-command-id');
+    if (!(deliveryCommandId === undefined ? context.createRun : context.createDeliveryRun)) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const root = context.root ?? process.cwd(); const options = { env: context.env ?? process.env };
     const config = await loadConfig(root, options);
     const graph = await readGraphInput(source === '-' ? source : resolve(root, source), config.cli.graphInputMaxBytes, context.stdin);
@@ -72,7 +75,8 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       const issue = sanitizeIssues(parsed.error.issues)[0];
       throw ErrorRegistry.createError('CLI_GRAPH_INPUT_INVALID', { params: { path: issue?.path.join('.') ?? 'graph', reason: issue?.code ?? 'invalid' } });
     }
-    const result = await context.createRun(root, parsed.data, options);
+    const result = deliveryCommandId === undefined ? await context.createRun!(root, parsed.data, options)
+      : await context.createDeliveryRun!(root, runDeliveryAdmissionSchema.parse({ ...parsed.data, deliveryCommandId }), options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
       run: data.admission.run.runId, revision: data.admission.run.revision,
     }, locale) }); return;

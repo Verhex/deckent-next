@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
-import { runHostShell, type HostShellResult } from './run.js';
+import type { HostShellResult } from './run.js';
+import { hostShellRealm, type ShellRealmResolution } from './realm.js';
 
 export const HOST_SHELL_TARGET_KIND = 'host-shell';
 /** Core operation of an agent shell command (catalog data in code for the built-in Core target). Policy-gated: which commands ask is
@@ -30,14 +31,17 @@ const inputSchema = z.object({ command: z.string().min(1).max(HOST_SHELL_COMMAND
 export class HostShellTarget implements EffectTarget {
   readonly kind = HOST_SHELL_TARGET_KIND;
   constructor(private readonly cwd: string, private readonly run: { readonly timeoutMs: number; readonly extraEnv: readonly string[];
-    readonly fixedEnv?: Readonly<Record<string, string>>; readonly signal: AbortSignal; readonly onOutput: (stream: 'stdout' | 'stderr', text: string) => void;
-    readonly onResult: (result: HostShellResult) => void }) {}
+    readonly realm?: ShellRealmResolution; readonly fixedEnv?: Readonly<Record<string, string>>; readonly signal: AbortSignal;
+    readonly onOutput: (stream: 'stdout' | 'stderr', text: string) => void; readonly onResult: (result: HostShellResult) => void }) {}
   identity() { return `host-shell:${this.cwd}`; }
   async observe() { return { version: null }; }
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
-    const result = await runHostShell({ command: parsed.data.command, cwd: this.cwd, timeoutMs: this.run.timeoutMs, extraEnv: this.run.extraEnv,
+    const selection = this.run.realm ?? { ok: true, realm: hostShellRealm, notice: null };
+    if (!selection.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
+    if (selection.notice) this.run.onOutput('stderr', `${selection.notice}\n`);
+    const result = await selection.realm.run({ command: parsed.data.command, cwd: this.cwd, timeoutMs: this.run.timeoutMs, extraEnv: this.run.extraEnv,
       ...(this.run.fixedEnv ? { fixedEnv: this.run.fixedEnv } : {}), signal: this.run.signal, onOutput: this.run.onOutput });
     this.run.onResult(result);
     if (result.status === 'exited') return { version: null };

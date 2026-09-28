@@ -4,6 +4,12 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (B06-2c): `execution.adoption.verification {kind, required, criteria}`; adoption without a required verification, with
+  the wrong kind or weaker criteria is refused by name; CLI `task integration-adopt --verification-run` and `run create
+  --delivery-command-id`; Docker profiles may bind project dependency directories read-only (`readOnlyMounts`).
+- ADDED (S5): `terminal.shell.realm` (`require-sandbox | prefer-sandbox | host`, default prefer) with a sandbox capability probe;
+  without an implemented sandbox, `require-sandbox` refuses and `prefer-sandbox` runs on the host with a visible `sandbox: none` notice.
+- ADDED (terminal): `/resume` and `/approvals` without arguments open an arrow-key picker (Enter opens, Esc closes).
 - ADDED (B06-2b, ledger v42): an adoption can bind an accepted verification Run of the delivered commit (SDK `verificationRunId` +
   `verificationKind`); mismatching, failed, pending, unsettled or cancelled Runs are refused by name and nothing moves; v1 adoption
   records migrate to v2 at the service-start upgrade (backed up); a v41 build refuses a v42 ledger.

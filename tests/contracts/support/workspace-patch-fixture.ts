@@ -14,16 +14,19 @@ import { fixtureDockerRegistry } from './execution-registry.js';
 const exec = promisify(execFile);
 /** Test-owned resources the caller removes in afterEach: temporary roots and cleanup callbacks (reverse order). */
 export interface FixtureTracker { readonly roots: string[]; readonly cleanup: (() => Promise<void>)[] }
-export interface WorkspacePatchFixtureOptions { readonly restartable?: boolean; readonly adoptionTargets?: readonly string[] }
+export interface WorkspacePatchFixtureOptions { readonly restartable?: boolean; readonly adoptionTargets?: readonly string[];
+  /** Extra tracked files of the base commit (relative path → content). */
+  readonly baseFiles?: Readonly<Record<string, string>> }
 
 /** Real Git project, configured Docker execution and one reserved coding attempt whose worker edits note/removed/added files. */
-export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets }: WorkspacePatchFixtureOptions = {}) {
+export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {} }: WorkspacePatchFixtureOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-patch-')); track.roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(project, 'note.txt'), 'before\n'); await writeFile(join(project, 'removed.txt'), 'remove\n');
-  await git('add', 'note.txt', 'removed.txt'); await git('commit', '-m', 'base'); const base = await git('rev-parse', 'HEAD');
+  for (const [path, content] of Object.entries(baseFiles)) await writeFile(join(project, path), content);
+  await git('add', 'note.txt', 'removed.txt', ...Object.keys(baseFiles)); await git('commit', '-m', 'base'); const base = await git('rev-parse', 'HEAD');
   await writeFile(join(project, 'note.txt'), 'owner-wip\n');
   const registry = fixtureDockerRegistry(['coding']); registry.profiles[0]!.parameters.argv = ['node', '-e',
     "const fs=require('node:fs');fs.writeFileSync('note.txt','after\\n');fs.unlinkSync('removed.txt');fs.writeFileSync('added.txt','new\\n');fs.mkdirSync('.codex');fs.writeFileSync('.codex/auth.json','synthetic-private');fs.appendFileSync('.git/config','\\n[diff]\\n external = touch /workspace/hook-fired\\n');"];

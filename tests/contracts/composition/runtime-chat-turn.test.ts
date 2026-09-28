@@ -43,7 +43,7 @@ type Script = { toolCall?: { name: string; arguments: string }; content?: string
 async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
-  thinkingSwitch?: boolean; dataInside?: boolean } = {}) {
+  thinkingSwitch?: boolean; dataInside?: boolean; shellRealm?: 'host' | 'prefer-sandbox' | 'require-sandbox' | 'absent' } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
@@ -98,7 +98,8 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
     ...(options.windowTokens ? { contextWindowTokens: options.windowTokens } : {}) };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
-    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
+    terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 },
+      ...(options.shellRealm === 'absent' ? {} : { shell: { schemaVersion: 1, realm: options.shellRealm ?? 'host' } }) },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     ...(options.approvalTtlMs ? { approvals: { requestTtlMs: options.approvalTtlMs } } : {}),
@@ -663,6 +664,37 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       expect(await kept()).toEqual([]);
     }, 60_000);
   }
+
+  it('S5 default prefer-sandbox shows host fallback before output and in the durable/model result', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'absent' }); await f.start();
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    await f.client().chatTurn(ask('turn-realm-prefer'), event => events.push(event));
+    const output = events.filter(event => event.kind === 'tool.output');
+    expect(output[0]).toMatchObject({ stream: 'stderr', text: expect.stringContaining('sandbox: none') });
+    expect(toolText(events)).toMatch(/^\[deckent\] run_shell: sandbox: none; /);
+    expect(JSON.stringify(f.state.requests[1])).toContain('sandbox: none');
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }]);
+  });
+
+  it('S5 require-sandbox refuses before approval, effect intent and process creation', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox' }); await f.start();
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"touch must-not-exist"}' } }, { content: 'Refused.' }];
+    const events: AgentTurnStreamEvent[] = [];
+    const client = f.client(), pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-realm-require'), event => {
+      events.push(event);
+      // If the realm gate regresses, approve this harmless fixture write so assertions observe the forbidden process/effect.
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'unexpected-realm-approval', expectedRevision: event.revision, decision: 'allow', reason: 'Mutation sentinel only' }));
+    });
+    await Promise.all(pending);
+    expect(toolText(events)).toContain('SHELL_SANDBOX_UNAVAILABLE');
+    expect(events.some(event => event.kind === 'approval.requested')).toBe(false);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([]);
+    await expect(readFile(join(f.project, 'must-not-exist'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 
   // T-L4 slice 3c (Jev 82858581): run_shell as a C11 effect of host.shell.run. Only a read-only command of bounded reach runs silently.
   it('runs a read-only command of bounded reach without asking, streams its output and settles a host.shell.run effect (T-L4 slice 3c)', async () => {

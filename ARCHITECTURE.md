@@ -521,8 +521,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   from `cli.worker.phase.*`, age = observation time − host `receivedAt` (never `atMs`), truncated/dropped markers, a
   finished/failed session labelled "worker reported"; `starting` with unmapped events is muted progress, not an error.
   `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
-  and unsealed attempts are visible). `/approvals [n|id]` lists pending items via the runtime `listApprovals` and opens
-  one y/N card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
+  and unsealed attempts are visible). `/approvals` opens an arrow-key picker of pending items (runtime `listApprovals`; Enter opens
+  the highlighted item's y/N card, Esc closes) and `/approvals <n|id>` lists them and opens that card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
   `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
   no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
   default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
@@ -713,7 +713,7 @@ message holds for it); the terminal never sends `on`. `reasoning_effort` stays o
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
 compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
-`/resume` lists this scope's recent sessions and `/resume <n|id>` continues one (its messages become the history; later turns save
+`/resume` opens an arrow-key picker of this scope's recent sessions (Enter continues the highlighted one, Esc closes; TERM-PICKERS) and `/resume <n|id>` continues one (its messages become the history; later turns save
 into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
@@ -831,6 +831,13 @@ the command runs in its own process group so it can be killed, which also means 
 parent-death signal) — candidate: record the group id in the effect journal and signal it at start.
 **Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. The follow-up `b596eee` review (2130) closes both C12 violations: protocol subject visibility now participates in SQL page selection before LIMIT/capacity, and fresh unconsumed approval admission is rechecked after observation before the first claim. Already-consumed intent recovery remains separate. I40-c in that candidate uses trusted producer/consumer time and a monotonic TTL; the decider subtracts usability, never adds lifetime, with a 5 s conservative allowance. A decider already 5 s ahead may reject about 10 s early relative to the producer, and small TTLs can be wholly unusable; a single expiry authority remains a separate owner option. These are reviewed integration properties, not claims that current main or the live service has been updated (PLAN).
 
+**Shell realm (S5, owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock identities; only
+host is implemented yet). `terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes
+once per process (bwrap on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures are `unknown`,
+nothing installed). `require-sandbox` without an implemented sandbox refuses before any plan, approval or effect
+(`SHELL_SANDBOX_UNAVAILABLE`); macOS/Windows `SHELL_REALM_UNSUPPORTED`; `prefer-sandbox` runs on the host and says so in the approval
+preview, the live stream, the model result and the finished line (`sandbox: none`) — never a silent fallback. Finding host mechanisms is
+not an implemented sandbox (bubblewrap S9, Landlock S11 pending).
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
@@ -1457,6 +1464,33 @@ backs up v41 (0600) and, in one transaction, rewrites every exact v1 adopt recor
 (`verification: null`, command schema 2), so pre-upgrade adoptions replay, settle and roll back; other records stay byte for byte
 (still `ADOPTION_CORRUPT` if unreadable). A v41 build refuses a v42 ledger (`ATTEMPT_STORE_VERSION`, proven with the real `de2f30f`
 build; rows written by that build migrate and an interrupted one settles afterwards). Not yet: config precondition (`execution.adoption.verification`), CLI flags and verified text, criteria policy, audit subject.
+
+**Adoption verification precondition (B06-2c, config schema 3, no ledger/protocol change).** Config `execution.adoption.verification`
+(`null` default | `{kind, required, criteria[1..16]}`, each criterion `{evaluator:{id,version}, parameters}`) is the installation's bar. The one
+owner is `verifyAdoption` (engine `workspace-patch/verification.ts`), after Task acceptance and before the target check: no verification Run
+named → `ADOPTION_NOT_VERIFIED` when `required`, otherwise `not-verified` as before; a named Run must be of the configured kind
+(`ADOPTION_VERIFICATION_MISMATCH`) and, after the B06-2b identity/profile checks and **before its phase**, meet every required criterion with
+one of its task's acceptance criteria of the same evaluator that is not weaker under the Run's pinned evaluator implementation
+(`ADOPTION_VERIFICATION_CRITERIA_WEAKER`). "Not weaker" is evaluator code in `capabilities/evaluation-evidence` (`criterionWithin`;
+`process-exit@1`: accepted exit codes ⊆ the bar's); an implementation without a rule fails closed — Enterprise evaluators add theirs under
+their implementation identity. Without the section B06-2b behavior is unchanged (caller kind, no bar). A settled adoption replays from its
+record even if `required` was switched on later (B06-1 replay contract). The applied bar is not written into the adoption record (the
+verification block already carries kind, profile and criteria fingerprints; recording the bar would be an intent v3 = ledger change).
+CLI: `task integration-adopt … --verification-run <run>` takes the kind from config (`ADOPTION_VERIFICATION_NOT_CONFIGURED`, category
+config, when absent; the engine re-checks it); `run create … --delivery-command-id <id>` admits a delivery-pinned Run through the local
+composition path (`createConfiguredDeliveryRun`, not a runtime-service operation; protocol unchanged). Not yet: an `adoption-verification` audit subject, CLI `--wait`.
+
+**Read-only dependency binds (B06-2c, owner 2026-09-27 evening (4)).** A Docker task profile may declare `readOnlyMounts`
+(`[{source, target}]`, ≤ 8) — profile data, pinned with the Run and part of its profile fingerprint. `source` is relative to the trusted
+project root (normalized; no `..`/`.`/empty, `.git` or `.deckent` segment); composition resolves it before any dispatch and refuses
+(`EXECUTION_PROFILE_INVALID`) a path that is not a real directory (any link on its path), or that contains or lies inside the product layout
+root or any layout resource. `target` is an absolute normalized container path outside `/workspace`, `/tmp`, `/deckent`, `/run`, `/proc`,
+`/sys`, `/dev` (a bind can never overlay the delivered tree, which must stay exactly the verified commit). The supervisor re-checks the
+source at launch (real directory, outside the workspaces root) and always adds `readonly`; there is no writable form. `--network none`,
+`--read-only`, cap-drop, user and `/workspace` are unchanged. Supervisor option `readOnlyMounts` is additive (adapter version 2, like
+`inputs`/`connection`); a build without it refuses such a dispatch profile (`SUPERVISOR_PROFILE_INVALID`). Customer installations use a
+verification image with its dependencies instead (owner); host-prepared dependencies may drift from the delivered lockfile (stale deps can
+fail or, in principle, mask a lockfile change — known limit).
 
 ### Cancellation settlement — owner 2026-09-22 (implemented)
 

@@ -4,8 +4,8 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
   shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { createLocalPeerSession, createShellPathContext, createShellWriteContext, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND,
-  HostShellTarget, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type TerminalShellConfig,
-  type WorkspaceScope } from '#adapters/index.js';
+  HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity,
+  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { boundApprovalPreview } from './preview.js';
 
@@ -31,7 +31,7 @@ function cleanupNote(cleanup: HostShellResult['cleanup']): string | null {
   return cleanup === 'group-ended' ? '[deckent] cleanup: processes the command left running in its process group were ended; '
     + 'a process that left the group is not observed.' : null;
 }
-type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier }
+type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }> }
   | { readonly ok: false; readonly text: string };
 
 /**
@@ -53,21 +53,24 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
+    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities());
+    if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
     const risk = classifyShellRisk(command, readOnly);
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots));
-    const planned: ShellPlan = { ok: true, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
+    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
     plans.set(key(tool, args), planned);
     return planned;
   };
-  const describeResult = (command: string, result: HostShellResult) => {
+  const describeResult = (command: string, result: HostShellResult, notice: string | null) => {
     const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
     const note = cleanupNote(result.cleanup);
-    return `[deckent] run_shell: ${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
-      + (note ? `${result.output.endsWith('\n') || result.output === '' ? '' : '\n'}${note}` : '');
+    return `[deckent] run_shell: ${notice ? 'sandbox: none; ' : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
+      + (notice ? `\n${notice}` : '')
+      + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
   };
   return {
     plan,
@@ -78,7 +81,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const planned = plans.get(key(tool, args));
       if (!planned?.ok) return undefined;
       return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n`
-        + 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).');
+        + (planned.realm.notice ?? 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).'));
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
@@ -110,7 +113,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       };
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      const target = new HostShellTarget(scope.root, { timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput,
+      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput,
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
@@ -124,14 +127,14 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran), cleanup: ran.cleanup };
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeResult(planned.command, ran, planned.realm.notice), cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
         if (ran && ran.status !== 'exited') {
-          return { status: 'error', text: `${describeResult(planned.command, ran)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
+          return { status: 'error', text: `${describeResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'

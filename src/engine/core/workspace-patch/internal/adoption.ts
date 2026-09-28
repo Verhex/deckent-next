@@ -5,7 +5,7 @@ import { authenticateSession, assertSessionActive, type SessionVerifier, type Se
 import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import type { IntegrationDeliveryPlan, IntegrationDeliveryRecord, IntegrationDeliveryTarget } from './delivery.js';
 import { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode } from './adoption-error.js';
-import { adoptionVerificationSchema, verifyDeliveredCommit, type AdoptionVerification, type AdoptionVerificationPolicy,
+import { adoptionVerificationSchema, verifyAdoption, type AdoptionVerification, type AdoptionVerificationPolicy,
   type AdoptionVerificationStore } from './verification.js';
 export { WorkspaceAdoptionError, type WorkspaceAdoptionErrorCode };
 /** One owner of "this delivery is usable": completed in the ledger and its dedicated reference still names the delivered commit.
@@ -91,9 +91,9 @@ export class WorkspaceAdoptionApplication {
       record => JSON.stringify(record.intent.command.identity) === JSON.stringify(command.identity));
     const run = await this.accepted(command);
     const plan: IntegrationDeliveryPlan = delivery.intent.plan;
-    const verification = command.verificationRunId === undefined || command.verificationKind === undefined ? null
-      : await verifyDeliveredCommit(this.store, this.verification, verified.principal,
-        { scopeId: command.identity.scopeId, runId: command.verificationRunId, kind: command.verificationKind, commit: plan.commit });
+    const verification = await verifyAdoption(this.store, this.verification, verified.principal, { scopeId: command.identity.scopeId,
+      commit: plan.commit, ...(command.verificationRunId === undefined ? {} : { runId: command.verificationRunId }),
+      ...(command.verificationKind === undefined ? {} : { kind: command.verificationKind }) });
     await this.ready(command.targetRef, plan.baseCommit, 'ADOPTION_BASE_CHANGED');
     const intent = integrationAdoptionIntentSchema.parse({ schemaVersion: 2, kind: 'adopt', command, targetRef: command.targetRef,
       fromCommit: plan.baseCommit, toCommit: plan.commit, deliveryRef: plan.ref, basis: 'task-acceptance',
