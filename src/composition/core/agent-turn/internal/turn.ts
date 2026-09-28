@@ -10,7 +10,7 @@ import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
-  bubblewrapShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
+  bubblewrapShellSandbox, landlockShellSandbox, type HttpFetchTransport, type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory,
   type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
@@ -32,11 +32,11 @@ export interface RuntimeChatTurnHost {
   readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
   readonly scratch: ScratchActivity;
   readonly fetchTransport: HttpFetchTransport;
-  /** S9: the sandbox providers a shell call may pick, in preference order (bubblewrap first); only an in-process test passes another list. */
+  /** S9/S11: the sandbox providers a shell call may pick, in preference order (bubblewrap, then Landlock); only an in-process test passes another list. */
   readonly shellSandboxes: ShellSandboxFactory;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = layout => [bubblewrapShellSandbox(layout)]): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = layout => [bubblewrapShellSandbox(layout), landlockShellSandbox(layout)]): RuntimeChatTurnHost {
   void shellSandboxCapabilities(); // Start once with the service; turns await the same bounded observation.
   return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes });
 }
