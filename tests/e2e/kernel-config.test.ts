@@ -49,8 +49,8 @@ describe('K1 real binary journeys', () => {
   it('wires company-only doctor JSON v2 through the real binary', async () => {
     const f = await fixture('project-override');
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
-    expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready' });
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'paths', 'platform', 'principal', 'schemaVersion', 'scope', 'status']);
+    expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null });
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'paths', 'platform', 'policyTemplate', 'principal', 'schemaVersion', 'scope', 'status']);
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);

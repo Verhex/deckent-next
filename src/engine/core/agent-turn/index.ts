@@ -8,3 +8,4 @@ export { AGENT_COMPACTION_HIGH_WATER, AGENT_COMPACTION_INSTRUCTION, AGENT_COMPAC
 export type { AgentCompactionPlan, AgentCompactionSummary } from './internal/compaction.js';
 export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admission.js';
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview } from './internal/approval-preview.js';
+export { AGENT_TURN_SYSTEM_PROMPT_VERSION, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt } from './internal/system-prompt.js';

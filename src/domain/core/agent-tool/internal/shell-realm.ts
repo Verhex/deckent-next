@@ -12,6 +12,8 @@ export interface ShellRealmRequest {
   readonly timeoutMs?: number;
   /** Extra variable names an operator allowed (configuration), copied when present in the service environment. */
   readonly extraEnv?: readonly string[];
+  /** Values the caller sets whatever the service environment holds (SCR-A: `TMPDIR` = the conversation's scratch area). */
+  readonly fixedEnv?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
   /** Streamed output, in order, each chunk ≤ HOST_SHELL_CHUNK_MAX_BYTES and never splitting a UTF-8 character. */
   readonly onOutput?: (stream: 'stdout' | 'stderr', text: string) => void;

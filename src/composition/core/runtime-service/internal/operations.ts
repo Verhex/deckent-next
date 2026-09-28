@@ -51,7 +51,8 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
   } satisfies Record<Exclude<RuntimeServiceOperation, 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
     | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'chatTurn' | 'cancelChatTurn'
-    | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'>, RuntimeOperationHandler>;
+    | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'
+    | 'inspectScratch' | 'clearScratch'>, RuntimeOperationHandler>;
   if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
   return handlers[request.operation as keyof typeof handlers](request.input);
 }

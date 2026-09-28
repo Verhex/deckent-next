@@ -115,7 +115,8 @@
         "src/engine/core/effect",
         "src/engine/core/provider-spend",
         "src/platform/core/common",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/adapters/core/scratch-store"
       ],
       "plan": "PROVIDERS"
     },
@@ -458,7 +459,8 @@
         "src/engine/core/audit",
         "src/adapters/core/audit-store",
         "src/adapters/core/file-policy",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/adapters/core/scratch-store"
       ],
       "plan": "EXECUTION"
     },
@@ -846,7 +848,8 @@
         "src/domain/core/worker-event",
         "src/domain/core/approval",
         "src/surfaces/core/cli-models",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },
@@ -1122,7 +1125,8 @@
         "src/domain/core/audit",
         "src/engine/core/audit",
         "src/adapters/core/audit-store",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/adapters/core/scratch-store"
       ],
       "plan": "SURFACES"
     },
@@ -1355,7 +1359,8 @@
     "src/adapters/core/shell-paths": {
       "dependencies": [
         "src/adapters/core/workspace-read",
-        "src/engine/core/shell-classification"
+        "src/engine/core/shell-classification",
+        "src/adapters/core/workspace-write"
       ],
       "plan": "SURFACES"
     },
@@ -1547,7 +1552,8 @@
     "src/engine/core/agent-turn": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/host"
       ],
       "plan": "SURFACES"
     },
@@ -1649,6 +1655,18 @@
         "src/engine/core/audit"
       ],
       "plan": "SECURITY"
+    },
+    "src/adapters/core/scratch-store": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/domain/core/agent-tool",
+        "src/domain/core/command",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/domain/core/agent-turn"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

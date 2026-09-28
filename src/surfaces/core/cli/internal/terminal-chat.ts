@@ -1,4 +1,5 @@
-import type { ModelReference, PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from '#domain/index.js';
+import type { ModelReference, PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView, ScratchClearance, ScratchQuery,
+  ScratchView } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { AgentChatMessage, TurnDelta, WorklineMentionAttachment } from '#surfaces/core/terminal/index.js';
 
@@ -26,7 +27,7 @@ export type TerminalChatTurnHandler = (
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off' }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;
@@ -43,3 +44,6 @@ export type TerminalMentionAttachHandler = (root: string, input: Readonly<{ scop
 export type TerminalPermissionModeInspectHandler = (root: string, input: PermissionModeQuery, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<PermissionModeView>;
 /** Sets the caller's own mode (v15 `setPermissionMode`), conditional on the revision read; the service writes, never the terminal. */
 export type TerminalPermissionModeSetHandler = (root: string, input: PermissionModeCommand, options: ConfigLoadOptions) => Promise<PermissionModeChange>;
+/** The caller's own scratch area of one conversation (v16 `inspectScratch` / `clearScratch`, SCR-A); the service reads and deletes, never the terminal. */
+export type TerminalScratchInspectHandler = (root: string, input: ScratchQuery, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<ScratchView>;
+export type TerminalScratchClearHandler = (root: string, input: ScratchQuery, options: ConfigLoadOptions) => Promise<ScratchClearance>;

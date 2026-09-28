@@ -11,7 +11,8 @@ import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { createConfiguredDeliveryRun } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { main as runCli } from '#surfaces/index.js';
-import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
+import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation,
+  applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { readInstallationProfileFile } from '#adapters/index.js';
@@ -60,6 +61,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     // T-L4 slice 4c: `/mode` and the status row read and set the caller's own permission mode through the runtime service (v15).
     inspectPermissionMode: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectPermissionMode(input, signal),
     setPermissionMode: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setPermissionMode(input),
+    // SCR-A `/scratch`: the caller's own scratch area through the runtime service (v16); the terminal reads and deletes no file.
+    inspectScratch: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectScratch(input, signal),
+    clearScratch: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).clearScratch(input),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
     inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount,
@@ -88,6 +92,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       try { return await resumeInstallation(projectRoot, input); }
       catch (error) { throw queryFailure(error); }
     },
+    previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
     describeRuntimeService: (_root, options) => createConfiguredRuntimeClient(_root, options).describeService(),
     shutdownRuntimeService: (_root, command, options) => createConfiguredRuntimeClient(_root, options).shutdownService(command),
     inspectInventory: (_root, input) => runtime.inspectInventory(input),

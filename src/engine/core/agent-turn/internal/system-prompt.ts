@@ -3,10 +3,10 @@ import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
 import { productResourcePath, type ProductLayout } from '#platform/index.js';
 
 /**
- * Version of the model-facing system prompt (TL-C D4). The text is protocol, like tool descriptions: English, in code, never a
- * catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
+ * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area). The text is protocol, like tool descriptions:
+ * English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 1;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 2;
 
 /** A path as the model's tools address it: workspace-relative inside the project, else absolute. */
 function shown(projectRoot: string, path: string): { readonly text: string; readonly inside: boolean } {
@@ -16,12 +16,13 @@ function shown(projectRoot: string, path: string): { readonly text: string; read
 }
 
 /**
- * The service's instructions for an agent turn: where the model works (project root, Deckent data root and state, configuration),
- * which tools exist by class and that policy and the permission mode decide each call, how bounded results continue, and one
- * progress line between tool rounds. Deterministic for one project, layout and tool set; states no limit a tool may change.
+ * The service's instructions for an agent turn: where the model works (project root, Deckent data root and state, configuration, the
+ * conversation's scratch area), which tools exist by class and that policy and the permission mode decide each call, how bounded
+ * results continue, and one progress line between tool rounds. Deterministic for one project, layout, scratch area and tool set.
  */
-export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: string; readonly layout: ProductLayout; readonly tools: readonly AgentToolSpec[] }): string {
-  const { projectRoot, layout, tools } = input;
+export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: string; readonly layout: ProductLayout; readonly tools: readonly AgentToolSpec[];
+  readonly scratch?: { readonly dir: string; readonly retentionDays: number } | null }): string {
+  const { projectRoot, layout, tools, scratch } = input;
   const data = shown(projectRoot, layout.root), at = (resource: 'ledger' | 'terminalSessions') => shown(projectRoot, productResourcePath(layout, resource)).text;
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
   const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
@@ -35,6 +36,10 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
     `- Deckent data root: ${data.text}${data.inside ? '' : ' (outside the project root: the tools cannot read it)'}. Its ledger ${at('ledger')}`
       + ` is an SQLite database, not text; saved terminal conversations are in ${at('terminalSessions')}.`,
     `- Deckent configuration: ${shown(projectRoot, layout.bootstrapConfigPath).text}.`,
+    ...(scratch ? [`- Scratch area: ${scratch.dir}. Your own temporary space for this conversation, outside the project: put notes, drafts,`
+      + ' intermediate data and diagrams (Mermaid .mmd or SVG source as text) there with scratch_write, and read them with scratch_read and'
+      + ` scratch_list (paths relative to it); run_shell gets it as TMPDIR, and shell commands may address it by this absolute path. It never`
+      + ` changes the project; an area unused for ${scratch.retentionDays} days is removed.`] : []),
     '- Approvals, approval previews, keys and credential files are protected: the read tools refuse them; do not try to read them another way.',
   ];
   if (tools.length) {

@@ -98,5 +98,6 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     sessionId.current = target; context.current = null;
     return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) }))]);
   }, [labels, port]);
-  return { noteContext, save, run };
+  const id = useCallback(() => sessionId.current, []);
+  return { noteContext, save, run, id };
 }
