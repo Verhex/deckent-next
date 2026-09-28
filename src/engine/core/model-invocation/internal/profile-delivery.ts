@@ -2,7 +2,7 @@ import { IDENTITY_MAX_LENGTH, identitySchema, type ModelBindingDefinition, type 
 import { modelInvocationDeliveryFits, modelInvocationNativeResponseUpperBound, modelInvocationProfileDeliveryRequirement,
   type ModelInvocationDelivery } from './delivery.js';
 import { createModelInvocationClaimReceipt, modelInvocationProfileDigest } from './evidence.js';
-import type { ModelInvocationAdmission } from './port.js';
+import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port.js';
 
 // Lone UTF-16 surrogates are accepted identity code units and JSON escapes each as six ASCII bytes: a conservative
 // stand-in for any real actor/authorization/claim identity this profile could ever be invoked under.
@@ -57,4 +57,35 @@ export function assessModelInvocationProfileDelivery(profile: ModelInvocationPro
   const responseBytes = modelInvocationNativeResponseUpperBound(profile.limits.responseMaxBytes);
   return Object.freeze({ fits: modelInvocationDeliveryFits(receipt, responseBytes, delivery),
     requiredBytes: Number(modelInvocationProfileDeliveryRequirement(receipt, responseBytes)), availableBytes: delivery.maxResultBytes });
+}
+export interface ModelInvocationDeliveryProfileTarget {
+  readonly profile: ModelInvocationProfile;
+  readonly definition: ModelBindingDefinition;
+  readonly catalogRevision: string;
+}
+/**
+ * The audit decision itself (SESSION-RESULT-LIMIT-2026-09-28 review, engine owns it): for every already-resolved
+ * `{profile, definition, catalogRevision}` (composition/adapters resolve these from config and the catalog — no
+ * I/O happens here), checks every surface with `assessModelInvocationProfileDelivery` and collects the unfit
+ * ones. A target whose own `bindingDigest` no longer matches its paired `definition` (a stale/moved catalog
+ * entry) is a separate, pre-existing condition — skipped here, never reported as a delivery finding. Reused by
+ * both the doctor audit (every declared profile) and `models activate` (the profiles declared for one
+ * reference); neither composition call site re-implements this loop or the skip.
+ */
+export function assessModelInvocationProfileDeliveries(targets: readonly ModelInvocationDeliveryProfileTarget[],
+  surfaces: readonly (readonly [ModelInvocationDeliverySurface, ModelInvocationDelivery])[]): readonly ModelInvocationDeliveryFinding[] {
+  const findings: ModelInvocationDeliveryFinding[] = [];
+  for (const { profile, definition, catalogRevision } of targets) {
+    for (const [surface, delivery] of surfaces) {
+      let assessment: ModelInvocationProfileDeliveryAssessment;
+      try { assessment = assessModelInvocationProfileDelivery(profile, definition, catalogRevision, delivery); }
+      catch (error) {
+        if (error instanceof ModelInvocationStoreError && error.code === 'MODEL_INVOCATION_CORRUPT') continue; // stale binding, separate concern
+        throw error;
+      }
+      if (!assessment.fits) findings.push({ scopeId: profile.scopeId, profileId: profile.id, reference: profile.reference,
+        surface, requiredBytes: assessment.requiredBytes, availableBytes: assessment.availableBytes });
+    }
+  }
+  return findings;
 }

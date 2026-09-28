@@ -102,3 +102,16 @@ export function checkInvocationResultDelivery<T>(result: T, delivery?: ModelInvo
   if (delivery && bytes(result) > BigInt(delivery.maxResultBytes)) throw new ModelInvocationStoreError('MODEL_INVOCATION_RESULT_LIMIT');
   return result;
 }
+/**
+ * Divides a raw MCP tool-result wire budget into safe content bytes once the caller's own envelope overhead
+ * (JSON-RPC + tool-result wrapper, protocol-specific — the caller measures it, this stays free of any SDK type)
+ * is subtracted: escaped/duplicated JSON content costs at most 3x its raw bytes (quoting doubles the worst case,
+ * plus one duplicate copy in `structuredContent`). The MCP surface's own `boundedToolDelivery` and a static
+ * profile check below the surfaces layer (composition doctor/activation, via the mcp-transport adapter) both
+ * delegate here so the arithmetic itself is never duplicated (SESSION-RESULT-LIMIT-2026-09-28 review).
+ */
+export function mcpToolResultDeliveryCapacity(maximum: number, envelopeOverheadBytes: bigint): ModelInvocationDelivery | null {
+  const available = (BigInt(maximum) - envelopeOverheadBytes) / 3n;
+  if (available <= 0n) return null;
+  return Object.freeze({ maxResultBytes: Number(available) });
+}
