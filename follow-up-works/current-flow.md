@@ -58,6 +58,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   kodları (`MODEL_ACTIVATION_DELIVERY_UNFIT`, `OPERATION_SURFACE_RESTRICTED`, `POLICY_DELEGATION_EXCEEDS`, `POLICY_CHANGE_INVALID`,
   `POLICY_CHANGE_TOO_LARGE`, `POLICY_ADMINISTER_UNSUPPORTED`; `CONFIG_WRITE_LOCKED` zaten vardı), `config.field.mcp`, `cli.help`
   `mcp servers` satırı; ARCHITECTURE/PLAN/CHANGELOG.
+- Birleştirmede lead düzeltmesi: MCP client SDK'sı her CLI/MCP/servis sürecinde statik yükleniyordu (+≈60 ms/başlangıç;
+  `model-invocation-process` 29,9 → 34 sn, 30 sn sınırını aşıyordu) → `mcp-client` havuzu SDK'yı ilk sunucu başlangıcında yükler
+  (CLI `--version` 0,50 → 0,44 sn; test 30,7 sn, yük ≈4,3). Test tabanda da sınırda (29,9 sn): tam verify'da izlenmeli.
 - Sıradaki: altıncı partinin `lane/bwrap` REVISE düzeltmesi bu dala → tam verify (lead) → Astra incelemesi → PASS'te push → canlı geçiş.
 
 ## Canlı geçişte yapılacaklar (PASS sonrası)

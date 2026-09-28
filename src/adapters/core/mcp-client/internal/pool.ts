@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Client, ProtocolError, type CallToolResult, type VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import type { Client, CallToolResult, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
@@ -66,6 +65,9 @@ interface ServerState {
   last: Extract<McpServerOpen, { ok: true }> | null;
   lock: Promise<unknown>;
 }
+/** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each). */
+let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
+const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
 
 /**
@@ -116,6 +118,7 @@ export class McpClientPool {
     return state.last;
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string): Promise<McpServerOpen> {
+    const [{ Client }, { StdioClientTransport }] = await loadClientSdk();
     const transport = new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
     transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
@@ -153,6 +156,7 @@ export class McpClientPool {
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
     try { return { outcome: 'answered', result: await client.callTool({ name: tool, arguments: args }, { timeout: options.timeoutMs, signal: options.signal }) as CallToolResult }; }
     catch (error) {
+      const [{ ProtocolError }] = await loadClientSdk();
       if (error instanceof ProtocolError) return { outcome: 'answered', error: { code: error.code, message: error.message } };
       const code = errorCode(error);
       if (code === 'NOT_CONNECTED' || (error as Error)?.message === 'Not connected') return { outcome: 'refused', reason: 'not-connected' };
