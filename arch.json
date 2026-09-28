@@ -294,7 +294,7 @@
         "src/platform/core/config",
         "src/platform/core/host",
         "src/platform/core/i18n",
-        "src/surfaces/core/mcp",
+        "src/surfaces",
         "src/composition/core/toolchains",
         "src/engine/core/inference-serving",
         "src/platform/core/errors",
