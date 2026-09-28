@@ -1,25 +1,9 @@
-import { z } from 'zod';
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { assessToolchain, buildToolchainCurrencyReport, toolchainCatalog, admittedToolchainSchema,
-  type AdmittedToolchain, type LatestLookup, type ToolchainCurrencyReport } from '#engine/index.js';
+import { admittedToolchains, assessToolchain, buildToolchainCurrencyReport, toolchainCatalog,
+  type LatestLookup, type ToolchainCurrencyReport } from '#engine/index.js';
 import { fetchNpmLatestVersion, NpmRegistryError, type NpmLatestVersion, type NpmLatestVersionInput } from '#adapters/index.js';
 
 export type NpmLatestVersionFetcher = (input: NpmLatestVersionInput) => Promise<NpmLatestVersion>;
-const nativeProfileSchema = z.object({ id: z.string(), version: z.number(), parameters: z.object({ nativeSubscription: z.object({
-  provider: z.string(), preflight: z.object({ cliVersion: z.string() }).passthrough().optional() }).passthrough().optional() }).passthrough() }).passthrough();
-const registrySchema = z.object({ profiles: z.array(z.unknown()) }).passthrough();
-
-/** Admitted toolchains are the preflight pins of prepared native profiles in the installed admission registry. */
-export function admittedToolchains(config: Awaited<ReturnType<typeof loadConfig>>): AdmittedToolchain[] {
-  const registry = registrySchema.safeParse(config.admission?.registry);
-  if (!registry.success) return [];
-  return registry.data.profiles.flatMap(candidate => {
-    const profile = nativeProfileSchema.safeParse(candidate);
-    const subscription = profile.success ? profile.data.parameters.nativeSubscription : undefined;
-    if (!subscription?.preflight || !(subscription.provider in toolchainCatalog.providers)) return [];
-    return [admittedToolchainSchema.parse({ profile: { id: profile.data!.id, version: profile.data!.version }, provider: subscription.provider, cliVersion: subscription.preflight.cliVersion })];
-  });
-}
 /** Read-only currency report. Network is used only when `toolchains.currency.mode` is `report`, one bounded request per npm package;
  * failures become `unknown-offline` with a reason code. Nothing is activated, rebuilt or updated. */
 export async function inspectConfiguredToolchainCurrency(projectRoot: string, options: ConfigLoadOptions = {},

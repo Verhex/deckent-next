@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { AGENT_TURN_NO_PROGRESS_NOTE, planAgentCompaction, renderAgentCompaction, runAgentTurn, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
+import { AGENT_TURN_NO_PROGRESS_NOTE, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
+  type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
 
 const readFile: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'Read a file.',
@@ -377,4 +378,18 @@ it('never counts a denied call, a round with text, or a cancelled turn as no pro
   expect(stopped.result).toMatchObject({ finish: 'cancelled' }); expect(cancelled.invoked).toEqual([1, 2]);
   expect(stopped.events.filter(event => event.kind === 'tool.finished').map(event => event.kind === 'tool.finished' && event.status)).toEqual(['invalid-arguments', 'error']);
   expect(stopped.events.some(event => event.kind === 'message' && event.message.role === 'user')).toBe(false);
+});
+
+// COMPOSITION-BUDGET-2: both ends of the summary call's protocol live with the compaction contract (moved from the runtime agent turn).
+it('writes the summary input newest-first within its byte bound and reads the summary object out of a fenced answer', () => {
+  const older: AgentTurnMessage[] = [{ role: 'user', content: 'first question' },
+    { role: 'assistant', content: 'x'.repeat(2_100), toolCalls: [call('c1', 'read_file', { path: 'src/a.ts' })] },
+    { role: 'tool', toolCallId: 'c1', name: 'read_file', content: 'export const a = 1;' }];
+  const whole = agentCompactionTranscript(older, 1_000_000);
+  expect(whole.split('\n')).toEqual(['[user] first question', `[assistant] ${'x'.repeat(2_000)} …[cut]`, '  → read_file {"path":"src/a.ts"}',
+    '[tool result read_file] export const a = 1;']);
+  expect(agentCompactionTranscript(older, 40)).toBe('[2 earliest messages omitted from this summary input]\n[tool result read_file] export const a = 1;');
+  const summary = { objective: 'o', findings: ['f'], decisions: [], unresolved: [], nextActions: [], inspectedAreas: ['src/a.ts'] };
+  expect(parseAgentCompactionSummary(`Here:\n\`\`\`json\n${JSON.stringify(summary)}\n\`\`\``)).toEqual(summary);
+  for (const bad of [null, '', 'no object', '{"objective":1}', '{ not json }']) expect(parseAgentCompactionSummary(bad)).toBeNull();
 });

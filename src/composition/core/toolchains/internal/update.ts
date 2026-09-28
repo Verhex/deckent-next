@@ -2,30 +2,17 @@ import { constants } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { z } from 'zod';
 import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, toolchainCatalog, type AffectedProfile, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
-const nativeProfileSchema = z.object({ id: z.string(), version: z.number(), parameters: z.object({ imageId: z.string().optional(),
-  nativeSubscription: z.object({ provider: z.string(), preflight: z.object({ cliVersion: z.string() }).passthrough().optional() }).passthrough().optional() }).passthrough() }).passthrough();
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
 export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string }
 
-function affectedProfiles(config: Awaited<ReturnType<typeof loadConfig>>): AffectedProfile[] {
-  const registry = z.object({ profiles: z.array(z.unknown()) }).passthrough().safeParse(config.admission?.registry);
-  if (!registry.success) return [];
-  return registry.data.profiles.flatMap(candidate => {
-    const profile = nativeProfileSchema.safeParse(candidate); const subscription = profile.success ? profile.data.parameters.nativeSubscription : undefined;
-    if (!subscription?.preflight || !(subscription.provider in toolchainCatalog.providers)) return [];
-    const imageId = profile.data!.parameters.imageId;
-    return [{ profile: { id: profile.data!.id, version: profile.data!.version }, provider: subscription.provider, cliVersion: subscription.preflight.cliVersion, imageId: imageId && /^sha256:[a-f0-9]{64}$/.test(imageId) ? imageId : null }];
-  });
-}
 async function writeArtifact(directory: string, name: string, value: unknown) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, name);
@@ -46,7 +33,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const root = dependencies.packageRoot ?? packageRoot;
   const sources = await readWorkerImageSources(root);
   const plannedAt = now();
-  const plan = planToolchainUpdate({ report, recipe: sources.recipe, plannedAt, affectedProfiles: affectedProfiles(config) });
+  const plan = planToolchainUpdate({ report, recipe: sources.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
   const workspaces = await prepareProductDirectory(config.productLayout, 'workspaces');
   const home = join(workspaces, 'toolchains');
   if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });

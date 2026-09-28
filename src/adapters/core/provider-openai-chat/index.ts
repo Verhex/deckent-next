@@ -7,3 +7,5 @@ export { createOpenAiChatNativePort, openAiChatProtocol, prepareOpenAiChatHttpRe
 export type { OpenAiChatNativePortOptions, PreparedOpenAiChatRequest } from './internal/transport.js';
 export { OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, quoteOpenAiChatOperatorTariff } from './internal/tariff.js';
 export { createOpenAiChatStream, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHAT_STREAM_WIRE_FACTOR } from './internal/stream.js';
+export { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiChatStoppedAtLength,
+  openAiChatUsageFromInvocation } from './internal/invocation.js';

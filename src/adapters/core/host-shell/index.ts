@@ -3,3 +3,4 @@ export { HOST_SHELL_CHUNK_MAX_BYTES, HOST_SHELL_DEFAULT_TIMEOUT_MS, HOST_SHELL_E
 export { HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, RUN_SHELL_TOOL_SPEC } from './internal/target.js';
 export { probeShellCapabilities, shellSandboxCapabilities, type ShellCapabilities, type ShellCapabilityStatus, type ShellProbeEnvironment } from './internal/probe.js';
 export { hostShellRealm, resolveShellRealm, type ShellRealmResolution } from './internal/realm.js';
+export { describeHostShellResult, hostShellCleanupNote } from './internal/result.js';

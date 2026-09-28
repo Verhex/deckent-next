@@ -63,3 +63,38 @@ export function renderAgentCompaction(plan: AgentCompactionPlan, summary: AgentC
   ].join('\n');
   return Object.freeze({ role: 'user' as const, content });
 }
+
+/** Model-facing instruction of the compaction call (protocol text, like tool descriptions). */
+export const AGENT_COMPACTION_INSTRUCTION = 'You compress an earlier part of a conversation between a user and a coding assistant into one JSON object. Output only '
+  + 'that object, with no prose and no markdown fences, of exactly this shape: {"objective":string,"findings":string[],"decisions":string[],'
+  + '"unresolved":string[],"nextActions":string[],"inspectedAreas":string[]}. Every string is short, concrete and drawn from the conversation: '
+  + 'facts found in files or tool results with their paths, decisions made, open questions, what should happen next, files and areas '
+  + 'inspected. Invent nothing. Do not copy the user\'s messages or list the tool calls: Deckent records those itself. Write in the '
+  + 'language of the conversation.';
+/** Each message of the summary input is cut to this many characters (legacy bound). */
+const COMPACTION_MESSAGE_CHARS = 2_000;
+
+/** The older messages as plain text for a tools-off summary call, newest kept within `maxBytes` (older ones are named, not sent). */
+export function agentCompactionTranscript(messages: readonly AgentTurnMessage[], maxBytes: number): string {
+  const cutText = (text: string) => text.length <= COMPACTION_MESSAGE_CHARS ? text : `${text.slice(0, COMPACTION_MESSAGE_CHARS)} …[cut]`;
+  const lines = messages.map(message => message.role === 'assistant'
+    ? `[assistant] ${cutText(message.content)}${message.toolCalls.map(call => `\n  → ${call.name} ${cutText(call.argumentsJson)}`).join('')}`
+    : message.role === 'tool' ? `[tool result ${message.name}] ${cutText(message.content)}` : `[${message.role}] ${cutText(message.content)}`);
+  const kept: string[] = [];
+  let bytes = 0;
+  for (const line of [...lines].reverse()) {
+    const size = Buffer.byteLength(line, 'utf8') + 1;
+    if (bytes + size > maxBytes && kept.length > 0) break;
+    kept.unshift(line); bytes += size;
+  }
+  const omitted = lines.length - kept.length;
+  return [...(omitted ? [`[${omitted} earliest messages omitted from this summary input]`] : []), ...kept].join('\n');
+}
+/** The summary object inside the model's answer (prose or fences around it are ignored); null when absent or not the schema. */
+export function parseAgentCompactionSummary(text: string | null): AgentCompactionSummary | null {
+  if (!text) return null;
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { const parsed = agentCompactionSummarySchema.safeParse(JSON.parse(text.slice(start, end + 1))); return parsed.success ? parsed.data : null; }
+  catch { return null; }
+}

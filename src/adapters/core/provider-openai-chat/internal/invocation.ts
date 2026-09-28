@@ -1,5 +1,5 @@
 import type { ModelInvocationResult } from '#engine/index.js';
-import { agentToolCallSchema, type AgentToolCall } from '#domain/index.js';
+import { agentToolCallSchema, type AgentToolCall, type AgentTurnMessage, type JsonObject } from '#domain/index.js';
 
 function firstChoice(result: ModelInvocationResult): Record<string, unknown> | null {
   const native = result.response?.native;
@@ -53,4 +53,23 @@ export function openAiChatUsageFromInvocation(result: ModelInvocationResult):
   const details = usage['completion_tokens_details'] as Record<string, unknown> | null | undefined;
   const reasoning = details && typeof details['reasoning_tokens'] === 'number' ? details['reasoning_tokens'] : null;
   return { promptTokens: usage['prompt_tokens'], completionTokens: usage['completion_tokens'], reasoningTokens: reasoning };
+}
+
+/** Provider-neutral agent turn messages in the OpenAI chat request shape (assistant tool calls as `function` calls, tool results by call id). */
+export function openAiChatNativeMessages(messages: readonly AgentTurnMessage[]) {
+  return messages.map(message => message.role === 'assistant'
+    ? { role: 'assistant', content: message.content, ...(message.toolCalls.length ? { tool_calls: message.toolCalls.map(call =>
+      ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.argumentsJson } })) } : {}) }
+    : message.role === 'tool' ? { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
+      : { role: message.role, content: message.content });
+}
+
+/**
+ * Conservative prompt bound when the provider has no counter (legacy formula): every UTF-8 byte of messages and tools counts as a
+ * token, plus fixed overheads per request, message and tool. It never under-counts; it is always labelled `upper-bound`.
+ */
+export function openAiChatPromptUpperBound(nativeRequest: JsonObject): number {
+  const request = nativeRequest as { messages?: unknown[]; tools?: unknown[] };
+  const messages = request.messages ?? [], tools = request.tools ?? [];
+  return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * messages.length + 32 * tools.length;
 }

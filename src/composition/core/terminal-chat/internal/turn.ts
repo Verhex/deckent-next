@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { readTerminalChatConfig, registerProviderConfig } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, registerProviderConfig } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength } from './extract-text.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 

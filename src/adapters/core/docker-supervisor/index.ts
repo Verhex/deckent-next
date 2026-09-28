@@ -10,3 +10,4 @@ export type { DockerImageAvailabilityProbeInput, DockerImageAvailability, Docker
 export { collectDockerOutputFiles, dockerOutputFilesSchema } from './internal/output-files.js';
 export { resolveDockerReadOnlyMounts, dockerReadOnlyMountsSchema } from './internal/mounts.js';
 export type { DockerReadOnlyMount } from './internal/mounts.js';
+export { recordedDockerSupervisor } from './internal/recorded.js';

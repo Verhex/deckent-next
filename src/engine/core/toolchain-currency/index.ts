@@ -5,3 +5,4 @@ export { workerImageRecipeSchema, affectedProfileSchema, toolchainUpdatePlanSche
 export type { WorkerImageRecipe, AffectedProfile, ToolchainUpdatePlan, ProfileRevisionProposal } from './internal/update.js';
 export type { ToolchainCatalog, ToolchainMechanism, AdmittedToolchain, PublishedVersion, LatestLookup, ToolchainStatus,
   ToolchainCurrencyEntry, ToolchainCurrencyReport } from './internal/contract.js';
+export { admittedToolchains, affectedToolchainProfiles, type ToolchainAdmissionSource } from './internal/registry.js';

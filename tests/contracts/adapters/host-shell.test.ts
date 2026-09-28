@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { HOST_SHELL_CHUNK_MAX_BYTES, runHostShell } from '#adapters/index.js';
+import { describeHostShellResult, HOST_SHELL_CHUNK_MAX_BYTES, hostShellCleanupNote, runHostShell, type HostShellResult } from '#adapters/index.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -158,4 +158,19 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(await runHostShell({ command: 'touch ran', cwd, signal: controller.signal })).toMatchObject({ status: 'cancelled', totalBytes: 0 });
     expect(existsSync(join(cwd, 'ran'))).toBe(false);
   });
+});
+
+// COMPOSITION-BUDGET-2: the agent-facing text of a run is the host shell's (moved from the runtime agent turn's shell).
+it('describes a run: how it ended and after how long, the command cut at 120, the output, then the realm notice and the cleanup note', () => {
+  const ran = (over: Partial<HostShellResult>): HostShellResult => ({ status: 'exited', exitCode: 0, signal: null, output: 'hi\n', totalBytes: 3, omittedBytes: 0,
+    durationMs: 1_234, cleanup: 'clean', ...over });
+  expect(describeHostShellResult('echo hi', ran({}), null)).toBe('[deckent] run_shell: exit 0 after 1.2s (echo hi)\nhi\n');
+  expect(describeHostShellResult('x', ran({ exitCode: null, signal: 'SIGTERM', output: '' }), null)).toBe('[deckent] run_shell: exit signal SIGTERM after 1.2s (x)\n');
+  const long = 'y'.repeat(130);
+  expect(describeHostShellResult(long, ran({ status: 'timed-out', exitCode: null, output: 'part' }), null)).toBe(`[deckent] run_shell: timed-out after 1.2s (${'y'.repeat(119)}…)\npart`);
+  expect(describeHostShellResult('ls', ran({ cleanup: 'group-ended' }), null)).toBe(`[deckent] run_shell: exit 0 after 1.2s (ls)\nhi\n${hostShellCleanupNote('group-ended')}`);
+  expect(describeHostShellResult('ls', ran({ output: 'no newline', cleanup: 'unverified' }), 'N')).toBe(
+    `[deckent] run_shell: sandbox: none; exit 0 after 1.2s (ls)\nno newline\nN\n${hostShellCleanupNote('unverified')}`);
+  expect(hostShellCleanupNote('clean')).toBeNull();
+  expect(hostShellCleanupNote('unverified')).toMatch(/^\[deckent\] cleanup unverified: .*this is not a sandbox\.$/u);
 });

@@ -2,16 +2,16 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
-import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, agentTurnAdmission, awaitAgentToolApproval,
-  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt,
-  type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
+import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError,
+  agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
+  requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   type LocalPeerIdentity, type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
-import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
+import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
@@ -19,7 +19,8 @@ import { inspectModelBinding } from '#composition/core/provider-catalog/index.js
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions } from './mode.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
+  openAiChatUsageFromInvocation } from '#adapters/index.js';
 
 /** Service-owned state of running turns: cancellation by the starting principal, service stop, and the scratch areas they hold (never swept). */
 export interface RuntimeChatTurnHost {
@@ -41,51 +42,8 @@ function canonical(value: unknown): string {
 }
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
-/**
- * Conservative prompt bound when the provider has no counter (legacy formula): every UTF-8 byte of messages and tools counts as a
- * token, plus fixed overheads per request, message and tool. It never under-counts; it is always labelled `upper-bound`.
- */
-export function chatTurnPromptUpperBound(nativeRequest: JsonObject): number {
-  const request = nativeRequest as { messages?: unknown[]; tools?: unknown[] };
-  const messages = request.messages ?? [], tools = request.tools ?? [];
-  return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * messages.length + 32 * tools.length;
-}
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
 export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
-/** Model-facing instruction of the compaction call (protocol text, like tool descriptions). */
-const COMPACTION_INSTRUCTION = 'You compress an earlier part of a conversation between a user and a coding assistant into one JSON object. Output only '
-  + 'that object, with no prose and no markdown fences, of exactly this shape: {"objective":string,"findings":string[],"decisions":string[],'
-  + '"unresolved":string[],"nextActions":string[],"inspectedAreas":string[]}. Every string is short, concrete and drawn from the conversation: '
-  + 'facts found in files or tool results with their paths, decisions made, open questions, what should happen next, files and areas '
-  + 'inspected. Invent nothing. Do not copy the user\'s messages or list the tool calls: Deckent records those itself. Write in the '
-  + 'language of the conversation.';
-/** Each message of the summary input is cut to this many characters (legacy bound). */
-const COMPACTION_MESSAGE_CHARS = 2_000;
-
-/** The older messages as plain text for a tools-off summary call, newest kept within `maxBytes` (older ones are named, not sent). */
-export function chatTurnCompactionTranscript(messages: readonly AgentTurnMessage[], maxBytes: number): string {
-  const cutText = (text: string) => text.length <= COMPACTION_MESSAGE_CHARS ? text : `${text.slice(0, COMPACTION_MESSAGE_CHARS)} …[cut]`;
-  const lines = messages.map(message => message.role === 'assistant'
-    ? `[assistant] ${cutText(message.content)}${message.toolCalls.map(call => `\n  → ${call.name} ${cutText(call.argumentsJson)}`).join('')}`
-    : message.role === 'tool' ? `[tool result ${message.name}] ${cutText(message.content)}` : `[${message.role}] ${cutText(message.content)}`);
-  const kept: string[] = [];
-  let bytes = 0;
-  for (const line of [...lines].reverse()) {
-    const size = Buffer.byteLength(line, 'utf8') + 1;
-    if (bytes + size > maxBytes && kept.length > 0) break;
-    kept.unshift(line); bytes += size;
-  }
-  const omitted = lines.length - kept.length;
-  return [...(omitted ? [`[${omitted} earliest messages omitted from this summary input]`] : []), ...kept].join('\n');
-}
-function parseCompactionSummary(text: string | null): AgentCompactionSummary | null {
-  if (!text) return null;
-  const start = text.indexOf('{'), end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try { const parsed = agentCompactionSummarySchema.safeParse(JSON.parse(text.slice(start, end + 1))); return parsed.success ? parsed.data : null; }
-  catch { return null; }
-}
-
 /**
  * The Core read floor plus the owner-only product directories of this layout (TL-C D4): approvals (records, integrity key) and
  * approval previews (whole pending diffs). The floor names them under the default `.deckent`; a data root moved inside the project
@@ -105,14 +63,6 @@ export function chatTurnApprovalPreview(tool: string, args: Record<string, unkno
 }
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
-
-function nativeMessages(messages: readonly AgentTurnMessage[]) {
-  return messages.map(message => message.role === 'assistant'
-    ? { role: 'assistant', content: message.content, ...(message.toolCalls.length ? { tool_calls: message.toolCalls.map(call =>
-      ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.argumentsJson } })) } : {}) }
-    : message.role === 'tool' ? { role: 'tool', tool_call_id: message.toolCallId, content: message.content }
-      : { role: message.role, content: message.content });
-}
 
 /**
  * One terminal agent turn inside the runtime service (T-L3, runtime `chatTurn`). The principal comes from the connection; the model,
@@ -171,7 +121,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
     schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
     scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-    nativeRequest: { model: binding.definition.model.nativeId, messages: nativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
+    nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
       stream: true, stream_options: { include_usage: true }, ...roundThinking,
       ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
         parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
@@ -268,15 +218,15 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       async summarize({ sequence, messages: older }, summarySignal) {
         // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
-        const transcript = chatTurnCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
+        const transcript = agentCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
         const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
           scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
-          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: COMPACTION_INSTRUCTION },
+          nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: AGENT_COMPACTION_INSTRUCTION },
             { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };
         const result = await invokePeerConfiguredModel(projectRoot, invocation, peer, options, undefined, host.model, undefined, summarySignal).catch(() => null);
         if (result?.receipt.outcome?.state !== 'responded') return null;
-        return parseCompactionSummary(extractOpenAiChatTextFromInvocation(result));
+        return parseAgentCompactionSummary(extractOpenAiChatTextFromInvocation(result));
       },
       async measure({ round, messages, tools: declared }, measureSignal) {
         const invocation = roundCommand(round, messages, declared);
@@ -284,7 +234,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         const windows = [profileWindow, counted?.windowTokens ?? null].filter((value): value is number => value !== null);
         const windowTokens = windows.length ? Math.min(...windows) : null;
         if (counted) return { promptTokens: counted.promptTokens, windowTokens, quality: 'provider-count' as const };
-        return { promptTokens: chatTurnPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
+        return { promptTokens: openAiChatPromptUpperBound(invocation.nativeRequest), windowTokens, quality: 'upper-bound' as const };
       },
       describe: describeAgentCall,
       async execute(tool, args, toolSignal, callId, execution) {

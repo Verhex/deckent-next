@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { DockerSupervisor, runNodeDockerCommand } from '#adapters/index.js';
+import { DockerSupervisor, recordedDockerSupervisor, runNodeDockerCommand } from '#adapters/index.js';
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it.skipIf(!imageId || process.platform !== 'linux')('captures actual Docker origin and restores exact immutable options without accepting foreign origin or unknown parameters', async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'deckent-profile-')); const os = userInfo();
@@ -41,3 +41,13 @@ it.skipIf(!imageId || process.platform !== 'linux')('captures actual Docker orig
     await expect(DockerSupervisor.restoreProfile({ ...profile, adapterVersion: 1 })).rejects.toMatchObject({ code: 'SUPERVISOR_PROFILE_INVALID' });
   } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
 }, 15000);
+
+// COMPOSITION-BUDGET-2: the lazy recorded-custody supervisor is the Docker adapter's (moved from the runs composition).
+it('restores a recorded supervisor lazily: its profile is answered without the daemon, an invalid profile is refused at once', async () => {
+  const profile = { schemaVersion: 1 as const, adapterId: 'no-such-adapter', adapterVersion: 1, parameters: {} };
+  const recorded = recordedDockerSupervisor(profile);
+  expect(await recorded.captureProfile()).toEqual(profile);
+  // First use restores; a profile of another adapter is rejected by the Docker restore, never run.
+  await expect(recorded.observe({} as never)).rejects.toThrow();
+  expect(() => recordedDockerSupervisor({ ...profile, schemaVersion: 2 } as never)).toThrow();
+});

@@ -1,8 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, expect, it } from 'vitest';
-import { createOpenAiChatNativePort } from '#adapters/core/provider-openai-chat/index.js';
+import { createOpenAiChatNativePort, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound } from '#adapters/core/provider-openai-chat/index.js';
 import type { ModelInvocationDelta } from '#domain/index.js';
-import { openAiChatMessageFromInvocation } from '../../../src/composition/core/terminal-chat/index.js';
 
 const servers: Server[] = [];
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } });
@@ -131,4 +130,18 @@ it('refuses calls under tool_choice none and stops a stream at the first undecla
   expect(early.deltas).toEqual([]);
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(providerClosed).toBe(true); expect(writesAfter).toBeLessThan(20);
+});
+
+// COMPOSITION-BUDGET-2: the request side of the same wire shape lives with the adapter (moved from the runtime agent turn).
+it('maps provider-neutral turn messages onto the chat request shape and bounds an uncounted prompt from above', () => {
+  const messages = openAiChatNativeMessages([{ role: 'system', content: 's' }, { role: 'user', content: 'u' },
+    { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'read_file', argumentsJson: '{"path":"a.ts"}' }] },
+    { role: 'tool', toolCallId: 'c1', name: 'read_file', content: 'x' }, { role: 'assistant', content: 'done', toolCalls: [] }]);
+  expect(messages).toEqual([{ role: 'system', content: 's' }, { role: 'user', content: 'u' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.ts"}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'x' }, { role: 'assistant', content: 'done' }]);
+  const tools = [{ type: 'function', function: { name: 'read_file' } }];
+  expect(openAiChatPromptUpperBound({ model: MODEL, messages, tools } as never))
+    .toBe(Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * 5 + 32);
+  expect(openAiChatPromptUpperBound({ model: MODEL } as never)).toBe(Buffer.byteLength('{"messages":[],"tools":[]}', 'utf8') + 64);
 });

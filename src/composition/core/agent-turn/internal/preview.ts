@@ -6,43 +6,6 @@ import { inspectProductDirectory, ManagedFileError, prepareProductDirectory } fr
 
 type ProductLayout = Parameters<typeof prepareProductDirectory>[0];
 
-/** Largest approval preview in UTF-8 bytes: far below the event bound and any frame, whatever the script (Astra 2094 R3). */
-export const APPROVAL_PREVIEW_MAX_BYTES = 16_384;
-
-/** Longest prefix of `text` within `maxBytes` UTF-8 bytes, never splitting a code point. */
-function utf8Prefix(text: string, maxBytes: number): string {
-  let bytes = 0, end = 0;
-  for (const char of text) {
-    const size = Buffer.byteLength(char, 'utf8');
-    if (bytes + size > maxBytes) break;
-    bytes += size; end += char.length;
-  }
-  return text.slice(0, end);
-}
-
-/**
- * The preview an approval card shows. A text within the bound is shown whole; a larger one is cut to whole lines (the first line
- * itself cut at a character boundary when it alone is too long) under a first-line marker — the card shows the top lines, so the
- * marker is always visible — naming what is not shown, the sha256 of the whole text and, when kept, the file holding all of it.
- */
-export function boundApprovalPreview(text: string, fullAt: string | null = null, maxBytes = APPROVAL_PREVIEW_MAX_BYTES): string {
-  const total = Buffer.byteLength(text, 'utf8');
-  if (total <= maxBytes) return text;
-  const lines = text.split('\n'), digest = createHash('sha256').update(text).digest('hex');
-  const marker = (shown: number, bytes: number) => `[Deckent: preview cut to ${shown} of ${lines.length} lines (${bytes} of ${total} bytes); `
-    + `whole text sha256 ${digest}${fullAt ? `; complete at ${fullAt}` : '; not kept'}]`;
-  const budget = maxBytes - Buffer.byteLength(marker(lines.length, total), 'utf8') - 1;
-  const kept: string[] = [];
-  let bytes = 0;
-  for (const line of lines) {
-    const size = Buffer.byteLength(line, 'utf8') + 1;
-    if (bytes + size <= budget) { kept.push(line); bytes += size; continue; }
-    if (kept.length === 0) { const part = utf8Prefix(line, Math.max(0, budget - 4)); kept.push(`${part} …`); bytes += Buffer.byteLength(`${part} …`, 'utf8') + 1; }
-    break;
-  }
-  return [marker(kept.length, bytes), ...kept].join('\n');
-}
-
 /**
  * The whole text of a cut preview, kept owner-only (0600, exclusive, no-follow) while its approval is pending so the owner can review
  * all of the change. Not redacted: it must be exactly the change being approved, and it mirrors workspace content the owner already
