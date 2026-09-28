@@ -52,7 +52,8 @@ export type TurnDelta =
   | { readonly kind: 'done'; readonly finish: 'stop' | 'length' | 'cancelled' | 'error'; readonly note?: string | null };
 
 /** `reasoning: 'off'` (`/reasoning off`, protocol v16): the turn asks the model to run without thinking; absent otherwise. */
-export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off' }>) => AsyncIterable<TurnDelta>;
+/** `turn.sessionId` (v16, SCR-A) names the conversation: the service keeps its scratch area across the conversation's turns. */
+export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string }>) => AsyncIterable<TurnDelta>;
 
 /** Collects a stream into the final answer text (for line mode and tests); reasoning is excluded. */
 export async function collectTurnText(stream: AsyncIterable<TurnDelta>): Promise<{ readonly text: string; readonly finish: Extract<TurnDelta, { kind: 'done' }>['finish'] | null }> {

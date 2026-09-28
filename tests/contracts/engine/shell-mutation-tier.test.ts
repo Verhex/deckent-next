@@ -2,9 +2,8 @@ import { mkdir, mkdtemp, rm, symlink, writeFile, link } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createShellPathContext, createWorkspaceScope } from '#adapters/index.js';
+import { createShellPathContext, createShellWriteContext, createWorkspaceScope } from '#adapters/index.js';
 import { classifyReadOnlyShellCommand, classifyShellMutation, classifyShellRisk, shellPermissionTier } from '#engine/index.js';
-import { createShellWriteContext } from '#composition/core/agent-turn/index.js';
 
 // T-L4 slice 4a, owner q1: the narrow mutating tier is a separate classifier layer — recognized programs, checked paths, inside the
 // workspace — and the always-ask floor (interpreters, privilege, eval, xargs, tee, package managers, network, malformed input,

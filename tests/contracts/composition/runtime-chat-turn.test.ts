@@ -158,7 +158,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(events.filter(event => event.kind === 'text').map(event => (event as { text: string }).text).join('')).toBe('It exports a.');
     // The model saw the declared tools and, in round 2, the tool result.
     expect(f.state.requests).toHaveLength(2);
-    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file', 'run_shell']);
+    expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file', 'run_shell',
+      'scratch_write', 'scratch_read', 'scratch_list']);
     expect(f.state.requests[1]!['messages']).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'tool', tool_call_id: 'call_1' })]));
     // Each round is one governed invocation under the command id derived from turn and round.
     expect(f.rows("SELECT command_id FROM model_invocations ORDER BY command_id").map(row => (row as { command_id: string }).command_id).sort())
@@ -282,7 +283,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(compacted.messages[0]!.content).toContain('- a.ts exports a'); expect(compacted.messages[0]!.content).toContain('1. question 0');
     const sent = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     // One system message: the service segment ahead of the client's own prompt (TL-C D4); the client's history never holds the segment.
-    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v1\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
+    expect(sent[0]!.role).toBe('system'); expect(sent[0]!.content).toMatch(/^\[Deckent runtime instructions v2\][\s\S]*\n\nSYS$/); expect(sent).toHaveLength(10);
     expect(sent.filter(message => message.role === 'system')).toHaveLength(1);
     expect(compacted.messages.some(message => message.content.includes('Deckent runtime instructions'))).toBe(false);
     // The summary call never carries the switch when the model does not declare it (TL-C D8).
@@ -298,11 +299,11 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const clientPrompt = 'You are the Deckent operator terminal assistant. Reply in English.';
     const events: AgentTurnStreamEvent[] = [];
     await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-prompt', messages: [{ role: 'system', content: clientPrompt },
-      { role: 'user', content: 'hello' }] }, event => events.push(event));
+      { role: 'user', content: 'hello' }], sessionId: 'session-d4' }, event => events.push(event));
     const sent = f.state.requests[0]!['messages'] as { role: string; content: string }[];
     expect(sent.map(message => message.role)).toEqual(['system', 'user']);
     const system = sent[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v1]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v2]')).toBe(true); expect(system.endsWith(`\n\n${clientPrompt}`)).toBe(true);
     expect(system).toContain(`Project root: ${f.project}`);
     expect(system).toContain('Deckent data root: .deckent/live-data'); expect(system).toContain('.deckent/live-data/state/terminal-sessions');
     expect(system).toContain('.deckent/config.json');
@@ -313,7 +314,8 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     // The segment is service-side only: nothing the client keeps (message events, saved history) carries it.
     expect(events.some(event => event.kind === 'message' && event.message.content.includes('Deckent runtime instructions'))).toBe(false);
     // Without a client system message the segment is the whole system message.
-    await f.client().chatTurn(ask('turn-prompt-2'), () => undefined);
+    // The same conversation (v16 `sessionId`): the same scratch area, so the same segment.
+    await f.client().chatTurn({ ...ask('turn-prompt-2'), sessionId: 'session-d4' }, () => undefined);
     const bare = f.state.requests[1]!['messages'] as { role: string; content: string }[];
     expect(bare[0]).toEqual({ role: 'system', content: system.slice(0, -(clientPrompt.length + 2)) });
   }, 30_000);

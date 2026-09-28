@@ -22,6 +22,8 @@ export interface TerminalAgentTurnInput {
   readonly signal?: AbortSignal;
   /** `/reasoning off` (protocol v16): the turn asks the service to run every round without model thinking; absent otherwise. */
   readonly reasoning?: 'off';
+  /** The terminal conversation (protocol v16, SCR-A): the service keeps its scratch area across the conversation's turns. */
+  readonly sessionId?: string;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
 
@@ -33,7 +35,7 @@ type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown }
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
   const admission = await ports.preflight?.(input.projectRoot, input.options) ?? null;
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
-    ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}) };
+    ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}) };
   const cancel = () => ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;

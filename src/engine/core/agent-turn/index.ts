@@ -7,3 +7,4 @@ export { AGENT_COMPACTION_HIGH_WATER, AGENT_COMPACTION_KEEP_MESSAGES, AGENT_COMP
   planAgentCompaction, renderAgentCompaction } from './internal/compaction.js';
 export type { AgentCompactionPlan, AgentCompactionSummary } from './internal/compaction.js';
 export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admission.js';
+export { AGENT_TURN_SYSTEM_PROMPT_VERSION, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt } from './internal/system-prompt.js';

@@ -2,6 +2,7 @@ import { CORE_API_VERSION, adapterModuleManifestSchema, type OperationDescriptor
 import type { AdapterModuleRegistration } from '#engine/index.js';
 import { WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/core/workspace-write/index.js';
 import { HOST_SHELL_RUN_OPERATION } from '#adapters/core/host-shell/index.js';
+import { SCRATCH_FILE_WRITE_OPERATION } from '#adapters/core/scratch-store/index.js';
 
 /** Registry entry of a Core target whose operation lives in code: the manifest carries the descriptor, no config-built adapter (the
  * target is constructed by its own producer with workspace scope or shell settings, never from `operations.targets`). Being a root entry
@@ -15,3 +16,5 @@ const coreOperationModule = (id: string, descriptor: OperationDescriptor): Adapt
 export const coreWorkspaceWriteModule = coreOperationModule('core.workspace-write', WORKSPACE_FILE_WRITE_OPERATION);
 /** `host.shell.run@1` on the `host-shell` target (agent shell commands). */
 export const coreHostShellModule = coreOperationModule('core.host-shell', HOST_SHELL_RUN_OPERATION);
+/** `workspace.scratch.write@1` on the `scratch-file` target (the agent's scratch area, SCR-A). */
+export const coreScratchWriteModule = coreOperationModule('core.scratch-write', SCRATCH_FILE_WRITE_OPERATION);

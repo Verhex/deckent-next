@@ -36,6 +36,8 @@ export interface HostShellRequest {
   readonly timeoutMs?: number;
   /** Extra variable names an operator allowed (configuration), copied when present in the service environment. */
   readonly extraEnv?: readonly string[];
+  /** Values the caller sets whatever the service environment holds (SCR-A: `TMPDIR` = the conversation's scratch area). */
+  readonly fixedEnv?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
   /** Streamed output, in order, each chunk ≤ HOST_SHELL_CHUNK_MAX_BYTES and never splitting a UTF-8 character. */
   readonly onOutput?: (stream: 'stdout' | 'stderr', text: string) => void;
@@ -63,10 +65,10 @@ export interface HostShellResult {
   readonly cleanup: 'clean' | 'group-ended' | 'unverified';
 }
 
-export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = []): Record<string, string> {
+export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = [], fixed: Readonly<Record<string, string>> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const name of [...HOST_SHELL_ENV_ALLOWLIST, ...extra]) { const value = source[name]; if (typeof value === 'string') env[name] = value; }
-  return { ...env, ...NON_INTERACTIVE };
+  return { ...env, ...fixed, ...NON_INTERACTIVE };
 }
 
 /** UTF-8 safe head of `buffer` within `max` bytes (`buffer` holds whole sequences). */
@@ -123,7 +125,7 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return new Promise(resolve => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv),
+      child = spawn('bash', ['--noprofile', '--norc', '-c', request.command], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
         stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;

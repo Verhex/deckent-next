@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { AgentToolSpec, EffectTargetRef } from '#domain/index.js';
+import type { AgentToolSpec, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { createGlobMatcher, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, fileContentVersion, readWritableFile, resolveWritable,
@@ -44,7 +44,11 @@ type Journal = z.infer<typeof journalSchema>;
  */
 export class WorkspaceFileTarget implements EffectTarget {
   readonly kind = WORKSPACE_FILE_TARGET_KIND;
-  constructor(private readonly scope: WorkspaceScope, private readonly journalDirectory: string) {}
+  /** `createMode`: permission bits of a file a write creates (the scratch area's 0600), else the project default 0644; `maxFileBytes`:
+   * largest file read or written, else WORKSPACE_WRITE_MAX_FILE_BYTES. */
+  constructor(private readonly scope: WorkspaceScope, private readonly journalDirectory: string,
+    private readonly options: { readonly createMode?: number; readonly maxFileBytes?: number } = {}) {}
+  private get maxBytes() { return this.options.maxFileBytes ?? WORKSPACE_WRITE_MAX_FILE_BYTES; }
   identity() { return `workspace-file:${this.scope.root}`; }
   private async writable(ref: EffectTargetRef) {
     const target = await resolveWritable(this.scope, ref.id);
@@ -52,7 +56,7 @@ export class WorkspaceFileTarget implements EffectTarget {
     return target;
   }
   private async version(ref: EffectTargetRef) {
-    const current = await readWritableFile(this.scope, await this.writable(ref));
+    const current = await readWritableFile(this.scope, await this.writable(ref), this.maxBytes);
     if (!current.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     return current.version;
   }
@@ -75,7 +79,7 @@ export class WorkspaceFileTarget implements EffectTarget {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success || request.expectedVersion === null) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const bytes = Buffer.from(parsed.data.content, 'utf8');
-    if (bytes.length > WORKSPACE_WRITE_MAX_FILE_BYTES) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
+    if (bytes.length > this.maxBytes) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const target = await this.writable(request.target);
     // A stale precondition is refused before anything is journaled, so it leaves no trace a later lookup could misread.
     if (await this.version(request.target) !== request.expectedVersion) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
@@ -91,7 +95,7 @@ export class WorkspaceFileTarget implements EffectTarget {
       escapedTo: next.state === 'escaped' ? next.where : null });
     try {
       return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes,
-        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase }) };
+        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...this.options }) };
     } catch (error) {
       if (error instanceof WorkspaceWriteError) {
         throw new EffectTargetError(error.code === 'precondition' ? 'EFFECT_TARGET_PRECONDITION' : error.code === 'rejected' ? 'EFFECT_TARGET_REJECTED' : 'EFFECT_TARGET_UNKNOWN', { cause: error });
@@ -111,6 +115,25 @@ export class WorkspaceFileTarget implements EffectTarget {
     // The temporary file is the only causal evidence a `prepared` attempt leaves; the file's content is not (Astra 2100).
     return await temporaryPresent(this.scope, target, journal.temporary) === true ? { status: 'absent' as const } : null;
   }
+}
+
+/**
+ * Where an agent's file-writing tool writes (T-L4 edits; SCR-A scratch): the Core operation and its effect target, how a call is planned,
+ * whether a planned path is on the approval floor, the effect target id of a planned path (unique in the installation: the store's busy
+ * check is per target kind and id) and how the result names it. The composition runs every area through one C11 effect path.
+ */
+export interface WorkspaceEditArea {
+  readonly operation: OperationDescriptor;
+  plan(tool: string, args: Record<string, unknown>): Promise<WorkspaceEditPlan>;
+  floored(rel: string): boolean;
+  targetId(rel: string): string;
+  target(journalDirectory: string): EffectTarget;
+  shown(rel: string): string;
+}
+/** The project workspace as an edit area: `workspace.file.write@1` on `workspace-file`, the approval floor, paths as the model gave them. */
+export function projectEditArea(scope: WorkspaceScope): WorkspaceEditArea {
+  return Object.freeze({ operation: WORKSPACE_FILE_WRITE_OPERATION, plan: (tool: string, args: Record<string, unknown>) => planWorkspaceEdit(scope, tool, args),
+    floored: isWriteApprovalFloored, targetId: (rel: string) => rel, target: (journal: string) => new WorkspaceFileTarget(scope, journal), shown: (rel: string) => rel });
 }
 
 /** The edit tools (T-L4). Arguments are exact strings: `old_string` must match exactly once unless `replace_all`. */
@@ -134,10 +157,11 @@ export type WorkspaceEditPlan = { readonly ok: true; readonly rel: string; reado
  * The file change an edit call proposes, computed from the file as it is now: its version (the write's precondition), the new
  * content and a bounded diff for the approval card. Nothing is written here. `replace` never interprets `$` patterns.
  */
-export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, args: Record<string, unknown>): Promise<WorkspaceEditPlan> {
+export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, args: Record<string, unknown>,
+  maxFileBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<WorkspaceEditPlan> {
   const target = await resolveWritable(scope, args['path']);
   if (!target.ok) return { ok: false, error: target.error };
-  const current = await readWritableFile(scope, target);
+  const current = await readWritableFile(scope, target, maxFileBytes);
   if (!current.ok) return { ok: false, error: current.error };
   let before: string | null = null;
   if (current.bytes) {
@@ -157,7 +181,7 @@ export async function planWorkspaceEdit(scope: WorkspaceScope, tool: string, arg
     after = args['replace_all'] === true ? parts.join(replacement) : before.slice(0, before.indexOf(old)) + replacement + before.slice(before.indexOf(old) + old.length);
   } else return { ok: false, error: 'unknown-tool' };
   if (after === before) return { ok: false, error: 'no change' };
-  if (Buffer.byteLength(after, 'utf8') > WORKSPACE_WRITE_MAX_FILE_BYTES) return { ok: false, error: 'too-large' };
+  if (Buffer.byteLength(after, 'utf8') > maxFileBytes) return { ok: false, error: 'too-large' };
   const preview = unifiedDiff(target.rel, before, after), lines = preview.split('\n');
   return { ok: true, rel: target.rel, beforeVersion: current.version === ABSENT_FILE_VERSION ? ABSENT_FILE_VERSION : current.version, after, preview,
     added: lines.filter(line => line.startsWith('+') && !line.startsWith('+++')).length, removed: lines.filter(line => line.startsWith('-') && !line.startsWith('---')).length };

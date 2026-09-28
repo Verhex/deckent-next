@@ -32,6 +32,16 @@ export const terminalConfigSchema = z.object({
     timeoutMs: z.number().int().min(1_000).max(3_600_000).default(300_000),
     environment: z.array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)).max(64).default([]),
   }).strict().optional(),
+  /** The agent's scratch area (SCR-A, owner 2026-09-28): per-write, per-session and installation-wide byte ceilings of the layout's
+   * `scratch` resource, how many days an unused session area is kept, and how often the running service sweeps. Data, not code. */
+  scratch: z.object({
+    schemaVersion: z.literal(1),
+    writeMaxBytes: z.number().int().min(1_024).max(1_048_576).default(1_048_576),
+    sessionMaxBytes: z.number().int().min(1_024).max(1_073_741_824).default(67_108_864),
+    installationMaxBytes: z.number().int().min(1_024).max(17_179_869_184).default(536_870_912),
+    retentionDays: z.number().int().min(1).max(365).default(7),
+    sweepIntervalMs: z.number().int().min(60_000).max(86_400_000).default(3_600_000),
+  }).strict().optional(),
 }).strict();
 
 export type TerminalConfig = z.infer<typeof terminalConfigSchema>;
@@ -48,6 +58,16 @@ export type TerminalShellConfig = { readonly timeoutMs: number; readonly environ
 export function readTerminalShellConfig(config: Record<string, unknown>): TerminalShellConfig {
   const shell = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).shell;
   return Object.freeze({ timeoutMs: shell?.timeoutMs ?? 300_000, environment: Object.freeze([...(shell?.environment ?? [])]) });
+}
+
+export type TerminalScratchConfig = { readonly writeMaxBytes: number; readonly sessionMaxBytes: number; readonly installationMaxBytes: number;
+  readonly retentionDays: number; readonly sweepIntervalMs: number };
+/** The scratch section, or its defaults when absent (1 MiB write, 64 MiB session, 512 MiB installation, 7 days, hourly sweep). */
+export function readTerminalScratchConfig(config: Record<string, unknown>): TerminalScratchConfig {
+  const scratch = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).scratch;
+  const { writeMaxBytes, sessionMaxBytes, installationMaxBytes, retentionDays, sweepIntervalMs } = scratch
+    ?? terminalConfigSchema.shape.scratch.unwrap().parse({ schemaVersion: 1 });
+  return Object.freeze({ writeMaxBytes, sessionMaxBytes, installationMaxBytes, retentionDays, sweepIntervalMs });
 }
 
 export function readTerminalConfig(config: Record<string, unknown>): TerminalConfig {

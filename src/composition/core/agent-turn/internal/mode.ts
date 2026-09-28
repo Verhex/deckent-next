@@ -41,12 +41,13 @@ const isAuditedDecision = (audited: Relaxed, again: AgentToolCallDecision) => ag
  * Owner-approved calls keep the C12 gate as is.
  */
 export function createAgentCallDecisions(input: { readonly context: Context; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
-  readonly edits: ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
+  readonly edits: (tool: string) => ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
   readonly approvals: ReturnType<typeof createAgentCallApprovals> }) {
   const { context, clock, scopeId, turnId, edits, shell, approvals } = input;
   const stored = new Map<string, Stored>();
   const keyOf = (tool: AgentToolSpec, args: Record<string, unknown>) => agentToolArgumentsDigest(tool.name, args);
-  const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? WORKSPACE_FILE_WRITE_OPERATION.operation
+  // An edit tool no area serves still carries the project's write operation (never a one-sided decision).
+  const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? edits(tool.name)?.operation ?? WORKSPACE_FILE_WRITE_OPERATION.operation
     : tool.toolClass === 'shell' ? HOST_SHELL_RUN_OPERATION.operation : null;
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
@@ -56,7 +57,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
-    if (tool.toolClass === 'edit') return edits?.target(tool.name, args) === null || !edits ? null : edits.floored(tool.name, args) ? 'edit-floor' : 'edit';
+    if (tool.toolClass === 'edit') { const area = edits(tool.name); return !area || area.target(tool.name, args) === null ? null : area.floored(tool.name, args) ? 'edit-floor' : 'edit'; }
     if (tool.toolClass === 'shell') { const tier = shell?.tier(tool.name, args) ?? null; return tier === null ? null : SHELL_CELLS[tier]; }
     return 'read';
   };
@@ -76,7 +77,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const first = await decide(tool, 'read', snapshot);
       if (!first || first.decision === 'deny') return 'deny';
       if (tool.toolClass === 'read') { stored.set(key, { cell: 'read', decision: first }); return first.decision; }
-      const planned = tool.toolClass === 'edit' && edits ? await edits.plan(tool.name, args).then(plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)
+      const area = tool.toolClass === 'edit' ? edits(tool.name) : null;
+      const planned = area ? await area.plan(tool.name, args).then(plan => plan.ok ? null : `[deckent] ${tool.name}: error=${plan.error}`)
         : tool.toolClass === 'shell' && shell ? await shell.plan(tool.name, args).then(plan => plan.ok ? null : plan.text) : `[deckent] ${tool.name}: error=unknown-tool`;
       const cell = planned === null ? cellOf(tool, args) : null;
       if (planned !== null || cell === null) { stored.set(key, { planError: planned ?? `[deckent] ${tool.name}: error=failed` }); return 'require-approval'; }
@@ -111,7 +113,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
           return await run(inner);
         }
-        const argsDigest = agentToolArgumentsDigest(tool.name, args), path = edits?.target(tool.name, args) ?? null, command = String(args['command'] ?? '');
+        const argsDigest = agentToolArgumentsDigest(tool.name, args), path = edits(tool.name)?.target(tool.name, args) ?? null, command = String(args['command'] ?? '');
         const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: permissionModeEventId(scopeId, turnId, execution, argsDigest), scopeId,
           principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision: fresh.revision, atMs: clock.sample().wallMs,
           subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool: { name: tool.name, version: tool.version },

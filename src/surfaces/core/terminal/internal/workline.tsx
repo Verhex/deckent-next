@@ -27,6 +27,7 @@ import type { ComposerMentionPort } from '#surfaces/core/terminal-composer/index
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
+import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -51,6 +52,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly mode?: WorklineModeLabels;
   /** `/reasoning` notices (TL-A D6); optional until the catalog carries `terminal.reasoning.*` (`i18n-delta.json`), neutral text meanwhile. */
   readonly reasoning?: WorklineReasoningLabels;
+  /** `/scratch` notices (SCR-A); neutral text until the catalog carries `terminal.scratch.*` (`i18n-delta.json`). */
+  readonly scratch?: WorklineScratchLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -85,6 +88,8 @@ export interface WorklineProps {
   readonly sessions?: ConversationSessionPort;
   /** The person's permission mode through the runtime service (status row segment and `/mode`, T-L4 slice 4c). */
   readonly permissionMode?: WorklinePermissionModePort;
+  /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
+  readonly scratch?: WorklineScratchPort;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -131,6 +136,7 @@ export function WorklineApp(props: WorklineProps) {
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode);
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
+  const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
 
   // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
@@ -217,7 +223,8 @@ export function WorklineApp(props: WorklineProps) {
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         // One `/reasoning` state: off hides the preview and asks the service for a turn without model thinking (v16).
-        for await (const delta of props.streamTurn(messages, controller.signal, reasoning.current.current ? undefined : { reasoning: 'off' })) {
+        // The conversation's id travels with every turn (v16): its scratch area lives across the conversation.
+        for await (const delta of props.streamTurn(messages, controller.signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: session.id() })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);
@@ -261,9 +268,9 @@ export function WorklineApp(props: WorklineProps) {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
-    if (slash.command === 'mode') {
+    if (slash.command === 'mode' || slash.command === 'scratch') {
       setBusy(true);
-      try { await mode.run(slash.args); } finally { setBusy(false); }
+      try { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); } finally { setBusy(false); }
       return true;
     }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
@@ -291,7 +298,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, reasoning.run, runTurn, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the

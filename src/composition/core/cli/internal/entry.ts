@@ -59,6 +59,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     // T-L4 slice 4c: `/mode` and the status row read and set the caller's own permission mode through the runtime service (v15).
     inspectPermissionMode: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectPermissionMode(input, signal),
     setPermissionMode: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setPermissionMode(input),
+    // SCR-A `/scratch`: the caller's own scratch area through the runtime service (v16); the terminal reads and deletes no file.
+    inspectScratch: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectScratch(input, signal),
+    clearScratch: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).clearScratch(input),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation,
     inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount,

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "rootName": ".deckent",
   "resources": {
     "config": "config.json",
@@ -24,7 +24,8 @@
     "terminalHistory": "state/terminal-history.jsonl",
     "terminalSessions": "state/terminal-sessions",
     "fileEffects": "state/file-effects",
-    "approvalPreviews": "state/approval-previews"
+    "approvalPreviews": "state/approval-previews",
+    "scratch": "state/scratch"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal"],

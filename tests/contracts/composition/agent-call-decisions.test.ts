@@ -37,7 +37,7 @@ async function fixture(loads: unknown[]) {
   const edits = { async plan() { plans++; return { ok: true }; }, floored: () => false, target: () => 'src/a.ts' };
   const inner: EffectApprovalGate = { async admit(_descriptor, decision) { if (decision !== 'allow') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); } };
   const approvals = { gate: () => ({ gate: inner, async close() {} }) };
-  const decisions = createAgentCallDecisions({ context: context as never, clock: new SystemTrustedClock(), scopeId: 'scope', turnId: 'turn', edits: edits as never,
+  const decisions = createAgentCallDecisions({ context: context as never, clock: new SystemTrustedClock(), scopeId: 'scope', turnId: 'turn', edits: (() => edits) as never,
     shell: null, approvals: approvals as never });
   const events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT event_id FROM audit_events').all().length; } finally { db.close(); } };
   const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {

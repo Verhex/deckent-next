@@ -30,14 +30,15 @@ const inputSchema = z.object({ command: z.string().min(1).max(HOST_SHELL_COMMAND
 export class HostShellTarget implements EffectTarget {
   readonly kind = HOST_SHELL_TARGET_KIND;
   constructor(private readonly cwd: string, private readonly run: { readonly timeoutMs: number; readonly extraEnv: readonly string[];
-    readonly signal: AbortSignal; readonly onOutput: (stream: 'stdout' | 'stderr', text: string) => void; readonly onResult: (result: HostShellResult) => void }) {}
+    readonly fixedEnv?: Readonly<Record<string, string>>; readonly signal: AbortSignal; readonly onOutput: (stream: 'stdout' | 'stderr', text: string) => void;
+    readonly onResult: (result: HostShellResult) => void }) {}
   identity() { return `host-shell:${this.cwd}`; }
   async observe() { return { version: null }; }
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const result = await runHostShell({ command: parsed.data.command, cwd: this.cwd, timeoutMs: this.run.timeoutMs, extraEnv: this.run.extraEnv,
-      signal: this.run.signal, onOutput: this.run.onOutput });
+      ...(this.run.fixedEnv ? { fixedEnv: this.run.fixedEnv } : {}), signal: this.run.signal, onOutput: this.run.onOutput });
     this.run.onResult(result);
     if (result.status === 'exited') return { version: null };
     if (result.status === 'spawn-failed' || result.status === 'unsupported-platform') throw new EffectTargetError('EFFECT_TARGET_REJECTED');

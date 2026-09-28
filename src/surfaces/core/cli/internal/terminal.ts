@@ -268,8 +268,13 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectPermissionMode && context.setPermissionMode ? { permissionMode: {
       inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
       set: (mode: PermissionMode, expectedRevision: string) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision }, options) } } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off' }>) =>
-      context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}) }, options, signal) } : {}),
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string }>) =>
+      context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
+        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}) }, options, signal) } : {}),
+    // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
+    ...(context.inspectScratch && context.clearScratch ? { scratch: {
+      inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
+      clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     ...(serviceLine ? { openingNotices: [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine },
       ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {

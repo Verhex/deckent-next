@@ -5,3 +5,5 @@ export type { AgentContextQuality, AgentToolApprovalSettlement, AgentTurnMessage
 export { WORKSPACE_ATTACHMENT_MAX_BYTES, WORKSPACE_ATTACHMENT_REFUSALS, WORKSPACE_FILE_FIND_MAX_RESULTS, WORKSPACE_FILE_QUERY_MAX_CHARS, parseWorkspaceAttachmentRequest,
   parseWorkspaceFileQuery, workspaceAttachmentRequestSchema, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema } from './internal/workspace-files.js';
 export type { WorkspaceAttachment, WorkspaceAttachmentRefusal, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery } from './internal/workspace-files.js';
+export { parseScratchQuery, SCRATCH_VIEW_MAX_FILES, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema } from './internal/scratch.js';
+export type { ScratchClearance, ScratchQuery, ScratchView } from './internal/scratch.js';

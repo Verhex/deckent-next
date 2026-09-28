@@ -3,13 +3,14 @@ import { isAbsolute, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { AGENT_TURN_ANSWER_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, agentCompactionSummarySchema, agentTurnAdmission, awaitAgentToolApproval,
-  requestAgentToolApproval, runDurableAgentTurn,
+  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt,
   type AgentCompactionSummary, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, readTerminalChatConfig, readTerminalShellConfig, RUN_SHELL_TOOL_SPEC,
-  registerProviderConfig, type LocalPeerIdentity, type RuntimeServiceTurnChannel } from '#adapters/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
+  readTerminalShellConfig, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity, type LocalPeerIdentity,
+  type RuntimeServiceTurnChannel, type ScratchActivity, type WorkspaceEditArea } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
@@ -18,17 +19,17 @@ import { inspectModelBinding } from '#composition/core/provider-catalog/index.js
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions } from './mode.js';
-import { renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt } from './system-prompt.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatUsageFromInvocation } from '#composition/core/terminal-chat/index.js';
 
-/** Service-owned state of running turns: cancellation by the starting principal, and service stop. */
+/** Service-owned state of running turns: cancellation by the starting principal, service stop, and the scratch areas they hold (never swept). */
 export interface RuntimeChatTurnHost {
   readonly model: RuntimeModelInvocationHost;
   readonly signal: AbortSignal;
   readonly running: Map<string, { readonly principalKey: string; readonly controller: AbortController }>;
+  readonly scratch: ScratchActivity;
 }
-export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal): RuntimeChatTurnHost {
-  return Object.freeze({ model, signal, running: new Map() });
+export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity()): RuntimeChatTurnHost {
+  return Object.freeze({ model, signal, running: new Map(), scratch });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -90,7 +91,7 @@ function parseCompactionSummary(text: string | null): AgentCompactionSummary | n
  * (e.g. `.deckent/live-data`) would otherwise leave them readable. The same scope classifies edit and shell paths.
  */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
-  const owned = (['approvals', 'approvalPreviews'] as const).flatMap(resource => {
+  const owned = (['approvals', 'approvalPreviews', 'scratch'] as const).flatMap(resource => {
     const rel = relative(projectRoot, productResourcePath(layout, resource));
     return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split(sep).join('/'), `${rel.split(sep).join('/')}/**`];
   });
@@ -144,18 +145,22 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const roundThinking = command.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {};
   // TL-B D3: `terminal.chat.readResultMaxBytes` reaches the adapter (field default 65_536 = adapter default).
   const workspace = toolCapable ? await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, context.layout), limits: { maxResultBytes: chat.readResultMaxBytes } }) : null;
-  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC] : [];
-  const edits = workspace ? createAgentFileEdits({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
+  // SCR-A: the conversation's scratch area (the caller's own subtree of the layout's `scratch` resource); `scratch_write` is its edit area.
+  const scratch = workspace ? await openScratchSession(await prepareProductDirectory(context.layout, 'scratch'), scratchSessionKey({ scopeId: command.scopeId, principal: context.principal,
+    turnId: command.turnId, ...(command.sessionId ? { sessionId: command.sessionId } : {}) }), readTerminalScratchConfig(config), { maxResultBytes: chat.readResultMaxBytes }) : null;
+  const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS] : [];
+  const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
+  const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
   const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
-    config: readTerminalShellConfig(config) }) : null;
+    config: readTerminalShellConfig(config), scratch }) : null;
   const principalKey = principalKeyOf(context.principal);
   const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
   // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
   // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
-  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools });
+  const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays } });
   const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
     binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
-    ...(command.reasoning ? { reasoning: command.reasoning } : {}) })}`);
+    ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}) })}`);
 
   // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
   const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
@@ -172,7 +177,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
   const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId });
   // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits, shell, approvals });
+  const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals });
 
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
@@ -180,6 +185,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
   const registered = !host.running.has(key);
   if (registered) host.running.set(key, { principalKey, controller: cancel });
+  const releaseScratch = scratch ? host.scratch.hold(scratch.key) : null;
   try {
     const ports: AgentTurnPorts = {
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
@@ -215,7 +221,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
       authorize: (tool, args) => decisions.authorize(tool, args),
       async prepare(tool, args) {
-        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && edits)) return decisions.prepare(tool, args);
+        if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name))) return decisions.prepare(tool, args);
         return { ok: true };
       },
       async requestApproval({ round, index, call, tool, args, argsDigest, target }, approvalSignal) {
@@ -234,7 +240,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
-          const diff = edits?.preview(tool.name, args);
+          const diff = editsOf(tool.name)?.preview(tool.name, args);
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
             summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
@@ -283,11 +289,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       async execute(tool, args, toolSignal, callId, execution) {
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
-        if ((tool.toolClass === 'edit' && edits) || (tool.toolClass === 'shell' && shell)) {
+        if ((tool.toolClass === 'edit' && editsOf(tool.name)) || (tool.toolClass === 'shell' && shell)) {
           return decisions.execute(tool, args, execution, callId, gate => tool.toolClass === 'edit'
-            ? edits!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate));
+            ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate));
         }
-        return workspace.execute(tool.name, args, toolSignal);
+        return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       now: () => clock.sample().wallMs,
     };
@@ -303,6 +309,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
     if (registered) host.running.delete(key);
+    releaseScratch?.();
     store.close();
   }
 }

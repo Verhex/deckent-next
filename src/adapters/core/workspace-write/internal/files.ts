@@ -18,11 +18,8 @@ export class WorkspaceWriteError extends Error {
 
 const proc = (handle: FileHandle, name: string) => `/proc/self/fd/${handle.fd}/${name}`;
 
-/**
- * A workspace path an edit may write: normalized, inside the root, not denied, a plain file name under an existing parent that is
- * its own real path (no symlinked directory). The file itself may not exist yet.
- */
-export async function resolveWritable(scope: WorkspaceScope, requested: unknown): Promise<WritablePath> {
+/** The lexical part of `resolveWritable`: normalized, inside the root, not denied, a plain file name; nothing on disk is looked at. */
+export function writablePath(scope: WorkspaceScope, requested: unknown): WritablePath {
   if (typeof requested !== 'string' || !requested || requested.length > 4096 || requested.includes('\0')) return { ok: false, error: 'invalid-path' };
   let path = posix.normalize(requested.replace(/\\/g, '/'));
   if (path.startsWith('/')) {
@@ -33,12 +30,20 @@ export async function resolveWritable(scope: WorkspaceScope, requested: unknown)
   if (path === '' || path === '.' || path === '..' || path.startsWith('../') || path.endsWith('/')) return { ok: false, error: 'invalid-path' };
   const name = posix.basename(path), parent = posix.dirname(path), parentRel = parent === '.' ? '' : parent;
   if (scope.denied(path)) return { ok: false, error: 'denied' };
-  if (parentRel) {
-    const resolved = await scope.resolve(parentRel);
-    if (!resolved.ok) return { ok: false, error: `parent-${resolved.error}` };
-    if (resolved.rel !== parentRel) return { ok: false, error: 'parent-is-link' };
-  }
   return { ok: true, rel: path, parentRel, name };
+}
+
+/**
+ * A workspace path an edit may write: normalized, inside the root, not denied, a plain file name under an existing parent that is
+ * its own real path (no symlinked directory). The file itself may not exist yet.
+ */
+export async function resolveWritable(scope: WorkspaceScope, requested: unknown): Promise<WritablePath> {
+  const target = writablePath(scope, requested);
+  if (!target.ok || !target.parentRel) return target;
+  const resolved = await scope.resolve(target.parentRel);
+  if (!resolved.ok) return { ok: false, error: `parent-${resolved.error}` };
+  if (resolved.rel !== target.parentRel) return { ok: false, error: 'parent-is-link' };
+  return target;
 }
 
 async function openParent(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>) {
@@ -48,7 +53,7 @@ async function openParent(scope: WorkspaceScope, target: Extract<WritablePath, {
 }
 
 /** The current bytes and version of the file under an opened parent: absent, or a single-link regular file within the size limit. */
-async function currentUnder(dir: FileHandle, name: string): Promise<CurrentFile> {
+async function currentUnder(dir: FileHandle, name: string, maxBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<CurrentFile> {
   let info;
   try { info = await lstat(proc(dir, name)); } catch (error) {
     return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { ok: true, version: ABSENT_FILE_VERSION, bytes: null, mode: 0o644 } : { ok: false, error: 'unreadable' };
@@ -56,7 +61,7 @@ async function currentUnder(dir: FileHandle, name: string): Promise<CurrentFile>
   if (info.isSymbolicLink()) return { ok: false, error: 'is-link' };
   if (!info.isFile()) return { ok: false, error: 'not-a-file' };
   if (info.nlink > 1) return { ok: false, error: 'hard-linked' };
-  if (info.size > WORKSPACE_WRITE_MAX_FILE_BYTES) return { ok: false, error: 'too-large' };
+  if (info.size > maxBytes) return { ok: false, error: 'too-large' };
   const handle = await open(proc(dir, name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = await handle.stat();
@@ -68,9 +73,9 @@ async function currentUnder(dir: FileHandle, name: string): Promise<CurrentFile>
   } finally { await handle.close(); }
 }
 
-export async function readWritableFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>): Promise<CurrentFile> {
+export async function readWritableFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, maxBytes = WORKSPACE_WRITE_MAX_FILE_BYTES): Promise<CurrentFile> {
   const dir = await openParent(scope, target);
-  try { return await currentUnder(dir, target.name); } finally { await dir.close(); }
+  try { return await currentUnder(dir, target.name, maxBytes); } finally { await dir.close(); }
 }
 
 /** Phases of one write attempt, reported to its effect journal in order (T-L4, Astra 2094 R1/R2). `escaped`: the rename happened but
@@ -81,6 +86,10 @@ export interface WriteAttempt {
   readonly temporary: string;
   /** A temporary file an earlier attempt of the same effect may have left; removed before this attempt starts. */
   readonly stale?: string | null;
+  /** Permission bits of a file this attempt creates (an existing file keeps its own); absent: 0644, the project default. */
+  readonly createMode?: number;
+  /** Largest file read or written; absent: WORKSPACE_WRITE_MAX_FILE_BYTES. */
+  readonly maxFileBytes?: number;
   readonly phase: (phase: WritePhase) => Promise<void>;
 }
 export const writeAttemptTemporary = (name: string) => `.${name}.deckent-${randomBytes(6).toString('hex')}.tmp`;
@@ -97,21 +106,23 @@ export const writeAttemptTemporary = (name: string) => `.${name}.deckent-${rando
  */
 export async function writeWorkspaceFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, expectedVersion: string, content: Buffer,
   attempt: WriteAttempt = { temporary: writeAttemptTemporary(target.name), phase: async () => undefined }): Promise<string> {
-  if (content.length > WORKSPACE_WRITE_MAX_FILE_BYTES) throw new WorkspaceWriteError('rejected', 'too-large');
+  const maxBytes = attempt.maxFileBytes ?? WORKSPACE_WRITE_MAX_FILE_BYTES;
+  if (content.length > maxBytes) throw new WorkspaceWriteError('rejected', 'too-large');
   const dir = await openParent(scope, target);
   const temporary = attempt.temporary;
   let pending = false;
   try {
     if (attempt.stale) await unlink(proc(dir, attempt.stale)).catch(() => undefined);
-    const current = await currentUnder(dir, target.name);
+    const current = await currentUnder(dir, target.name, maxBytes);
     if (!current.ok) throw new WorkspaceWriteError('rejected', current.error);
     if (current.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed since it was read');
     await attempt.phase({ state: 'prepared' });
     pending = true;
-    const out = await open(proc(dir, temporary), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, current.mode);
+    const mode = current.version === ABSENT_FILE_VERSION ? attempt.createMode ?? current.mode : current.mode;
+    const out = await open(proc(dir, temporary), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);
     try { await out.writeFile(content); await out.sync(); } finally { await out.close(); }
     if (!(await scope.verify(dir, target.parentRel))) throw new WorkspaceWriteError('changed', 'directory moved during the write');
-    const again = await currentUnder(dir, target.name);
+    const again = await currentUnder(dir, target.name, maxBytes);
     if (!again.ok || again.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed during the write');
     await rename(proc(dir, temporary), proc(dir, target.name));
     pending = false;

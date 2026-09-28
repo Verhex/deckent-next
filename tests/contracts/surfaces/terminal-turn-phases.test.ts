@@ -192,10 +192,10 @@ describe('workline (D5 + D6)', () => {
   });
 
   it('/reasoning turns the preview off and on; the narration line stays', async () => {
-    let turn = 0; const asked: unknown[] = [];
-    // v16 (OPEN-REASONING-FILE): the same state asks the turn for no model thinking while off.
-    const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, options?: { readonly reasoning?: 'off' }) {
-      turn++; asked.push(options ?? null);
+    let turn = 0; const asked: unknown[] = [], sessions: unknown[] = [];
+    // v16 (OPEN-REASONING-FILE): the same state asks the turn for no model thinking while off. SCR-A: every turn names the conversation.
+    const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, options?: { readonly reasoning?: 'off'; readonly sessionId?: string }) {
+      turn++; asked.push(options?.reasoning ? { reasoning: options.reasoning } : null); sessions.push(options?.sessionId);
       yield { kind: 'reasoning' as const, text: `PREVIEW-${turn}` };
       await settle(80);
       yield { kind: 'text' as const, text: `answer-${turn}` }; yield { kind: 'done' as const, finish: 'stop' as const };
@@ -212,12 +212,13 @@ describe('workline (D5 + D6)', () => {
     expect(view.stdout.text).toContain('PREVIEW-3');
     view.stdin.write('/reasoning maybe\r'); await until(() => view.stdout.text.includes('Usage: /reasoning [on|off]'), 'usage');
     expect(asked).toEqual([null, { reasoning: 'off' }, null]);
+    expect(new Set(sessions).size).toBe(1); expect(sessions[0]).toMatch(/^[0-9a-f-]{36}$/u);
   });
 
   it('applies a /reasoning off typed while a turn runs to the message queued after it (FIFO, no render in between)', async () => {
     const asked: unknown[] = [];
     const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, options?: { readonly reasoning?: 'off' }) {
-      asked.push(options ?? null); await settle(120);
+      asked.push(options?.reasoning ? { reasoning: options.reasoning } : null); await settle(120);
       yield { kind: 'text' as const, text: `answer-${asked.length}` }; yield { kind: 'done' as const, finish: 'stop' as const };
     };
     const view = mountWorkline({ streamTurn }); mounted.push(view);

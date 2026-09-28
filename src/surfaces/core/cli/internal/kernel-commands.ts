@@ -17,7 +17,7 @@ import {
 } from '#platform/index.js';
 
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
-  TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler } from './terminal-chat.js';
+  TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
@@ -64,6 +64,8 @@ export interface CommandContext extends ModelCommandContext {
   attachTerminalMentions?: TerminalMentionAttachHandler;
   inspectPermissionMode?: TerminalPermissionModeInspectHandler;
   setPermissionMode?: TerminalPermissionModeSetHandler;
+  inspectScratch?: TerminalScratchInspectHandler;
+  clearScratch?: TerminalScratchClearHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
