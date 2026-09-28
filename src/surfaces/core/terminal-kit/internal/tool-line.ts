@@ -30,16 +30,19 @@ const META_PREFIX = '[deckent] ';
 const countContentLines = (content: string) => content.split('\n').filter(line => line.length > 0 && !line.startsWith(META_PREFIX)).length;
 const hasMetaNote = (content: string) => content.split('\n').some(line => line.startsWith(META_PREFIX));
 
-// grep's own line shapes (`workspace-read/internal/tools.ts`): a real hit is `path:line:text`; a context row around
-// it, only ever present when the model asked for `context` (Astra 2143 R2), is `path:line-text`; a gap between two
-// non-adjacent context blocks is a lone `--` row. Only the first shape is a match — the summary must not let context
-// rows or the block separator inflate the count the user sees. The check anchors on the FIRST colon (`[^:]*`, no
-// colons allowed before it): that is always the path/line-number boundary, so it cannot keep scanning into a
-// context line's own content and mistake something shaped like `12:34:56` (a timestamp is the everyday case) for
-// the marker. Known limit: this is still shape-derived (no new wire field, TL-B D2), so a workspace-relative path
-// that itself contained a literal ':' would be undercounted here; this product's paths never do.
-const GREP_HIT_LINE = /^[^:]*:\d+:/;
-const countGrepHitLines = (content: string) => content.split('\n').filter(line => line.length > 0 && !line.startsWith(META_PREFIX) && GREP_HIT_LINE.test(line)).length;
+/** grep's count is the producer's own, never read back from the hit rows (Astra 2145 R2): a workspace path may itself contain ':'
+ * (`report:2026.txt:1:MATCH`) and a context row's text may carry `12:34:56`, so `path:line:text` cannot be split reliably. A grep
+ * result with hits ends with `[deckent] grep: matches=N` (`N+` when it returned less than it found: hit cap, byte cap, skipped or
+ * unscanned files; `workspace-read/internal/tools.ts`). Only the LAST line is read, so a meta-shaped line earlier in the text (a path
+ * with a newline in it) is never taken for it. No such line (an older recorded result, another producer, a text cut by the final
+ * byte cap) means the count is unknown: no summary, never a guessed number. */
+function grepSummary(content: string): ToolResultSummary | null {
+  const lines = content.split('\n');
+  const count = /^\[deckent\] grep: matches=(\d+)(\+)?$/.exec(lines[lines.length - 1] ?? '');
+  if (count) return { kind: 'matches', count: Number(count[1]), more: count[2] !== undefined };
+  const none = /^\[deckent\] grep: no matches in \d+ scanned file\(s\)(; the search was not complete)?$/.exec(lines[0] ?? '');
+  return none ? { kind: 'matches', count: 0, more: none[1] !== undefined } : null;
+}
 
 function readFileSummary(content: string): ToolResultSummary | null {
   const meta = content.split('\n', 1)[0] ?? '';
@@ -55,17 +58,14 @@ function readFileSummary(content: string): ToolResultSummary | null {
   return null;
 }
 
-/** Read-class result text is always either a leading meta line (read_file) or a plain list of content lines (grep,
- * glob, list_dir) with `[deckent] `-prefixed notes only for skips/caps/errors — so a match count and a coarse "may be
- * incomplete" flag come from the shape of the text itself, without tools.ts adding a single new meta line for D2. */
+/** read_file carries a leading meta line and grep a trailing exact count (both produced by `workspace-read/internal/tools.ts`);
+ * glob and list_dir are plain lists of content lines with `[deckent] `-prefixed notes only for skips/caps/errors, so their count
+ * and a coarse "may be incomplete" flag come from the shape of the text. */
 export function summarizeAgentToolResult(name: string, content: string): ToolResultSummary | null {
   // S5: only the trusted leading metadata carries posture; command stdout cannot supply this prefix.
   if (name === 'run_shell') return content.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' } : null;
   if (name === 'read_file') return readFileSummary(content);
-  if (name === 'grep') {
-    const count = countGrepHitLines(content);
-    return { kind: 'matches', count, more: count > 0 && hasMetaNote(content) };
-  }
+  if (name === 'grep') return grepSummary(content);
   if (name === 'glob') {
     const count = countContentLines(content);
     return { kind: 'matches', count, more: count > 0 && hasMetaNote(content) };

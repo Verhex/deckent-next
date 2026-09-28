@@ -1,5 +1,5 @@
 import { openSqliteModelInvocationCancellationInventory, openSqliteModelInvocationStore } from '#adapters/index.js';
-import { ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization, isRuntimeServiceModelOwnerId,
+import { ModelInvocationCancellationRecoveryApplication, ModelInvocationPolicyAuthorization, endedRuntimeServiceModelOwner,
   ModelInvocationStoreError, modelInvocationCancellationRecoveryCommandSchema,
   type ModelInvocationControllers } from '#engine/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -24,11 +24,13 @@ export async function recoverConfiguredModelCancellations(projectRoot: string, i
   } catch (error) { throw queryFailure(error); }
 }
 
-/** Start reconciliation; the caller must hold endpoint custody (INFLIGHT-FIX, FIX-2143-SLOTS). Holding it proves no service instance of
- * this installation is alive, so an open call a service instance permitted settles `unknown`; slots an earlier build kept for settled
- * `unknown` calls are released. Any other open call, and any allocation whose records do not verify, is never rewritten. */
-export async function releaseSettledModelSlots(ledgerPath: string, sqlite: Parameters<typeof openSqliteModelInvocationStore>[1]) {
+/** Start reconciliation; the caller must hold the endpoint custody named `custodyId` (INFLIGHT-FIX, FIX-2143-SLOTS). Holding it proves
+ * only that no service instance is alive on that endpoint (Astra 2145 R1: another endpoint may share this ledger), so an open call
+ * settles `unknown` only when its send owner names this same custody; slots an earlier build kept for settled `unknown` calls are
+ * released. Any other open call, and any allocation whose records do not verify, is never rewritten. */
+export async function releaseSettledModelSlots(ledgerPath: string, sqlite: Parameters<typeof openSqliteModelInvocationStore>[1], custodyId: string) {
+  const endedOwner = endedRuntimeServiceModelOwner(custodyId);
   const store = await openSqliteModelInvocationStore(ledgerPath, sqlite, 'forbid');
-  try { return await store.releaseSettledSlots({ atMs: new SystemTrustedClock().sample().wallMs, endedOwner: isRuntimeServiceModelOwnerId }); }
+  try { return await store.releaseSettledSlots({ atMs: new SystemTrustedClock().sample().wallMs, endedOwner }); }
   finally { store.close(); }
 }

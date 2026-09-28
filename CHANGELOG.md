@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SECURITY (LEDGER-SINGLETON, owner 2026-09-28): one runtime service per ledger. A second `runtime serve` against the same ledger
+  through another endpoint is refused (`LOCAL_RUNTIME_ALREADY_RUNNING`) before it touches the running service's turns, model calls,
+  approvals, previews, scratch areas or schema; the service holds a kernel lock on `<ledger>-lock` next to its ledger.
 - ADDED (SCR-A, owner 2026-09-28): the terminal agent has its own scratch area per conversation (`scratch_write` / `scratch_read` /
   `scratch_list`), outside the project, silent when policy allows it, with typed quotas (1 MiB write, 64 MiB conversation, 512 MiB
   installation) and 7-day retention; the shell's `TMPDIR` points to it; `/scratch`, `/scratch path`, `/scratch clear`. Layout registry
@@ -25,6 +28,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   records migrate to v2 at the service-start upgrade (backed up); a v41 build refuses a v42 ledger.
 - ADDED (B09-2): native workers can return a structured final report (native authoring v3), validated, redacted and sealed with the
   dispatch output; shown by `task transcript` as an untrusted worker claim.
+- FIX (Astra 2145): a service started on another socket over the same ledger no longer settles a live service's open model call;
+  the terminal grep count comes from the tool's exact `matches=N` line (files with `:` in the name are counted correctly).
 - ADDED (protocol v16, owner 2026-09-28): `chatTurn` optional `reasoning: 'on' | 'off'`; lifecycle window [16, 15]; `/reasoning off`
   turns model thinking off for every round (models declaring `chat-template-enable-thinking`; others refuse the turn by name).
 - SECURITY: `@file` never lists or attaches the layout's approval records or approval previews.

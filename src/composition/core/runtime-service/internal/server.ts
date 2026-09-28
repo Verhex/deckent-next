@@ -38,7 +38,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
    * not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */
   onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
-  /** Open model calls of an ended service instance settled `unknown`, and slots an earlier build kept for settled `unknown` calls,
+  /** Open model calls of an ended instance of this endpoint settled `unknown`, and slots an earlier build kept for settled `unknown` calls,
    * released at this start (INFLIGHT-FIX, FIX-2143-SLOTS); allocations whose records do not verify are reported untouched. */
   onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
   /** Scratch areas unused past retention removed at start and by the running service's periodic sweep (SCR-A S4). */
@@ -58,7 +58,7 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
 
 /** Agent turns left running by a stopped service are closed as interrupted, never resumed. Like the upgrade, this runs only
  * under ledger custody: a second start (on any endpoint) that fails to take it never closes a live service's turns. */
-async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
+async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
@@ -67,9 +67,9 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
-  // Same custody: open model calls of an ended service instance settle `unknown` (FIX-2143-SLOTS) and slots an earlier build kept for
-  // settled `unknown` calls are released (INFLIGHT-FIX); any other open call is never touched.
-  const slots = await releaseSettledModelSlots(path, config.storage.sqlite);
+  // Open model calls of an instance that held this same custody settle `unknown` (FIX-2143-SLOTS, Astra 2145 R1) and slots an earlier
+  // build kept for settled `unknown` calls are released (INFLIGHT-FIX); any other open call is never touched.
+  const slots = await releaseSettledModelSlots(path, config.storage.sqlite, custodyId);
   if (slots.released || slots.settled || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
   await sweepFullPreviews(config.productLayout);
@@ -105,7 +105,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   await registerConfiguredScopesAtStart(config);
-  await interruptAgentTurnsAtStart(config, observer);
+  await interruptAgentTurnsAtStart(config, observer, guard.custodyId);
   // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held).
   const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);
   const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), { has: () => false }) : null;
@@ -116,8 +116,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onError: (command, error) => observer.onReconciliationError?.(command, error),
   }, options) : null;
   const instanceId = randomUUID();
-  // The send owner names this service instance, so the next start under custody can prove its open calls ended (FIX-2143-SLOTS).
-  const modelHost = { ownerId: runtimeServiceModelOwnerId(instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
+  // The send owner names this instance and the custody it holds: only a later start holding that custody proves its open calls ended.
+  const modelHost = { ownerId: runtimeServiceModelOwnerId(guard.custodyId, instanceId), controllers: new ModelInvocationControllers(config.service.maxConcurrentExecutions) };
   // Service stop cancels running turns (they close as cancelled, not interrupted).
   const turnStop = new AbortController();
   const scratchActivity = createScratchActivity(), chatTurnHost = createRuntimeChatTurnHost(modelHost, turnStop.signal, scratchActivity);

@@ -13,7 +13,8 @@ export class LocalRuntimeSocketError extends Error {
 
 export type LocalRuntimeSocketOptions = Readonly<{ endpoint: string; maxConnections: number; inputMaxBytes: number;
   responseMaxBytes: number; headerTimeoutMs: number; responseTimeoutMs: number; acceptRetryDelayMs: number; acceptRetryLimit: number }>;
-export type ResolvedLocalRuntimeSocketOptions = LocalRuntimeSocketOptions & Readonly<{ guardEndpoint: string }>;
+/** `custodyId`: the digest naming this endpoint's custody (the guard socket is `\0deckent-<custodyId>`). */
+export type ResolvedLocalRuntimeSocketOptions = LocalRuntimeSocketOptions & Readonly<{ custodyId: string; guardEndpoint: string }>;
 
 function positive(value: number): boolean { return Number.isSafeInteger(value) && value > 0; }
 export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): Promise<ResolvedLocalRuntimeSocketOptions> {
@@ -35,7 +36,7 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700
     || await realpath(parent) !== resolve(parent)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
   const digest = createHash('sha256').update(`${options.endpoint}\0${process.getuid()}`).digest('hex');
-  return Object.freeze({ ...options, guardEndpoint: `\0deckent-${digest}` });
+  return Object.freeze({ ...options, custodyId: digest, guardEndpoint: `\0deckent-${digest}` });
 }
 
 export async function assertOwnedSocket(endpoint: string): Promise<void> {

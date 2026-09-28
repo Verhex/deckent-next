@@ -129,13 +129,17 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
   socket.once('close', disconnectedNow);
 }
 
-/** Installation custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the
- * kernel releases when the process dies. Hold it before any startup work that must not race a live service (ledger
- * backup/migration), then start the listener under the same custody (Astra 2054 R1).
- * With `ledgerLock` (the runtime service always passes it; LEDGER-SINGLETON, owner 2026-09-28), the custody of that ledger is
- * taken first and held and released together with the endpoint guard: a second service on another endpoint of the same ledger
- * is refused before it holds anything. */
-export interface LocalRuntimeSocketGuard { start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>; release(): Promise<void> }
+/** Installation custody of one endpoint: a kernel-owned abstract socket that no other live host can bind and that the kernel
+ * releases when the process dies. Hold it before any startup work that must not race a live service (ledger backup/migration), then
+ * start the listener under the same custody (Astra 2054 R1). It proves nothing about another endpoint: the runtime socket is a
+ * configurable layout resource, so work owned under custody names `custodyId` (Astra 2145 R1). With `ledgerLock` (the runtime service
+ * always passes it; LEDGER-SINGLETON, owner 2026-09-28), the custody of that ledger is taken first and held and released together with
+ * the endpoint guard: a second service on another endpoint of the same ledger is refused before it holds anything. */
+export interface LocalRuntimeSocketGuard {
+  readonly custodyId: string;
+  start(handler: RuntimeServiceHandler): Promise<LocalRuntimeSocketServer>;
+  release(): Promise<void>;
+}
 
 export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions, ledgerLock?: string): Promise<LocalRuntimeSocketGuard> {
   const resolved = await resolveSocketOptions(options);
@@ -149,6 +153,7 @@ export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocket
   }
   let state: 'held' | 'started' | 'released' = 'held';
   return Object.freeze({
+    custodyId: resolved.custodyId,
     async start(handler: RuntimeServiceHandler) {
       if (state !== 'held') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT');
       state = 'started';
