@@ -20,6 +20,27 @@ export const agentShellEffectCommandId = (scopeId: string, turnId: string, execu
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 /** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */
 const PROJECT_READ_ONLY_NOTE = '[deckent] the project was read-only for this unattended run: change project files with the edit tools, or with a command the owner approves.';
+/** Who stands behind one shell call at its effect, as the call decision decided it (`createAgentCallDecisions.execute`, typed, never read from
+ * text): the owner's card, the launched full-access mode (an audited `full-access-call`, MODES-3), or nobody (a silent, standing-approved or
+ * mode-relaxed call). */
+export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'unattended';
+/**
+ * The one derivation of a sandboxed call's write posture (SHELL-AUTONOMY, Astra 2170 R1, MODES-3; owner 2026-09-29: full access is
+ * comprehensive). The realm reads it with the turn's layout: its write floor (the approval floor; in a full-access turn only the
+ * configuration file) and `.git` (writable only in a full-access turn, never under a read-only project).
+ * - owner-approved: the project writes, the write floor included;
+ * - full-access: the project, the write floor and `.git` write; the configuration file stays read-only (the layout's floor in that turn);
+ * - unattended, the narrow mutating set: the project writes, the write floor's existing paths read-only (its literal targets passed the
+ *   write check);
+ * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
+ *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
+ *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
+ */
+export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean } {
+  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false };
+  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false };
+  return { writeFloorReadOnly: true, projectReadOnly: tier !== 'narrow-mutating' || fullAccessTurn };
+}
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
@@ -39,7 +60,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** S9: sandbox providers in preference order; the realm is resolved per call against the service's host measurement. */
   readonly sandboxes: readonly ShellSandbox[];
   /** Astra 2162 (owner F2): deny patterns of the product's own state — a command that names one is refused, never offered for approval. */
-  readonly productState: readonly string[] }) {
+  readonly productState: readonly string[];
+  /** MODES-3: the turn was launched in full access (its sandbox layout: the configuration file as the floor, `.git` writable). */
+  readonly fullAccess?: boolean }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
@@ -80,7 +103,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
-      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, approved = false): Promise<AgentToolOutcome> {
+      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, authority: ShellCallAuthority = 'unattended'): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: planned.text };
@@ -108,10 +131,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       };
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      // A call the owner did not approve sees the write floor read-only inside a sandbox; one the classifier could not bound (anything but
-      // the narrow set) sees the whole project read-only, so no new floor name can appear either (SHELL-AUTONOMY, Astra 2170 R1).
-      const projectReadOnly = !approved && planned.tier !== 'narrow-mutating';
-      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly: !approved, projectReadOnly,
+      // The call's write posture in a sandbox realm, derived once (`shellWritePosture`); the host realm has no such boundary.
+      const { writeFloorReadOnly, projectReadOnly } = shellWritePosture(authority, planned.tier, input.fullAccess === true);
+      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {

@@ -44,10 +44,12 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
     return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string; kind: string; phase?: string; source?: string; approvalId?: string | null } & Record<string, unknown> } });
   } finally { db.close(); } };
+  let lastAuthority: string | undefined;
   /** Runs the call as the effect application does: two admissions (submit, then before the first claim), recording what each saw. */
   const execute = async () => {
     const seen: { eventsAtRun: number; admissions: string[] } = { eventsAtRun: -1, admissions: [] };
-    const outcome = await decisions.execute(edit, args, { round: 1, index: 0 }, 'call_1', async gate => {
+    const outcome = await decisions.execute(edit, args, { round: 1, index: 0 }, 'call_1', async (gate, authority) => {
+      lastAuthority = authority;
       seen.eventsAtRun = events();
       for (let pass = 0; pass < 2; pass++) {
         try { await gate.admit({ approval: 'policy' } as never, 'require-approval', {} as never, principal as never, { record: null } as never); seen.admissions.push('admitted'); }
@@ -57,8 +59,16 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
     });
     return { outcome, ...seen };
   };
-  return { decisions, execute, events, auditRecords, plans: () => plans };
+  return { decisions, execute, events, auditRecords, plans: () => plans, authority: () => lastAuthority };
 }
+
+/** MODES-3: a policy snapshot with the company grant `permission-mode`/`set` `full-access` (null: none) and a v3 mode entry. */
+const withAccess = (tool: Effect, grant: Effect | null, revision = `p-fa-${tool}-${grant}`, mode = 'full-auto') => {
+  const base = snapshot(tool, 'full-auto', revision) as { grants: unknown[] } & Record<string, unknown>;
+  return resolvePolicyBindings({ schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+    ...(grant ? [{ id: 'fa', effect: grant, actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-access'] } }] : [])] },
+  { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode: mode === 'full-auto' ? 'full-auto' : 'full-access' }] });
+};
 
 describe('permission decision at the effect (T-L4 slice 4a)', () => {
   it('writes the audit event before the effect runs and admits the relaxed call on each admission', async () => {
@@ -197,13 +207,6 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
 
   // MODES-3: a launched full-access turn. Every effect call it allows is one sealed `full-access-call` event before the effect — a plain allow
   // too — and the effect gate admits only that decision again: a revoked grant (or a turn without the flag) is not what was audited.
-  const withAccess = (tool: Effect, grant: Effect | null, revision = `p-fa-${tool}-${grant}`, mode = 'full-auto') => {
-    const base = snapshot(tool, 'full-auto', revision) as { grants: unknown[] } & Record<string, unknown>;
-    return resolvePolicyBindings({ schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
-      ...(grant ? [{ id: 'fa', effect: grant, actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-access'] } }] : [])] },
-    { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode: mode === 'full-auto' ? 'full-auto' : 'full-access' }] });
-  };
-
   it('full access: a plain allow and a floor path both run, each audited once as a full-access call before the effect', async () => {
     const plain = await fixture([withAccess('allow', 'allow')], { fullAccess: true });
     expect(await plain.decisions.authorize(edit, args)).toBe('allow');
@@ -229,5 +232,22 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     const stored = await fixture([withAccess('allow', 'allow', 'p-stored', 'full-access')], { floored: true });
     expect(await stored.decisions.authorize(edit, args)).toBe('require-approval');
     expect(noGrant.events() + stored.events()).toBe(0);
+  });
+});
+
+describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
+  // Merge Astra 2170 x MODES-3 (owner 2026-09-29): the decision tells the effect who stands behind the call — the sandboxed shell derives its
+  // write posture from it (`shellWritePosture`): an audited full-access call is `full-access`, never the unattended read-only posture.
+  it('hands the effect the call authority: owner-approved for a card, full-access for an audited full-access call, unattended otherwise', async () => {
+    const cases: readonly [string, unknown, boolean, string][] = [['card (ask edits)', snapshot('require-approval', 'ask'), false, 'owner-approved'],
+      ['full access', withAccess('allow', 'allow'), true, 'full-access'], ['full access over a floor raise', withAccess('require-approval', 'allow'), true, 'full-access'],
+      ['mode relaxation', snapshot('require-approval', 'auto-edit'), false, 'unattended'], ['silent allow', snapshot('allow', null), false, 'unattended'],
+      ['full-auto relaxation with the grant but no launch flag', withAccess('require-approval', 'allow'), false, 'unattended']];
+    for (const [label, loaded, fullAccess, authority] of cases) {
+      const f = await fixture([loaded], { fullAccess });
+      await f.decisions.authorize(edit, args);
+      await f.execute();
+      expect({ label, authority: f.authority() }).toEqual({ label, authority });
+    }
   });
 });

@@ -7,7 +7,7 @@ import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, MCP_TOOL_CALL_OPERATION,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createAgentFileEdits } from './edits.js';
-import type { createAgentShell } from './shell.js';
+import type { createAgentShell, ShellCallAuthority } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
 import type { createAgentMcp } from './mcp.js';
@@ -136,11 +136,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      * nothing runs), a mode relaxation is audited first, and a silent decision is counted.
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
-      run: (gate: EffectApprovalGate, approved: boolean) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      run: (gate: EffectApprovalGate, authority: ShellCallAuthority) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
-        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, true);
+        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, 'owner-approved');
         const fresh = await decide(tool, kept.cell, undefined, args, kept.shell);
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };
@@ -149,7 +149,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
           if (!fetches(tool) && !mcps(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
-          return await run(inner, false);
+          return await run(inner, 'unattended');
         }
         // A mode relaxation or a full-access call (MODES-3: every effect call of a full-access turn, lowered or not) is its own event.
         const event: AuditEvent = relaxation || fullAccess ? agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: callSummary(tool, args),
@@ -173,7 +173,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
             }
             return inner.admit(descriptor, decision, command, principal, context);
           },
-        }, false);
+        // MODES-3 x Astra 2170 (owner 2026-09-29): a full-access call is owner-authorized by the launched mode (its own write posture).
+        }, fullAccess ? 'full-access' : 'unattended');
       } finally { await close(); }
     },
   };
