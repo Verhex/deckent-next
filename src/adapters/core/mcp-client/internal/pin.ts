@@ -93,7 +93,7 @@ export function verifyMcpTools(server: McpClientServerSettings, live: readonly M
     const pin = server.tools.find(entry => entry.name === tool.name) ?? null, digest = mcpToolPinDigest(tool), display = mcpToolDisplay(server.id, tool.name);
     const wireName = mcpToolWireName(server.id, tool.name), base = { name: tool.name, display, wireName, digest, pinnedDigest: pin?.digest ?? null };
     if (!pin) return { ...base, status: 'unpinned', cell: null, spec: null };
-    if (pin.digest !== digest) return { ...base, status: 'drifted', cell: null, spec: null, reason: 'the definition changed; re-pin its digest to offer it again' };
+    if (pin.digest !== digest) return { ...base, status: 'drifted', cell: null, spec: null, reason: 'the live definition does not match the pinned digest; pin the live digest (re-approval) to offer it' };
     if (!wireName || (wires.get(wireName) ?? 0) > 1) return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'no unique provider-safe name' };
     const schema = tool.inputSchema;
     if (!schema || schema['type'] !== 'object') return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'the input schema is not an object' };
