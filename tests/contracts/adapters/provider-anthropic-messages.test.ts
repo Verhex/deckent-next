@@ -140,6 +140,8 @@ it('assembles a tool turn from input_json_delta and replays the received thinkin
 it('rejects protocol defects without trusting usage: mid-stream error, missing stop, mismatch, bad order, tool defects', async () => {
   const cases: [string, string, string][] = [
     ['overloaded error after 200', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockDelta(0, { type: 'text_delta', text: 'x' }) + sse('error', { error: { type: 'overloaded_error', message: 'Overloaded' } }), 'interrupted'],
+    ['a complete ending after a provider error event is not trusted', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0)
+      + sse('error', { error: { type: 'overloaded_error', message: 'Overloaded' } }) + endEvents(), 'interrupted'],
     ['stream ends without message_stop', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } }), 'interrupted'],
     ['alias id echoed differently', startEvent(undefined, 'claude-haiku-4-5-20251001'), 'model-mismatch'],
     ['delta before block start', startEvent() + blockDelta(0, { type: 'text_delta', text: 'x' }), 'invalid-response'],
