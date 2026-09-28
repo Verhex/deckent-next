@@ -117,6 +117,13 @@ export async function inspectProductFile(layout: ProductLayout, resource: Produc
   return path;
 }
 
+/** The path of a managed file's private companion (`<file><suffix>`), its parents validated and created as for the file
+ * itself, whether or not the file exists yet; the companion is opened and checked by its owner, never here. */
+export async function prepareProductCompanionPath(layout: ProductLayout, resource: ProductResource, suffix: string): Promise<string> {
+  if (!/^-[a-z]+$/.test(suffix)) throw new ManagedFileError('MANAGED_FILE_UNSAFE');
+  return await prepareLocation(layout, resource, false) + suffix;
+}
+
 /** Resolve a managed local socket location; never create or replace the socket itself. */
 export async function prepareProductSocket(layout: ProductLayout, resource: ProductResource, createParents = true): Promise<string> {
   const path = await prepareLocation(layout, resource, false, createParents);

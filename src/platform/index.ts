@@ -56,7 +56,7 @@ export type { SecretResolver, SecretResolution } from '#platform/core/config/ind
 export { inspectProductLayout, type ProductPathInspection } from '#platform/core/host/index.js';
 export { inspectProductPaths } from '#platform/core/config/index.js';
 export { SQLITE_STORAGE_OPTIONS } from '#platform/core/config-fields/index.js';
-export { prepareProductFile, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError } from '#platform/core/managed-files/index.js';
+export { prepareProductFile, prepareProductCompanionPath, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError } from '#platform/core/managed-files/index.js';
 export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from '#platform/core/config-fields/index.js';
 
 export * from '#platform/core/bootstrap-state/index.js';

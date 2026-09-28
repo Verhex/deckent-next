@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <string>
@@ -336,12 +337,48 @@ napi_value connection_active(napi_env env, napi_callback_info info) {
   }
   napi_value result; napi_get_boolean(env, active, &result); return result;
 }
+// Ledger custody (LEDGER-SINGLETON): an exclusive flock on a private single-link file. flock belongs to the open file
+// description, so it is independent of the endpoint and the network namespace; the kernel frees it when the last descriptor
+// closes, and O_CLOEXEC keeps exec'd children from inheriting it. Returns the locked descriptor, or null while another
+// description holds the lock; the caller releases by closing the descriptor.
+napi_value lock_file(napi_env env, napi_callback_info info) {
+  size_t count = 1; napi_value args[1]; napi_valuetype type;
+  napi_get_cb_info(env, info, &count, args, nullptr, nullptr);
+  size_t length = 0;
+  if (count != 1 || napi_typeof(env, args[0], &type) != napi_ok || type != napi_string
+      || napi_get_value_string_utf8(env, args[0], nullptr, 0, &length) != napi_ok || length == 0 || length >= PATH_MAX)
+    return fail(env, "LOCAL_PEER_ARGUMENTS");
+  std::string path(length + 1, '\0');
+  napi_get_value_string_utf8(env, args[0], path.data(), path.size(), &length); path.resize(length);
+  if (path.find('\0') != std::string::npos || path[0] != '/') return fail(env, "LOCAL_PEER_ARGUMENTS");
+  const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NOCTTY, 0600);
+  if (fd < 0) return fail(env, errno == ELOOP ? "LOCAL_PEER_LOCK_UNSAFE" : "LOCAL_PEER_LOCK");
+  struct stat opened{};
+  if (fstat(fd, &opened) != 0 || !S_ISREG(opened.st_mode) || opened.st_uid != geteuid()
+      || (opened.st_mode & 0777) != 0600 || opened.st_nlink != 1) { ::close(fd); return fail(env, "LOCAL_PEER_LOCK_UNSAFE"); }
+  int locked;
+  do { locked = flock(fd, LOCK_EX | LOCK_NB); } while (locked != 0 && errno == EINTR);
+  if (locked != 0) {
+    const int error = errno; ::close(fd);
+    if (error == EWOULDBLOCK) { napi_value busy; napi_get_null(env, &busy); return busy; }
+    return fail(env, "LOCAL_PEER_LOCK");
+  }
+  // The path must still name the locked file: a file swapped in between open and lock is not this custody.
+  struct stat linked{};
+  if (lstat(path.c_str(), &linked) != 0 || !S_ISREG(linked.st_mode)
+      || linked.st_dev != opened.st_dev || linked.st_ino != opened.st_ino) { ::close(fd); return fail(env, "LOCAL_PEER_LOCK_UNSAFE"); }
+  napi_value result;
+  if (napi_create_int32(env, fd, &result) != napi_ok) { ::close(fd); return fail(env, "LOCAL_PEER_LOCK"); }
+  return result;
+}
 }
 NAPI_MODULE_INIT() {
   napi_property_descriptor witness = {"isConnectionActive", nullptr, connection_active, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &witness);
   napi_property_descriptor method = {"createListener", nullptr, create_listener, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &method);
+  napi_property_descriptor lock = {"lockFile", nullptr, lock_file, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &lock);
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   napi_property_descriptor injection = {"__testFailNextStart", nullptr, fail_next_start, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &injection);
