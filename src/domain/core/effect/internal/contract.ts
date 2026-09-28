@@ -17,6 +17,10 @@ export const operationDescriptorSchema = z.object({
   /** C12: how long an `allow` decision admits the approved command (from its decision time) before it is refused as expired; absent →
    * the installation's `approvals.requestTtlMs`. No schema default: a stored descriptor must re-parse byte for byte (intent CAS). */
   admitWithinMs: z.number().int().positive().safe().optional(),
+  /** POLICY-ADMIN I5-i: an `authority` operation changes who may do what. Every generic producer (CLI `deckent operation`, SDK, the
+   * runtime service behind MCP `execute_operation`, agent tools) refuses it before any policy, ledger or target access
+   * (`OPERATION_SURFACE_RESTRICTED`); only the authority producer runs it. Versioned code class, not a grant; absent = generic. */
+  surface: z.literal('authority').optional(),
 }).strict().superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });
@@ -70,7 +74,7 @@ export type EffectRecord = z.infer<typeof effectRecordSchema>;
 export class EffectError extends Error {
   constructor(readonly code: 'EFFECT_INVALID' | 'EFFECT_OPERATION_UNKNOWN' | 'EFFECT_APPROVAL_REQUIRED' | 'EFFECT_PRECONDITION_CHANGED'
     | 'EFFECT_TARGET_BUSY' | 'EFFECT_CONFLICT' | 'EFFECT_OUTCOME_UNKNOWN' | 'EFFECT_NOT_COMPENSABLE' | 'EFFECT_REJECTED' | 'EFFECT_CORRUPT' | 'EFFECT_TARGET_UNAVAILABLE'
-    | 'EFFECT_TARGET_CHANGED',
+    | 'EFFECT_TARGET_CHANGED' | 'OPERATION_SURFACE_RESTRICTED',
     options?: ErrorOptions) { super(code, options); this.name = 'EffectError'; }
 }
 
@@ -97,3 +101,14 @@ export function assertCompensation(original: EffectRecord, command: EffectComman
     || compensation.id !== command.operation.id || compensation.version !== command.operation.version
     || JSON.stringify(command.target) !== JSON.stringify(original.intent.command.target)) throw new EffectError('EFFECT_NOT_COMPENSABLE');
 }
+
+/** Target kind of the installation's authority documents (policy.json + bindings.json as one record, id `installation`). */
+export const AUTHORITY_DOCUMENT_TARGET_KIND = 'authority-document';
+/**
+ * `policy.administer@1` (POLICY-ADMIN P3, lead decision A1): the one Core operation that changes company policy grants and role
+ * bindings. Every change asks (`approval: 'required'`, owner M3: never silent in any mode), is conditional on the effective
+ * `policy+bindings` revision the caller read, has no compensation (a revert is a new change) and runs only on the authority surface.
+ */
+export const POLICY_ADMINISTER_OPERATION = Object.freeze({ schemaVersion: 1 as const, operation: Object.freeze({ id: 'policy.administer', version: 1 }),
+  targetKind: AUTHORITY_DOCUMENT_TARGET_KIND, effectClass: 'write' as const, approval: 'required' as const, precondition: 'record-version' as const,
+  compensation: null, inputMaxBytes: 65_536, surface: 'authority' as const });

@@ -7,3 +7,5 @@ export { agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApp
   type AgentToolCallAdmission } from './internal/tool-call.js';
 export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, awaitOperationApproval, operationApprovalActionDigest,
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';
+export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationApplication } from './internal/policy-admin.js';
+export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';

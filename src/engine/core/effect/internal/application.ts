@@ -92,7 +92,9 @@ class PendingSignal { constructor(readonly outcome: EffectApprovalPending) {} }
 export class EffectApplication {
   constructor(private readonly catalog: OperationCatalog, private readonly targets: EffectTargets, private readonly store: EffectStore,
     private readonly approvals: EffectApprovalGate, private readonly sessions: SessionVerifier & SessionAuthority,
-    private readonly authorization: OperationPolicyAuthorization, private readonly clock: TrustedClock) {}
+    private readonly authorization: OperationPolicyAuthorization, private readonly clock: TrustedClock,
+    /** The producer's surface class (POLICY-ADMIN I5-i). Absent: a generic producer, which refuses `surface: 'authority'` operations. */
+    private readonly options: { readonly surface?: 'authority' } = {}) {}
 
   /** Runs to settlement or throws; a pending approval is `EFFECT_APPROVAL_REQUIRED` here (callers that handle pending use `submit`). */
   async execute(input: unknown, credential?: unknown): Promise<EffectResult> { return this.settledOnly(await this.submit('execute', input, credential)); }
@@ -119,6 +121,9 @@ export class EffectApplication {
   private async run(command: EffectCommand, action: 'execute' | 'compensate', credential?: unknown): Promise<EffectResult> {
     const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
     const descriptor = await this.catalog.resolve(command.operation);
+    // Before the target, policy, approval or ledger is touched: a generic producer never runs an authority operation, even if some
+    // registry made a target of its kind reachable (default-closed; only the authority producer passes `surface: 'authority'`).
+    if (descriptor?.surface === 'authority' && this.options.surface !== 'authority') throw new EffectError('OPERATION_SURFACE_RESTRICTED');
     const target = descriptor ? this.targets.resolve(descriptor.targetKind) : null;
     if (!descriptor || !target || descriptor.targetKind !== command.target.kind || target.kind !== descriptor.targetKind) throw new EffectError('EFFECT_OPERATION_UNKNOWN');
     const current = binding(descriptor, target);

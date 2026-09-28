@@ -1,4 +1,4 @@
-import { CORE_API_VERSION, adapterModuleManifestSchema, type OperationDescriptor } from '#domain/index.js';
+import { CORE_API_VERSION, POLICY_ADMINISTER_OPERATION, adapterModuleManifestSchema, type OperationDescriptor } from '#domain/index.js';
 import type { AdapterModuleRegistration } from '#engine/index.js';
 import { WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/core/workspace-write/index.js';
 import { HOST_SHELL_RUN_OPERATION } from '#adapters/core/host-shell/index.js';
@@ -21,3 +21,6 @@ export const coreHostShellModule = coreOperationModule('core.host-shell', HOST_S
 export const coreScratchWriteModule = coreOperationModule('core.scratch-write', SCRATCH_FILE_WRITE_OPERATION);
 /** `network.fetch@1` on the `network-fetch` target (the agent's `fetch_url`, FETCH S7): closes the `network` namespace to overlays. */
 export const coreNetworkFetchModule = coreOperationModule('core.network-fetch', NETWORK_FETCH_OPERATION);
+/** `policy.administer@1` on the `authority-document` target (POLICY-ADMIN P3): closes the `policy` namespace to overlays. Its target is built
+ * only by the authority producer; the descriptor's `surface: 'authority'` makes every generic producer refuse it before any access. */
+export const corePolicyAdministerModule = coreOperationModule('core.policy-administer', POLICY_ADMINISTER_OPERATION);

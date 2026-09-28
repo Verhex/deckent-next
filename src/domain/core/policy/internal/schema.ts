@@ -17,6 +17,8 @@ const restriction = z.object(matchShape).strict().readonly();
 const modeEligible = { modeEligible: z.boolean().optional() };
 const eligibleOnlyOnApproval = (rule: { readonly effect: string; readonly modeEligible?: boolean | undefined }) => rule.modeEligible !== true || rule.effect === 'require-approval';
 const markedGrant = z.object({ ...matchShape, effect, ...modeEligible }).strict().refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
+/** A v2 company grant as `policy.administer` changes carry it (same schema as in policy.json). */
+export const policyGrantSchema = markedGrant;
 export type PolicyRule = z.infer<typeof restriction>;
 export type PolicyGrant = z.infer<typeof grant> & { readonly modeEligible?: boolean | undefined };
 
@@ -45,6 +47,9 @@ const role = z.object({ id: localId, permissions: z.array(permission).min(1).rea
 const duty = z.object({ id: identitySchema, rule: z.literal('requester-cannot-approve'), scopes: selection }).strict().readonly();
 const binding = z.object({ id: localId, principals: z.array(principalRef).min(1).readonly(), roles: z.array(localId).min(1).readonly(),
   scopes: selection }).strict().readonly();
+/** A role binding as `policy.administer` changes carry it (same schema as in bindings.json). */
+export const policyBindingSchema = binding;
+export type PolicyBinding = z.infer<typeof binding>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),
   separationOfDuties: z.array(duty).readonly() };
 /**
