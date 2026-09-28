@@ -233,7 +233,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
           channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
             summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
-              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? mcp?.preview(tool.name, args)
+              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
           requested = { approvalId: record.request.approvalId };

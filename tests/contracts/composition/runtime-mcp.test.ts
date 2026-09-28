@@ -30,7 +30,9 @@ function mcpFixture(mode: 'legacy' | 'dual' = 'dual', tools: unknown[] = [echo, 
   const section = (pins: unknown[], extraServer: Record<string, unknown> = {}, extraSection: Record<string, unknown> = {}) => ({ schemaVersion: 1, callTimeoutMs: 10_000,
     ...extraSection, servers: [{ id: 'fx', command: process.execPath, args: [FIXTURE, '--mode', mode, '--tools', toolsFile, '--log', logFile], realm: 'host',
       tools: pins, ...extraServer }] });
-  return { calls, section, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)) };
+  const starts = () => readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { event: string; pid: number })
+    .filter(event => event.event === 'start').map(event => event.pid);
+  return { calls, starts, section, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)) };
 }
 type Effect = 'allow' | 'require-approval' | 'deny';
 const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
@@ -130,6 +132,25 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     const { events } = await answered(hosted, 'turn-hosted', 'deny');
     const [card] = requested(events);
     expect(card?.kind === 'approval.requested' && card.preview).toContain('sandbox: none');
+    expect(m.calls()).toEqual([]);
+  }, 60_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('MCP server lifecycle (MCP-CLIENT)', () => {
+  it('stopping the service ends every MCP server process it started; a large argument set shows a cut card', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants(), mcpClients: m.section([pin(echo)]) }); const service = await f.start();
+    f.state.script = [call('mcp__fx__echo', { text: 'x'.repeat(24_000) }), { content: 'Stopped.' }];
+    const { events } = await answered(f, 'turn-lifecycle', 'deny');
+    const [card] = requested(events);
+    // The card is cut to the approval preview bound (16 KiB) with its digest; the arguments digest still binds the whole call.
+    expect(card?.kind === 'approval.requested' && Buffer.byteLength(card.preview, 'utf8')).toBeLessThanOrEqual(16_384);
+    expect(card?.kind === 'approval.requested' && card.preview).toContain('mcp:fx/echo'); expect(card?.kind === 'approval.requested' && card.preview).toContain('preview cut');
+    const pids = m.starts();
+    expect(pids.length).toBeGreaterThan(0);
+    await service.stop(); await service.done;
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    await expect.poll(() => pids.filter(alive), { timeout: 10_000 }).toEqual([]);
     expect(m.calls()).toEqual([]);
   }, 60_000);
 });
