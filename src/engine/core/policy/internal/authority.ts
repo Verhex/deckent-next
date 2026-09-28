@@ -43,3 +43,13 @@ export function authorityChangeAuditEvent(input: { readonly scopeId: string; rea
       commandId: input.commandId, approvalId: input.approvalId, decider: { issuer: input.decider.issuer, subject: input.decider.subject }, inputDigest: input.inputDigest,
       revision: { before: input.before, after: input.after }, counts: { ...input.counts } } };
 }
+
+/** The sealed-audit event of one refused authority change (audit subject `authority-refusal`): the stage it stopped at and its stable code. */
+export function authorityRefusalAuditEvent(input: { readonly scopeId: string; readonly principal: Person; readonly atMs: number; readonly policyRevision: string;
+  readonly stage: 'decide' | 'submit' | 'settle'; readonly code: string; readonly operation: { readonly id: string; readonly version: number };
+  readonly commandId: string | null; readonly approvalId: string | null; readonly decider: Person | null }): AuditEvent {
+  return { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId, principal: { issuer: input.principal.issuer, subject: input.principal.subject },
+    policyRevision: input.policyRevision, atMs: input.atMs, subject: { kind: 'authority-refusal', stage: input.stage, code: input.code,
+      operation: { id: input.operation.id, version: input.operation.version }, commandId: input.commandId, approvalId: input.approvalId,
+      decider: input.decider && { issuer: input.decider.issuer, subject: input.decider.subject } } };
+}

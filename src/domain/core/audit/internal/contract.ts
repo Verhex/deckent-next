@@ -45,6 +45,14 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
     commandId: identitySchema, approvalId: identitySchema, decider: auditPrincipalSchema, inputDigest: digest,
     revision: z.object({ before: identitySchema, after: identitySchema }).strict(),
     counts: z.object({ grantsAdded: counterSchema, grantsRemoved: counterSchema, bindingsAdded: counterSchema, bindingsRemoved: counterSchema }).strict() }).strict(),
+  /**
+   * A refused authority change (POLICY-HARDEN P3-R): where it stopped (`decide` = an approval surface that may not decide authority
+   * approvals, `submit` = before any intent, `settle` = a claimed intent refused terminally at the effect), the stable refusal code and the
+   * command; `approvalId`/`decider` are null while none exists. Nothing of the change itself is recorded.
+   */
+  z.object({ kind: z.literal('authority-refusal'), stage: z.enum(['decide', 'submit', 'settle']), code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
+    operation: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(), commandId: identitySchema.nullable(), approvalId: identitySchema.nullable(),
+    decider: auditPrincipalSchema.nullable() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();
