@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
+const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 /** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
 export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
@@ -36,6 +38,13 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * and, when allowed, the bindings revision it writes (`after` null: nothing was written — refused or already that mode). Recorded
    * before the bindings file is replaced; no record, no change.
    */
+  /**
+   * An MCP trust change (MCP-CLIENT, owner 2026-09-28): the owner trusted, declined, reset, revoked or reconnected one server definition of a
+   * registry scope. The definition and the pinned tool list are digests; the command and its values are never recorded. Recorded before the
+   * trust record is written; no event, no change.
+   */
+  z.object({ kind: z.literal('mcp-trust'), action: z.enum(['trust', 'decline', 'reset', 'revoke', 'reconnect']), scope: z.enum(MCP_REGISTRY_SCOPES),
+    server: z.string().regex(/^[a-z][a-z0-9]{0,15}$/), definitionDigest: digest, toolsDigest: digest.nullable() }).strict(),
   z.object({ kind: z.literal('permission-mode-change'), requested: permissionMode, previous: permissionMode,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict() }).strict(),

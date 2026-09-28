@@ -17,6 +17,8 @@ export interface McpClientServerSettings {
   readonly timeoutMs?: number;
   /** The command line as the registry entry writes it (`${VAR}` unexpanded): what cards show, so an expanded secret never reaches one. */
   readonly label?: string;
+  /** The trust record's reconnect counter: a new value makes the service replace the running process (`/mcp reconnect`). */
+  readonly generation?: number;
   readonly tools: readonly { readonly name: string; readonly digest: string; readonly alwaysAsk: boolean }[];
 }
 export interface McpClientSettings {

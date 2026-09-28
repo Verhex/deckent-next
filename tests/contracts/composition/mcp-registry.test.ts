@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { existsSync, appendFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,9 +50,9 @@ const byName = (listed: Record<string, unknown>) => Object.fromEntries((listed['
 describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence and approval (real processes)', () => {
   it('the same name in local, project and user starts only the local definition; removing it falls back to project, which needs its own approval', async () => {
     const w = workspace(), local = w.server('local'), project = w.server('project'), user = w.server('user');
-    await w.cli('add', '--scope', 'user', 'fx', ...user.args);
+    await w.cli('add', '--scope', 'user', '--no-approve', 'fx', ...user.args);
     await w.cli('add', '--scope', 'project', 'fx', ...project.args);
-    await w.cli('add', 'fx', ...local.args);
+    await w.cli('add', '--no-approve', 'fx', ...local.args);
     expect(statSync(join(w.home, '.deckent', 'mcp.json')).mode & 0o777).toBe(0o600);
     expect(byName(await w.cli('list'))['fx']).toMatchObject({ scope: 'local', status: 'pending-approval', health: 'not-started', shadows: ['project', 'user'] });
     expect([local.started(), project.started(), user.started()]).toEqual([0, 0, 0]);
@@ -96,10 +97,11 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
 
   it('an expanded ${VAR} (a personal token in args) never shows on the approval card or the tool-call card; the definition stays the template', async () => {
     const w = workspace(), fx = w.server('fx');
-    await w.cli('add', 'fx', ...fx.args, '--token', '${MY_TOKEN}');
+    await w.cli('add', '--no-approve', 'fx', ...fx.args, '--token', '${MY_TOKEN}');
     const approved = await (async () => { const out: string[] = []; await mcpCommand(['mcp', 'approve', 'fx', '--yes', '--json'], { root: w.project, env: w.env,
       stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: async (root, request, options, confirm) =>
         runConfiguredMcpCommand(root, request as never, options, async card => { out.push(JSON.stringify(card)); return confirm(card); }) }); return out.join(''); })();
+    expect(approved).toContain('"phase":"launch"'); expect(approved).toContain('"phase":"tools"');
     expect(approved).toContain('${MY_TOKEN}'); expect(approved).toContain('"name":"MY_TOKEN","set":true'); expect(approved).not.toContain('s3cr3t-value-xyz');
     const view = await loadMcpRegistry({ projectRoot: w.project, layout: resolveProductLayout({ projectRoot: w.project }), environment: w.env, secret: async () => undefined });
     const settings = mcpClientSettings(view, {})!;
@@ -110,6 +112,35 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
       const preview = tools.preview('mcp__fx__echo', {});
       expect(preview).toContain('${MY_TOKEN}'); expect(preview).not.toContain('s3cr3t-value-xyz');
     } finally { controller.abort(); await pool.close(); }
+  }, 60_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('MCP trust decisions (owner 2026-09-28): add is trust for personal scopes; user trust holds in every project', () => {
+  const ledgerAudits = (project: string) => {
+    const db = new DatabaseSync(join(project, '.deckent', 'state', 'ledger.db'), { readOnly: true });
+    try { return db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String((row as { record: string }).record)) as
+      { event: { subject: Record<string, unknown> } }).event.subject); } finally { db.close(); }
+  };
+  it('adding a local server with --yes trusts and pins it in one step, audited; without a terminal and without --yes nothing is written', async () => {
+    const w = workspace(), fx = w.server('fx');
+    await expect(w.cli('add', 'fx', ...fx.args)).rejects.toMatchObject({ code: 'MCP_APPROVAL_NEEDS_TERMINAL' });
+    expect(existsSync(join(w.home, '.deckent', 'mcp.json'))).toBe(false);
+    expect(await w.cli('add', '--yes', 'fx', ...fx.args)).toMatchObject({ added: { scope: 'local' }, trust: 'trusted', pinnedTools: 1 });
+    expect(byName(await w.cli('list'))['fx']).toMatchObject({ scope: 'local', status: 'trusted', health: 'connected' });
+    expect(ledgerAudits(w.project)).toEqual([expect.objectContaining({ kind: 'mcp-trust', action: 'trust', scope: 'local', server: 'fx' })]);
+    // A project entry is not decided at add: it asks on first use.
+    expect(await w.cli('add', '--scope', 'project', 'px', ...fx.args)).toMatchObject({ trust: 'pending' });
+  }, 60_000);
+
+  it('a user-scope trust lives beside the personal registry and holds in another project without asking; project trust stays in its data root', async () => {
+    const w = workspace(), fx = w.server('fx');
+    expect(await w.cli('add', '--scope', 'user', '--yes', 'fx', ...fx.args)).toMatchObject({ trust: 'trusted' });
+    expect(statSync(join(w.home, '.deckent', 'mcp-trust.json')).mode & 0o777).toBe(0o600);
+    expect(existsSync(join(w.project, '.deckent', 'integrations', 'mcp-trust.json'))).toBe(false);
+    const other = join(w.base, 'other'); mkdirSync(join(other, '.deckent'), { recursive: true }); writeFileSync(join(other, '.deckent', 'config.json'), '{}\n');
+    const out: string[] = [];
+    await mcpCommand(['mcp', 'list', '--json'], { root: other, env: w.env, stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: runConfiguredMcpCommand });
+    expect(byName(JSON.parse(out.join('')) as Record<string, unknown>)['fx']).toMatchObject({ scope: 'user', status: 'trusted', health: 'connected' });
   }, 60_000);
 });
 

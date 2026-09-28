@@ -84,7 +84,7 @@ export class McpClientPool {
   }
   /** Starts (when needed), lists and verifies one server; serialized per server. */
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
-    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm])).digest('hex');
+    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0])).digest('hex');
     let state = this.states.get(server.id);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); state = undefined; }
     if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, lock: Promise.resolve() };
