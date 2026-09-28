@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, type HttpFetchTransport } from '#adapters/index.js';
+import { openSqliteModelActivationStore, type HttpFetchTransport, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -39,7 +39,9 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   /** SCR-A: the `terminal.scratch` and `terminal.shell` sections, when a test sets them. */
   scratch?: Record<string, unknown>; shell?: Record<string, unknown>;
   /** FETCH: the `terminal.fetch` section, and the test-only transport handed to the in-process service (never config or env). */
-  fetch?: Record<string, unknown>; fetchTransport?: HttpFetchTransport } = {}) {
+  fetch?: Record<string, unknown>; fetchTransport?: HttpFetchTransport;
+  /** S9/S11: the sandbox providers a shell call may pick (code-only port); `() => []` is the "no sandbox mechanism usable" host. */
+  sandboxes?: ShellSandboxFactory } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
@@ -121,7 +123,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
     const service = await startConfiguredRuntimeService(project, observed ? { async onPage() {}, async onError() {},
       onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); },
       onModelAllocationSlotsReleased(result) { released.push(result); }, onScratchSwept(result) { scratchSwept.push(result); } }
-      : { async onPage() {}, async onError() {} }, { env }, options.fetchTransport ? { fetchTransport: options.fetchTransport } : undefined);
+      : { async onPage() {}, async onError() {} }, { env }, { ...(options.fetchTransport ? { fetchTransport: options.fetchTransport } : {}), ...(options.sandboxes ? { shellSandboxes: options.sandboxes } : {}) });
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { probeShellCapabilities, resolveShellRealm, hostShellRealm, runHostShell, HostShellTarget } from '#adapters/core/host-shell/index.js';
+import { probeShellCapabilities, resolveShellRealm, hostShellRealm, runHostShell, HostShellTarget, landlockShellSandbox } from '#adapters/core/host-shell/index.js';
+import { bubblewrapShellSandbox } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { readTerminalShellConfig } from '#adapters/core/contract/index.js';
 
 const linux = (kernel = { userNamespace: true, landlockAbi: 7, landlockErrno: 0 }, bwrap = false) => ({
@@ -64,20 +65,39 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, notice: null, posture: expect.stringContaining('not a sandbox') });
+    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, marker: null, notice: null, posture: expect.stringContaining('not a sandbox') });
   });
   it('S9: takes sandbox providers in preference order, names why each was unusable in the visible fallback, and host mode never picks one', async () => {
     const capabilities = await probeShellCapabilities(linux(undefined, true));
     const realm = { kind: 'bubblewrap' as const, run: vi.fn() };
-    const unusable = { kind: 'landlock' as const, posture: 'L', usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
-    const usable = { kind: 'bubblewrap' as const, posture: 'in a bubblewrap sandbox', usable: vi.fn(() => ({ ok: true as const, realm })) };
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, notice: null, posture: 'in a bubblewrap sandbox' });
+    const unusable = { kind: 'landlock' as const, usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
+    const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture: 'in a bubblewrap sandbox', notice: null })) };
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture: 'in a bubblewrap sandbox' });
     expect(resolveShellRealm('require-sandbox', capabilities, [usable])).toMatchObject({ ok: true, realm });
-    expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, notice: null });
+    expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: null, notice: null });
     expect(usable.usable).toHaveBeenCalledWith(capabilities);
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm,
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: 'sandbox: none',
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*landlock: no-abi/u) });
     expect(resolveShellRealm('require-sandbox', capabilities, [unusable])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+  });
+  // S9 + S11 merged: the shipped providers in the shipped order, against fake measurements (no sandbox runs here).
+  it('picks bubblewrap when usable, Landlock when bubblewrap is not, and names both reasons when neither is', async () => {
+    const layout = { project: { root: '/nonexistent', ignoredDirs: new Set<string>(), denied: () => false }, scratchDir: null };
+    const providers = [bubblewrapShellSandbox(layout, { binaryPaths: ['/usr/bin/bwrap'] }), landlockShellSandbox(layout)];
+    const both = await probeShellCapabilities(linux({ userNamespace: true, landlockAbi: 7, landlockErrno: 0 }, true));
+    const bwrapUsable = providers[0]!.usable(both).ok;
+    expect(resolveShellRealm('prefer-sandbox', both, providers)).toMatchObject(bwrapUsable
+      ? { ok: true, realm: { kind: 'bubblewrap' }, marker: 'sandbox: bubblewrap', notice: null }
+      : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock' });
+    const noBwrap = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 7, landlockErrno: 0 }, false));
+    expect(resolveShellRealm('require-sandbox', noBwrap, providers)).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null,
+      posture: expect.stringContaining('Landlock') });
+    expect(resolveShellRealm('prefer-sandbox', await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 3, landlockErrno: 0 }, false)), providers))
+      .toMatchObject({ realm: { kind: 'landlock' }, marker: 'sandbox: degraded', notice: expect.stringContaining('DEGRADED') });
+    const neither = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: -1, landlockErrno: 38 }, false));
+    expect(resolveShellRealm('prefer-sandbox', neither, providers)).toMatchObject({ ok: true, realm: { kind: 'host' }, marker: 'sandbox: none',
+      notice: expect.stringMatching(/^\[deckent\] sandbox: none; running on host \(bubblewrap: bubblewrap unavailable; landlock: landlock unavailable\)/u) });
+    expect(resolveShellRealm('require-sandbox', neither, providers)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
   });
   it.skipIf(process.platform !== 'linux')('host delegates to the existing runner without changing output or result fields', async () => {
     const request = { command: 'printf "host-bytes\\n"', cwd: '/tmp', environment: {} };

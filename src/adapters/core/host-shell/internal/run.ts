@@ -78,9 +78,15 @@ export function runHostShell(request: HostShellRequest, clock: HostShellClock = 
   return runShellProcess(BASH_LAUNCH, request, clock);
 }
 
-/** What is spawned for a command: the host shell itself, or a sandbox launcher (S9 bubblewrap) that ends with the same shell line. */
-export interface ShellLaunch { readonly file: string; readonly args: (command: string) => readonly string[] }
+/** What is spawned for a command: the host shell itself, or a sandbox launcher (S9 bubblewrap, S11 Landlock helper) whose argv ends
+ * with the same shell line and which execs bash in its own process (the process-group contract below is unchanged). A launcher with
+ * `statusChannel` reports a setup failure as text on fd 3 before anything runs (the call is then `spawn-failed` with that text as its
+ * output); fd 3 closed with nothing written means the command started — the command itself never holds fd 3, so it cannot forge a
+ * setup failure. */
+export interface ShellLaunch { readonly file: string; readonly args: (command: string) => readonly string[]; readonly statusChannel?: boolean }
 export const BASH_LAUNCH: ShellLaunch = Object.freeze({ file: 'bash', args: (command: string) => ['--noprofile', '--norc', '-c', command] });
+/** Longest setup-failure text kept from a launcher. */
+const LAUNCH_STATUS_MAX_BYTES = 1_024;
 
 /** The one process runner behind every realm: `launch` decides the executable and argv; the group, cancellation, timeout, pipe and
  * output contracts above are the same for all of them. */
@@ -103,7 +109,7 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(launch.file, [...launch.args(request.command)], { cwd: request.cwd, env: hostShellEnvironment(request.environment ?? process.env, request.extraEnv, request.fixedEnv),
-        stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+        stdio: launch.statusChannel ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], detached: true });
     } catch { resolve(done('spawn-failed', null, null)); return; }
     let ending: 'timed-out' | 'cancelled' | null = null, exited = false, settled = false;
     let termSent = false, killSent = false, forceTimer: NodeJS.Timeout | null = null;
@@ -204,8 +210,13 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
       exited = true;
       reaping = reapGroup().then(cleanup => { if (openPipes > 0 && !settled) drainTimer = setTimeout(releasePipes, PIPE_DRAIN_GRACE_MS); return cleanup; });
     });
+    // The launcher's status channel (fd 3): text is a setup failure before anything ran; `close` below waits for its end too.
+    let setupFailure = '';
+    child.stdio[3]?.on('data', (chunk: Buffer) => { if (setupFailure.length < LAUNCH_STATUS_MAX_BYTES) setupFailure += chunk.toString('utf8').slice(0, LAUNCH_STATUS_MAX_BYTES); });
     child.once('close', (code, signal) => {
-      void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(done(ending ?? 'exited', code, signal, pipesReleased ? 'unverified' : cleanup)));
+      void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(setupFailure !== ''
+        ? Object.freeze({ ...done('spawn-failed', null, null, cleanup), output: `[deckent] ${setupFailure.trim()}; nothing was run.` })
+        : done(ending ?? 'exited', code, signal, pipesReleased ? 'unverified' : cleanup)));
     });
   });
 }

@@ -15,12 +15,12 @@ export function hostShellCleanupNote(cleanup: HostShellResult['cleanup']): strin
     + 'a process that left the group is not observed.' : null;
 }
 
-/** The agent-facing result text of one run: sandbox notice, how it ended and after how long, the command (cut at 120), the kept output, then the
- * realm notice and the cleanup note. */
-export function describeHostShellResult(command: string, result: HostShellResult, notice: string | null): string {
+/** The agent-facing result text of one run: the realm marker, how it ended and after how long, the command (cut at 120), the kept
+ * output, then the realm notice and the cleanup note. */
+export function describeHostShellResult(command: string, result: HostShellResult, realm: { readonly marker: string | null; readonly notice: string | null } | null): string {
   const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
-  const note = hostShellCleanupNote(result.cleanup);
-  return `[deckent] run_shell: ${notice ? 'sandbox: none; ' : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
+  const note = hostShellCleanupNote(result.cleanup), notice = realm?.notice ?? null;
+  return `[deckent] run_shell: ${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
     + (notice ? `\n${notice}` : '')
     + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
 }

@@ -61,7 +61,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
       if (!planned?.ok) return undefined;
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.notice ?? planned.realm.posture}`);
+      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.posture}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
@@ -107,18 +107,19 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm.notice), cleanup: ran.cleanup };
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: describeHostShellResult(planned.command, ran, planned.realm), cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
-        if (ran && ran.status !== 'exited' && ran.status !== 'spawn-failed') {
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm.notice)}\n[deckent] the command was stopped; what it changed before that is unknown.`, cleanup: ran.cleanup };
+        if (ran && ran.status !== 'exited') {
+          // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? '' : '\n[deckent] the command was stopped; what it changed before that is unknown.'}`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
-          : code === 'EFFECT_REJECTED' ? `the command could not start${ran?.output ? ` (${ran.output.trim()})` : ''}`
+          : code === 'EFFECT_REJECTED' ? 'the command could not start'
           : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
           : typeof code === 'string' ? code : 'failed';
         return { status: 'error', text: `[deckent] run_shell: error=${why}` };

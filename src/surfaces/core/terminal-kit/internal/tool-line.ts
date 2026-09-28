@@ -62,8 +62,9 @@ function readFileSummary(content: string): ToolResultSummary | null {
  * glob and list_dir are plain lists of content lines with `[deckent] `-prefixed notes only for skips/caps/errors, so their count
  * and a coarse "may be incomplete" flag come from the shape of the text. */
 export function summarizeAgentToolResult(name: string, content: string): ToolResultSummary | null {
-  // S5: only the trusted leading metadata carries posture; command stdout cannot supply this prefix.
-  if (name === 'run_shell') return content.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' } : null;
+  // S5/S11: only the trusted leading metadata carries posture (host fallback, degraded Landlock); command stdout cannot supply this prefix.
+  if (name === 'run_shell') return content.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' }
+    : content.startsWith('[deckent] run_shell: sandbox: degraded; ') ? { kind: 'sandbox-degraded' } : null;
   if (name === 'read_file') return readFileSummary(content);
   if (name === 'grep') return grepSummary(content);
   if (name === 'glob') {

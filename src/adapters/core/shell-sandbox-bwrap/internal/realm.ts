@@ -137,17 +137,17 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
     const started = performance.now();
     const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options);
     if (!view.ok) {
-      return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox refused: ${view.reason}`, totalBytes: 0, omittedBytes: 0,
+      return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
     }
     const prefix = bubblewrapArguments(view.view);
     return runShellProcess({ file: bwrap, args: command => [...prefix, '--', BASH_LAUNCH.file, ...BASH_LAUNCH.args(command)] }, request);
   } });
-  return Object.freeze({ kind: 'bubblewrap', posture: BUBBLEWRAP_POSTURE,
+  return Object.freeze({ kind: 'bubblewrap',
     usable(capabilities: ShellCapabilities): ReturnType<ShellSandbox['usable']> {
       if (capabilities.bubblewrap !== 'available') return { ok: false, reason: `bubblewrap ${capabilities.bubblewrap}` };
       if (capabilities.userNamespace !== 'available') return { ok: false, reason: `user namespace ${capabilities.userNamespace}` };
       const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
-      return binary.ok ? { ok: true, realm: run(binary.path) } : { ok: false, reason: binary.reason };
+      return binary.ok ? { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null } : { ok: false, reason: binary.reason };
     } });
 }

@@ -169,7 +169,7 @@ it('describes a run: how it ended and after how long, the command cut at 120, th
   const long = 'y'.repeat(130);
   expect(describeHostShellResult(long, ran({ status: 'timed-out', exitCode: null, output: 'part' }), null)).toBe(`[deckent] run_shell: timed-out after 1.2s (${'y'.repeat(119)}…)\npart`);
   expect(describeHostShellResult('ls', ran({ cleanup: 'group-ended' }), null)).toBe(`[deckent] run_shell: exit 0 after 1.2s (ls)\nhi\n${hostShellCleanupNote('group-ended')}`);
-  expect(describeHostShellResult('ls', ran({ output: 'no newline', cleanup: 'unverified' }), 'N')).toBe(
+  expect(describeHostShellResult('ls', ran({ output: 'no newline', cleanup: 'unverified' }), { marker: 'sandbox: none', notice: 'N' })).toBe(
     `[deckent] run_shell: sandbox: none; exit 0 after 1.2s (ls)\nno newline\nN\n${hostShellCleanupNote('unverified')}`);
   expect(hostShellCleanupNote('clean')).toBeNull();
   expect(hostShellCleanupNote('unverified')).toMatch(/^\[deckent\] cleanup unverified: .*this is not a sandbox\.$/u);
