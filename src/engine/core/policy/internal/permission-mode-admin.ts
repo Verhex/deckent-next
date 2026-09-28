@@ -3,6 +3,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, bindingsFileSchema, evaluatePolicy, parsePe
   policySchema, resolvePolicyBindings, withPrincipalPermissionMode, type AuditEvent, type PermissionModeChange, type PermissionModeView,
   type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
 import { PolicyAuthorizationError } from './authorize.js';
+import { AuthorityChangeError, chainAuthorityRevision, type AuthorityDocumentStore } from './authority.js';
 
 export class PermissionModeError extends Error {
   constructor(readonly code: 'PERMISSION_MODE_CONFLICT' | 'PERMISSION_MODE_UNSUPPORTED' | 'PERMISSION_MODE_INVALID') { super(code); this.name = 'PermissionModeError'; }
@@ -21,7 +22,6 @@ export interface PermissionModeBindingsStore {
 /** Persists one sealed audit event before the change it records; throws (typically `AuditError`) when it cannot. */
 export type PermissionModeAudit = (event: AuditEvent) => void;
 
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 /** The caller's own mode in the queried scope over the request's trusted policy snapshot (the scope was admitted by the caller). */
 export function inspectPermissionMode(policy: unknown, principal: VerifiedPrincipal, input: unknown): PermissionModeView {
   let query;
@@ -36,13 +36,19 @@ export function inspectPermissionMode(policy: unknown, principal: VerifiedPrinci
  * (no record, no change). The mode itself grants nothing: lowering stays the decision function's, on company-eligible rules only.
  */
 export class PermissionModeApplication {
-  constructor(private readonly store: PermissionModeBindingsStore, private readonly audit: PermissionModeAudit, private readonly now: () => number) {}
+  /** The store is the installation's one authority writer (POLICY-ADMIN P3: the same `updateAuthority` path `policy.administer` uses). */
+  constructor(private readonly store: AuthorityDocumentStore, private readonly audit: PermissionModeAudit, private readonly now: () => number) {}
 
   async set(principal: VerifiedPrincipal, input: unknown): Promise<PermissionModeChange> {
     let command;
     try { command = parsePermissionModeCommand(input); } catch { throw new PermissionModeError('PERMISSION_MODE_INVALID'); }
+    try { return await this.write(principal, command); }
+    catch (error) { throw error instanceof AuthorityChangeError && error.code === 'POLICY_CONFLICT' ? new PermissionModeError('PERMISSION_MODE_CONFLICT') : error; }
+  }
+
+  private write(principal: VerifiedPrincipal, command: ReturnType<typeof parsePermissionModeCommand>): Promise<PermissionModeChange> {
     const actor = { issuer: principal.issuer, subject: principal.subject };
-    return this.store.update<PermissionModeChange>(snapshot => {
+    return this.store.updateAuthority<PermissionModeChange>(snapshot => {
       const policy = snapshot.bindings === null ? policySchema.parse(snapshot.policy) : resolvePolicyBindings(snapshot.policy, snapshot.bindings);
       if (policy.revision !== command.expectedRevision) throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
       if (policy.schemaVersion === 1) throw new PermissionModeError('PERMISSION_MODE_UNSUPPORTED');
@@ -63,18 +69,18 @@ export class PermissionModeApplication {
         throw new PolicyAuthorizationError(decision.decision === 'require-approval' ? 'POLICY_APPROVAL_UNSUPPORTED' : 'POLICY_DENIED');
       }
       const modes = withPrincipalPermissionMode(bindings, actor, command.scopeId, command.mode,
-        `m-${sha256(`permission-mode-entry:1\0${actor.issuer}\0${actor.subject}\0${command.mode}`).slice(0, 16)}`);
+        `m-${createHash('sha256').update(`permission-mode-entry:1\0${actor.issuer}\0${actor.subject}\0${command.mode}`).digest('hex').slice(0, 16)}`);
       if (modes === null) {
         record(null);
         return { write: null, result: Object.freeze({ ...before, previous: before.mode, changed: false }) };
       }
       // The new revision chains the previous one, so returning to earlier content never reuses a revision (no ABA for a stale writer).
       const body = { bindings: bindings.bindings, modes };
-      const next = bindingsFileSchema.parse({ schemaVersion: 2, revision: `m-${sha256(`permission-mode-bindings:1\0${bindings.revision}\0${JSON.stringify(body)}`).slice(0, 40)}`, ...body });
+      const next = bindingsFileSchema.parse({ schemaVersion: 2, revision: chainAuthorityRevision('permission-mode-bindings:1', 'm', bindings.revision, body), ...body });
       const after = permissionModeView(resolvePolicyBindings(snapshot.policy, next), actor, command.scopeId);
       // No record, no change: the audit event is durable before the file is replaced.
       record(next.revision);
-      return { write: next, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
+      return { write: { policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };
     });
   }
 }

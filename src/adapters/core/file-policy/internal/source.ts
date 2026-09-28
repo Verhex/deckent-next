@@ -1,14 +1,18 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open, realpath, rename, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { bindingsFileSchema, policyFileSchema, resolvePolicyBindings } from '#domain/index.js';
-import { PermissionModeError, type PermissionModeBindingsStore, type PermissionModeSnapshot, type PolicySource } from '#engine/index.js';
+import { AuthorityChangeError, PermissionModeError, type AuthorityDocumentStore, type AuthorityLookup, type AuthorityWrite, type PermissionModeBindingsStore,
+  type PermissionModeSnapshot, type PolicySource } from '#engine/index.js';
+import { AuthorityArchive, archiveKeyName } from './archive.js';
 const optionsSchema = z.object({ path: z.string().min(1), bindingsPath: z.string().min(1).optional(),
+  /** Authority revision archive directory (POLICY-ADMIN P2); absent = writes are not archived and keyed writes are refused. */
+  archivePath: z.string().min(1).optional(),
   ownerUid: z.number().int().nonnegative().safe(), maxBytes: z.number().int().positive().safe() }).strict();
 export type FilePolicyOptions = z.infer<typeof optionsSchema>;
-type PolicyFileResource = 'policy' | 'bindings';
+type PolicyFileResource = 'policy' | 'bindings' | 'archive';
 export class PolicyFileError extends Error {
   constructor(readonly code: 'POLICY_FILE_INVALID' | 'POLICY_FILE_UNSAFE' | 'POLICY_FILE_TOO_LARGE' | 'POLICY_FILE_CHANGED' | 'POLICY_FILE_UNSUPPORTED'
     | 'POLICY_FILE_MISSING', readonly resource: PolicyFileResource = 'policy') { super(code); this.name = 'PolicyFileError'; }
@@ -17,18 +21,23 @@ export class PolicyFileError extends Error {
  * POSIX preflight; no defense against a privileged host owner. Provision by atomic file replacement.
  * A v2 policy is resolved with its separate bindings file under the same guard (H34 S2); a v1 policy never reads bindings.
  */
-/** Updates of one bindings file are serialized in this process (the runtime service is the only product writer: one instance per layout). */
+/** Authority writes of one installation (keyed by its policy path) are serialized in this process, and across processes by the lock below. */
 const updates = new Map<string, Promise<void>>();
+/** Cross-process exclusion around one authority write (composition passes the platform's directory lock); absent = this process only. */
+export type AuthorityWriteLock = <T>(work: () => Promise<T>) => Promise<T>;
 const sameFile = (left: BigIntStats, right: BigIntStats) => left.dev === right.dev && left.ino === right.ino && left.size === right.size
   && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
-export class FilePolicySource implements PolicySource, PermissionModeBindingsStore {
+export class FilePolicySource implements PolicySource, PermissionModeBindingsStore, AuthorityDocumentStore {
   private readonly options: FilePolicyOptions;
-  constructor(input: FilePolicyOptions) {
+  constructor(input: FilePolicyOptions, private readonly lock: AuthorityWriteLock = work => work()) {
     const parsed = optionsSchema.safeParse(input);
-    if (!parsed.success || !isAbsolute(parsed.data.path) || (parsed.data.bindingsPath !== undefined && !isAbsolute(parsed.data.bindingsPath))) throw new PolicyFileError('POLICY_FILE_INVALID');
+    if (!parsed.success || !isAbsolute(parsed.data.path) || [parsed.data.bindingsPath, parsed.data.archivePath].some(path => path !== undefined && !isAbsolute(path))) {
+      throw new PolicyFileError('POLICY_FILE_INVALID');
+    }
     if (process.platform === 'win32') throw new PolicyFileError('POLICY_FILE_UNSUPPORTED');
     this.options = Object.freeze({ ...parsed.data, path: resolve(parsed.data.path),
-      ...(parsed.data.bindingsPath === undefined ? {} : { bindingsPath: resolve(parsed.data.bindingsPath) }) });
+      ...(parsed.data.bindingsPath === undefined ? {} : { bindingsPath: resolve(parsed.data.bindingsPath) }),
+      ...(parsed.data.archivePath === undefined ? {} : { archivePath: resolve(parsed.data.archivePath) }) });
   }
   private validate(stat: BigIntStats, resource: PolicyFileResource) {
     const mode = stat.mode & 0o777n;
@@ -68,26 +77,42 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
     // An unknown role refuses the whole snapshot (PolicyError POLICY_ROLE_UNKNOWN); the policy is never evaluated without its bindings.
     return resolvePolicyBindings(parsed.data, bindings.data);
   }
-  /**
-   * Conditional, atomic replacement of the bindings file (T-L4 slice 4c, `PermissionModeBindingsStore`). Serialized per file in this
-   * process; policy and bindings are read under the same guards as `load`; a document `work` answers is written to a new file in the
-   * same directory (`O_EXCL|O_NOFOLLOW`, the original 0400/0600 mode, flushed), and renamed over the target only when both the target
-   * and the policy file are still exactly the files read — otherwise `PERMISSION_MODE_CONFLICT`, nothing replaced. The writer must be the trusted owner, so the
-   * replaced file stays readable by `load` (a foreign-owned file would refuse all authority).
-   */
+  /** Legacy bindings-only write (T-L4 slice 4c): the same authority writer, keeping its `PERMISSION_MODE_CONFLICT` code. */
   async update<T>(work: (snapshot: PermissionModeSnapshot) => { readonly write: unknown; readonly result: T }): Promise<T> {
-    const target = this.options.bindingsPath;
-    if (target === undefined) throw new PolicyFileError('POLICY_FILE_MISSING', 'bindings');
-    const previous = updates.get(target) ?? Promise.resolve();
+    try {
+      return await this.updateAuthority(snapshot => {
+        const outcome = work(snapshot);
+        return { write: outcome.write === null ? null : { policy: null, bindings: outcome.write, order: 'policy-first' as const }, result: outcome.result };
+      });
+    } catch (error) { throw error instanceof AuthorityChangeError ? new PermissionModeError('PERMISSION_MODE_CONFLICT') : error; }
+  }
+  identity() { return `authority-document:${this.options.path}+${this.options.bindingsPath ?? ''}`; }
+  private archive() {
+    const path = this.options.archivePath;
+    return path === undefined ? null : new AuthorityArchive(path, this.options.ownerUid, () => new PolicyFileError('POLICY_FILE_UNSAFE', 'archive'));
+  }
+  /**
+   * Conditional, atomic replacement of policy.json and/or bindings.json (POLICY-ADMIN P2, `AuthorityDocumentStore`; T-L4 slice 4c for
+   * bindings alone). Serialized per installation in this process; both files are read under the same guards as `load`; each document
+   * `work` answers is written to a new file in its directory (`O_EXCL|O_NOFOLLOW`, the original 0400/0600 mode, flushed). Before each
+   * rename every authority file must still be exactly the file read — or, once renamed by this call, exactly the file it wrote —
+   * otherwise `POLICY_CONFLICT` (a failure after the first rename leaves that valid intermediate state and a `prepared` archive record:
+   * the keyed lookup then answers unknown, never a blind resend). The writer must be the trusted owner, so `load` keeps reading them.
+   */
+  async updateAuthority<T>(work: (snapshot: PermissionModeSnapshot) => { readonly write: AuthorityWrite | null; readonly result: T }, key?: string): Promise<T> {
+    const lane = this.options.path;
+    const previous = updates.get(lane) ?? Promise.resolve();
     let release!: () => void;
     const tail = previous.then(() => new Promise<void>(done => { release = done; }));
-    updates.set(target, tail);
+    updates.set(lane, tail);
     await previous;
-    try { return await this.updateHeld(target, work); }
-    finally { release(); if (updates.get(target) === tail) updates.delete(target); }
+    // Across processes the injected lock orders writers: the identity checks alone leave a check-to-rename window (lost updates were
+    // measured without it, POLICY-ADMIN P2); they stay as the guard against a writer that takes no lock (a manual edit).
+    try { return await this.lock(() => this.updateHeld(work, key)); }
+    finally { release(); if (updates.get(lane) === tail) updates.delete(lane); }
   }
-  private async updateHeld<T>(target: string, work: (snapshot: PermissionModeSnapshot) => { readonly write: unknown; readonly result: T }): Promise<T> {
-    // The policy's identity is kept too: it authorized the change and fixed the effective revision `work` compared (Astra 2139 R1).
+  private async updateHeld<T>(work: (snapshot: PermissionModeSnapshot) => { readonly write: AuthorityWrite | null; readonly result: T }, key?: string): Promise<T> {
+    // The policy's identity is kept even when only bindings change: it authorized the change and fixed the compared revision (Astra 2139 R1).
     const authority = await this.readGuarded(this.options.path, 'policy');
     const policy = policyFileSchema.safeParse(authority.value);
     if (!policy.success) throw new PolicyFileError('POLICY_FILE_INVALID');
@@ -96,34 +121,86 @@ export class FilePolicySource implements PolicySource, PermissionModeBindingsSto
       if (outcome.write !== null) throw new PolicyFileError('POLICY_FILE_UNSUPPORTED', 'bindings');
       return outcome.result;
     }
+    const target = this.options.bindingsPath;
+    if (target === undefined) throw new PolicyFileError('POLICY_FILE_MISSING', 'bindings');
     let read: { readonly value: unknown; readonly stat: BigIntStats };
     try { read = await this.readGuarded(target, 'bindings'); }
     catch (error) { throw (error as NodeJS.ErrnoException).code === 'ENOENT' ? new PolicyFileError('POLICY_FILE_MISSING', 'bindings') : error; }
     const outcome = work({ policy: policy.data, bindings: read.value });
-    if (outcome.write === null) return outcome.result;
-    const bytes = Buffer.from(`${JSON.stringify(bindingsFileSchema.parse(outcome.write), null, 2)}\n`, 'utf8');
-    if (bytes.length > this.options.maxBytes) throw new PolicyFileError('POLICY_FILE_TOO_LARGE', 'bindings');
+    const write = outcome.write;
+    if (write === null || (write.policy === null && write.bindings === null)) return outcome.result;
+    const bindings = bindingsFileSchema.parse(read.value);
+    const files = [
+      { resource: 'policy' as const, path: this.options.path, stat: authority.stat, before: policy.data, next: write.policy === null ? null : policyFileSchema.parse(write.policy) },
+      { resource: 'bindings' as const, path: target, stat: read.stat, before: bindings, next: write.bindings === null ? null : bindingsFileSchema.parse(write.bindings) },
+    ];
+    if (write.order === 'bindings-first') files.reverse();
+    const archive = this.archive();
+    if (key !== undefined && archive === null) throw new PolicyFileError('POLICY_FILE_MISSING', 'archive');
     if (process.getuid?.() !== this.options.ownerUid) throw new PolicyFileError('POLICY_FILE_UNSAFE', 'bindings');
-    const temporary = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
-    const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    let renamed = false;
+    const revision = (policyDocument: { readonly revision: string }, bindingsDocument: { readonly revision: string }) => `${policyDocument.revision}+${bindingsDocument.revision}`;
+    const side = (policyDocument: { readonly revision: string }, bindingsDocument: { readonly revision: string }) => ({ revision: revision(policyDocument, bindingsDocument), policy: policyDocument, bindings: bindingsDocument });
+    const before = side(policy.data, bindings);
+    const after = side(files.find(file => file.resource === 'policy')!.next ?? policy.data, files.find(file => file.resource === 'bindings')!.next ?? bindings);
+    const entryName = key !== undefined ? archiveKeyName(key) : `r-${createHash('sha256').update(`${before.revision}\0${after.revision}`).digest('hex').slice(0, 32)}.json`;
+    const temporaries = new Map<string, string>();
     try {
-      try {
-        let offset = 0;
-        while (offset < bytes.length) offset += (await handle.write(bytes, offset, bytes.length - offset, offset)).bytesWritten;
-        await handle.chmod(Number(read.stat.mode & 0o777n));
-        await handle.sync();
-      } finally { await handle.close(); }
-      // Conditional on exactly the files read — the bindings written over and the policy that authorized the write: a replacement of
-      // either since (another writer, the owner) is a conflict, never overwritten.
-      if (!sameFile(await lstat(this.options.path, { bigint: true }), authority.stat) || !sameFile(await lstat(target, { bigint: true }), read.stat)) {
-        throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
+      for (const file of files) {
+        if (file.next === null) continue;
+        const bytes = Buffer.from(`${JSON.stringify(file.next, null, 2)}\n`, 'utf8');
+        if (bytes.length > this.options.maxBytes) throw new PolicyFileError('POLICY_FILE_TOO_LARGE', file.resource);
+        const temporary = join(dirname(file.path), `.${basename(file.path)}.${randomUUID()}.tmp`);
+        const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        temporaries.set(file.path, temporary);
+        try {
+          let offset = 0;
+          while (offset < bytes.length) offset += (await handle.write(bytes, offset, bytes.length - offset, offset)).bytesWritten;
+          await handle.chmod(Number(file.stat.mode & 0o777n));
+          await handle.sync();
+        } finally { await handle.close(); }
       }
-      await rename(temporary, target);
-      renamed = true;
-      const directory = await open(dirname(target), constants.O_RDONLY | constants.O_DIRECTORY);
-      try { await directory.sync(); } finally { await directory.close(); }
-    } finally { if (!renamed) await unlink(temporary).catch(() => undefined); }
+      // Conditional on exactly the files read (or, once renamed here, written): a replacement by another writer is a conflict, never overwritten.
+      const expected = new Map(files.map(file => [file.path, file.stat]));
+      const unchanged = async () => {
+        for (const [path, stat] of expected) if (!sameFile(await lstat(path, { bigint: true }), stat)) throw new AuthorityChangeError('POLICY_CONFLICT');
+      };
+      await unchanged();
+      await archive?.write(entryName, { schemaVersion: 1, key: key ?? null, state: 'prepared', before, after });
+      let renamed = false;
+      for (const file of files) {
+        const temporary = temporaries.get(file.path);
+        if (temporary === undefined) continue;
+        try { await unchanged(); } catch (error) {
+          // Nothing of this write reached the files: drop its prepared record. After a rename the valid intermediate state stays, reported
+          // as `partial` (its keyed lookup answers unknown).
+          if (!renamed) await archive?.remove(entryName);
+          throw renamed ? new AuthorityChangeError('POLICY_CONFLICT', 'partial') : error;
+        }
+        await rename(temporary, file.path);
+        renamed = true;
+        temporaries.delete(file.path);
+        expected.set(file.path, await lstat(file.path, { bigint: true }));
+        const directory = await open(dirname(file.path), constants.O_RDONLY | constants.O_DIRECTORY);
+        try { await directory.sync(); } finally { await directory.close(); }
+      }
+      await archive?.write(entryName, { schemaVersion: 1, key: key ?? null, state: 'committed', before, after });
+    } finally { for (const temporary of temporaries.values()) await unlink(temporary).catch(() => undefined); }
     return outcome.result;
+  }
+  /**
+   * The C11 evidence of a keyed authority write: a committed record → applied; a prepared record → applied when the files now hold its
+   * `after` revision, absent when they still hold its `before` revision (nothing was renamed; the resend is safe), otherwise unknown
+   * (a crash between the two renames or a later change: never a blind resend); no record → absent; an untrustworthy record → unknown.
+   */
+  async lookupAuthority(key: string): Promise<AuthorityLookup> {
+    const archive = this.archive();
+    if (archive === null) return null;
+    const entry = await archive.read(key);
+    if (entry === 'missing') return { status: 'absent' };
+    if (entry === null) return null;
+    if (entry.state === 'committed') return { status: 'applied', version: entry.after.revision };
+    let current: string;
+    try { current = (await this.load()).revision; } catch { return null; }
+    return current === entry.after.revision ? { status: 'applied', version: current } : current === entry.before.revision ? { status: 'absent' } : null;
   }
 }
