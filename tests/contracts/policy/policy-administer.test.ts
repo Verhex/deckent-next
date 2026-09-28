@@ -67,6 +67,11 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
   it('never applies silently: even the owner root with an allow grant and a full-auto mode gets a pending card; after the allow the change settles once, audited and archived', async () => {
     const f = await fixture(() => [], ownerRoot, me => [{ id: 'fa', principal: me, scopes: ['s'], mode: 'full-auto' }]);
     const other = { issuer: f.me.issuer, subject: '424242' };
+    // An input that is not a typed, bounded change set is refused before any card is opened.
+    for (const input of ['garbage', { schemaVersion: 1, changes: [] }, { schemaVersion: 1, changes: [{ kind: 'mode.set', scopeId: 's', mode: 'full-auto' }] }]) {
+      await expect(f.admin.submit(f.command('bad', input))).rejects.toMatchObject({ code: 'POLICY_CHANGE_INVALID' });
+    }
+    expect(f.journal.store.list('s', null, 10)).toEqual([]);
     const first = await f.admin.submit(f.command('c1', addRead('share', other)));
     expect(first).toMatchObject({ status: 'approval-pending', operation: { id: 'policy.administer', version: 1 } });
     expect((await f.files()).policy.revision).toBe('p1');

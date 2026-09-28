@@ -1,5 +1,5 @@
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, planPolicyChange,
-  effectCommandSchema, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
+  effectCommandSchema, policyChangeSchema, PolicyChangeError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import type { SessionAuthority, SessionVerifier } from '#engine/core/authentication/index.js';
@@ -104,6 +104,9 @@ export class PolicyAdministrationApplication {
   submit(input: unknown, credential?: unknown): Promise<EffectOutcome> {
     const { deps } = this;
     const command = effectCommandSchema.parse(input);
+    // The typed, bounded change set is checked before anything is asked: an invalid input never opens a card. Snapshot-dependent checks
+    // (an id that exists, a known role) stay with the plan at the gate and inside the write.
+    if (!policyChangeSchema.safeParse(command.input).success) return Promise.reject(new PolicyChangeError('POLICY_CHANGE_INVALID'));
     const submission: AuthoritySubmission = {};
     const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs });
     const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission);
