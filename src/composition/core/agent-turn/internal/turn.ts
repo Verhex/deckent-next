@@ -71,14 +71,24 @@ export const AGENT_READABLE_PRODUCT_RESOURCES: readonly ProductResource[] = Obje
  * shell paths and feeds both shell sandboxes' deny views, and the composer's `@file` picker uses it too.
  */
 export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
-  const owned = (Object.keys(layout.resources) as ProductResource[]).filter(resource => !AGENT_READABLE_PRODUCT_RESOURCES.includes(resource)).flatMap(resource => {
-    const rel = relative(projectRoot, productResourcePath(layout, resource));
-    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return [];
-    const path = rel.split(sep).join('/'), slash = path.lastIndexOf('/');
-    return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
-  });
   // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
-  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...owned, `${MCP_PROJECT_REGISTRY_PATH}*`, MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
+  return Object.freeze([...DEFAULT_WORKSPACE_READ_DENY, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
+    MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
+}
+/** Project-relative POSIX paths of the product's protected resources inside the project. */
+function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
+  return Object.freeze((Object.keys(layout.resources) as ProductResource[]).filter(resource => !AGENT_READABLE_PRODUCT_RESOURCES.includes(resource)).flatMap(resource => {
+    const rel = relative(projectRoot, productResourcePath(layout, resource));
+    return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split(sep).join('/')];
+  }));
+}
+/** The deny patterns of the product's own state: each protected resource, anything under it, its sidecars and a writer's hidden temporary;
+ * a shell command naming one of these is refused outright — no approval opens product management (owner F2, Astra 2162). */
+export function agentProductStateDeny(projectRoot: string, layout: ProductLayout): readonly string[] {
+  return Object.freeze(agentProductStatePaths(projectRoot, layout).flatMap(path => {
+    const slash = path.lastIndexOf('/');
+    return [`${path}*`, `${path}/**`, `${path.slice(0, slash + 1)}.${path.slice(slash + 1)}*`];
+  }));
 }
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
@@ -144,7 +154,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const editsIn = (area: WorkspaceEditArea | null | undefined) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope)), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
-      config: readTerminalShellConfig(config), scratch, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null }) }) : null;
+      config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout),
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a

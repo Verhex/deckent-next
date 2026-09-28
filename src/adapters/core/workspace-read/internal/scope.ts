@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { constants, open, readdir, readFile, readlink, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { globLiteralHead } from '#platform/index.js';
 
 /** Generated/vendored directory names skipped by walks (legacy baseline), plus unambiguous directory names from the root .gitignore. */
 export const BASELINE_IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'build', 'out', 'coverage',
@@ -19,6 +20,9 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '.git', '**/.git']);
 
 type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
+// The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation
+// and the product layout admission share it (Astra 2164/2166) — a bracketed path such as `.cache/deckent[1]/state/ledger.db*` keeps its brackets.
+export { globLiteralHead } from '#platform/index.js';
 /**
  * Glob matcher without backtracking (Astra 2078 R2): `**` followed by a slash is any run of whole directories, `**` anything,
  * `*` any run within a segment, `?` one non-slash character. Matching is a dynamic program over (pattern token, path position),
@@ -36,7 +40,7 @@ export function createGlobMatcher(pattern: string): (path: string) => boolean {
   }
   // The literal head before the first wildcard must start the path: a cheap exact test first, so a long deny list (TERM-FEEDBACK-1:
   // every product resource of the layout) costs a string compare per pattern for most paths.
-  const wildcard = pattern.search(/[*?]/), head = wildcard < 0 ? pattern : pattern.slice(0, wildcard);
+  const head = globLiteralHead(pattern);
   return (path: string) => {
     if (!path.startsWith(head)) return false;
     let current = new Uint8Array(path.length + 1);
@@ -74,6 +78,10 @@ export interface WalkIncomplete { depthLimited: number; unreadable: number; chan
 export interface WorkspaceScope {
   readonly root: string;
   readonly ignoredDirs: ReadonlySet<string>;
+  /** The literal, nested heads of the deny patterns (`.deckent/live-data/state/ledger.db` from `…/ledger.db*`, `.deckent/host` from
+   * `.deckent/host/**`; a pattern starting with a glob has none): paths whose ancestors a shell sandbox must never grant whole, even
+   * under an ignored tree (Astra 2162). Derived from the deny list, so a `.gitignore` change cannot lift them. */
+  readonly protectedAnchors: ReadonlySet<string>;
   denied(rel: string): boolean;
   /** The real, workspace-relative path of an existing target; symlinks are resolved and must stay inside and not denied. */
   resolve(requested: unknown, allowRoot?: boolean): Promise<ResolvedPath>;
@@ -110,6 +118,10 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
       if (name !== '' && !/[*?[\]]/.test(name) && !name.includes('/')) ignoredDirs.add(name);
     }
   } catch { /* no readable .gitignore: the baseline stands */ }
+  const protectedAnchors = new Set(deny.flatMap(pattern => {
+    const head = globLiteralHead(pattern).replace(/\/$/u, '');
+    return head.includes('/') ? [head] : [];
+  }));
   const inside = (abs: string, allowRoot: boolean) => { const rel = relative(root, abs); return rel === '' ? allowRoot : !rel.startsWith('..') && !isAbsolute(rel); };
   const denied = (rel: string) => rel !== '' && denyMatchers.some(match => match(rel));
   const close = async (handle: FileHandle | undefined) => { await handle?.close().catch(() => undefined); };
@@ -118,7 +130,7 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
     try { return await readlink(fdPath(handle)) === (rel === '' ? root : join(root, rel)); } catch { return false; }
   };
   return Object.freeze({
-    root, ignoredDirs, denied, verify,
+    root, ignoredDirs, protectedAnchors, denied, verify,
     async resolve(requested: unknown, allowRoot = false): Promise<ResolvedPath> {
       if (!supported) return { ok: false, error: 'platform-unsupported' };
       if (requested !== undefined && typeof requested !== 'string') return { ok: false, error: 'path-invalid' };

@@ -42,7 +42,12 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   ~420 ms, Landlock ~310 ms/çağrı (hızlandırma ayrı dilim).
 - TERM-FEEDBACK-1 birleşti (`ab8baf0` özetleme, `50bca7e` ürün durumu ajana/sandbox'a kapalı — bwrap'ta runtime soketine bağlanma açığını da kapatır, `946464b`
   sistem istemi v4); Astra'ya ek bulgu olarak bildirildi (2160).
-- Sıradaki: tam verify → Astra yeniden inceleme → PASS'te push → canlı geçiş (owner onayı; `service.responseMaxBytes` 4 MiB + policy v2 şablonu ile).
+- Astra 2162 REVISE (ignored üst dizinde ürün durumu korumasızdı; test akış sırası) → `lane/bwrap` `424fcb2` birleşti (`protectedAnchors` ata koruması iki realm,
+  shell planında `PRODUCT_STATE_PROTECTED` sert taban). Saat testi `lane/flake-clock` `20598e5` (Sonnet 5.5) birleşti; açık bulgu: operasyon onay penceresi
+  yalnız duvar saatiyle ölçülüyor (geri adımda ≤ adım kadar uzar) — süreç içi monotonic koruma önerisi, ayrı dilim. CLAUDE.md/AGENTS.md güncel kaynak kuralı eklendi.
+- Astra 2164 REVISE (anchor çıkarımı `[`'de kesiyordu; eşleyici `[`'i düz sayar → `.cache/deckent[1]` korumasız) → `lane/bwrap` `e2d1222`: tek dil `GLOB_WILDCARD = /[*?]/u` +
+  `globLiteralHead` (eşleyici ve anchor aynı fonksiyon). Astra 2166 → `5a1a751`: `*`/`?` içeren etkili ürün yolu kurulumda `LAYOUT_PATH_UNEXPRESSIBLE` ile reddedilir (glob dilbilgisi `platform/core/common`'da tek).
+- Canlı policy owner onayıyla v2'ye yükseltildi (servis yeniden başlatılmadan). Sıradaki: tam verify → Astra → PASS'te push → canlı geçiş (owner onayı; 4 MiB teslim sınırı).
 - Dogfood: ölçüm `proof/DOGFOOD-MEASURE-2026-09-28` (test imajında git/openssl/python3/cc yok; `--configLoader native` salt-okunur
   bind'i çözer); bağımlılıklı doğrulama imajı Cursor şeridinde (`proof/DOGFOOD-IMAGE-2026-09-28`); tek komut döngü seçenekleri A/B/C.
 

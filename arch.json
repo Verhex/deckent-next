@@ -1396,7 +1396,8 @@
     },
     "src/adapters/core/workspace-read": {
       "dependencies": [
-        "src/domain/core/agent-tool"
+        "src/domain/core/agent-tool",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },

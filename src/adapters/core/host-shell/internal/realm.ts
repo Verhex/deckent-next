@@ -17,7 +17,11 @@ export type ShellRealmResolution = { readonly ok: true; readonly realm: ShellRea
 /** What a sandbox realm needs to lay out its view of the machine: the project scope (real root, deny floor, ignored names) and the
  * turn's scratch area (SCR-A); nothing about the command. */
 export interface ShellSandboxLayout {
-  readonly project: { readonly root: string; readonly ignoredDirs: ReadonlySet<string>; denied(rel: string): boolean };
+  /** The turn's workspace scope: real root, deny floor, ignored names, and the deny list's nested literal heads (`protectedAnchors`) —
+   * the product's own state (ledger, policy, sessions, …) and the Core floor's nested paths — which the realms protect together with
+   * their ancestors even under an ignored tree (`node_modules`, `.cache`, a `.gitignore` entry) that they otherwise do not scan; a chain
+   * that cannot be protected (a symbolic link on it) refuses the call (Astra 2162). */
+  readonly project: { readonly root: string; readonly ignoredDirs: ReadonlySet<string>; readonly protectedAnchors: ReadonlySet<string>; denied(rel: string): boolean };
   readonly scratchDir: string | null;
 }
 /** A sandbox mechanism (S9 bubblewrap, S11 Landlock) as a realm provider: usable on the measured host — then its realm, marker,

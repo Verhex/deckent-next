@@ -100,7 +100,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
    * does not hide another name of a protected inode, so every regular file with more than one link inside it is masked, an unreadable
    * or too deep directory is masked, and a symbolic link takes nothing. Only this floor applies inside (the deny floor names `.git/**`
    * as a whole). A hard-linked local clone's shared objects stay readable when their content verifies against their name; any other
-   * multi-linked file is closed (`scanGitDirectory`: verification cached per inode, directory scans cached by directory change time).
+   * multi-linked file is closed (`scanGitDirectory`: verdicts re-read every call, only object hashes cached — Astra 2158).
    */
   const walkGit = async (dir: string, depth: number): Promise<string | null> => {
     const scan = await scanGitDirectory(dir);
@@ -130,6 +130,28 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     readOnly.add(common);
     return walkGit(common, 0);
   };
+  // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
+  // protected path is not skipped whole: it is listed, its denied entries masked, and only the ancestors of protected paths are entered
+  // (siblings stay unscanned, as ignored). A symbolic link on such a chain cannot be masked by path → the call is refused.
+  const anchors = [...layout.project.protectedAnchors];
+  const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
+  const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
+  const walkProtected = async (dir: string, rel: string, depth: number): Promise<string | null> => {
+    let names;
+    try { names = await readdir(dir, { withFileTypes: true }); } catch { maskedDirectories.push(dir); return null; }
+    for (const entry of names) {
+      if (++entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`;
+      const over = overMasks(); if (over) return over;
+      const path = join(dir, entry.name), entryRel = `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink()) { if (onChain(entryRel)) return `protected product state behind a symbolic link (${entryRel})`; continue; }
+      if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }
+      if (!entry.isDirectory() || !hasProtectedBeneath(entryRel)) continue;
+      if (depth + 1 > MAX_DEPTH) { maskedDirectories.push(path); continue; }
+      const refused = await walkProtected(path, entryRel, depth + 1);
+      if (refused) return refused;
+    }
+    return null;
+  };
   const walk = async (dir: string, rel: string, depth: number): Promise<string | null> => {
     let names;
     try { names = await readdir(dir, { withFileTypes: true }); }
@@ -141,7 +163,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       if (++entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`;
       const over = overMasks(); if (over) return over;
       const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
-      if (entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink()) { if (onChain(entryRel)) return `protected product state behind a symbolic link (${entryRel})`; continue; }
       // `.git`: see `gitEntry` — the inode floor, then the read-only grant (a nested `.git` file, a pointer the sandboxed command could have
       // written, opens nothing: a submodule loses `git status` inside; documented).
       if (entry.name === '.git') { const refused = await gitEntry(path, rel, entry.isDirectory(), entry.isFile()); if (refused) return refused; continue; }
@@ -152,7 +174,10 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       if (layout.project.denied(`${entryRel}/`)) { maskedDirectories.push(path); continue; }
       // Generated/vendored trees are not entered (their content is not secret-bearing by the floor's definition and can be huge); a
       // directory ignored only by the project's .gitignore (e.g. `.brain/`) is, so `.brain/memory.db*` is masked.
-      if (BASELINE_IGNORED_DIRS.has(entry.name)) continue;
+      if (BASELINE_IGNORED_DIRS.has(entry.name)) {
+        if (hasProtectedBeneath(entryRel)) { const refused = await walkProtected(path, entryRel, depth + 1); if (refused) return refused; }
+        continue;
+      }
       // Beyond the depth bound nothing is seen, so nothing is opened.
       if (depth + 1 > MAX_DEPTH) { maskedDirectories.push(path); continue; }
       const refused = await walk(path, entryRel, depth + 1);

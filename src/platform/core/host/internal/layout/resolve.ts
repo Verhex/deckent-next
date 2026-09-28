@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { posix, win32 } from 'node:path';
-import { PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index.js';
+import { hasGlobWildcard, PRODUCT_LAYOUT_REGISTRY as registry } from '#platform/core/common/index.js';
 
 export type ProductResource = keyof typeof registry.resources;
 export interface ProductLayoutInput {
@@ -19,7 +19,10 @@ export interface ProductLayout {
   readonly resources: Readonly<Record<ProductResource, string>>;
 }
 export class LayoutError extends Error {
-  constructor(readonly code: 'LAYOUT_VERSION_UNSUPPORTED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN') { super(code); }
+  /** `LAYOUT_PATH_UNEXPRESSIBLE` (Astra 2166): the project root, the data root or the bootstrap configuration path holds a `*` or `?`, which the
+   * workspace deny language cannot name literally — the product state under it could not be protected, so the layout is refused (brackets and
+   * braces are literal in that language and stay accepted). */
+  constructor(readonly code: 'LAYOUT_VERSION_UNSUPPORTED' | 'LAYOUT_ROOT_INVALID' | 'LAYOUT_RESOURCE_INVALID' | 'LAYOUT_RESOURCE_UNKNOWN' | 'LAYOUT_PATH_UNEXPRESSIBLE') { super(code); }
 }
 const hasControl = (value: string) => [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const isFixedResource = (resource: string) => registry.fixedResources.includes(resource);
@@ -34,6 +37,7 @@ export function resolveProductLayout(input: ProductLayoutInput): ProductLayout {
   if (!api.isAbsolute(input.projectRoot) || hasControl(input.projectRoot)
     || (input.root !== undefined && (!api.isAbsolute(input.root) || hasControl(input.root)))) throw new LayoutError('LAYOUT_ROOT_INVALID');
   const root = api.normalize(input.root ?? api.join(input.projectRoot, registry.rootName));
+  if (hasGlobWildcard(input.projectRoot) || hasGlobWildcard(root)) throw new LayoutError('LAYOUT_PATH_UNEXPRESSIBLE');
   const resources = { ...registry.resources };
   for (const [key, value] of Object.entries(input.resources ?? {})) {
     if (isFixedResource(key)) throw new LayoutError('LAYOUT_RESOURCE_INVALID');
@@ -47,6 +51,7 @@ export function resolveProductLayout(input: ProductLayoutInput): ProductLayout {
     resources[registry.bootstrapResource as ProductResource]);
   if (!api.isAbsolute(bootstrapConfigPath) || hasControl(bootstrapConfigPath)) throw new LayoutError('LAYOUT_ROOT_INVALID');
   const normalizedBootstrapConfigPath = api.normalize(bootstrapConfigPath);
+  if (hasGlobWildcard(normalizedBootstrapConfigPath)) throw new LayoutError('LAYOUT_PATH_UNEXPRESSIBLE');
   const resourcePath = (resource: ProductResource) => {
     if (resource === registry.bootstrapResource) return normalizedBootstrapConfigPath;
     const relative = isFixedResource(resource) ? registry.resources[resource] : resources[resource];

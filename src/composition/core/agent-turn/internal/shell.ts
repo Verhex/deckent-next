@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
+import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { createLocalPeerSession, createShellPathContext, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
+import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
   HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
@@ -33,8 +34,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** SCR-A: the conversation's scratch area — the command's `TMPDIR`, and a second root its path checks accept. */
   readonly scratch: { readonly scope: WorkspaceScope; readonly dir: string } | null;
   /** S9: sandbox providers in preference order; the realm is resolved per call against the service's host measurement. */
-  readonly sandboxes: readonly ShellSandbox[] }) {
+  readonly sandboxes: readonly ShellSandbox[];
+  /** Astra 2162 (owner F2): deny patterns of the product's own state — a command that names one is refused, never offered for approval. */
+  readonly productState: readonly string[] }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
+  const productState = input.productState.map(createGlobMatcher);
+  const namesProductState = (detail: string | undefined) => detail !== undefined
+    && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
@@ -49,6 +55,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
       : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots));
+    // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
+    for (const verdict of [readOnly, mutation]) {
+      if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
+    }
     const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation) };
     plans.set(key(tool, args), planned);
     return planned;
