@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { fsOpsFor, type FsOps } from './fs-ops.js';
 
 /**
  * Whether a multi-linked file inside Git metadata is a genuine content-addressed object (Astra 2156): a hard-linked local clone
@@ -86,17 +87,17 @@ const UNREADABLE: GitDirectoryScan = Object.freeze({ readable: false, suspectFil
  * rewritten through it without the directory's times changing). Only the content hash of a verified object is cached, under the
  * inode's ctime and expected identity (`isVerifiedGitObject`). Timestamp bounds: ctime is kernel-set at nanosecond resolution; a
  * change landing in the same tick as the cached ctime, or a component swapped between this scan and the mount, is outside what
- * the scan can see.
+ * the scan can see. The reads are synchronous on a local file system and asynchronous otherwise (`fsOpsFor`); the verdict is the same.
  */
-export async function scanGitDirectory(dir: string): Promise<GitDirectoryScan> {
+export async function scanGitDirectory(dir: string, ops: FsOps = fsOpsFor(dir)): Promise<GitDirectoryScan> {
   let entries;
-  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return UNREADABLE; }
+  try { entries = await ops.readdir(dir); } catch { return UNREADABLE; }
   const suspectFiles: string[] = [], cleanFiles: string[] = [], directories: string[] = [];
   await Promise.all(entries.map(async entry => {
     if (entry.isDirectory()) { directories.push(entry.name); return; }
     if (!entry.isFile()) return;
     const path = join(dir, entry.name);
-    const links = await lstat(path).then(info => info.nlink, () => 2);
+    const links = await ops.nlink(path);
     (links === 1 || await isVerifiedGitObject(path) ? cleanFiles : suspectFiles).push(entry.name);
   }));
   return Object.freeze({ readable: true, suspectFiles: suspectFiles.sort(), cleanFiles: cleanFiles.sort(), directories: directories.sort() });
