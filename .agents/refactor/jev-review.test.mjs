@@ -43,6 +43,87 @@ test('observation times accept past, equal and explicit unknown while rejecting 
   c.evidence[0].observedAt = '2026-02-30T00:00:00Z';
   assert.throws(() => prepare(c, policy, at), /JEV_EVIDENCE/);
 });
+test('quality warnings are deterministic, nonblocking and leave authored context unchanged', () => {
+  const c = fixture(); c.options[0].evidenceIds = [];
+  c.options[0].action = 'Faster validation';
+  c.options[1].tradeoffs = ['Immediate progress'];
+  c.unknowns = [];
+  const before = structuredClone(c);
+  const risks = prepare(c, policy).diagnostics.sufficiencyRisks;
+  assert.equal(risks.mode, 'advisory-only');
+  assert.equal(risks.semanticQuality, 'not-measured');
+  const codes = risks.warnings.map(w => w.code);
+  for (const code of ['OPTION_WITHOUT_EVIDENCE', 'MEASUREMENT_SUPPORT_UNCLEAR', 'TRADEOFF_BALANCE_UNCLEAR', 'REJECTED_ALTERNATIVES_UNCLEAR', 'NO_EXPLICIT_UNKNOWNS']) assert.ok(codes.includes(code), code);
+  assert.deepEqual(c, before);
+  assert.deepEqual(prepare(c, policy).diagnostics.sufficiencyRisks, risks);
+  assert.deepEqual(prepare(c, policy).input.state.case, before);
+});
+test('shared evidence, duplicated options and locator-only observations prompt specific review', () => {
+  const c = fixture(); c.options[1].action = c.options[0].action;
+  c.options[1].northStarImpact = c.options[0].northStarImpact;
+  c.checks.push({ ...c.checks[0], id: 'another' });
+  c.evidence[0].observation = '/unread/source.txt:10';
+  const warnings = prepare(c, policy).diagnostics.sufficiencyRisks.warnings;
+  for (const code of ['OPTIONS_SHARE_ALL_EVIDENCE', 'CHECKS_SHARE_ALL_EVIDENCE', 'DUPLICATE_OPTION_ACTION', 'IDENTICAL_NORTH_STAR_IMPACT', 'EVIDENCE_LOCATOR_ONLY']) assert.ok(warnings.some(w => w.code === code), code);
+  c.checks[0].evidenceIds = [];
+  assert.throws(() => prepare(c, policy), /JEV_CHECK/);
+  c.checks[0].evidenceIds = ['not-authored'];
+  assert.throws(() => prepare(c, policy), /JEV_CHECK/);
+});
+test('plan-only checks warn without claiming to understand untagged prose', () => {
+  const c = fixture(); c.evidence[0].observation = '[plan] Run a regression test.';
+  const codes = () => prepare(c, policy).diagnostics.sufficiencyRisks.warnings.map(w => w.code);
+  assert.ok(codes().includes('CHECK_ONLY_UNVERIFIED_EVIDENCE'));
+  c.evidence.push({ ...c.evidence[0], id: 'actual', observation: 'The recorded fixture failed.' });
+  c.checks[0].evidenceIds.push('actual');
+  assert.ok(!codes().includes('CHECK_ONLY_UNVERIFIED_EVIDENCE'));
+});
+test('measurement hint requires linked numeric units; a commit number is not a measurement', () => {
+  const c = fixture(); c.options[0].action = 'Faster execution';
+  c.evidence[0].observation = 'Revision 1234, tests 12/12 passed.';
+  const warns = () => prepare(c, policy).diagnostics.sufficiencyRisks.warnings.some(w => w.code === 'MEASUREMENT_SUPPORT_UNCLEAR');
+  assert.equal(warns(), true);
+  c.evidence.push({ ...c.evidence[0], id: 'measurement', observation: 'At fixture-v1 on local CPU, 100 fixed inputs: p95 12 ms; 10 % less latency. No production extrapolation.' });
+  assert.equal(warns(), true);
+  c.options[0].evidenceIds.push('measurement');
+  assert.equal(warns(), false);
+  c.evidence[1].observation = '[plan] Target p95 12 ms';
+  assert.equal(warns(), true);
+  c.options[0].action = 'Reduce expenditure 20%';
+  assert.equal(warns(), true);
+  c.evidence[1].observation = 'Recorded workload comparison saved 20%';
+  assert.equal(warns(), false);
+  // A recognized number is only a cue; semantic quality remains unmeasured.
+  assert.equal(prepare(c, policy).diagnostics.sufficiencyRisks.semanticQuality, 'not-measured');
+});
+test('explicit exclusions avoid inventing rejected options; full cases can have no warnings', () => {
+  const c = fixture();
+  c.process.acceptedDecisions.push('Rejected alternative: blind retry, because the failure cause is unknown.');
+  c.evidence.push({ ...c.evidence[0], id: 'counter', observation: 'Accepting the unexplained failure supplies no correction proof.' });
+  c.options[1].evidenceIds = ['counter'];
+  assert.deepEqual(prepare(c, policy).diagnostics.sufficiencyRisks.warnings, []);
+  c.process.acceptedDecisions[1] = 'Rejected alternatives: blind retry, cause unknown.';
+  assert.deepEqual(prepare(c, policy).diagnostics.sufficiencyRisks.warnings, []);
+  c.process.acceptedDecisions[1] = 'Reddedilen alternatif: kör tekrar; hata nedeni bilinmiyor.';
+  c.options[0].tradeoffs = ['Kazanım: kanıt; kayıp: inceleme süresi'];
+  assert.deepEqual(prepare(c, policy).diagnostics.sufficiencyRisks.warnings, []);
+});
+test('warnings are journaled locally but do not change or accompany provider state/questions', async () => sandbox(async root => {
+  const c = fixture(); c.options[0].evidenceIds = [];
+  let calls = 0;
+  const result = await consult(config, policy, c, root, key, async (...args) => {
+    calls++;
+    const wire = JSON.parse(args[1].body);
+    assert.deepEqual(Object.keys(wire).sort(), ['model', 'questions', 'state']);
+    assert.deepEqual(Object.keys(wire.state).sort(), ['case', 'northStar']);
+    assert.deepEqual(wire.state.case, c);
+    assert.equal(JSON.stringify(wire).includes('OPTION_WITHOUT_EVIDENCE'), false);
+    return transport(...args);
+  });
+  assert.equal(calls, 1); assert.equal(result.status, 'advice');
+  const request = await readEvent(result.directory, 'request.json');
+  assert.ok(request.diagnostics.sufficiencyRisks.warnings.some(w => w.code === 'OPTION_WITHOUT_EVIDENCE'));
+}));
 test('future evidence is rejected before journal or transport work', async () => sandbox(async root => {
   let calls = 0;
   const c = fixture(); c.evidence[0].observedAt = '9999-12-31T23:59:59Z';

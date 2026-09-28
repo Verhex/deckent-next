@@ -198,6 +198,34 @@ use independent tests/reviews to assess quality. No automatic training or behavi
 
 Owner 2026-09-19: Jev choice consultations must always include both none_of_the_above and insufficient_information. Report their probabilities and selection counts separately; neither alone proves why the option space or context failed. Preserve historical defer records without relabeling. Review config schemaVersion=2; low-level transport remains generic, normal development consultations use the preparation layer.
 
+### Context sufficiency preparation — owner 2026-09-28
+
+For this development workflow, report selection probability against 0.90 and context sufficiency
+against 0.75; aim for at least 0.85 sufficiency on the first well-prepared call. These are owner
+review criteria, not automatic tool gates or evidence of decision correctness. Never repeat an
+unchanged question to chase a score. Preserve option meaning in context-only comparisons.
+
+Before asking: pin the decision-time revision and scope; state accepted decisions and why any
+reopening is justified; distinguish observed facts, proposals, assumptions and unknowns. Supply
+short sanitized observations/excerpts, including contrary evidence, not only source paths (Jev
+cannot open them). Explain how each observation distinguishes the actions; connect each check
+to the specific supporting evidence and state unproven paths. For each option write concrete
+Gain/Loss (Kazanım/Kayıp), north-star impact and remaining proof gaps. Describe rejected alternatives
+and their reasons in existing process/constraints/evidence fields; if none apply, say so without
+inventing them. For speed/cost/scale claims supply measurements with workload, environment and
+revision, or explicitly mark a hypothesis. Do not turn a planned test into a passed test.
+
+`prepare` now returns `diagnostics.sufficiencyRisks` (version 1, advisory-only). Warnings flag
+empty option references, identical evidence sets/actions/impacts, locator-only observations,
+checks citing only explicitly tagged `[plan]`/`[assumption]`/`[hypothesis]` (also `[varsayım]`/
+`[hipotez]`), and lexical signs of missing measurements, balanced tradeoffs, rejected alternatives
+or unknowns. Warnings describe review prompts, not semantic defects: common evidence may be valid,
+a missing warning is not proof, and English/Turkish lexical hints can miss prose or flag valid text.
+Do not add words or unrelated numbers merely to clear warnings. Empty/dangling check references
+remain schema errors. Case schema v2, prepared questions and provider state are unchanged; warnings
+stay in local diagnostics/journal and never become additional model context. No source retrieval,
+auto-rewrite, automatic sanitization, retry, confidence score or acceptance is added.
+
 ## Development duration measurement — owner 2026-09-22 (A02/W0-3)
 
 Record every slice with `node .agents/refactor/effort.mjs`: `start <CARD-slice> --milestone M1..M5 --title --actor [--kind active]`,
