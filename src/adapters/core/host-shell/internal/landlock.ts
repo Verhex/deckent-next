@@ -1,5 +1,5 @@
 import type { Dirent } from 'node:fs';
-import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
@@ -7,6 +7,7 @@ import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout } from './realm.js';
 import { BASH_LAUNCH, runShellProcess } from './run.js';
 import { scanGitDirectory } from './git-objects.js';
+import { fsOpsFor, type FsOps } from './fs-ops.js';
 
 /** Rule classes the native helper maps to Landlock rights: `x` read + execute, `r` read, `w` read-write (no device nodes),
  * `l` list the directory only, `d` a device file (read/write). */
@@ -45,7 +46,8 @@ export async function gitWorktreeRepository(root: string): Promise<string | null
  * Symbolic links take no rule (access through one resolves to its target's own rule). Ignored directories (node_modules, dist, …)
  * are not scanned and are read-write as a whole. Past a bound the set is refused, never cut.
  */
-export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {}): Promise<LandlockRuleSet> {
+export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {},
+  fsOps: (path: string) => FsOps = fsOpsFor): Promise<LandlockRuleSet> {
   const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied, ignoredDirs } = input.project;
   let seen = 0;
   let gitSeen = 0;
@@ -57,7 +59,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
    * objects stay readable when their content verifies against their name; any other multi-linked file is closed (`scanGitDirectory`).
    */
   const scanGit = async (dir: string, rulePath: string, depth: number): Promise<readonly LandlockRule[]> => {
-    const scanned = await scanGitDirectory(dir);
+    const scanned = await scanGitDirectory(dir, fsOps(dir));
     if (!scanned.readable) return [];
     if ((gitSeen += scanned.suspectFiles.length + scanned.cleanFiles.length + scanned.directories.length) > limit.maxGitEntries) {
       throw new BoundExceeded(`the git metadata has more than ${limit.maxGitEntries} entries to scan`);
@@ -80,7 +82,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const carveProtected = async (rel: string, depth: number): Promise<readonly LandlockRule[]> => {
     let entries: Dirent[];
-    try { entries = await readdir(join(root, rel), { withFileTypes: true }); } catch { return []; }
+    const path = join(root, rel);
+    try { entries = await fsOps(path).readdir(path); } catch { return []; }
     if ((seen += entries.length) > limit.maxEntries) throw new BoundExceeded(`the project has more than ${limit.maxEntries} entries to scan`);
     if (depth + 1 > limit.maxDepth) throw new BoundExceeded(`the project is deeper than ${limit.maxDepth} directories`);
     const rules: LandlockRule[] = [['l', rel]];
@@ -95,7 +98,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   };
   const scan = async (rel: string, depth: number): Promise<readonly LandlockRule[] | null> => {
     let entries: Dirent[];
-    try { entries = await readdir(rel === '.' ? root : join(root, rel), { withFileTypes: true }); } catch { return []; }
+    const dir = rel === '.' ? root : join(root, rel), ops = fsOps(dir);
+    try { entries = await ops.readdir(dir); } catch { return []; }
     if ((seen += entries.length) > limit.maxEntries) throw new BoundExceeded(`the project has more than ${limit.maxEntries} entries to scan`);
     // One verdict per entry, siblings (and their subtrees) examined concurrently: a clean path, carved rules, or nothing (no rule).
     const verdicts = await Promise.all(entries.map(async (entry): Promise<{ readonly clean?: string; readonly rules?: readonly LandlockRule[]; readonly carve: boolean }> => {
@@ -105,7 +109,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (entry.name === '.git') {
         if (entry.isSymbolicLink()) return { rules: [], carve: true };
         if (entry.isDirectory()) return { rules: await scanGit(join(root, child), child, 0), carve: true };
-        return { rules: await lstat(join(root, child)).then(info => info.nlink === 1, () => false) ? [['r', child]] : [], carve: true };
+        return { rules: await ops.nlink(join(root, child)) === 1 ? [['r', child]] : [], carve: true };
       }
       if (entry.isSymbolicLink()) { if (onChain(child)) throw new BoundExceeded(`protected product state lies behind a symbolic link (${child})`); return { carve: false }; }
       if (denied(child)) return { carve: true };
@@ -115,7 +119,7 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
         const inner = await scan(child, depth + 1);
         return inner === null ? { clean: child, carve: false } : { rules: inner, carve: true };
       }
-      return entry.isFile() && await lstat(join(root, child)).then(info => info.nlink === 1, () => false) ? { clean: child, carve: false } : { carve: true };
+      return entry.isFile() && await ops.nlink(join(root, child)) === 1 ? { clean: child, carve: false } : { carve: true };
     }));
     if (!verdicts.some(verdict => verdict.carve)) return null;
     return [['l', rel], ...verdicts.flatMap(verdict => verdict.clean ? [['w', verdict.clean] as const] : []), ...verdicts.flatMap(verdict => verdict.rules ?? [])];

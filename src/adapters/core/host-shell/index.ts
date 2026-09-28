@@ -7,3 +7,4 @@ export { HOST_SHELL_POSTURE, hostShellRealm, resolveShellRealm, type ShellRealmR
 export { describeHostShellResult, hostShellCleanupNote } from './internal/result.js';
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
 export { isVerifiedGitObject, scanGitDirectory, type GitDirectoryScan } from './internal/git-objects.js';
+export { ASYNC_FS_OPS, fsOpsFor, LOCAL_FILESYSTEM_TYPES, SYNC_FS_OPS, type FsOps } from './internal/fs-ops.js';
