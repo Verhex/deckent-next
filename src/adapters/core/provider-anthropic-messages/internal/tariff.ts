@@ -28,7 +28,8 @@ export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, c
   return Number(minor);
 }
 
-export type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string }>;
+export type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string;
+  definition: unknown; limits: unknown }>;
 
 /** Pure, repeatable quote for the exact prepared request: published tariff from the profile, real reservation bound. */
 export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInput, prepared: AnthropicPreparedView): ProviderSpendQuote {
@@ -38,6 +39,8 @@ export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInpu
   const request = parseOpenAiChatTextRequest(input.command.nativeRequest, definition);
   if (request.model !== binding.model.nativeId || request.model !== definition.tariff.modelId || prepared.request.model !== request.model
     || prepared.request.max_completion_tokens !== request.max_completion_tokens || prepared.scopeId !== profile.scopeId
+    // The token must come from this very profile (endpoint, key reference, tariff, thinking and cache choices, limits), not a sibling one.
+    || !isDeepStrictEqual(prepared.definition, definition) || !isDeepStrictEqual(prepared.limits, profile.limits)
     || !isDeepStrictEqual(input.command.reference, profile.reference) || input.command.expectedBinding.digest !== profile.bindingDigest
     || input.command.scopeId !== profile.scopeId || modelInvocationRequestDigest(input.command) !== input.requestDigest
     || modelInvocationProfileDigest(profile) !== input.profileDigest) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');

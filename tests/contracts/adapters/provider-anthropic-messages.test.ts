@@ -257,6 +257,9 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
   expect(priced.quote({ ...spending, prepared: token } as never)).toEqual(quote);
   expect(() => priced.quote({ ...spending, requestDigest: 'b'.repeat(64), prepared: token } as never)).toThrow();
   expect(() => priced.quote({ ...spending, prepared: {} } as never)).toThrow();
-  expect(() => quoteAnthropicPublishedTariff({ ...spending, prepared: token } as never, { body: '{}', request: { model: 'other', max_completion_tokens: 64 }, scopeId: 'scope' })).toThrow();
+  expect(() => quoteAnthropicPublishedTariff({ ...spending, prepared: token } as never, { body: '{}', request: { model: 'other', max_completion_tokens: 64 }, scopeId: 'scope', definition: {}, limits: {} })).toThrow();
+  // A prepared token of a sibling profile (same scope and model, other endpoint or cache choice) can never back this profile's quote.
+  const sibling = await priced.native.prepare(profile(endpoint, { cache: '1h' }), binding(), request);
+  expect(() => priced.quote({ ...spending, prepared: sibling } as never)).toThrow();
   expect(priced.native.responseBytesUpperBound!(token)).toBeGreaterThan(BigInt(limits.responseMaxBytes));
 });
