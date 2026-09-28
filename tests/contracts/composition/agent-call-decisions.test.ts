@@ -7,7 +7,7 @@ import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { createAgentCallDecisions } from '#composition/core/agent-turn/index.js';
+import { createAgentCallDecisions, shellWritePosture, type ShellCallAuthority } from '#composition/core/agent-turn/index.js';
 
 // T-L4 slice 4a (MODES-3: a bindings v2 `auto-edit` entry reads as standart, `ask` as standart that asks for every edit too): the turn's
 // permission decision is taken again at the effect on the policy as it is then. A relaxation writes its audit
@@ -248,6 +248,23 @@ describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
       await f.decisions.authorize(edit, args);
       await f.execute();
       expect({ label, authority: f.authority() }).toEqual({ label, authority });
+    }
+  });
+
+  // The one posture derivation, pinned per owner rule (2026-09-29): full access is comprehensive (never project read-only; only the configuration
+  // file, its turn's floor, stays read-only); standart/full-auto keep the Astra 2170 postures; a revoked full-access turn's unattended call is
+  // read-only whatever its tier.
+  it('derives every write posture from the call authority, the tier and the turn', () => {
+    const tiers = ['read-none', 'read-low', 'narrow-mutating', 'destructive', 'always-ask', 'other-modify'] as const;
+    for (const authority of ['owner-approved', 'full-access', 'unattended'] as const satisfies readonly ShellCallAuthority[]) {
+      for (const tier of tiers) {
+        for (const fullAccessTurn of [false, true]) {
+          const expected = authority === 'owner-approved' ? { writeFloorReadOnly: false, projectReadOnly: false }
+            : authority === 'full-access' ? { writeFloorReadOnly: true, projectReadOnly: false }
+              : { writeFloorReadOnly: true, projectReadOnly: fullAccessTurn || tier !== 'narrow-mutating' };
+          expect({ authority, tier, fullAccessTurn, ...shellWritePosture(authority, tier, fullAccessTurn) }).toEqual({ authority, tier, fullAccessTurn, ...expected });
+        }
+      }
     }
   });
 });
