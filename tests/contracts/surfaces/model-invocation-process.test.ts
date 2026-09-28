@@ -387,6 +387,8 @@ async function hostileProxyEnvironment(home: string) {
     HTTP_PROXY: `http://127.0.0.1:${address.port}`, NO_PROXY: '' } };
 }
 
+// Temporary per-test bound (batch 6, 2026-09-29): measured alone 27.4-28.0 s on 6b57cd0 and c0cec98 (no regression); under the 4-worker full
+// verify it crossed the 30 s default. The CLI/MCP startup cost fix (STARTUP-COST, 3f879c6, batch 7) halves process start; restore the default then.
 it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -535,4 +537,4 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   expect(proxyRequests()).toBe(0);
   // Requests are represented by digests, not separately persisted raw prompts; rejected response evidence may itself echo one.
   expect((await readFile(ledger)).includes(Buffer.from('prompt-first'))).toBe(false);
-});
+}, 45_000);
