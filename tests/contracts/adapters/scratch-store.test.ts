@@ -17,7 +17,7 @@ async function area(sessionId = 's1') {
   await Promise.all([mkdir(root, { mode: 0o700 }), mkdir(outside), mkdir(join(project, 'src'), { recursive: true })]);
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
   const key = scratchSessionKey({ scopeId: 'scope', principal: { issuer: 'host', subject: '1000' }, sessionId });
-  const session = await openScratchSession(root, key, limits);
+  const session = await openScratchSession(root, key, limits, createScratchActivity());
   return { base, root, outside, project, key, session, journal: join(base, 'journal') };
 }
 const write = (key: string, path: string, content: string, commandId = 'c'.repeat(64)) => ({ target: { kind: 'scratch-file', id: `${key}/${path}` },
@@ -73,7 +73,7 @@ describe.skipIf(process.platform !== 'linux')('scratch store (SCR-A)', () => {
   it('sweeps areas unused past retention, never one a running turn holds, and removes it once released', async () => {
     const f = await area();
     await writeFile(join(f.session.dir, 'old.txt'), 'old'); await age(f.session.dir, Date.now() - 8 * DAY_MS);
-    const activity = createScratchActivity(), release = activity.hold(f.key), again = activity.hold(f.key);
+    const activity = createScratchActivity(), release = await activity.hold(f.key), again = await activity.hold(f.key);
     expect(await sweepScratch(f.root, limits, Date.now(), activity)).toEqual({ removedSessions: 0, removedBytes: 0, kept: 1, unreadable: 0 });
     expect(await readdir(f.session.dir)).toEqual(['old.txt']);
     release(); release();
