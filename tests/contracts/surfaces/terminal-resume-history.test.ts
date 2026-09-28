@@ -55,3 +55,24 @@ describe('/resume through the real workline (TERM-UX-1 b)', () => {
     expect(sent[0]!.map(message => message.content)).toEqual(['SYSTEM', 'old question', 'OLD-ANSWER-TEXT', 'next']);
   });
 });
+
+// The replay and the /context split recognize the engine's summary message and the composition's attached-file blocks by their text:
+// these tests keep that coupling honest (a changed marker would otherwise leak a summary or an attachment body silently).
+describe('markers shared with the engine and the mention composition', () => {
+  it('a real compaction message replays as one marker and a real attached-file block is neither replayed nor counted as typed text', async () => {
+    const { planAgentCompaction, renderAgentCompaction } = await import('#engine/index.js');
+    const { attachTerminalMentions } = await import('#composition/core/terminal-chat/index.js');
+    const { contextBreakdown } = await import('#surfaces/core/terminal-render/index.js');
+    const older = Array.from({ length: 14 }, (_, index) => index % 2 ? assistant(`a${index}`) : user(`u${index}`));
+    const plan = planAgentCompaction(older)!;
+    const summary = renderAgentCompaction(plan, { objective: 'goal', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] });
+    const excerpt = renderAgentCompaction(plan, null);
+    expect(texts(resumedHistoryEntries([summary, excerpt]))).toEqual(['notice:· summary', 'notice:· summary']);
+    const attached = await attachTerminalMentions({ projectRoot: '/p', scopeId: 's', text: 'look', paths: ['a.ts'], options: {} }, {
+      find: async () => ({ schemaVersion: 1, paths: [], truncated: false, incomplete: false }),
+      attach: async () => ({ schemaVersion: 1, path: 'a.ts', status: 'attached', content: 'BODY-OF-A', bytes: 9, totalBytes: 9, truncated: false }) });
+    const message = user(attached.content);
+    expect(texts(resumedHistoryEntries([message]))).toEqual(['user:look']);
+    expect(contextBreakdown([message]).attachments).toBeGreaterThan(9);
+  });
+});

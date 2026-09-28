@@ -20,7 +20,7 @@ export interface RuntimeWorkspaceFileHost {
    */
   index(projectRoot: string, deny: readonly string[]): Promise<WorkspaceFileIndex>;
 }
-export function createRuntimeWorkspaceFileHost(ttlMs = 10_000, now: () => number = Date.now, maxStaleMs = 300_000): RuntimeWorkspaceFileHost {
+export function createRuntimeWorkspaceFileHost(ttlMs = 10_000, now: () => number = Date.now, maxStaleMs = 3_600_000): RuntimeWorkspaceFileHost {
   interface Entry { readonly at: number; readonly index: Promise<WorkspaceFileIndex>; refreshing: boolean }
   const cached = new Map<string, Entry>();
   const walk = (projectRoot: string, deny: readonly string[]) => createWorkspaceScope(projectRoot, deny).then(scope => indexWorkspaceFiles(scope));
