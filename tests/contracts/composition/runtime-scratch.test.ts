@@ -153,7 +153,7 @@ const ageTree = async (dir: string, atMs: number) => {
 
 describe.skipIf(process.platform !== 'linux')('agent scratch area: shell, retention and /scratch (SCR-A S3–S4, v16)', () => {
   it('gives run_shell the conversation scratch as TMPDIR (over the service value), reads an absolute scratch path without asking, asks for another area', async () => {
-    const f = await runtime({ extraGrants: [...scratchGrants('allow'), ...shellGrants], shell: { schemaVersion: 1, environment: ['TMPDIR'] } }); await f.start();
+    const f = await runtime({ extraGrants: [...scratchGrants('allow'), ...shellGrants], shell: { schemaVersion: 1, environment: ['TMPDIR'] }, sandboxes: () => [] }); await f.start();
     // The service's own TMPDIR (and the operator naming it in `terminal.shell.environment`) never reaches the agent's shell.
     vi.stubEnv('TMPDIR', '/tmp/operator-tmp');
     try {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import type { HostShellResult } from './run.js';
-import { hostShellRealm, type ShellRealmResolution } from './realm.js';
+import { HOST_SHELL_POSTURE, hostShellRealm, type ShellRealmResolution } from './realm.js';
 
 export const HOST_SHELL_TARGET_KIND = 'host-shell';
 /** Core operation of an agent shell command (catalog data in code for the built-in Core target). Policy-gated: which commands ask is
@@ -14,7 +14,7 @@ export const HOST_SHELL_RUN_OPERATION = Object.freeze({ schemaVersion: 1 as cons
 export const HOST_SHELL_COMMAND_MAX_CHARS = 16_384;
 
 export const RUN_SHELL_TOOL_SPEC: AgentToolSpec = Object.freeze({ name: 'run_shell', version: 1, toolClass: 'shell' as const,
-  description: 'Run a bash command in the project root on the user\'s machine and return its output (not a sandbox: it runs as the user). '
+  description: 'Run a bash command in the project root on the user\'s machine and return its output (as the user; whether it runs in a sandbox is shown when it asks). '
     + 'Read-only commands (ls, cat, grep on named files, git status/diff/log) may run without asking; anything that changes files or state, '
     + 'traverses the whole tree, or is destructive is shown to the owner first. No interactive input; long output is shortened.',
   inputSchema: { type: 'object' as const, required: ['command'], properties: { command: { type: 'string', description: 'The bash command line' } } } });
@@ -38,7 +38,7 @@ export class HostShellTarget implements EffectTarget {
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
-    const selection = this.run.realm ?? { ok: true, realm: hostShellRealm, notice: null };
+    const selection = this.run.realm ?? { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: HOST_SHELL_POSTURE };
     if (!selection.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     if (selection.notice) this.run.onOutput('stderr', `${selection.notice}\n`);
     const result = await selection.realm.run({ command: parsed.data.command, cwd: this.cwd, timeoutMs: this.run.timeoutMs, extraEnv: this.run.extraEnv,

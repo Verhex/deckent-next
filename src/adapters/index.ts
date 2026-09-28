@@ -63,5 +63,6 @@ export * from '#adapters/core/sqlite-agent-turn/index.js';
 export * from '#adapters/core/workspace-write/index.js';
 export * from '#adapters/core/shell-paths/index.js';
 export * from '#adapters/core/host-shell/index.js';
+export * from '#adapters/core/shell-sandbox-bwrap/index.js';
 export * from '#adapters/core/scratch-store/index.js';
 export * from '#adapters/core/http-fetch/index.js';

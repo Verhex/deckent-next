@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import { homedir, hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
-import { openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore } from '#adapters/index.js';
+import { landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
@@ -23,6 +23,13 @@ import { invokeConfiguredModel } from '#composition/core/model-invocation/index.
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
+// S9: the real host measurement gates the bubblewrap turn; other shell tests pin the realm to `host` or inject `() => []`.
+const measured = await probeShellCapabilities();
+const sandboxReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const kernelLandlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
+/** S11 through the port: only the Landlock provider, judged against an injected measurement (the kernel's ABI, or one it does not have). */
+const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
+  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi } }) }];
 afterEach(async () => {
   for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
@@ -43,7 +50,9 @@ type Script = { toolCall?: { name: string; arguments: string }; content?: string
 async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
-  thinkingSwitch?: boolean; dataInside?: boolean; shellRealm?: 'host' | 'prefer-sandbox' | 'require-sandbox' | 'absent' } = {}) {
+  thinkingSwitch?: boolean; dataInside?: boolean; shellRealm?: 'host' | 'prefer-sandbox' | 'require-sandbox' | 'absent';
+  /** S9: the sandbox providers a turn may pick (code-only port); `() => []` is the "no sandbox mechanism usable" host. */
+  sandboxes?: ShellSandboxFactory } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
@@ -125,7 +134,7 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
     const service = await startConfiguredRuntimeService(project, observed ? { async onPage() {}, async onError() {},
       onAgentTurnsInterrupted(result) { interrupted.push(result); }, onToolCallApprovalsExpired(result) { swept.push(result); },
       onModelAllocationSlotsReleased(result) { released.push(result); } }
-      : { async onPage() {}, async onError() {} }, { env });
+      : { async onPage() {}, async onError() {} }, { env }, options.sandboxes ? { shellSandboxes: options.sandboxes } : {});
     services.push(service); return service;
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
@@ -666,7 +675,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   }
 
   it('S5 default prefer-sandbox shows host fallback before output and in the durable/model result', async () => {
-    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'absent' }); await f.start();
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'absent', sandboxes: () => [] }); await f.start();
     f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Done.' }];
     const events: AgentTurnStreamEvent[] = [];
     await f.client().chatTurn(ask('turn-realm-prefer'), event => events.push(event));
@@ -679,7 +688,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
   });
 
   it('S5 require-sandbox refuses before approval, effect intent and process creation', async () => {
-    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox' }); await f.start();
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox', sandboxes: () => [] }); await f.start();
     f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"touch must-not-exist"}' } }, { content: 'Refused.' }];
     const events: AgentTurnStreamEvent[] = [];
     const client = f.client(), pending: Promise<unknown>[] = [];
@@ -695,6 +704,37 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([]);
     await expect(readFile(join(f.project, 'must-not-exist'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  // S9: on a host with bubblewrap and a user namespace, require-sandbox runs the command in the bubblewrap realm through the same
+  // policy → classification → approval → C11 path: the card says so, no fallback note anywhere, the deny floor and HOME are hidden,
+  // the project write lands, and the scratch area (TMPDIR) is writable.
+  it.skipIf(!sandboxReady)('S9 require-sandbox runs a modifying command in the bubblewrap realm after approval, hiding secrets and HOME', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox' }); await f.start();
+    await writeFile(join(f.project, '.env'), 'SECRET-ENV\n');
+    // The command's HOME is the service process's own (host-shell allowlist), not the fixture's: a regular file that exists there must not exist inside.
+    const serviceHome = process.env['HOME'] ?? homedir();
+    const homeFile = (await readdir(serviceHome, { withFileTypes: true })).find(entry => entry.isFile())?.name ?? '.no-such-file';
+    const command = `cat .env 2>&1; test -e "$HOME/${homeFile}"; echo "home-file=$?"; echo "home-files=$(find "$HOME" -maxdepth 1 -type f | wc -l)"; echo made > made.txt; echo scratch > "$TMPDIR/s.txt"`;
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: JSON.stringify({ command }) } }, { content: 'Done.' }];
+    const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    const client = f.client();
+    await client.chatTurn(ask('turn-realm-bwrap'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        commandId: 'allow-bwrap', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('bubblewrap sandbox') });
+    expect(events.find(event => event.kind === 'approval.requested')).not.toMatchObject({ preview: expect.stringContaining('not a sandbox') });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ name: 'run_shell', status: 'ok', cleanup: 'clean' });
+    expect(JSON.stringify(events)).not.toContain('sandbox: none'); expect(JSON.stringify(events)).not.toContain('SECRET');
+    expect(toolText(events)).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0 after [\d.]+s \(cat \.env/u);
+    expect(toolText(events)).toMatch(/cat: \.env: Permission denied/u); expect(toolText(events)).toMatch(/home-file=1\nhome-files=0\n/u);
+    expect(await readFile(join(serviceHome, homeFile))).toBeDefined();
+    expect(await readFile(join(f.project, 'made.txt'), 'utf8')).toBe('made\n');
+    expect((await readdir(join(f.data, 'state', 'scratch'), { recursive: true })).some(entry => String(entry).endsWith('s.txt'))).toBe(true);
+    expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }]);
+  }, 30_000);
 
   // T-L4 slice 3c (Jev 82858581): run_shell as a C11 effect of host.shell.run. Only a read-only command of bounded reach runs silently.
   it('runs a read-only command of bounded reach without asking, streams its output and settles a host.shell.run effect (T-L4 slice 3c)', async () => {
@@ -1389,4 +1429,43 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       expect(view.stdout.text).not.toContain('UNKNOWN');
     } finally { view.instance.unmount(); }
   }, 30_000);
+});
+
+// S11: a real turn through the service with Landlock chosen from injected capabilities (its own block: line bound of the main one).
+describe.skipIf(process.platform !== 'linux')('agent shell in the Landlock realm (S11)', () => {
+  it.skipIf(kernelLandlockAbi < 1)('S11 a sandbox that cannot be set up runs nothing: the effect is refused and the reason reaches the model', async () => {
+    // The measured posture promises more than the kernel offers (a probe older than the kernel): the helper refuses before exec.
+    {
+      const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'require-sandbox', sandboxes: landlockOnly(kernelLandlockAbi + 1) }); await f.start();
+      f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } }, { content: 'Done.' }];
+      const events: AgentTurnStreamEvent[] = [];
+      await f.client().chatTurn(ask('turn-realm-landlock-setup'), event => events.push(event));
+      expect(toolText(events)).toMatch(/^\[deckent\] run_shell: sandbox: landlock; spawn-failed after [\d.]+s \(cat src\/a\.ts\)\n\[deckent\] shell-sandbox: .*; nothing was run\.$/u);
+      expect(toolText(events)).not.toContain('export const a');
+      expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'refused' }]);
+    }
+  });
+  it.skipIf(kernelLandlockAbi < 1)('S11 prefer-sandbox with Landlock runs the command confined: realm named in preview and result, outside files unreadable', async () => {
+    {
+      const f = await runtime({ toolGrant: false, extraGrants: shellGrants('allow'), shellRealm: 'absent', sandboxes: landlockOnly(kernelLandlockAbi) }); await f.start();
+      const outside = join(f.project, '..', 'home', 'secret.txt');
+      await writeFile(outside, 'OUTSIDE_SECRET\n', { mode: 0o600 });
+      f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"cat src/a.ts"}' } },
+        { toolCall: { name: 'run_shell', arguments: JSON.stringify({ command: `cat ${outside}` }) } }, { content: 'Done.' }];
+      const events: AgentTurnStreamEvent[] = [], client = f.client(), pending: Promise<unknown>[] = [];
+      await client.chatTurn(ask('turn-realm-landlock'), event => {
+        events.push(event);
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          commandId: 'landlock-outside', expectedRevision: event.revision, decision: 'allow', reason: 'The sandbox must refuse it' }));
+      });
+      await Promise.all(pending);
+      const texts = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+      expect(texts[0]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 0 after [\d.]+s \(cat src\/a\.ts\)\nexport const a = 1;\n$/u);
+      expect(texts[1]).toMatch(/^\[deckent\] run_shell: sandbox: landlock; exit 1 /u);
+      expect(texts[1]).toContain('Permission denied'); expect(texts[1]).not.toContain('OUTSIDE_SECRET');
+      expect(events.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('Landlock') });
+      expect(events.some(event => event.kind === 'tool.output' && event.text.includes('sandbox: none'))).toBe(false);
+      expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }, { target_kind: 'host-shell', state: 'settled' }]);
+    }
+  });
 });

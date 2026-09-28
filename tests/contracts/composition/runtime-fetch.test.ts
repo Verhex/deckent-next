@@ -207,7 +207,7 @@ describe.skipIf(process.platform !== 'linux')('company policy narrows the agent 
     const t = await tlsFixture();
     const shellGrants = [{ id: 'shell-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
       { id: 'shell-op', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } }];
-    const f = await runtime({ extraGrants: [...fetchGrants(), ...shellGrants], fetch: fetchSection('none'), shell: { schemaVersion: 1, realm: 'require-sandbox' },
+    const f = await runtime({ extraGrants: [...fetchGrants(), ...shellGrants], fetch: fetchSection('none'), shell: { schemaVersion: 1, realm: 'require-sandbox' }, sandboxes: () => [],
       scratch: { schemaVersion: 1, retentionDays: 1 }, fetchTransport: t.transport }); await f.start();
     f.state.script = [call('run_shell', { command: 'curl https://docs.example/x' }), { content: 'Offline.' }, call('fetch_url', { url: 'https://docs.example/x' })];
     const shell = await answered(f, 'turn-airgap', 'allow');

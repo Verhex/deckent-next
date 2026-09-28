@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
+import { openSqliteModelActivationStore, probeShellCapabilities, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
@@ -21,6 +21,8 @@ const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
+// S9: what the service process measures on this host decides whether the shell call below ran in the bubblewrap realm.
+const measured = await probeShellCapabilities();
 afterEach(async () => {
   for (const child of runtimes.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await new Promise<void>(done => child.once('exit', () => done())); }
@@ -180,6 +182,8 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     expect(run.output).not.toContain('Unknown command');
+    // S9: the default realm is prefer-sandbox; on a host with bubblewrap the shell ran sandboxed, so no fallback notice reached the terminal.
+    if (measured.bubblewrap === 'available' && measured.userNamespace === 'available') expect(run.output).not.toContain('sandbox: none');
     // The model saw one area for the whole turn; the listing named both files, then the area was emptied (the directory stays).
     expect(new Set(f.seen.scratch).size).toBe(1);
     const area = f.seen.scratch[0]!;
