@@ -19,8 +19,8 @@ export const describeAgentCall = (tool: AgentToolSpec, args: Record<string, unkn
  * neither admits anything — the engine gate reads and verifies the durable record.
  */
 export function createAgentCallApprovals(input: { readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly clock: TrustedClock;
-  readonly scopeId: string; readonly turnId: string }) {
-  const { context, clock, scopeId, turnId } = input;
+  readonly scopeId: string; readonly turnId: string; readonly describe?: typeof describeAgentCall }) {
+  const { context, clock, scopeId, turnId } = input, describe = input.describe ?? describeAgentCall;
   const allowed = new Map<string, NonNullable<AgentToolCallAdmission['approval']>>(), consumed = new Map<string, string>();
   const position = (execution: Execution) => `${execution.round}\0${execution.index}`;
   const subject = (execution: Execution, tool: AgentToolSpec, target: string | null, argsDigest: string) => ({ kind: 'agent-tool-call' as const,
@@ -42,7 +42,7 @@ export function createAgentCallApprovals(input: { readonly context: Awaited<Retu
         catch (error) { journal.close(); throw error; }
       })());
       const gate = agentToolCallApprovalGate(records, clock, { scopeId,
-        subject: subject(execution, tool, describeAgentCall(tool, args), agentToolArgumentsDigest(tool.name, args)), approval }, consumed);
+        subject: subject(execution, tool, describe(tool, args), agentToolArgumentsDigest(tool.name, args)), approval }, consumed);
       return { gate, async close() { if (opened) (await opened.catch(() => null))?.close(); } };
     },
   };

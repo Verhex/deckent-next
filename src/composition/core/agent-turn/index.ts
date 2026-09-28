@@ -9,3 +9,4 @@ export { sweepFullPreviews } from './internal/preview.js';
 export { attachPeerWorkspaceFile, createRuntimeWorkspaceFileHost, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export type { RuntimeWorkspaceFileHost } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';
+export { inspectConfiguredMcpServers } from './internal/mcp.js';

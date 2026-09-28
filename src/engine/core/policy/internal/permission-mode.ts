@@ -6,34 +6,37 @@ import { evaluatePolicy, identitySchema, modeEligibleApproval, policyResources, 
  * call); this module only decides. `edit`: a write outside the write floor; `edit-floor`: a write the floor always asks for;
  * shell cells come from the classifier's tiers (`shell-read-none` runs silently under allow; `shell-narrow-mutating` is the
  * owner's q1 set). `read` is a read tool. A fetch (FETCH S7) is `fetch-listed` (an allowlisted host: the policy decision stands) or
- * `fetch-unlisted` (any other host: allow asks); neither is ever relaxable, so no permission mode lowers a fetch (owner 2026-09-28).
+ * `fetch-unlisted` (any other host: allow asks); neither is ever relaxable, so no permission mode lowers a fetch (owner 2026-09-28). An MCP
+ * tool call (MCP-CLIENT, owner 2026-09-28 S6 a) asks by default even under allow: `mcp-call` may be lowered in full-auto only ("full access
+ * does not ask again"), `mcp-floor` (the owner's `alwaysAsk` pin or a pinned `destructiveHint`) never.
  */
 export type AgentToolCallCell = 'read' | 'edit' | 'edit-floor' | 'shell-read-none' | 'shell-read-low' | 'shell-narrow-mutating' | 'shell-destructive'
-  | 'shell-always-ask' | 'shell-other-modify' | 'fetch-listed' | 'fetch-unlisted';
+  | 'shell-always-ask' | 'shell-other-modify' | 'fetch-listed' | 'fetch-unlisted' | 'mcp-call' | 'mcp-floor';
 /** Cells that ask even when every policy says allow (the floor raise). A mode never removes this raise by itself. */
 const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive', 'shell-always-ask', 'shell-other-modify',
-  'fetch-unlisted']);
+  'fetch-unlisted', 'mcp-call', 'mcp-floor']);
 /**
  * The only cells a mode may lower, and in which modes (owner 2026-09-27): an ordinary edit in auto-edit and full-auto; the narrow
  * mutating shell set in full-auto only. Everything else — read tools, the write floor, `low`, destructive, always-ask, other
  * `modify`, and (conservatively) a read-only shell command under require-approval — asks in every mode.
  */
-const RELAXABLE: Readonly<Partial<Record<AgentToolCallCell, { readonly modes: readonly PermissionMode[]; readonly audit: 'edit-non-floor' | 'shell-modify' }>>> = {
+const RELAXABLE: Readonly<Partial<Record<AgentToolCallCell, { readonly modes: readonly PermissionMode[]; readonly audit: PermissionModeRelaxation['cell'] }>>> = {
   edit: { modes: ['auto-edit', 'full-auto'], audit: 'edit-non-floor' },
   'shell-narrow-mutating': { modes: ['full-auto'], audit: 'shell-modify' },
+  'mcp-call': { modes: ['full-auto'], audit: 'mcp-call' },
 };
 
 export interface AgentToolCallRequest {
   readonly principal: VerifiedPrincipal;
   readonly scopeId: string;
   readonly tool: { readonly name: string };
-  /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`, `network.fetch`), or null for a read tool. */
+  /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`, `network.fetch`, `mcp.tool.call`), or null for a read tool. */
   readonly operation: { readonly id: string } | null;
   readonly cell: AgentToolCallCell;
 }
 export interface PermissionModeRelaxation {
   readonly mode: Exclude<PermissionMode, 'ask'>;
-  readonly cell: 'edit-non-floor' | 'shell-modify';
+  readonly cell: 'edit-non-floor' | 'shell-modify' | 'mcp-call';
   /** The lowered company `require-approval` rule ids (sorted, `+`-joined) and the person's mode entry id. */
   readonly company: string;
   readonly person: string;

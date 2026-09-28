@@ -8,11 +8,14 @@ export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
  * What the event summarizes — never the raw command or file content (design note §4): an edit names its workspace-relative
- * path; a shell call keeps the first `AUDIT_SHELL_HEAD_MAX_CHARS` characters (the approval subject's head) and the argument digest.
+ * path; a shell call keeps the first `AUDIT_SHELL_HEAD_MAX_CHARS` characters (the approval subject's head) and the argument digest;
+ * an MCP call its `mcp:<server>/<tool>` name and the argument digest (additive members, schema version 1 unchanged).
  */
 export const auditSummarySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('edit'), path: z.string().min(1).max(4096) }).strict(),
   z.object({ kind: z.literal('shell'), head: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
+  /** An MCP tool call (MCP-CLIENT): the tool as the owner names it (`mcp:<server>/<tool>`) and the argument digest, never the arguments. */
+  z.object({ kind: z.literal('mcp'), tool: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
 ]);
 /** The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). */
 const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto']);
@@ -22,7 +25,7 @@ const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto']);
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 export const auditSubjectSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto']), cell: z.enum(['edit-non-floor', 'shell-modify']),
+  z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict(),
     call: z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict(),
     grants: z.object({ company: identitySchema, person: identitySchema }).strict(),
