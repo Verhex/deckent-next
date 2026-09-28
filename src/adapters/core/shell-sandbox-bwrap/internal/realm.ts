@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, gitWorktreeRepository, runShellProcess, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
@@ -43,26 +43,35 @@ const TOOLCHAIN_DIR_NAMES = new Set(['bin', '.bin', 'sbin']);
 /**
  * PATH directories outside the system prefixes that exist (a toolchain under HOME such as nvm), read-only. Never HOME itself, an
  * ancestor of it (`/home`, `/root`, `/`), the project, the scratch area or any ancestor of those; never a directory that is not a
- * program directory by name (`~/.local` would expose `~/.local/share`).
+ * program directory by name (`~/.local` would expose `~/.local/share`). Every bind source — the entry and each sibling — is its own
+ * canonical directory (no symbolic link in any component: `realpath(path) === path`, `lstat` a directory) checked against the same
+ * exclusions (Astra 2154 R1): `lib -> $HOME` beside a `bin` is not a bind. A symbolic-link toolchain directory is therefore not bound
+ * at all. bubblewrap opens the canonical path at mount time; a component swapped for a link between this check and the mount is the
+ * documented same-user race (as for scratch), not a path this rule opens.
  */
 async function toolchainOf(pathVariable: string | undefined, protectedPaths: { readonly enclosed: readonly string[]; readonly home: string | null }): Promise<string[]> {
   const out: string[] = [];
   const seen = new Set<string>();
   // Skipped: excluded/system prefixes; not a program directory by name; inside or above the project/scratch area; HOME itself or above it
   // (a directory under HOME — nvm, `~/.local/bin` — is what this is for).
-  const skipped = (path: string) => NEVER_BOUND_PREFIXES.some(prefix => under(path, prefix)) || BUBBLEWRAP_SYSTEM_PATHS.some(prefix => under(path, prefix))
-    || !TOOLCHAIN_DIR_NAMES.has(basename(path)) || protectedPaths.enclosed.some(enclosed => under(path, enclosed) || under(enclosed, path))
-    || (protectedPaths.home !== null && under(protectedPaths.home, path));
+  const excluded = (path: string) => NEVER_BOUND_PREFIXES.some(prefix => under(path, prefix)) || BUBBLEWRAP_SYSTEM_PATHS.some(prefix => under(path, prefix))
+    || protectedPaths.enclosed.some(enclosed => under(path, enclosed) || under(enclosed, path)) || (protectedPaths.home !== null && under(protectedPaths.home, path));
+  const skipped = (path: string) => excluded(path) || !TOOLCHAIN_DIR_NAMES.has(basename(path));
+  /** Whether the path is a canonical directory (no link in any component) that the exclusions admit (the name rule is the entry's alone). */
+  const canonicalDirectory = async (path: string): Promise<boolean> => {
+    try { if (!(await lstat(path)).isDirectory() || await realpath(path) !== path) return false; } catch { return false; }
+    return !excluded(path);
+  };
   for (const entry of (pathVariable ?? '').split(':').slice(0, 256)) {
     // Excluded prefixes are decided on the text first: a foreign drive (`/mnt/c/…` on WSL) is never touched (each stat there costs milliseconds).
     if (!isAbsolute(entry) || skipped(entry)) continue;
     let real: string;
-    try { real = await realpath(entry); if (!(await stat(real)).isDirectory()) continue; } catch { continue; }
-    if (skipped(real)) continue;
+    try { real = await realpath(entry); } catch { continue; }
+    if (skipped(real) || !await canonicalDirectory(real)) continue;
     const candidates = basename(real) === 'bin' ? [real, ...['lib', 'lib64', 'libexec'].map(name => join(dirname(real), name))] : [real];
     for (const candidate of candidates) {
       if (seen.has(candidate)) continue;
-      try { if (!(await stat(candidate)).isDirectory()) continue; } catch { continue; }
+      if (!await canonicalDirectory(candidate)) continue;
       seen.add(candidate); out.push(candidate);
     }
   }
@@ -72,7 +81,10 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
 /**
  * Resolves the sandbox's view for a layout: the deny floor is enumerated from the project root (no symlink is followed or masked;
  * `BASELINE`-ignored directories such as `node_modules` and `dist` are not entered), every `.git` becomes read-only, HOME comes
- * from the command's environment. Over the walk bound the view is refused (the command will not run), never left unmasked.
+ * from the command's environment. What the walk could not see is closed, never left read-write (Astra 2154 R3): a directory it
+ * could not read, or one beyond the depth bound, is masked as an empty tmpfs; a regular file with more than one link is masked like
+ * a denied file, because another name of a protected inode would otherwise open it (Astra 2154 R2; the read tools refuse such files
+ * too). Over the entry/mask bounds the view is refused (the command will not run), never left unmasked.
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
   options: Pick<BubblewrapOptions, 'maxEntries'> = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
@@ -82,7 +94,11 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   let entries = 0;
   const walk = async (dir: string, rel: string, depth: number): Promise<string | null> => {
     let names;
-    try { names = await readdir(dir, { withFileTypes: true }); } catch { return null; }
+    try { names = await readdir(dir, { withFileTypes: true }); }
+    catch { if (rel === '') return 'the project root could not be read'; maskedDirectories.push(dir); return null; }
+    // Link counts of this directory's regular files, read concurrently (one lstat each through the thread pool; a failed read masks).
+    const links = new Map(await Promise.all(names.filter(entry => entry.isFile()).map(async entry =>
+      [entry.name, await lstat(join(dir, entry.name)).then(info => info.nlink, () => 2)] as const)));
     for (const entry of names) {
       if (++entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`;
       if (maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX) return `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})`;
@@ -97,11 +113,15 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
         continue;
       }
       if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }
+      // Another name of a protected inode (a hard link) is closed with the inode; a regular single-link file stays open.
+      if (entry.isFile()) { if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path); continue; }
       if (!entry.isDirectory()) continue;
       if (layout.project.denied(`${entryRel}/`)) { maskedDirectories.push(path); continue; }
       // Generated/vendored trees are not entered (their content is not secret-bearing by the floor's definition and can be huge); a
       // directory ignored only by the project's .gitignore (e.g. `.brain/`) is, so `.brain/memory.db*` is masked.
-      if (BASELINE_IGNORED_DIRS.has(entry.name) || depth + 1 > MAX_DEPTH) continue;
+      if (BASELINE_IGNORED_DIRS.has(entry.name)) continue;
+      // Beyond the depth bound nothing is seen, so nothing is opened.
+      if (depth + 1 > MAX_DEPTH) { maskedDirectories.push(path); continue; }
       const refused = await walk(path, entryRel, depth + 1);
       if (refused) return refused;
     }
