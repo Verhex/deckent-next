@@ -3,13 +3,22 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- `origin/main` = `0e0ca63` (altıncı parti; Astra 2167 PASS, kanal REVIEW 2168). Canlı servis `0e0ca63` build'iyle (instance `f810508e…`, owner onayı
-  "Şimdi geç"; kanıt `proof/LIVE-SWITCH-BATCH5-2026-09-28/BATCH6-README.md`), ledger v42, `service.responseMaxBytes` 4 MiB → satır modu yanıt veriyor;
-  canlı policy v2. Geri dönüş: `dd63fd9` build'i + `config-before-batch6.json`. DOGFOOD OFF.
-- Canlı geçişte görülen küçük bulgular: bwrap içinde `ls .deckent/live-data/state` giriş adlarını listeliyor (içerik maskeli, ad düzeyinde meta veri);
-  terminal kapanınca onay bekleyen tur onay TTL'i (9 dk) dolana kadar `running` kalıyor.
-- Ana checkout `dd63fd9` + `0e0ca63` ff; Astra/owner WIP'i (core-memory, `hemen-donulecek-is.md`, `auto-edit-test.txt`) korunuyor; Astra 2167 notları
-  yamada (`.deckent/host/reviews/astra-main-notes-2026-09-29-live6.patch`) ve aşağıya işlendi.
+- **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
+  Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
+  protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
+  grant'ı, full-auto korundu); secret yetkisi `owner-secret-store` (`add-secret-grant.mjs`); secret deposu bilerek env (dosya arka ucu geçişi owner'la).
+  Kanıt `proof/LIVE-SWITCH-BATCH12-2026-09-29/README.md`. Geri dönüş: `0e0ca63` build'i + yedekler (`migrate-backup/` v2 bindings). DOGFOOD OFF.
+- **Canlı bulgu → düzeltme:** ilk kabuk kartı Landlock gösterdi; kök neden next-entry `DECKENT_GLOBAL_HOME` proje içinde → gömülü bwrap kopyası
+  proje içinde → güvenlik kuralı reddetti (doğru) → Landlock'a bildirimsiz düşüş. Düzeltme: next-entry global kökü `~/.local/state/deckent-next-dev`
+  (main `0360bab9`, push bekliyor; canlı build'in parçası değil), yeniden başlatma sonrası kart "Runs in a bubblewrap sandbox …"; ürün bildirimi
+  REALM-NOTICE on üçüncü partide (`bwrap-fallback-investigation.md`).
+- Küçük açıklar (kapanış kanıtı yok): bwrap içinde `ls .deckent/live-data/state` giriş adlarını listeliyor (içerik maskeli); terminal kapanınca onay
+  bekleyen tur onay TTL'i (9 dk) dolana kadar `running` kalıyor.
+- **Astra 2186 (`4a2ac04`) PASS:** R5/R6 kapandı, R1–R4 korunuyor; açık: önceden 1 MiB üstü store kurtarması yok, compact dış dosyada delete
+  `SECRET_STORE_FULL` alabilir (dosya aynı/okunabilir). Ayrıntı PLAN "On ikinci parti".
+- Ana checkout: Astra'nın yerel notları (stash `astra-main-notes-2026-09-29-live12` / `.deckent/host/reviews/…-live12.patch`) on üçüncü partiye
+  işlendi; stash owner/Astra'nın, dokunulmadı.
+- Aşağıdaki yedinci–on ikinci parti bölümleri canlıya alınmış partilerin entegrasyon kaydıdır (sonraki temizlikte COMPLETED-PLAN'a).
 
 ## Dış çalışma alanı sadeleştirmesi — Astra, 2026-09-29
 Owner isteğiyle 7 tüketilmiş devir/plan belgesi ve 18 eski, referanssız kanıt girdisi
@@ -17,13 +26,6 @@ Owner isteğiyle 7 tüketilmiş devir/plan belgesi ve 18 eski, referanssız kan�
 Paket ayrı dizine açılarak ve taşınan özgünler SHA-256 ile doğrulandı; içerik silinmedi. `COMPLETED-PLAN.md`'deki beş tarihsel bağlantı
 yeni yollara çevrildi (hedefler var); diğer iki belge ve 18 kanıt girdisine izli belgelerde referans yok. Manifest aracı sembolik bağları
 izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanıtları ve owner WIP'i yerinde; arşiv için bekleyen silme yok.
-
-## Astra 2167/2168 (2026-09-29)
-- Aday `0e0ca63`: kapsamlı olmayan bağımsız **PASS** (2166 wildcard ürün yolu kapandı: desteklenmeyen etkili yol typed admission reddi; normal/bracket/brace
-  desteği korunuyor). İzole build + native, lint-arch 0, 95/95 hedefli test; gerçek servis başlangıcı ve iki realm'de onaylı tur kanıtı. Opus tam verify logu
-  okundu (412/2763, exit 0; bağımsız tekrar yok). Kanıt `proof/ASTRA-2167-2026-09-29/review.md`; Jev 540a8645 PASS 0,99, yeterlilik 0,79 (tavsiye).
-- Takip: `model-invocation-process` geçici 45 s sınırı yedinci partide kaldırıldı (`3bb8058`, STARTUP-COST sonrası ≈24 s ölçüldü) — tam verify ile
-  doğrulanacak; `LAYOUT_*` typed kodlarının i18n metni küçük takip.
 
 ## Yedinci parti (`integrate/2026-09-28-h`, worktree `/home/alperen/deckent-next-integrate-h`, taban `5b267a9` + main `0e0ca63`)
 - Birleşenler (her biri `--no-ff`):
@@ -116,21 +118,19 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
   derlenmiş dist'ten üç yeni metin en/tr redaktörde değişmiyor; build-dist `--bwrap` + pack-smoke Node 24.15.0 (SQLite tam 3.51.3, taban kabul), 24.21.0 ve
   26.10.0 ✓. Kanıt `proof/INTEGRATE-M-2026-09-29/`.
 - v18 (lead kararı: v17 push edildi → sürüm artışı): secret işlemleri yalnız v18'de, pencere [18,17] yaşam döngüsüyle sınırlı; commit aşağıda.
-- Bilinen sınırlar: canlı v16 servisi [18,17] dışında (owner durdurur ya da tek geçişlik [18,17,16]); mevcut kurulumlarda secret grant'ı elle (§5); Node 26 PTY
+- Bilinen sınırlar: mevcut kurulumlarda secret grant'ı elle (§5; canlıda eklendi); v16 servisi canlı geçişte eski CLI ile durduruldu; Node 26 PTY
   kanıtı yalnız şeritte; eski SQLite'lı gerçek Node ile ret yalnız birim testinde (enjekte sürüm); `ci.yml` lead incelemesi bekliyor.
 
 ## Sıradaki
-1. Push adayı `9a3ef2c` (dokuzuncu parti, H+I+J): Astra 2179 incelemesi → PASS'te push.
-2. Onuncu parti (`integrate/2026-09-29-k`): tam verify → Astra → PASS'te push.
-2a. On birinci parti (`integrate/2026-09-29-l`): lead lane/shell-overlay Astra 2180 R1 düzeltmesini birleştirir → tam verify (gömülü bwrap aşamalı) →
-   Astra → PASS'te push.
-2b. On ikinci parti (`integrate/2026-09-29-m`, DEPS-P0 + SECRET-WRITE): tam verify → Astra → PASS'te push; canlı geçişte owner secret grant'ını ekler
-   (`proof/SECRET-WRITE-2026-09-29/review.md` §5) ve v16 servisinin durdurulma yolu seçilir (elle ya da [18,17,16]).
-4. Owner kararları: PLAN "Onuncu parti" açık kararları (secret set|delete yetkisi — A + S3 kararı verildi, on ikinci partide uygulandı; SHELL-OVERLAY O1/O3/O5/O6/O7;
-   JSON Schema doğrulayıcısı + ReDoS — on birinci partide kapandı, yerine `format` / şema korpusu ölçümü / AppArmor / CI maddeleri; DEPS-SCHEMA C1 kanıtı) ve sabah listesi
-   `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları; MCP sandbox seçenekleri B/C/D/E
-   + tur başı `notice` olayı (sonraki protokol sürümü); DEPS-DIST yayın engelleri (gömülü lisans metinleri, `path` tip sızıntısı; LICENSE kapandı) ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman
-   çağrısı ve legacy tarifeler; fast-uri kabul edilmiş riski (2026-10-29); canlı geçiş).
+1. On üçüncü parti (`integrate/2026-09-29-n`, worktree `/home/alperen/deckent-next-integrate-n`: main `0360bab9` + REALM-NOTICE `5bd4a3dd` + belge
+   commit'leri): tam verify → Astra → PASS'te push (`0360bab9` dahil). Canlıya alma ayrı owner onayı.
+2. REALM-NOTICE açığı: MCP ön-başlatma launch kartı gerçek realm'i önceden adlandırmıyor — (a) `usable()` ön-seçimi / (b) olduğu gibi; lead/owner.
+3. Owner kararları: SHELL-OVERLAY O1/O3/O5/O6/O7; `format` denetleyicisi, şema korpusu ölçümü, AppArmor kurulum belgesi, CI `bwrap-bundle.yml` ilk koşu;
+   DEPS-SCHEMA C1 kanıtı; sabah listesi `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları;
+   MCP sandbox seçenekleri B/C/D/E + tur başı `notice` olayı; DEPS-DIST yayın engelleri ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman çağrısı ve legacy
+   tarifeler; fast-uri kabul edilmiş riski 2026-10-29); canlı secret deposunun env → dosya geçişi.
+4. **Node 26 geçişi (owner, gözden kaçmasın):** Node 26 LTS 2026-10-28'de çıkınca kurulur → tam verify → nvm varsayılanı, CI zorunlu geçidi ve
+   canlı servis Node 26; o güne kadar canlı Node 24.21 (PLAN "On ikinci parti").
 
 ## Açık kalanlar
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).

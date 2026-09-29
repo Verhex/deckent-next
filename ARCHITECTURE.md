@@ -968,9 +968,14 @@ falls short — or why not), taken in preference order from a code-only composit
 list **bubblewrap, then Landlock**). `host` → host (result bytes unchanged); a sandbox mode → the first usable provider; none usable →
 `require-sandbox` refuses before any plan, approval or effect (`SHELL_SANDBOX_UNAVAILABLE`), `prefer-sandbox` runs on the host and says
 so in the approval preview, the live stream, the model result and the finished line (`sandbox: none; running on host (bubblewrap: …;
-landlock: …)`) — never a silent fallback; a preferred mechanism the host restricts (bubblewrap under AppArmor) is a visible fallback too:
-`[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: …; <fix>)` leads the resolution notice (live stream, model result) and
-follows the winning provider's posture (approval card); macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
+landlock: …)`) — never a silent fallback. A later provider that wins after a preferred one was passed over **for any reason**
+(REALM-NOTICE, live 2026-09-29: a host restriction such as AppArmor with its fix, a launcher inside the project or scratch area, an
+unavailable or changed launcher) is a visible fallback too, in every sandbox mode: `[deckent] sandbox: <chosen> instead of <preferred>
+(<preferred>: <reason>)` (one helper, `describeSandboxFallback`; each reason one line, control characters as spaces, at most 480
+characters, `boundSandboxReason`) leads the resolution notice (live stream, model result) and follows the winning provider's posture
+(approval card). The resolution carries the providers passed over (`rejected`, in order), which doctor reads. Lead decision 2026-09-29:
+the notice stays on every fallback, including a host that always falls back (owner principle "never a silent fallback"; the cost is one
+repeated line per shell call on such a host); macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
 bubblewrap | landlock | degraded | none`; only trusted metadata, never command output); the approval card renders that posture against the same `shellWritePosture` result the effect enforces (always `owner-approved` once a card exists; `sandboxWriteView` in `host-shell`), so its project, write-floor and `.git` wording cannot drift from the boundary (host and the no-sandbox fallback keep a fixed text).
 Both sandbox launchers go through the host shell's one process runner (`ShellLaunch`: program, argv ending in `bash --noprofile --norc
 -c`, optional fd 3 setup-failure channel), so the process-group, cancellation, timeout, output-bound and cleanup contract is the same
@@ -994,7 +999,18 @@ sandboxed command could replace it. `launcher.overlay` (≥ 0.11.0) is what SHEL
 `src/…/bundled/` from a verifying build-bwrap output (`DECKENT_BWRAP_BUILD` or `.pack/bwrap/*`) and says loudly when none exists;
 `bwrap-real-sandbox-guard.test.ts` fails a Linux host with open user namespaces that selected no working launcher with overlay (the
 bubblewrap tests would otherwise skip); vitest gives every worker a temporary `DECKENT_GLOBAL_HOME`, so the realized copy never lands in
-the owner's `~/.deckent/bin`. View per call: `--unshare-all` (network included; the
+the owner's `~/.deckent/bin` (the development entry `.agents/refactor/next-entry.mjs` keeps its global home outside the checkout,
+`~/.local/state/deckent-next-dev`, 0360bab9: a home inside the project put the copy there, which the rule above refuses — live 2026-09-29).
+`selectBubblewrapLauncher({ place: false })` is the read-only measurement (doctor): an already placed, verifying copy is used; nothing is
+created, written or re-moded, and a copy the service has not placed yet is reported as "not placed … yet". The shipped provider list is
+one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the service's default port, MCP `inspect` starts and doctor.
+**Doctor realm report (REALM-NOTICE).** `doctor` (`--json` field `shellRealm`, schemaVersion 1, additive to doctor schemaVersion 2,
+`null` when unwired; human lines in the product's own sandbox words, no catalog text — the result marker with `[terminal.shell.realm
+<mode>]`, then the notice or the reasons) reports the realm a shell call in this project gets under the configured mode, every provider
+passed over and why, and the host measurement (`bubblewrap: {status, launcher {source, path, version, overlay}, rejected, detail}`,
+`landlock`), measured read-only with the state root the service uses (`globalStateRoot()`), so "probe available, provider refuses" is
+visible. Host mode also reports `preferSandbox` (the MCP registry default). Measured in the CLI process: a running service keeps its own
+measurement until it restarts; no conversation scratch area (a launcher inside only the scratch area is not detected by doctor). View per call: `--unshare-all` (network included; the
 fetch tool is the only egress), `--die-with-parent`, `--new-session`, fresh `/proc`, minimal `/dev`, `/tmp` and HOME as 64 MiB tmpfs
 (HOME never bound: `~/.ssh`, tokens, a ledger under HOME invisible), system prefixes read-only by allowlist (`/usr /etc /bin /sbin
 /lib* /opt /snap /nix /sys`; never `/`, `/mnt`, `/run`, `/var`, `/home`), PATH program directories (`bin`/`.bin`/`sbin` by name; a
@@ -2073,7 +2089,12 @@ stdio the SDK probes with a sibling process), is listed every turn and kept for 
 server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
 SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the shell (`prefer-sandbox` default:
 bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network, HOME hidden; `require-sandbox`
-refuses without it; `host` explicit; Landlock is not offered for MCP servers). A sandboxed start that fails is diagnosed in the same view
+refuses without it; `host` explicit; Landlock is not offered for MCP servers). A launch-capable provider that wins after a preferred one
+was passed over adds the same `… instead of …` line to the server's posture (tools card, per-call approval card); the host fallback and a
+`require-sandbox` refusal name every reason with the same bound (REALM-NOTICE). With the shipped providers this path is not reachable
+today (Landlock has no long-lived launch: a refused bubblewrap means host or refusal, both already named). Open: the pre-start launch
+card (`mcpRealmPosture`) still says only what the realm means ("said at the start"); the actual selection and any fallback appear after
+the start, on the tools card and every call card (options: pre-select with `usable()` on the launch card, or keep — lead/owner). A sandboxed start that fails is diagnosed in the same view
 (MCP-SANDBOX-PATHS, 2026-09-29; `mcp-client/internal/diagnose.ts`): the command is resolved on this machine with the server's PATH (not found
 → `start-failed` "command not found", no name), then it and every existing absolute-path argument (≤ 16) are probed through the launcher's
 own prefix (`bwrap <view> -- /bin/sh -c '[ -e … ]'`; our `sh`/`test` only, never server code; 5 s bound; a failed probe leaves the SDK

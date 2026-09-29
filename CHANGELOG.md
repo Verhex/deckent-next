@@ -4,6 +4,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIX (REALM-NOTICE, live 2026-09-29): a preferred sandbox passed over for any reason (not only a host restriction; for example a
+  bubblewrap launcher inside the project) is now a visible fallback — `[deckent] sandbox: <chosen> instead of <preferred> (<preferred>:
+  <reason>)` on the live stream, the model result, the approval card and MCP server postures, with every reason on one bounded line;
+  `doctor` (`--json` `shellRealm`) reports the selected shell realm, every provider passed over and the host measurement (read-only).
 - ADDED (SECRET-WRITE): `deckent secret set <NAME> [--scope <id>] [--json]` and `deckent secret delete <NAME>` change the installation's
   secret store through the runtime service (runtime protocol v18 `setSecret`/`deleteSecret`; lifecycle window [18,17]) under the new policy resource `secret` (actions
   `set`/`delete`, id = the name or `all`). The value comes from piped stdin (one trailing newline dropped, at most 64 KiB) or a hidden
