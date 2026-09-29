@@ -50,9 +50,10 @@ describe('K1 real binary journeys', () => {
     const f = await fixture('project-override');
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'principal', 'schemaVersion', 'scope', 'secretStore', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'principal', 'schemaVersion', 'scope', 'secretStore', 'shellRealm', 'status']);
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null });
+    expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
