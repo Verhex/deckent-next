@@ -38,7 +38,7 @@ const binding = (nativeId = MODEL, capabilities: readonly string[] = ['tool-call
 const reference = { providerId: 'anthropic', providerVersion: 1, modelId: 'sonnet', modelVersion: 1 };
 function profile(endpoint: string, extra: Record<string, unknown> = {}, profileLimits = limits, tariff = anthropicPublishedTariff(MODEL)) {
   return { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: 'a'.repeat(64),
-    protocol: { family: 'anthropic-messages', version: '2023-06-01' }, adapter: { id: 'anthropic-messages-http', version: 1,
+    protocol: { family: 'anthropic-messages', version: '2023-06-01' }, adapter: { id: 'anthropic-messages-http', version: 2,
       definition: { endpoint, maxOutputTokens: 256, authentication: { type: 'header', name: 'x-api-key', credentialRef: 'ANTHROPIC_API_KEY' },
         tls: { caPem: certificate }, tariff, ...extra } },
     allocation: { id: 'allocation', maxCalls: 1, maxInFlight: 1 }, limits: profileLimits };

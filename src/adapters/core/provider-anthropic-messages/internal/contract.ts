@@ -2,9 +2,11 @@ import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { OpenAiChatHttpError, parseOpenAiChatHttpLimits } from '#adapters/core/provider-openai-chat/index.js';
+import { ANTHROPIC_EFFORT_LEVELS, anthropicControlsAdmitted } from './model-capabilities.js';
 
 export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID = 'anthropic-messages-http' as const;
-export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION = 1 as const;
+/** v2 (2026-09-29): profile `effort`, and thinking/effort/max-output checked against the model capability registry at load. */
+export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION = 2 as const;
 export const ANTHROPIC_MESSAGES_FAMILY = 'anthropic-messages' as const;
 /** The Messages API pins its wire contract with this header value (still the only current one, 2026-09-28). */
 export const ANTHROPIC_MESSAGES_PROTOCOL_VERSION = '2023-06-01' as const;
@@ -41,7 +43,9 @@ const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens
   authentication: z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/) }).strict(),
   tls: z.object({ caPem: certificate }).strict().optional(), tariff: anthropicTariffSchema,
   /** Absent = the model's default thinking (Opus 5.5 / Fable 5.1 / Sonnet 5.5: adaptive, thinking text omitted). */
-  thinking: thinkingSchema.optional(), cache: z.enum(['none', '5m', '1h']).optional(),
+  thinking: thinkingSchema.optional(),
+  /** `output_config.effort`; absent = the model's default (Opus 5.5: medium, others: high). Only levels the model's registry row lists. */
+  effort: z.enum(ANTHROPIC_EFFORT_LEVELS).optional(), cache: z.enum(['none', '5m', '1h']).optional(),
   tokenCountEndpoint: z.string().min(1).optional() }).strict();
 export type AnthropicMessagesDefinition = Readonly<z.infer<typeof definitionSchema>>;
 const jsonSchema = createImmutableJsonObjectSchema(ANTHROPIC_MESSAGES_WIRE_LIMITS);
@@ -61,6 +65,8 @@ export function parseAnthropicMessagesDefinition(input: unknown): AnthropicMessa
   if (count !== undefined && (!canonical(count) || new URL(count).origin !== new URL(parsed.data.endpoint).origin)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   // Manual thinking spends inside max_tokens: its budget must leave room for an answer.
   if (thinking?.mode === 'enabled' && thinking.budgetTokens >= parsed.data.maxOutputTokens) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
+  // Only what the pinned model's documented request surface accepts (a 400 caught at load, not at call time).
+  if (!anthropicControlsAdmitted(parsed.data.tariff.modelId, parsed.data)) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   return Object.freeze(structuredClone(parsed.data));
 }
 export const parseAnthropicMessagesLimits = parseOpenAiChatHttpLimits;

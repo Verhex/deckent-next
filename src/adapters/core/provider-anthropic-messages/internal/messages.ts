@@ -76,5 +76,6 @@ export function anthropicMessagesBody(request: OpenAiChatTextRequest, definition
     ...(tools ? { tools } : {}),
     ...(request.tool_choice ? { tool_choice: { type: request.tool_choice } } : {}),
     ...(thinking ? { thinking } : {}),
+    ...(definition.effort ? { output_config: { effort: definition.effort } } : {}),
     ...(definition.cache && definition.cache !== 'none' ? { cache_control: definition.cache === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' } } : {}) };
 }
