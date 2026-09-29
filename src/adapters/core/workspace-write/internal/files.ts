@@ -3,6 +3,7 @@ import { lstat, mkdir, open, readdir, readlink, rename, rmdir, unlink, type File
 import { createHash, randomBytes } from 'node:crypto';
 import { posix } from 'node:path';
 import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
+import { isDirectoryWriteApprovalFloored } from './floor.js';
 
 /** Largest file an agent edit reads or writes (the effect input must also fit its catalog bound). */
 export const WORKSPACE_WRITE_MAX_FILE_BYTES = 900_000;
@@ -189,17 +190,29 @@ export async function deleteWorkspaceFile(scope: WorkspaceScope, target: Extract
 /**
  * SHELL-OVERLAY: creates the missing directories above `rel` (a workspace-relative file path) one component at a time, each from its
  * opened parent (no link followed), with `modeOf(directoryRel)`. A denied component, a component that exists but is not a real
- * directory, or a parent that moved refuses (false); nothing above the first missing component is touched.
+ * directory, or a parent that moved refuses (false); nothing above the first missing component is touched. The missing directories are
+ * created only when every one of them was decided by the caller (`admit`, Astra 2182 R3: each new parent is classified and decided like
+ * the entry itself) and none is a write-floor name (`package.json/`, `.github/…`); otherwise none is made — checked before the first
+ * `mkdir`, so a directory the decision did not see stays uncreated.
  */
-export async function ensureWorkspaceParents(scope: WorkspaceScope, rel: string, modeOf: (directoryRel: string) => number): Promise<boolean> {
+export async function ensureWorkspaceParents(scope: WorkspaceScope, rel: string, modeOf: (directoryRel: string) => number,
+  admit: (directoryRel: string) => boolean): Promise<boolean> {
   const segments = posix.dirname(rel) === '.' ? [] : posix.dirname(rel).split('/');
+  const at = (i: number) => segments.slice(0, i + 1).join('/');
+  const refused = (directory: string) => scope.denied(directory) || scope.denied(`${directory}/`);
+  let first = segments.length;
   for (let i = 0; i < segments.length; i++) {
-    const directory = segments.slice(0, i + 1).join('/');
-    if (scope.denied(directory) || scope.denied(`${directory}/`)) return false;
-    const existing = await scope.open(directory, 'dir');
+    if (refused(at(i))) return false;
+    const existing = await scope.open(at(i), 'dir');
     if (existing.ok) { await existing.handle.close(); continue; }
     if (existing.error !== 'not-found') return false;
-    const parentRel = segments.slice(0, i).join('/');
+    first = i;
+    break;
+  }
+  // Every directory from the first missing one down is new: all of them are checked before the first is made (none, or all decided ones).
+  for (let i = first; i < segments.length; i++) if (refused(at(i)) || isDirectoryWriteApprovalFloored(at(i)) || !admit(at(i))) return false;
+  for (let i = first; i < segments.length; i++) {
+    const directory = at(i), parentRel = segments.slice(0, i).join('/');
     const parent = await scope.open(parentRel, 'dir');
     if (!parent.ok) return false;
     try {

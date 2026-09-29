@@ -46,7 +46,10 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     expect(events[0]).toMatchObject({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify' });
     const edits = events.slice(1);
     expect(edits.every(event => event.kind === 'permission-mode' && event.cell === 'edit-non-floor' && (event.tool as { name: string }).name === 'run_shell')).toBe(true);
-    expect(edits.map(event => (event.summary as { path: string }).path).sort()).toEqual(['src/gone.ts', 'src/moved.ts', 'src/x.ts', 'sub/deep/f', 'sub/deep/z', 'sub/old/f']);
+    // Astra 2182 R3: `mv sub/deep sub/old` is a copy plus a removal in the overlay, so `sub/old` is a new directory: decided (and audited)
+    // like an entry, shown as `sub/old/`, made before its file; it is not an effect of its own.
+    expect(edits.map(event => (event.summary as { path: string }).path).sort()).toEqual(['src/gone.ts', 'src/moved.ts', 'src/x.ts', 'sub/deep/f', 'sub/deep/z', 'sub/old/', 'sub/old/f']);
+    expect(result.text).toContain('[deckent] write set: new directories created: sub/old/.');
     // Each applied entry is its own settled C11 record of the project write operation; nothing is left in the private directory.
     const records = f.rows("SELECT target_id, state FROM effect_intents WHERE target_kind = 'workspace-file'") as { target_id: string; state: string }[];
     expect(records.length).toBe(6);

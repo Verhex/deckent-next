@@ -34,6 +34,9 @@ export type SandboxWriteSetScan = {
   readonly emptyDirectories: readonly string[];
   /** Upper directory modes by path (a created parent gets the mode the command gave it). */
   readonly directoryModes: ReadonlyMap<string, number>;
+  /** Directories the command made that the lower lacks (absent there, or a file there it replaced): a parent the apply would create, so
+   * each is classified and decided like an entry before any is made (Astra 2182 R3). */
+  readonly newDirectories: ReadonlySet<string>;
 } | { readonly ok: false; readonly reason: string };
 
 interface UpperEntry { readonly type: string; readonly mode: number; readonly nlink: number; readonly size: number; readonly rdev: readonly [number, number];
@@ -89,7 +92,7 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
   if (!listed.ok) return listed;
   const inUpper = new Map(listed.entries.map(entry => [entry.rel, entry] as const));
   const changes: SandboxWriteChange[] = [], refused: { rel: string; reason: SandboxWriteRefusal }[] = [], conflicts = new Set<string>();
-  const emptyDirectories: string[] = [], directoryModes = new Map<string, number>();
+  const emptyDirectories: string[] = [], directoryModes = new Map<string, number>(), newDirectories = new Set<string>();
   let count = listed.entries.length, bytes = 0;
   const over = () => count > bounds.maxEntries ? `more than ${bounds.maxEntries} entries` : bytes > bounds.maxTotalBytes ? `more than ${bounds.maxTotalBytes} bytes` : null;
   const lowerInfo = async (rel: string) => { try { return await lstat(join(lower, rel), { bigint: true }); } catch { return null; } };
@@ -149,6 +152,7 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
     }
     if (entry.type === 'd') {
       directoryModes.set(rel, entry.mode & 0o777);
+      if (!below?.isDirectory()) newDirectories.add(rel);
       if (below && !below.isDirectory()) await removeFile(rel);
       else if (below && entry.flags.includes('o')) {
         // Opaque over a lower directory: what the lower holds and the upper does not is gone (the directory was removed and made again).
@@ -193,7 +197,8 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
   // before the file is written.
   const order = (change: SandboxWriteChange) => change.kind === 'delete' ? 0 : change.kind === 'rmdir' ? 1 : 2;
   const depth = (change: SandboxWriteChange) => change.kind === 'rmdir' ? -change.rel.split('/').length : 0;
-  return { ok: true, changes: [...changes].sort((a, b) => order(a) - order(b) || depth(a) - depth(b)), refused, conflicts: [...conflicts].sort(), emptyDirectories, directoryModes };
+  return { ok: true, changes: [...changes].sort((a, b) => order(a) - order(b) || depth(a) - depth(b)), refused, conflicts: [...conflicts].sort(), emptyDirectories, directoryModes,
+    newDirectories };
 }
 
 /** A call's private directory: `upper` and `work` for the overlay and the start mark (the directory's own ctime, the kernel clock). */
@@ -240,6 +245,8 @@ export interface SandboxWriteSetReport {
   /** Entries whose outcome is unknown: read the file to see its state. */
   readonly unknown: readonly string[];
   readonly emptyDirectories: readonly string[];
+  /** New directories made as parents of applied entries (each decided like an entry; not a C11 record of its own). */
+  readonly createdDirectories: readonly string[];
   /** Stopped before the end (cancellation, a precondition that changed at write time, an unknown outcome): the rest was not tried. */
   readonly stopped: boolean;
 }
@@ -259,6 +266,7 @@ export function describeSandboxWriteSet(report: SandboxWriteSetReport): string {
     report.notApplied.length ? `[deckent] write set: not applied: ${list(report.notApplied.map(entry => `${entry.rel} (${REASONS[entry.reason] ?? entry.reason})`), 12)}.` : '',
     report.unknown.length ? `[deckent] write set: outcome unknown (read the file to see its state): ${list(report.unknown)}.` : '',
     report.stopped ? '[deckent] write set: stopped before the end; the rest was not applied.' : '',
+    report.createdDirectories.length ? `[deckent] write set: new directories created: ${list(report.createdDirectories.map(directory => `${directory}/`))}.` : '',
     report.emptyDirectories.length ? `[deckent] write set: empty new directories were not created: ${list(report.emptyDirectories)}.` : ''].filter(Boolean).join('\n');
 }
 
@@ -266,16 +274,21 @@ export function describeSandboxWriteSet(report: SandboxWriteSetReport): string {
  * Applies a scanned write set (design §5–§6) through the caller's ports: `classify` is the edit path rules (a denied path, else its cell),
  * `decider` the edit decision, `execute` one entry's C11 effect with the gate the decision handed out. A conflict found by the scan
  * applies nothing; deletions go first, then emptied directories, then writes (with their missing parents); a changed precondition or an
- * unknown outcome stops the rest. Nothing is applied to a path the decision did not allow.
+ * unknown outcome stops the rest. Nothing is applied to a path the decision did not allow — a new parent directory included (Astra 2182
+ * R3): after the write's own decision, each one it needs is classified as a directory and decided like an entry (once per set, shown as
+ * `dir/`); when any is refused,
+ * none of them is made and the write is not applied (`parent-refused`); `ensureParents` makes only the decided ones.
  */
 export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteSetScan; readonly decider: SandboxWriteDecider;
-  /** The edit path rules for one entry (a directory removal is classified as a directory: its own name and what lies beneath it). */
-  readonly classify: (rel: string, kind: SandboxWriteChange['kind']) => SandboxWriteCell | 'denied';
-  readonly ensureParents: (rel: string, modeOf: (directory: string) => number) => Promise<boolean>;
+  /** The edit path rules for one entry (a directory removal or a new parent directory, `mkdir`, is classified as a directory: its own name
+   * and what lies beneath it). */
+  readonly classify: (rel: string, kind: SandboxWriteChange['kind'] | 'mkdir') => SandboxWriteCell | 'denied';
+  /** Makes the missing directories above `rel`, only those `admit` names (the decided ones); false when any other would be needed. */
+  readonly ensureParents: (rel: string, modeOf: (directory: string) => number, admit: (directory: string) => boolean) => Promise<boolean>;
   readonly execute: (change: SandboxWriteChange, gate: EffectApprovalGate) => Promise<void>; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
   const { scan } = input;
   const report = { refused: null, applied: [] as string[], notApplied: [] as { rel: string; reason: string }[], conflicts: [] as readonly string[], unknown: [] as string[],
-    emptyDirectories: [] as readonly string[], stopped: false };
+    emptyDirectories: [] as readonly string[], createdDirectories: [] as string[], stopped: false };
   if (!scan.ok) return { ...report, refused: scan.reason };
   report.notApplied.push(...scan.refused);
   if (scan.conflicts.length) return { ...report, conflicts: scan.conflicts };
@@ -284,6 +297,27 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
   // Astra 2180 R1: a directory removal is an entry like any other (classified, decided, its own effect, reported); it is held back when
   // anything beneath it stayed (held back, refused or unknown), since the directory is not empty then.
   const stayedBeneath = (rel: string) => [...report.notApplied.map(entry => entry.rel), ...report.unknown].some(other => other.startsWith(`${rel}/`));
+  // Astra 2182 R3: the new directories above a write, shallowest first, each decided once per set like an entry; the new ones this write
+  // still needs, or null when one of them is refused (reported once, as `dir/` with its own reason).
+  const verdicts = new Map<string, boolean>(), created = new Set<string>();
+  const newParents = async (rel: string): Promise<string[] | null> => {
+    const needed: string[] = [], segments = rel.split('/');
+    for (let i = 1; i < segments.length; i++) {
+      const directory = segments.slice(0, i).join('/');
+      if (!scan.newDirectories.has(directory) || created.has(directory)) continue;
+      let allowed = verdicts.get(directory);
+      if (allowed === undefined) {
+        const cell = input.classify(directory, 'mkdir');
+        const decision = cell === 'denied' ? { ok: false as const, reason: 'denied' } : await input.decider.decide(`${directory}/`, cell);
+        allowed = decision.ok;
+        verdicts.set(directory, allowed);
+        if (!decision.ok) report.notApplied.push({ rel: `${directory}/`, reason: decision.reason });
+      }
+      if (!allowed) return null;
+      needed.push(directory);
+    }
+    return needed;
+  };
   for (const phase of ['delete', 'rmdir', 'write'] as const) {
     for (const change of scan.changes.filter(entry => entry.kind === phase)) {
       if (report.stopped || input.signal.aborted) { report.stopped = true; break; }
@@ -292,9 +326,13 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
       if (cell === 'denied') { report.notApplied.push({ rel: shown(change), reason: 'denied' }); continue; }
       const decision = await input.decider.decide(change.rel, cell);
       if (!decision.ok) { report.notApplied.push({ rel: shown(change), reason: decision.reason }); continue; }
-      if (change.kind === 'write' && !await input.ensureParents(change.rel, directory => scan.directoryModes.get(directory) ?? 0o755)) {
+      // The entry's own reason comes first (a refused entry never decides its directories); then each new directory it needs.
+      const parents = change.kind === 'write' ? await newParents(change.rel) : [];
+      if (parents === null) { report.notApplied.push({ rel: change.rel, reason: 'parent-refused' }); continue; }
+      if (change.kind === 'write' && !await input.ensureParents(change.rel, directory => scan.directoryModes.get(directory) ?? 0o755, directory => verdicts.get(directory) === true)) {
         report.notApplied.push({ rel: change.rel, reason: 'parent-refused' }); continue;
       }
+      for (const directory of parents) { created.add(directory); report.createdDirectories.push(directory); }
       try { await input.execute(change, decision.gate); report.applied.push(shown(change)); }
       catch (error) {
         const code = (error as { code?: unknown } | null)?.code;
