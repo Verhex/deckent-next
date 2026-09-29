@@ -8,8 +8,10 @@
 //  5. .md writes only from kernel/docs-authority
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+//  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
 import ts from 'typescript';
 import { lintConfigVocabulary } from './config-vocabulary.mjs';
+import { lintDependencies, loadRegistry, ownsImport, packageName } from './dependencies.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
@@ -18,8 +20,9 @@ import { fileURLToPath } from 'node:url';
 const rootArg = process.argv.indexOf('--root');
 const ROOT = rootArg > -1 && process.argv[rootArg + 1] ? resolve(process.argv[rootArg + 1]) : dirname(dirname(fileURLToPath(import.meta.url)));
 const arch = JSON.parse(readFileSync(join(ROOT, 'arch.json'), 'utf8'));
-const violations = [];
+const violations = [], warnings = [];
 const fail = (rule, file, message) => violations.push({ rule, file, message });
+const warn = (rule, file, message) => warnings.push({ rule, file, message });
 const rel = (p) => relative(ROOT, p).split(sep).join('/');
 
 function walk(dir, predicate, out = []) {
@@ -40,6 +43,7 @@ const tsConfig = ts.parseJsonConfigFileContent(JSON.parse(readFileSync(join(ROOT
 const program = ts.createProgram(tsConfig.fileNames, tsConfig.options);
 const checker = program.getTypeChecker();
 const packageNames = Object.keys(arch.packages);
+const { registry: dependencyRegistry, errors: registryErrors } = loadRegistry(ROOT, arch.dependencies?.registry);
 // Current domain/runtime contracts have one active shape. A second source module
 // or public V2 name creates two authorities; migration history is the explicit
 // boundary where old shapes may remain for forward-only conversion.
@@ -219,7 +223,7 @@ for (const file of srcFiles) {
     if (ts.isIdentifier(node) && ambient.has(node.text)) fail('domain-purity', rel(file), `ambient capability ${node.text}`);
     const spec = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier : undefined;
     if (spec && ts.isStringLiteral(spec) && !spec.text.startsWith('.') && !spec.text.startsWith('#')
-      && !(policy.externalImports ?? []).includes(spec.text)) fail('domain-purity', rel(file), `external dependency ${spec.text}`);
+      && !ownsImport(dependencyRegistry, rel(file), packageName(spec.text))) fail('domain-purity', rel(file), `external dependency ${spec.text}`);
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) fail('domain-purity', rel(file), 'dynamic import');
     ts.forEachChild(node, visit);
   }
@@ -430,6 +434,9 @@ for (const file of srcFiles) {
 }
 
 lintConfigVocabulary(ROOT, srcFiles, fail);
+lintDependencies({ root: ROOT, registryFile: arch.dependencies?.registry, registry: dependencyRegistry, errors: registryErrors, srcFiles, rel, fail, warn,
+  known: new Set([...Object.keys(declaredUnits), ...packageNames.map(pkg => `src/${pkg}`)]),
+  today: process.env.DECKENT_DEPS_TODAY ?? new Date().toISOString().slice(0, 10) });
 
 // ---- 4: model/flow literals
 const literalAllow = new Set(arch.literals.allow);
@@ -510,7 +517,7 @@ if (vocab?.enforce) {
 }
 
 // ---- report
-const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s)`;
-const report = [...violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}`), summary].join('\n') + '\n';
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s), ${warnings.length} warning(s)`;
+const report = [...violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}`), ...warnings.map(w => `⚠ [${w.rule}] ${w.file} — ${w.message}`), summary].join('\n') + '\n';
 process.stdout.write(report);
 process.exitCode = violations.length === 0 ? 0 : 1;

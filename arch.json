@@ -7,10 +7,7 @@
     },
     "domain": {
       "imports": [],
-      "pure": true,
-      "externalImports": [
-        "zod"
-      ]
+      "pure": true
     },
     "capabilities": {
       "imports": [
@@ -73,6 +70,9 @@
     "aliasPrefix": "#",
     "enforce": true,
     "note": "Cross-unit/package imports use native subpath imports through public indexes; relative paths stay inside a unit."
+  },
+  "dependencies": {
+    "registry": "dependencies.json"
   },
   "units": {
     "src/adapters/core/attempt-store": {

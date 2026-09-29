@@ -12,14 +12,18 @@ const ARCH = fileURLToPath(new URL('../../../arch.json', import.meta.url));
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(r => rm(r, { recursive: true, force: true }))); });
 
-async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false): Promise<string> {
+type FixtureDependencies = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; registry?: unknown };
+const emptyRegistry = { schemaVersion: 1, policy: { reviewIntervalDays: { P0: 30, P1: 60, P2: 90 }, licenses: { runtime: ['MIT'], dev: ['MIT'] }, failSeverities: ['HIGH', 'CRITICAL'] }, dependencies: {}, platform: {} };
+async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
   const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { tiers: { enforce: boolean }; imports: { enforce: boolean }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
   arch.tiers.enforce = tiersEnforce;
   arch.imports.enforce = importsEnforce;
   await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
   const packages = Object.keys(arch.packages);
-  await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])) }));
+  await writeFile(join(root, 'package.json'), JSON.stringify({ imports: Object.fromEntries(packages.map(p => [`#${p}/*`, `./dist/${p}/*`])),
+    dependencies: deps.dependencies ?? {}, devDependencies: deps.devDependencies ?? {} }));
+  if (deps.registry !== null) await writeFile(join(root, 'dependencies.json'), JSON.stringify(deps.registry ?? emptyRegistry));
   await writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { baseUrl: '.', paths: Object.fromEntries(packages.map(p => [`#${p}/*`, [`./src/${p}/*`]])) } }));
   const catalogs = Object.fromEntries(arch.i18n.families.flatMap(family => ['en', 'tr'].map(locale => [`${arch.i18n.catalogDir}/locales/${locale}/${family}.json`, '{}'])));
   const fixtureFiles = { 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '| ID | Scope |\n|---|---|\n| FOUNDATION | fixture |', 'COMPLETED-PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files };
@@ -47,8 +51,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   }
   return root;
 }
-async function lint(root: string): Promise<{ code: number; out: string }> {
-  try { const { stdout } = await run(process.execPath, [LINT, '--root', root], { timeout: 20_000, killSignal: 'SIGKILL' }); return { code: 0, out: stdout }; }
+async function lint(root: string, env: NodeJS.ProcessEnv = process.env): Promise<{ code: number; out: string }> {
+  try { const { stdout } = await run(process.execPath, [LINT, '--root', root], { timeout: 20_000, killSignal: 'SIGKILL', env }); return { code: 0, out: stdout }; }
   catch (error) {
     const e = error as { code?: number | string | null; signal?: string | null; killed?: boolean;
       stdout?: string | Buffer; stderr?: string | Buffer; message?: string };
@@ -265,4 +269,102 @@ describe('lint-arch unit contract', () => {
     expect(result.out).toContain('[vocabulary]');
   });
 
+});
+
+describe('lint-arch external dependency contract', () => {
+  const review = { lastReview: '2026-09-29', nextReview: '2026-10-29' };
+  const entry = (kind: 'runtime' | 'dev', owners: string[], extra: Record<string, unknown> = {}) => ({ kind, owners, purpose: 'fixture', features: ['fixture'],
+    criticality: 'P0', reviewedVersion: '1.0.0', alternatives: [], ownSolution: 'none', ...review, ...extra });
+  const registry = (dependencies: Record<string, unknown>, platform: Record<string, unknown> = {}) => ({ ...emptyRegistry, dependencies, platform });
+  const owned = { dependencies: { 'acme-lib': '1.0.0', 'shared-lib': '1.0.0' }, devDependencies: { 'dev-lib': '1.0.0' },
+    registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']), 'shared-lib': entry('runtime', ['src/domain', 'src/engine']),
+      'dev-lib': entry('dev', ['package.json']) }) };
+
+  it('accepts owned static, subpath, dynamic and type-position imports, node: built-ins and a domain-owned pure package', async () => {
+    const root = await fixture({
+      'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; import 'acme-lib/sub'; import { readFileSync } from 'node:fs';\n"
+        + "export const load = () => import('acme-lib'); export type Lib = typeof import('acme-lib/types'); export const v = [a, readFileSync];\n",
+      'src/domain/core/task/index.ts': "import { z } from 'shared-lib'; export const schema = z;\n",
+      'src/engine/core/run/index.ts': "export { z } from 'shared-lib';\n",
+    }, true, false, owned);
+    const result = await lint(root);
+    expect(result.out).not.toMatch(/\[(?:external-[a-z]+|domain-purity|dependency-registry)\]/);
+    expect(result.code).toBe(0);
+  });
+
+  it('rejects unowned, undeclared, dev-only, unprefixed built-in, non-literal and stale-owner imports', async () => {
+    const root = await fixture({
+      'src/adapters/core/acme/index.ts': 'export const idle = 1;\n',
+      'src/surfaces/core/view/index.ts': "import { a } from 'acme-lib'; import { g } from 'ghost-lib'; import { d } from 'dev-lib'; import fs from 'fs';\n"
+        + "import { createRequire } from 'node:module'; const name = 'acme-lib'; export const late = () => import(name);\n"
+        + "export const req = createRequire(import.meta.url)('@scope/hidden/deep'); export type T = typeof import('acme-lib'); export const v = [a, g, d, fs];\n",
+      'src/domain/core/task/index.ts': "export const idle = 1;\n",
+      'src/engine/core/run/index.ts': "import { z } from 'shared-lib'; export const v = z;\n",
+    }, true, false, owned);
+    const result = await lint(root);
+    expect(result.code).toBe(1);
+    expect(result.out).toMatch(/\[external-owner\] src\/surfaces\/core\/view\/index\.ts:1 — acme-lib may only be imported by \[src\/adapters\/core\/acme\]/);
+    expect(result.out).toMatch(/\[external-owner\] src\/surfaces\/core\/view\/index\.ts:3 — acme-lib/);
+    expect(result.out).toMatch(/\[external-undeclared\] src\/surfaces\/core\/view\/index\.ts:1 — ghost-lib/);
+    expect(result.out).toMatch(/\[external-undeclared\] src\/surfaces\/core\/view\/index\.ts:3 — @scope\/hidden/);
+    expect(result.out).toMatch(/\[external-dev-only\] src\/surfaces\/core\/view\/index\.ts:1 — dev-lib/);
+    expect(result.out).toMatch(/\[external-builtin\] src\/surfaces\/core\/view\/index\.ts:1 — fs/);
+    expect(result.out).toMatch(/\[external-dynamic\] src\/surfaces\/core\/view\/index\.ts:2/);
+    expect(result.out).toMatch(/\[external-stale-owner\] dependencies\.json — acme-lib owner src\/adapters\/core\/acme/);
+    expect(result.out).toMatch(/\[external-stale-owner\] dependencies\.json — shared-lib owner src\/domain/);
+  });
+
+  it('keeps the pure domain closed to packages the registry does not assign to it', async () => {
+    const root = await fixture({ 'src/domain/core/task/index.ts': "import { a } from 'acme-lib'; export const v = a;\n",
+      'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n" }, true, false, owned);
+    const out = (await lint(root)).out;
+    expect(out).toContain('[domain-purity] src/domain/core/task/index.ts — external dependency acme-lib');
+  });
+
+  it('fails closed on a missing or invalid registry and on drift from package.json', async () => {
+    const missing = await lint(await fixture({}, true, false, { registry: null }));
+    expect(missing.code).toBe(1);
+    expect(missing.out).toContain('[dependency-registry] dependencies.json');
+    const drift = await lint(await fixture({ 'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n" }, true, false, {
+      dependencies: { 'acme-lib': '1.0.0', 'extra-lib': '1.0.0' }, devDependencies: { 'dev-lib': '1.0.0' },
+      registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']), 'dev-lib': entry('runtime', ['src/nowhere/core/x']),
+        'gone-lib': entry('dev', ['no/such/path'], { lastReview: '2026-10-01', nextReview: '2026-09-30' }),
+        'late-lib': entry('dev', ['package.json'], { criticality: 'P0', nextReview: '2027-01-01' }),
+        'bad-lib': { kind: 'runtime', owners: [] } }),
+    }));
+    expect(drift.code).toBe(1);
+    expect(drift.out).toContain('[dependency-registry] package.json — extra-lib is declared in package.json but missing from dependencies.json');
+    expect(drift.out).toContain('[dependency-registry] dependencies.json — dev-lib is kind "runtime" but package.json declares it in devDependencies');
+    expect(drift.out).toContain('[dependency-registry] dependencies.json — dev-lib owner src/nowhere/core/x is not an arch.json unit or package');
+    expect(drift.out).toContain('[dependency-registry] dependencies.json — gone-lib owner no/such/path does not exist');
+    expect(drift.out).toContain('[dependency-registry] dependencies.json — gone-lib nextReview 2026-09-30 is not after lastReview 2026-10-01');
+    expect(drift.out).toContain('[dependency-registry] dependencies.json — late-lib review interval 94 days exceeds the P0 limit of 30');
+    expect(drift.out).toMatch(/\[dependency-registry\] dependencies\.json — dependencies\.bad-lib/);
+  });
+
+  it('warns without failing when a review date has passed', async () => {
+    const root = await fixture({ 'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n" }, true, false, {
+      dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']) },
+        { bwrap: { requirement: '>=0.13', owners: ['src/adapters/core/acme'], purpose: 'p', criticality: 'P1', alternatives: [], ownSolution: 'none', ...review } }) });
+    const due = await lint(root, { ...process.env, DECKENT_DEPS_TODAY: '2026-12-01' });
+    expect(due.code).toBe(0);
+    expect(due.out).toContain('⚠ [dependency-review] dependencies.json — acme-lib review is overdue (nextReview 2026-10-29)');
+    expect(due.out).toContain('⚠ [dependency-review] dependencies.json — platform bwrap review is overdue (nextReview 2026-10-29)');
+    const fresh = await lint(root, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-01' });
+    expect(fresh.out).not.toContain('[dependency-review]');
+  });
+
+  it('requires the declared embedded components to match the installed sourcemaps', async () => {
+    const files = { 'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n",
+      'node_modules/acme-lib/package.json': JSON.stringify({ name: 'acme-lib', version: '1.0.0' }),
+      'node_modules/acme-lib/dist/index.js.map': JSON.stringify({ sources: ['../../../node_modules/.pnpm/fast-uri@3.1.0/node_modules/fast-uri/index.js'] }) };
+    const undeclared = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' },
+      registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']) }) }));
+    expect(undeclared.code).toBe(1);
+    expect(undeclared.out).toContain('[external-embedded] dependencies.json — acme-lib embeds undeclared fast-uri@3.1.0');
+    const declared = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' },
+      registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme'], { embedded: [{ name: 'fast-uri', version: '3.1.0' }, { name: 'ajv', version: '8.18.0' }] }) }) }));
+    expect(declared.out).toContain('[external-embedded] dependencies.json — acme-lib declares ajv@8.18.0 but the installed sourcemaps no longer embed it');
+    expect(declared.out).not.toContain('undeclared fast-uri');
+  });
 });
