@@ -3,6 +3,7 @@ import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type ProductLayout } from '#platform/index.js';
+import { displayMcpDiagnosis } from './diagnose.js';
 import { McpClientPool, type McpLaunchContext } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
@@ -149,7 +150,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
       const state = await probe(pool => pool.open(launch, { ...settings, servers: [launch] }, launchContext));
       return { ...summary(server), health: state.ok ? (state.tools.every(tool => tool.status !== 'drifted' && tool.status !== 'missing') ? 'connected' : 'tools-changed') : 'failed',
         ...(state.ok ? { era: state.era, tools: state.tools.map(verdict => Object.fromEntries(Object.entries(verdict).filter(([key]) => key !== 'spec'))) }
-          : { failure: state.reason }) };
+          : { failure: state.reason, ...(state.detail ? { detail: state.detail } : {}),
+            ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) }) };
     }));
     return { schemaVersion: 1, servers, problems: view.problems };
   }

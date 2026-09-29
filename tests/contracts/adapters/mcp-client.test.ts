@@ -324,6 +324,46 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
   }, 60_000);
 });
 
+// MCP-SANDBOX-PATHS (2026-09-29): a server that cannot start inside the bubblewrap view is a typed diagnosis naming what the view hides,
+// decided by probing the same view (never by parsing the server's stderr), not a bare CONNECTION_CLOSED; and it never falls back to the host.
+describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start (real bubblewrap)', () => {
+  const setup = () => {
+    const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-hidden-')); roots.push(root);
+    const home = join(root, 'home'), project = join(root, 'project'), elsewhere = join(root, 'elsewhere'), runners = join(root, 'runners', 'bin');
+    for (const dir of [home, join(project, 'tools'), elsewhere, runners]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(project, 'package.json'), '{}\n');
+    for (const at of [join(project, 'tools', 'raw-mcp.mjs'), join(elsewhere, 'raw-mcp.mjs')]) writeFileSync(at, RAW_SERVER);
+    writeFileSync(join(elsewhere, 'raw-bin'), `#!/usr/bin/env node\n${RAW_SERVER}`, { mode: 0o755 });
+    // A package runner inside a bound PATH toolchain directory that fails the way `npx -y` does offline (no server, exit 1).
+    writeFileSync(join(runners, 'npx'), '#!/bin/sh\necho "npm error code ENOTCACHED" >&2\nexit 1\n', { mode: 0o755 });
+    return { home, project, elsewhere, runners };
+  };
+  const open = async (f: ReturnType<typeof setup>, command: string, args: string[], realm: 'require-sandbox' | 'prefer-sandbox' | 'host' = 'require-sandbox') => {
+    const scope = await createWorkspaceScope(f.project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
+    const environment = { HOME: f.home, PATH: `${f.runners}:${dirname(process.execPath)}:/usr/bin:/bin` };
+    const server = { id: `hidden-${realm}`, command, args, env: { PATH: environment.PATH }, realm, tools: [] };
+    return pool().open(server, settings([server], { connectTimeoutMs: 5_000 }), { cwd: f.project, environment, sandboxes });
+  };
+  it('a command outside the view (a script elsewhere, a temp install) names that path; the host realm starts it; prefer-sandbox does not fall back', async () => {
+    const f = setup(), command = join(f.elsewhere, 'raw-bin');
+    expect(await open(f, command, [], 'host')).toMatchObject({ ok: true, sandboxed: false });
+    for (const realm of ['require-sandbox', 'prefer-sandbox'] as const) {
+      expect(await open(f, command, [], realm)).toMatchObject({ ok: false, reason: 'sandbox-unreachable',
+        diagnosis: { kind: 'path-hidden', role: 'command', path: command } });
+    }
+  }, 60_000);
+  it('an interpreter in the view with its script outside names the script (argument); the same script inside the project starts', async () => {
+    const f = setup(), script = join(f.elsewhere, 'raw-mcp.mjs');
+    expect(await open(f, process.execPath, [join(f.project, 'tools', 'raw-mcp.mjs')])).toMatchObject({ ok: true, sandboxed: true });
+    expect(await open(f, 'node', [script])).toMatchObject({ ok: false, reason: 'sandbox-unreachable', diagnosis: { kind: 'path-hidden', role: 'argument', path: script } });
+  }, 60_000);
+  it('a command that exists nowhere is "not found", not a sandbox problem; a package runner that fails in the view is named as one', async () => {
+    const f = setup();
+    expect(await open(f, 'no-such-mcp-server-command', [])).toMatchObject({ ok: false, reason: 'start-failed', detail: 'command not found' });
+    expect(await open(f, 'npx', ['-y', 'some-mcp-server'])).toMatchObject({ ok: false, reason: 'sandbox-unreachable', diagnosis: { kind: 'package-runner', runner: 'npx' } });
+  }, 60_000);
+});
+
 // SHELL-AUTONOMY (lead, merge with MCP-CLIENT): a server is third-party code no card approves call by call, so its long-lived bubblewrap view
 // keeps the write floor's existing paths read-only, while the rest of the project stays writable; on the host the same server writes.
 const WRITER_SERVER = `import { createInterface } from 'node:readline';

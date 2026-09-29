@@ -5,6 +5,7 @@ import { ErrorRegistry, prepareProductFile, type ProductLayout, type TrustedCloc
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
+import { displayMcpDiagnosis } from './diagnose.js';
 import { McpClientPool, type McpLaunchContext } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, type McpScope, type McpServerEntry } from './registry.js';
@@ -91,6 +92,12 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   try {
     const state = await pool.open(launch, { ...MCP_CLIENT_DEFAULTS, ...(context.inputMaxBytes ? { inputMaxBytes: context.inputMaxBytes } : {}), servers: [launch] },
       { cwd: context.cwd, environment: context.environment, sandboxes: context.sandboxes });
+    if (!state.ok && state.reason === 'sandbox-unreachable') {
+      // MCP-SANDBOX-PATHS: what the sandbox view hides (or needs from outside it), in the registry's own words for a `${VAR}` path.
+      const shown = displayMcpDiagnosis(state.diagnosis, server.entry);
+      throw ErrorRegistry.createError('MCP_SANDBOX_COMMAND_UNREACHABLE', { params: { name: server.name, kind: shown.kind,
+        ...(shown.kind === 'path-hidden' ? { role: shown.role, path: shown.path, target: shown.target ?? '' } : { runner: shown.runner }) } });
+    }
     if (!state.ok) throw fail(state.reason === 'sandbox-unavailable' ? 'MCP_SANDBOX_UNAVAILABLE' : 'MCP_SERVER_START_FAILED', state.detail ?? state.reason);
     const live = state.tools.filter(tool => tool.digest !== null);
     for (const name of options.alwaysAsk ?? []) if (!live.some(tool => tool.name === name)) throw fail('MCP_TOOL_UNKNOWN', name);
