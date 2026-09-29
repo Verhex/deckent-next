@@ -1660,7 +1660,8 @@
       "dependencies": [
         "src/domain/core/adapter-registry",
         "src/domain/core/effect",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/platform/core/validate"
       ],
       "plan": "EXECUTION"
     },
