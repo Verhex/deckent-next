@@ -4,7 +4,7 @@
 // appended to `--log <jsonl>` (what reached the server is the evidence, never the client's claim).
 import { appendFileSync, readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { Server } from '@modelcontextprotocol/server';
+import { ProtocolError, Server } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
 const { values } = parseArgs({ options: { mode: { type: 'string' }, tools: { type: 'string' }, log: { type: 'string' }, token: { type: 'string' },
@@ -20,7 +20,7 @@ function build() {
     ...(mode === 'legacy' ? { supportedProtocolVersions: ['2025-11-25', '2025-06-18'] } : {}) });
   // `--page-size N` serves `tools/list` in pages (an opaque numeric cursor); `--endless` never stops sending a cursor (a hostile server).
   server.setRequestHandler('tools/list', async request => {
-    const all = definitions().map(tool => Object.fromEntries(Object.entries(tool).filter(([key]) => key !== 'behavior')));
+    const all = definitions().map(tool => Object.fromEntries(Object.entries(tool).filter(([key]) => key !== 'behavior' && key !== 'structured')));
     const size = values['page-size'] ? Number(values['page-size']) : 0, cursor = request.params?.cursor;
     log({ event: 'list', cursor: cursor ?? null });
     if (!size) return { tools: all };
@@ -38,6 +38,10 @@ function build() {
       log({ event: 'slow-ended', aborted: context.mcpReq.signal?.aborted === true });
       return { content: [{ type: 'text', text: 'late' }] };
     }
+    // `header-mismatch` answers every call with the SEP-2243 HEADER_MISMATCH error (-32020), which makes an SDK client re-list and re-send;
+    // `structured` returns the tool's `structured` value as structuredContent (checked against its outputSchema when validation runs).
+    if (behavior === 'header-mismatch') throw new ProtocolError(-32020, 'fixture: header mismatch');
+    if (behavior === 'structured') return { content: [{ type: 'text', text: JSON.stringify(tool.structured) }], structuredContent: tool.structured };
     if (behavior === 'fail') return { isError: true, content: [{ type: 'text', text: 'the fixture tool failed' }] };
     if (behavior === 'big') return { content: [{ type: 'text', text: `${'x'.repeat(200_000)}\nsecret=abcdef0123456789abcdef` }] };
     if (behavior === 'image') return { content: [{ type: 'image', mimeType: 'image/png', data: Buffer.from('png-bytes').toString('base64') }] };

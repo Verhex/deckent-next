@@ -66,9 +66,13 @@ interface ServerState {
   last: Extract<McpServerOpen, { ok: true }> | null;
   lock: Promise<unknown>;
 }
-/** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each). */
-let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
-const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
+/** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each).
+ * The validator is the SDK's interpreter provider (@cfworker/json-schema): a server's `outputSchema` is untrusted and must never be compiled by
+ * the Node default (the bundled ajv 8.18 + fast-uri 3.1.0, whose advisories no install-time override can reach). */
+let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio'),
+  typeof import('@modelcontextprotocol/client/validators/cf-worker')]> | undefined;
+const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio'),
+  import('@modelcontextprotocol/client/validators/cf-worker')]);
 /** Every page of the server's tool list (one deadline for the whole walk, each page also bounded); the pin then covers every page. */
 const listAllTools = async (client: Client, timeoutMs: number) =>
   (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.timeout(timeoutMs * 2) })).tools as McpLiveTool[];
@@ -125,7 +129,7 @@ export class McpClientPool {
     return state.last;
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string): Promise<McpServerOpen> {
-    const [{ Client }, { StdioClientTransport }] = await loadClientSdk();
+    const [{ Client }, { StdioClientTransport }, { CfWorkerJsonSchemaValidator }] = await loadClientSdk();
     const transport = new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
     transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
@@ -134,7 +138,8 @@ export class McpClientPool {
     // Both eras: `server/discover` first (2026-07-28), the `initialize` handshake when the server is not modern (stdio: a sibling probe process).
     const negotiation: VersionNegotiationMode = 'auto';
     const client = new Client({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { supportedProtocolVersions: [...MCP_CLIENT_PROTOCOL_VERSIONS],
-      versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX });
+      versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX,
+      jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
