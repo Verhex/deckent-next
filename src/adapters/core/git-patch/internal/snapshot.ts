@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { patchPathSchema, patchFile, patchDigest, isPatchExcluded, WorkspacePatchError, type PatchFile, type PatchLimits } from '#engine/index.js';
 import type { GitWorkspaceLease, GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
+import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 const exec = promisify(execFile);
 export type Snapshot = Map<string, PatchFile>;
 /** Base tree entry from the trusted source repository: identity only, no content read. */
@@ -38,10 +39,8 @@ function sourceGit(lease: GitWorkspaceLease, options: GitWorkspaceOptions, budge
   return async (args: string[], maxBuffer: number) => {
     budget.time();
     try {
-      return (await exec(options.gitExecutable, ['--no-replace-objects', '-C', lease.sourceBase.source.repositoryRoot,
-        '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args],
-      { env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
-        timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer, encoding: 'buffer' })).stdout;
+      return (await exec(options.gitExecutable, localGitArgs(lease.sourceBase.source.repositoryRoot, args),
+      { env: GIT_LOCAL_ENV, timeout: Math.max(1, budget.deadline - Date.now()), maxBuffer, encoding: 'buffer' })).stdout;
     } catch (error) { throw gitFailure(error); }
   };
 }
