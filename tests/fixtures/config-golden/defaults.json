@@ -1,0 +1,131 @@
+{
+  "admission": null,
+  "approvals": {
+    "keyFile": "authority.key",
+    "pageSize": 100,
+    "requestTtlMs": 600000,
+    "sessionTtlMs": 60000
+  },
+  "artifacts": {
+    "maxBytes": 16777216,
+    "maxInputs": 64,
+    "patchPreview": {
+      "maxDepth": 32,
+      "maxEntries": 10000,
+      "maxPathBytes": 1024
+    }
+  },
+  "auth_mode": "subscription",
+  "cancellation": null,
+  "cancellationRuntime": null,
+  "cli": {
+    "graphInputMaxBytes": 1048576,
+    "invocationInputMaxBytes": 1048576
+  },
+  "company": {
+    "id": "default"
+  },
+  "enforce_principal_assurance": false,
+  "execution": null,
+  "inspection": {
+    "maxPageSize": 64,
+    "policyMaxBytes": 1048576,
+    "workers": {
+      "heartbeatMs": 2000,
+      "maxEntries": 4096,
+      "maxFileBytes": 65536,
+      "sources": [],
+      "staleMs": 10000
+    }
+  },
+  "installation": {
+    "imageProbe": {
+      "outputBytes": 65536,
+      "timeoutMs": 5000
+    },
+    "packageMeasurement": {
+      "maxDepth": 32,
+      "maxFileBytes": 67108864,
+      "maxFiles": 8192,
+      "maxTotalBytes": 536870912
+    },
+    "profileMaxBytes": 1048576,
+    "writeLockTimeoutMs": 2000
+  },
+  "language": "en",
+  "layout": {
+    "resources": {},
+    "root": null
+  },
+  "live_trace": {
+    "enabled": false
+  },
+  "max_workers": "auto",
+  "mcp": {
+    "inputMaxBytes": 1048576,
+    "maxConcurrentCalls": 8,
+    "responseMaxBytes": 1048576
+  },
+  "mode": "performance",
+  "operations": {
+    "catalog": [],
+    "targets": []
+  },
+  "output_mode": "standard",
+  "projectName": "deckent-project",
+  "providers": {
+    "brain": null,
+    "fallback": null,
+    "overrides": {},
+    "worker": null
+  },
+  "reconciliationRuntime": null,
+  "runRuntime": {
+    "failureBackoffMs": 5000,
+    "maxReservationsPerTurn": 4,
+    "pageSize": 64,
+    "pollIntervalMs": 1000
+  },
+  "schema_version": 3,
+  "service": {
+    "acceptRetryDelayMs": 25,
+    "acceptRetryLimit": 3,
+    "headerTimeoutMs": 10000,
+    "identity": null,
+    "inputMaxBytes": 1048576,
+    "maxConcurrentExecutions": 8,
+    "maxConcurrentRequests": 16,
+    "maxConnections": 32,
+    "responseMaxBytes": 1048576,
+    "responseTimeoutMs": 10000,
+    "shutdownGraceMs": 30000
+  },
+  "spawn_backend": "auto",
+  "storage": {
+    "driver": "sqlite",
+    "sqlite": {
+      "busyTimeoutMs": 100,
+      "durability": "full",
+      "journalMode": "wal"
+    }
+  },
+  "terminal": {
+    "autostartService": true,
+    "persistHistory": true,
+    "serviceStartTimeoutMs": 20000
+  },
+  "toolchains": {
+    "currency": {
+      "mode": "report",
+      "registryEndpoint": "https://registry.npmjs.org",
+      "responseMaxBytes": 65536,
+      "timeoutMs": 5000
+    },
+    "update": {
+      "atStartup": false,
+      "buildTimeoutMs": 1800000,
+      "mode": "propose",
+      "outputBytes": 1048576
+    }
+  }
+}
