@@ -19,8 +19,12 @@ export interface McpClientServerSettings {
   readonly label?: string;
   /** The trust record's reconnect counter: a new value makes the service replace the running process (`/mcp reconnect`). */
   readonly generation?: number;
+  /** MCP-REVOKE: the registry scope and definition this server was trusted as when the turn read it; a call is sent only while the current
+   * registry and trust still hold exactly this binding (absent: a probe, never an agent call). Not part of the launch key. */
+  readonly binding?: McpTrustBinding;
   readonly tools: readonly { readonly name: string; readonly digest: string; readonly alwaysAsk: boolean }[];
 }
+export interface McpTrustBinding { readonly scope: 'managed' | 'local' | 'project' | 'user'; readonly definitionDigest: string }
 export interface McpClientSettings {
   readonly connectTimeoutMs: number;
   readonly callTimeoutMs: number;

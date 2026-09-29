@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AgentToolOutcome } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
-import type { McpCallOutcome, McpClientPool } from './pool.js';
+import type { McpCallOutcome, McpClientPool, McpSendRefusal } from './pool.js';
 
 export const MCP_TOOL_TARGET_KIND = 'mcp-tool';
 /** Core operation of one MCP tool call (MCP-CLIENT, owner 2026-09-28): the `mcp` namespace is Core's. An external process acts on the call
@@ -21,21 +21,27 @@ export const agentMcpEffectCommandId = (scopeId: string, turnId: string, executi
 const inputSchema = z.object({ server: z.string().min(1), tool: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/), arguments: z.record(z.string(), z.unknown()) }).strict();
 /**
  * One MCP tool call as a C11 effect target. Each call is its own record and is never repeated (`lookup` is always unknown). Nothing sent
- * (not connected, the pin no longer matches, its pinned outputSchema cannot be compiled, cancelled first) → refused; the server answered (a
+ * (not connected, the pin no longer matches, its pinned outputSchema cannot be compiled, cancelled first, or — MCP-REVOKE — the current
+ * registry and trust no longer hold the server's definition and the tool's pin: `admit`, asked after the approval wait) → refused; the server answered (a
  * result, `isError`, a JSON-RPC error, HEADER_MISMATCH, a structured result that does not conform to the pinned outputSchema) → the effect
  * happened; sent then timed out, cancelled or the process died → unknown.
  */
 export class McpToolTarget implements EffectTarget {
   readonly kind = MCP_TOOL_TARGET_KIND;
   constructor(private readonly run: { readonly pool: McpClientPool; readonly timeoutMs: number; readonly signal: AbortSignal;
-    readonly onResult: (outcome: McpCallOutcome) => void }) {}
+    readonly onResult: (outcome: McpCallOutcome) => void;
+    /** The send authority (MCP-REVOKE): a one-shot approval of this call never stands in for the server's trust, re-read at the send. */
+    readonly admit: (call: { readonly server: string; readonly tool: string; readonly digest: string }) => Promise<McpSendRefusal | null> }) {}
   identity() { return 'mcp-tool:stdio'; }
   async observe() { return { version: null }; }
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const { server, tool, digest, arguments: args } = parsed.data;
-    const outcome = await this.run.pool.call(server, tool, digest, args, { timeoutMs: this.run.timeoutMs, signal: this.run.signal });
+    const outcome = await this.run.pool.call(server, tool, digest, args, { timeoutMs: this.run.timeoutMs, signal: this.run.signal,
+      admit: () => this.run.admit({ server, tool, digest }) });
+    // A server whose trust is gone does not keep its process: the next trusted use starts it again, after its cards.
+    if (outcome.outcome === 'refused' && (outcome.reason === 'trust-revoked' || outcome.reason === 'definition-changed')) void this.run.pool.retire(server);
     this.run.onResult(outcome);
     if (outcome.outcome === 'refused') throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     if (outcome.outcome === 'unknown') throw new EffectTargetError('EFFECT_TARGET_UNKNOWN');
