@@ -3,12 +3,15 @@
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const invoked = process.argv[1]?.split('/').at(-1);
 const args = process.argv.slice(2);
 const surface = invoked === 'deckent-mcp' ? 'mcp' : invoked === 'deckent' ? 'cli' : args.shift();
 if (!['cli', 'mcp', 'node'].includes(surface)) { process.stderr.write('NEXT_ENTRY_SURFACE_REQUIRED\n'); process.exit(2); }
-const env = { ...process.env, DECKENT_GLOBAL_HOME: resolve(root, '.deckent/host/global') };
+// The global root must live outside the checkout: the runtime copies the bundled bubblewrap there, and a launcher inside the project is
+// refused (a sandboxed command could replace it) — live switch 2026-09-29 fell back to Landlock because of this.
+const env = { ...process.env, DECKENT_GLOBAL_HOME: resolve(homedir(), '.local/state/deckent-next-dev') };
 // Legacy root overrides must not redirect this checkout's execution or monitoring.
 delete env.DECKENT_HOME;
 const entry = surface === 'node' ? [] : [resolve(root, `dist/composition/core/${surface}/internal/entry.js`)];
