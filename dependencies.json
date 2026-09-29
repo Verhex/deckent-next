@@ -31,8 +31,8 @@
       "alternatives": [
         { "name": "fastmcp", "package": "fastmcp", "version": "4.22.0", "date": "2026-09-26", "note": "Server framework layered on the official SDK; not an independent client implementation." }
       ],
-      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today.",
-      "watch": ["Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); remote outputSchema already goes to the cf-worker validator (MCP-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042.", "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint."],
+      "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: the SDK's JsonSchemaValidator interface (getValidator) is the seam; not built while cf-worker has no concrete blocker (proof/FASTURI-OUT-2026-09-29 §5).",
+      "watch": ["FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).", "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); remote outputSchema already goes to the cf-worker validator (MCP-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.", "The SDK's embedded @cfworker/json-schema@4.1.1 is now the only shipped JSON Schema validator: last release 2025-01-31, open 2026 correctness reports (cfworker#335/#336/#337) without maintainer reply; re-evaluate at nextReview (FASTURI-OUT §5).", "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint."],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
@@ -41,7 +41,7 @@
       "reviewedVersion": "2.2.0",
       "owners": ["src/adapters/core/mcp-transport", "src/surfaces/core/mcp", "src/composition/core/mcp"],
       "purpose": "deckent-mcp server: the protocol surface external agents use to drive Deckent over stdio.",
-      "features": ["low-level Server with setRequestHandler tools/list + tools/call and capabilities.tools", "Transport, TransportSendOptions, JSONRPCMessage, MessageExtraInfo, RequestId, Tool, CallToolResult types (bounded own transport in mcp-transport)", "serveStdio + StdioServerTransport (maxBufferSize) via @modelcontextprotocol/server/stdio"],
+      "features": ["low-level Server with setRequestHandler tools/list + tools/call, capabilities.tools and jsonSchemaValidator", "CfWorkerJsonSchemaValidator via @modelcontextprotocol/server/validators/cf-worker (FASTURI-OUT: the SDK default is stubbed in the published package)", "Transport, TransportSendOptions, JSONRPCMessage, MessageExtraInfo, RequestId, Tool, CallToolResult types (bounded own transport in mcp-transport)", "serveStdio + StdioServerTransport (maxBufferSize) via @modelcontextprotocol/server/stdio"],
       "embedded": [
         { "name": "@cfworker/json-schema", "version": "4.1.1", "license": "MIT" },
         { "name": "ajv", "version": "8.18.0", "license": "MIT" },
@@ -56,8 +56,8 @@
       "alternatives": [
         { "name": "fastmcp", "package": "fastmcp", "version": "4.22.0", "date": "2026-09-26", "note": "Higher-level server framework on top of the official SDK; would not remove the SDK or its embedded ajv." }
       ],
-      "ownSolution": "We parse tool input with our own zod schemas and use only the low-level Server; an own stdio JSON-RPC server would drop ajv/zod4/eventsource/jose from the tree but take on spec tracking.",
-      "watch": ["Server dist loads the embedded ajvProvider unconditionally (shimsNode) even though we validate with zod.", "Three nested zod@4.6.5 copies under the SDK packages until our zod 4 migration dedupes them."],
+      "ownSolution": "We parse tool input with our own zod schemas and use only the low-level Server; an own stdio JSON-RPC server would drop ajv/zod4/eventsource/jose from the tree but take on spec tracking. The ajv default validator is already out of the published package (build-dist stub, FASTURI-OUT); an own validator would implement the SDK's JsonSchemaValidator interface.",
+      "watch": ["Server dist loads the embedded ajvProvider unconditionally (shimsNode) in the installed dev/test tree; the published package loads a stub instead (FASTURI-OUT) and the Server gets the cf-worker validator explicitly.", "Three nested zod@4.6.5 copies under the SDK packages until our zod 4 migration dedupes them."],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
@@ -163,7 +163,7 @@
       "reviewedVersion": "0.28.2",
       "owners": ["scripts/build-dist.mjs"],
       "purpose": "Bundles the runtime dependencies into the published package (DEPS-DIST, owner 2026-09-29): zero install-time dependencies, one tarball for air-gapped installs; its metafile is the SBOM source.",
-      "features": ["build API: bundle + splitting (format esm, platform node, target node24), chunkNames, external, legalComments eof", "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)", "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)", "package.json imports (#…) resolution inside dependencies"],
+      "features": ["build API: bundle + splitting (format esm, platform node, target node24), chunkNames, external, legalComments eof", "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)", "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)", "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)", "package.json imports (#…) resolution inside dependencies"],
       "criticality": "P1",
       "alternatives": [
         { "name": "Rolldown", "package": "rolldown", "version": "1.2.11", "date": "2026-09-24", "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance." },
@@ -331,10 +331,11 @@
       "package": "fast-uri",
       "version": "3.1.0",
       "carriers": ["@modelcontextprotocol/client@2.2.0", "@modelcontextprotocol/server@2.2.0"],
+      "shipped": false,
       "advisories": ["GHSA-4c8g-83qw-93j6", "GHSA-7p8r-x3mc-p8w7", "GHSA-f65p-4m7j-42xc", "GHSA-jqff-g426-hqxp", "GHSA-q3j6-qgpj-74h6", "GHSA-qw65-cvwx-89v3", "GHSA-v2hh-gcrm-f6hx", "GHSA-v39h-62p7-jpjc"],
       "severity": "HIGH",
-      "mitigation": "Untrusted schemas never reach the bundled ajv/fast-uri: the client compiles a server's outputSchema with the SDK's cf-worker interpreter validator (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Server side: the low-level Server's only getValidator caller is form elicitation with our own schema, so no path reaches fast-uri. The bundled code is still installed and loaded until the SDK ships a rebuilt bundle (typescript-sdk#2042).",
-      "evidence": ["proof/MCP-VALIDATOR-2026-09-29/review.md (server side section; ajv-vs-cfworker.log; mutation-remove-validator.log)", "lane/mcp-pin-def c30a651 + proof/MCP-PIN-DEF-2026-09-29/review.md", "merged f6bd9d3 (lane/mcp-validator 35700a2)"],
+      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes the cf-worker validator to every SDK Client and Server (static + runtime contract test), the client compiles a server's outputSchema on cf-worker (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036).",
+      "evidence": ["proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)", "tests/contracts/surfaces/mcp-json-schema-validator.test.ts", "proof/MCP-VALIDATOR-2026-09-29/review.md (server side section; ajv-vs-cfworker.log; mutation-remove-validator.log)", "lane/mcp-pin-def c30a651 + proof/MCP-PIN-DEF-2026-09-29/review.md", "merged f6bd9d3 (lane/mcp-validator 35700a2)"],
       "decidedBy": "lead (DEPS-GOV follow-up, 2026-09-29)",
       "decided": "2026-09-29",
       "expires": "2026-10-29"

@@ -7,7 +7,8 @@
 // dist.attestations, publish dates for direct dependencies and registry alternatives), `npm audit signatures --json`, lockfile licenses.
 // Writes <outDir>/deps-watch-<date>.json and .md; exit 1 when a finding's severity is in policy.failSeverities (default HIGH/CRITICAL).
 // dependencies.json `acceptedRisks` turn a vulnerability into MITIGATED (reported, not failing) only while the entry is unexpired and the
-// component's observed advisory set, version, carrier and severities match it exactly; any change fails again.
+// component's observed advisory set, version, carrier and severities match it exactly; any change fails again. An entry with `shipped: false`
+// covers only the installed tree: with --sbom, an embedded component the SBOM omits is marked [not shipped], one it names is not accepted.
 // A source that cannot be read is itself a HIGH finding (an incomplete watch never passes).
 import { execFile } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,8 +37,9 @@ export function licenseAllowed(expression, allowed) {
 }
 
 /** Marks vulnerabilities MITIGATED per accepted risk (exact package, version, carrier and advisory set; unexpired; severity not above the
- * accepted one) and adds one finding per vulnerability. A risk no longer observed anywhere is reported (LOW) so it gets removed. */
-export function applyAcceptedRisks(vulnerable, risks, today, add) {
+ * accepted one; a `shipped: false` risk only while `shippedKeys` — `name@version|carrier` of a package SBOM — does not name it) and adds one
+ * finding per vulnerability. A risk no longer observed anywhere is reported (LOW) so it gets removed. */
+export function applyAcceptedRisks(vulnerable, risks, today, add, shippedKeys = null) {
   const groups = Map.groupBy(vulnerable, item => `${item.name}@${item.version}|${item.carrier}`);
   const used = new Set();
   for (const items of groups.values()) {
@@ -49,6 +51,7 @@ export function applyAcceptedRisks(vulnerable, risks, today, add) {
       const observed = new Set(items.map(item => item.id)), accepted = new Set(risk.advisories);
       const added = [...observed].filter(id => !accepted.has(id)), gone = [...accepted].filter(id => !observed.has(id));
       if (risk.expires < today) reason = `accepted risk ${risk.id} expired ${risk.expires}`;
+      else if (risk.shipped === false && shippedKeys?.has(`${name}@${version}|${carrier}`)) reason = `accepted risk ${risk.id} covers the installed tree only, but the package SBOM ships it`;
       else if (added.length || gone.length) reason = `accepted risk ${risk.id} no longer matches (new: ${added.join(', ') || '—'}; gone: ${gone.join(', ') || '—'})`;
       else if (items.some(item => RANK[item.severity] > RANK[risk.severity])) reason = `accepted risk ${risk.id} covers up to ${risk.severity}`;
     }
@@ -115,7 +118,8 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
   for (const component of embedded) if (!component.version) add('MEDIUM', 'embedded-unversioned', `${component.name} (in ${component.via})`, 'sourcemap carries no version; OSV cannot be queried');
   const installed = name => lock.packages?.[`node_modules/${name}`]?.version ?? null;
   // Shipped components of a bundled package: the same name@version already scanned (tree or embedded carrier) is not queried twice.
-  const shipped = sbom ? sbomComponents(sbom) : [], known = new Set([...[...tree.values()].map(entry => `${entry.name}@${entry.version}|tree`),
+  const shipped = sbom ? sbomComponents(sbom) : [], shippedKeys = sbom ? new Set(shipped.map(component => `${component.name}@${component.version}|${component.via ?? 'tree'}`)) : null;
+  const known = new Set([...[...tree.values()].map(entry => `${entry.name}@${entry.version}|tree`),
     ...embedded.map(component => `${component.name}@${component.version}|${component.via}`)]);
   const sbomOnly = shipped.filter(component => !known.has(`${component.name}@${component.version}|${component.via ?? 'tree'}`));
   for (const component of sbomOnly) add('MEDIUM', 'sbom-drift', `${component.name}@${component.version}${component.via ? ` (embedded in ${component.via})` : ''}`,
@@ -123,7 +127,8 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
 
   // OSV: one querybatch for the tree and the versioned embedded components; paginated per query; details for severity.
   const targets = [...[...tree.values()].map(entry => ({ name: entry.name, version: entry.version, via: null, runtime: entry.runtime })),
-    ...embedded.filter(component => component.version).map(component => ({ ...component, runtime: true })),
+    ...embedded.filter(component => component.version).map(component => ({ ...component, runtime: true,
+      notShipped: shippedKeys !== null && !shippedKeys.has(`${component.name}@${component.version}|${component.via}`) })),
     ...sbomOnly.map(component => ({ ...component, runtime: true }))];
   const vulnerable = [];
   try {
@@ -145,12 +150,12 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
         const record = records.get(id);
         if (record?.withdrawn) continue;
         const { severity, rated } = osvSeverity(record ?? { id });
-        const subject = `${target.name}@${target.version}${target.via ? ` (embedded in ${target.via})` : ''}${target.runtime ? '' : ' [dev]'}`;
+        const subject = `${target.name}@${target.version}${target.via ? ` (embedded in ${target.via})` : ''}${target.runtime ? '' : ' [dev]'}${target.notShipped ? ' [not shipped]' : ''}`;
         vulnerable.push({ id, subject, severity, rated, name: target.name, version: target.version, carrier: target.via ?? 'tree',
           summary: record?.summary ?? '', aliases: record?.aliases ?? [] });
       }
     });
-    applyAcceptedRisks(vulnerable, registry.acceptedRisks, today, add);
+    applyAcceptedRisks(vulnerable, registry.acceptedRisks, today, add, shippedKeys);
   } catch (error) { add('HIGH', 'watch-incomplete', 'OSV', error.message); }
 
   // npm registry: abbreviated packuments for the installed tree; full packuments (publish times) for direct deps and alternatives.

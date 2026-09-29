@@ -4,6 +4,8 @@
 // structure — every file is its own entry and its relative/#imports stay external — so import.meta.url-relative paths (native addon, sandbox
 // helpers, spawned entries, build identity, package root) resolve exactly as in the tested dist. Only third-party code moves: esbuild inlines
 // it (code splitting, so lazy import() stays lazy and React/zod exist once) into `dist/vendor/` chunks.
+// FASTURI-OUT (owner 2026-09-29): the MCP SDK's own bundled ajv + fast-uri (default validator) is replaced by a throwing stub and the build fails
+// if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components); Deckent ships cf-worker only.
 // Reads the existing `dist` (run `npm run build` first; `--build` does it), writes `<out>/package/` (+ `<out>/meta.json`), and with `--pack`
 // the tarball. Usage: node scripts/build-dist.mjs [--out .pack] [--build] [--pack]
 import { execFileSync } from 'node:child_process';
@@ -23,6 +25,51 @@ export const OPTIONAL_EXTERNALS = ['react-devtools-core', 'bufferutil', 'utf-8-v
 const REQUIRE_SHIM = 'Dynamic require of "';
 const REQUIRE_BANNER = "import { createRequire as __deckentCreateRequire } from 'node:module'; const require = __deckentCreateRequire(import.meta.url);";
 const PUBLISHED_FIELDS = ['name', 'version', 'description', 'license', 'type', 'engines', 'bin', 'exports', 'imports', 'main'];
+
+/** FASTURI-OUT (owner 2026-09-29): the MCP SDK packages carry their own bundled ajv 8 + fast-uri 3.1.0 (8 HIGH advisories) behind the
+ * `_shims` default validator and the `validators/ajv` subpath; Deckent always passes the SDK's cf-worker validator, so that code must not ship.
+ * Those public subpaths load with their one `ajvProvider` import replaced by stubs that throw a typed error when built or called. */
+export const AJV_PROVIDER_PACKAGES = ['@modelcontextprotocol/client', '@modelcontextprotocol/server'];
+export const FORBIDDEN_IN_BUNDLE = ['ajv', 'ajv-formats', 'fast-uri', 'json-schema-traverse'];
+const AJV_IMPORT = /^import\s*\{([^}]*)\}\s*from\s*["'](?:\.{1,2}\/)+ajvProvider-[^"']+\.mjs["'];?[ \t]*$/mu;
+/** The stubbed module text: `code` with its single ajvProvider import replaced; throws when the SDK layout no longer matches. */
+export function stubAjvImport(code, label) {
+  const match = AJV_IMPORT.exec(code);
+  if (!match || AJV_IMPORT.test(code.slice(match.index + match[0].length))) throw new Error(`${label}: expected exactly one ajvProvider import to stub (SDK layout changed; review FASTURI-OUT)`);
+  const locals = match[1].split(',').map(part => part.trim()).filter(Boolean).map(part => part.split(/\s+as\s+/u).at(-1));
+  const stub = ['class DeckentRemovedValidatorError extends Error { constructor(name) { super(`${name} (the MCP SDK default ajv validator) is not part of this package; pass an explicit jsonSchemaValidator (CfWorkerJsonSchemaValidator)`); this.name = "DeckentRemovedValidatorError"; this.code = "MCP_DEFAULT_VALIDATOR_REMOVED"; } }',
+    ...locals.map(local => `function ${local}() { throw new DeckentRemovedValidatorError(${JSON.stringify(local)}); }`)].join('\n');
+  return code.slice(0, match.index) + stub + code.slice(match.index + match[0].length);
+}
+const escape = text => text.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
+const AJV_SUBPATH = new RegExp(`^(?:${AJV_PROVIDER_PACKAGES.map(escape).join('|')})/(?:_shims|validators/ajv)$`, 'u');
+/** esbuild plugin; `hits` counts each stubbed `<package>/<subpath>` (the guard requires every present SDK package's `_shims`). */
+export function ajvStubPlugin(hits = new Map()) {
+  return { name: 'deckent-mcp-ajv-stub', setup(builder) {
+    builder.onResolve({ filter: /^@modelcontextprotocol\/[^/]+\/(?:_shims|validators\/ajv)$/ /* Go RE2 syntax: no flags */ }, async args => {
+      if (args.pluginData?.deckentAjvStub || !AJV_SUBPATH.test(args.path)) return undefined;
+      // esbuild's own resolver (package exports, `node` condition) finds the real module; only its contents are replaced.
+      const real = await builder.resolve(args.path, { kind: args.kind, importer: args.importer, resolveDir: args.resolveDir, pluginData: { deckentAjvStub: true } });
+      if (real.errors.length) return { errors: real.errors };
+      hits.set(args.path, (hits.get(args.path) ?? 0) + 1);
+      return { path: real.path, pluginData: { deckentAjvStub: args.path } };
+    });
+    builder.onLoad({ filter: /\.mjs$/ }, args => typeof args.pluginData?.deckentAjvStub !== 'string' ? undefined
+      : { contents: stubAjvImport(readFileSync(args.path, 'utf8'), args.pluginData.deckentAjvStub), loader: 'js', resolveDir: dirname(args.path) });
+  } };
+}
+/** Violations of the no-ajv/fast-uri rule for one build: stub hits per present SDK package, metafile inputs, shipped and embedded components. */
+export function ajvGuard({ metafile, shipped, embedded, hits }) {
+  const out = [], inputs = Object.keys(metafile.inputs);
+  for (const name of AJV_PROVIDER_PACKAGES) {
+    if (inputs.some(input => input.includes(`node_modules/${name}/`)) && !(hits.get(`${name}/_shims`) > 0)) out.push(`${name}/_shims was bundled without the ajv stub`);
+  }
+  const forbidden = new RegExp(`(?:^|/)node_modules/(?:${FORBIDDEN_IN_BUNDLE.map(escape).join('|')})/|/ajvProvider-[^/]*$`, 'u');
+  for (const input of inputs.filter(input => forbidden.test(input))) out.push(`bundle input ${input}`);
+  for (const item of shipped.filter(item => FORBIDDEN_IN_BUNDLE.includes(item.name))) out.push(`shipped package ${item.name}@${item.version}`);
+  for (const item of embedded.filter(item => item.shipped && FORBIDDEN_IN_BUNDLE.includes(item.name))) out.push(`embedded ${item.name}@${item.version} in ${item.carrier} (${item.carrierFiles.join(', ')})`);
+  return out;
+}
 
 const walk = (dir, out = []) => { for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name);
   if (entry.isDirectory()) walk(path, out); else out.push(path); } return out; };
@@ -61,14 +108,14 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (existsSync(out) && readdirSync(out).length && !existsSync(join(out, 'summary.json'))) throw new Error(`refusing to replace ${out}: not a build-dist output`);
   rmSync(out, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 
-  const files = walk(dist);
+  const files = walk(dist), stubHits = new Map();
   const own = { name: 'deckent-own-modules', setup(builder) {
     // Deckent's own modules stay separate files: a relative or #import from a dist file is external (import attributes are preserved).
     builder.onResolve({ filter: /^[.#]/ /* Go RE2 syntax: no flags */ }, args => args.kind !== 'entry-point' && args.importer.startsWith(dist + '/') ? { path: args.path, external: true } : undefined);
   } };
   const result = await build({ absWorkingDir: root, entryPoints: files.filter(file => file.endsWith('.js')), outbase: dist, outdir: join(stage, 'dist'),
     bundle: true, splitting: true, format: 'esm', platform: 'node', target: 'node24', chunkNames: 'vendor/[name]-[hash]', legalComments: 'eof',
-    external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own] });
+    external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] });
   const patched = [];
   for (const output of Object.keys(result.metafile.outputs)) {
     const path = join(root, output), code = readFileSync(path, 'utf8');
@@ -86,6 +133,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const licenses = new Map(Object.values(registry?.dependencies ?? {}).flatMap(entry => (entry.embedded ?? []).filter(item => item.license).map(item => [`${item.name}@${item.version}`, item.license])));
   const { shipped, treeShaken } = bundledPackages(root, result.metafile);
   const embedded = embeddedInBundle(root, shipped, licenses);
+  const ajvViolations = ajvGuard({ metafile: result.metafile, shipped, embedded, hits: stubHits });
+  if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
     shipped, embedded, timestamp: timestamp ?? identity.builtAt });
   const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded });
@@ -97,6 +146,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const blockers = [...(Object.keys(typeLeaks).length ? [`published declarations import packages the zero-dependency package cannot resolve: ${Object.keys(typeLeaks).join(', ')}`] : []),
     ...(existsSync(join(stage, 'LICENSE')) ? [] : ['LICENSE file missing']), ...notices.gaps.map(gap => `notice: ${gap}`)];
   const summary = { schemaVersion: 1, stage, esbuild: esbuildVersion, outputs: Object.keys(result.metafile.outputs).length, requireBanner: patched,
+    ajvStub: Object.fromEntries([...stubHits].sort(([a], [b]) => a.localeCompare(b))),
     shipped: shipped.map(item => `${item.name}@${item.version}`), treeShaken: treeShaken.map(item => `${item.name}@${item.version}`),
     embedded: embedded.map(item => `${item.name}@${item.version} in ${item.carrier}: ${item.shipped ? 'shipped' : 'not shipped'}`),
     typeLeaks, publishable: { ok: blockers.length === 0, blockers } };
