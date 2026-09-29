@@ -11,7 +11,7 @@ const exec = promisify(execFile); const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const limits = { maxBytes: 64 * 1024 * 1024, maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 };
 
-describe('local Git invocation construction (Astra GIT-NET 2026-09-29)', () => {
+describe('local Git invocation construction (lane GIT-NET 2026-09-29)', () => {
   it('denies every Git protocol transport and carries no ambient environment', () => {
     const args = localGitArgs('/repo', ['rev-parse', 'HEAD']);
     expect(args).toEqual(['--no-replace-objects', '-C', '/repo', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', 'rev-parse', 'HEAD']);
@@ -45,7 +45,7 @@ async function promisorSource() {
   return { root, origin, source, head, blob, git };
 }
 
-describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot reach a remote (Astra GIT-NET 2026-09-29)', () => {
+describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot reach a remote (lane GIT-NET 2026-09-29)', () => {
   it('refuses a promisor lazy fetch over file:// and leaves the object unfetched', async () => {
     const f = await promisorSource();
     expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
