@@ -22,7 +22,8 @@ function fixture() {
   writeFileSync(toolsFile, JSON.stringify([echo])); appendFileSync(logFile, '');
   const events = () => readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { event: string; name?: string; pid: number });
   const entry = (extra: string[] = []) => ({ command: process.execPath, args: [FIXTURE, '--mode', 'dual', '--tools', toolsFile, '--log', logFile, ...extra], realm: 'host' });
-  return { calls: () => events().filter(event => event.event === 'call'), starts: () => events().filter(event => event.event === 'start').map(event => event.pid), entry };
+  return { calls: () => events().filter(event => event.event === 'call'), starts: () => events().filter(event => event.event === 'start').map(event => event.pid), entry,
+    setTools: (tools: unknown[]) => writeFileSync(toolsFile, JSON.stringify(tools)) };
 }
 const grants = [
   { id: 'mcp-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo'] } },
@@ -124,6 +125,16 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(status).toMatchObject({ server: { scope: 'user', status: 'pending-approval', trust: null } });
     expect(m.calls()).toEqual([]);
     expect(stale.tool.join('\n')).toContain('error=trust-revoked; nothing was sent');
+    expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
+  }, 60_000);
+
+  it('the tool pinned again to another digest while the card waits (same definition, still trusted): nothing is sent (pin-revoked)', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+    writeRegistry(f.project, m.entry()); await approve(f);
+    // The running process keeps its listing (the old digest still matches the call); the trust record now pins the tool's new definition.
+    const repinned = await turn(f, 'repinned', async () => { m.setTools([{ ...echo, description: 'Echo, changed' }]); await approve(f); });
+    expect(m.calls()).toEqual([]);
+    expect(repinned.tool.join('\n')).toContain('error=pin-revoked; nothing was sent');
     expect(effects(f)).toEqual([{ target_kind: 'mcp-tool', state: 'refused', refusal: 'EFFECT_REJECTED' }]);
   }, 60_000);
 
