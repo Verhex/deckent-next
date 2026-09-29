@@ -36,7 +36,7 @@ const command = (f: Harness, request: Parameters<typeof runConfiguredMcpCommand>
 const approve = (f: Harness) => command(f, { verb: 'approve', name: 'fx', alwaysAsk: [] });
 
 /** One turn calling `mcp__fx__echo`; `meanwhile` runs while its card waits (after the card is shown, before the owner's allow). */
-async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown> = async () => undefined) {
+async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown> = async () => undefined, decision: 'allow' | 'deny' = 'allow') {
   // The scripted model answers by request index across the service's life: this turn's two steps follow every earlier request.
   f.state.script = [...f.state.requests.map(() => ({ content: 'earlier' })), { toolCall: { name: 'mcp__fx__echo', arguments: JSON.stringify({ text: turnId }) } }, { content: 'Done.' }];
   const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
@@ -45,7 +45,7 @@ async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown
     if (event.kind === 'approval.requested') pending.push((async () => {
       await meanwhile();
       await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: `allow-${event.approvalId}`,
-        expectedRevision: event.revision, decision: 'allow', reason: 'stale card' });
+        expectedRevision: event.revision, decision, reason: 'stale card' });
     })());
   });
   await Promise.all(pending);
@@ -90,6 +90,21 @@ describe.skipIf(process.platform !== 'linux')('a stale MCP tool card after the s
     expect(m.calls()).toHaveLength(1);
     expect(served).not.toContain(m.calls()[0]!.pid);
     expect(effects(f).map(row => (row as { state: string }).state)).toEqual(['refused', 'settled']);
+  }, 60_000);
+
+  it('reset with no call waiting: the next turn stops the service\'s process of the untrusted server before its cards; a no starts nothing', async () => {
+    const m = fixture(), f = await runtime({ extraGrants: grants }); await f.start();
+    writeRegistry(f.project, m.entry()); await approve(f);
+    const before = m.starts().length;
+    expect((await turn(f, 'first')).finished).toEqual([['mcp__fx__echo', 'ok']]);
+    const served = m.starts().slice(before);
+    await command(f, { verb: 'reset', name: 'fx' });
+    const next = m.starts().length;
+    const declined = await turn(f, 'declined', async () => undefined, 'deny');
+    expect(declined.cards).toBe(1);
+    expect(m.starts().length).toBe(next);
+    expect(await until(() => served.every(pid => !alive(pid)))).toBe(true);
+    expect(m.calls()).toHaveLength(1);
   }, 60_000);
 
   it('remove while the card waits: nothing is sent and the effect is refused before send', async () => {
