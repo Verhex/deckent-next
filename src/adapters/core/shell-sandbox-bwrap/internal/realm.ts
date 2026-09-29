@@ -1,6 +1,7 @@
-import { statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { realpathSync, statSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
@@ -48,6 +49,33 @@ function findBubblewrap(paths: readonly string[]): { readonly ok: true; readonly
   }
   return { ok: false, reason: `bwrap not found at a known path (${paths.join(', ')})` };
 }
+
+/** SHELL-OVERLAY: bubblewrap's overlay options (`--overlay-src`, `--overlay`) exist from 0.11.0 (NEWS, 2024-10-30). */
+export const BUBBLEWRAP_OVERLAY_MIN_VERSION = Object.freeze([0, 11, 0] as const);
+const overlayVersions = new Map<string, boolean>();
+/**
+ * Whether the verified launcher at `path` has the overlay options: its `--version` (`bubblewrap X.Y.Z`, empty environment, 1 s bound) is
+ * read once per file identity (device, inode, size, mtime, ctime) and compared with the minimum; anything unparseable is "no".
+ */
+export function bubblewrapHasOverlay(path: string): boolean {
+  let key: string;
+  try { const info = statSync(path, { bigint: true }); key = `${path}\0${info.dev}\0${info.ino}\0${info.size}\0${info.mtimeNs}\0${info.ctimeNs}`; } catch { return false; }
+  const known = overlayVersions.get(key);
+  if (known !== undefined) return known;
+  let answer = false;
+  try {
+    const match = /^bubblewrap (\d+)\.(\d+)\.(\d+)\s*$/u.exec(execFileSync(path, ['--version'], { env: {}, timeout: 1_000, maxBuffer: 256, encoding: 'utf8' }));
+    if (match) {
+      const version = [Number(match[1]), Number(match[2]), Number(match[3])];
+      const min = BUBBLEWRAP_OVERLAY_MIN_VERSION;
+      answer = version[0]! !== min[0] ? version[0]! > min[0] : version[1]! !== min[1] ? version[1]! > min[1] : version[2]! >= min[2];
+    }
+  } catch { answer = false; }
+  overlayVersions.set(key, answer);
+  return answer;
+}
+/** Whether `a` and `b` (real paths) are the same or one holds the other: overlay layers may not (bubblewrap man page; undefined otherwise). */
+const nested = (a: string, b: string) => { const up = relative(a, b), down = relative(b, a); return up === '' || !up.startsWith('..') && !isAbsolute(up) || !down.startsWith('..') && !isAbsolute(down); };
 
 /** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
 const TOOLCHAIN_DIR_NAMES = new Set(['bin', '.bin', 'sbin']);
@@ -98,7 +126,19 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
  * too). Over the entry/mask bounds the view is refused (the command will not run), never left unmasked.
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
-  options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+  options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean;
+    readonly writeSet?: { readonly upper: string; readonly work: string } } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+  // SHELL-OVERLAY: the overlay's directories must be real, private, outside the project and not holding it (undefined overlay behavior).
+  let overlay: { readonly upper: string; readonly work: string } | null = null;
+  if (write.writeSet) {
+    try {
+      const upper = realpathSync(write.writeSet.upper), work = realpathSync(write.writeSet.work);
+      if (upper !== write.writeSet.upper || work !== write.writeSet.work) return { ok: false, reason: 'the write set directories are not their own real paths' };
+      if (nested(upper, layout.project.root) || nested(work, layout.project.root) || nested(upper, work)) return { ok: false, reason: 'the write set directories overlap the project' };
+      if ([upper, work].some(path => { const info = statSync(path); return !info.isDirectory() || (info.mode & 0o077) !== 0; })) return { ok: false, reason: 'the write set directories are not private' };
+      overlay = { upper, work };
+    } catch { return { ok: false, reason: 'the write set directories could not be checked' }; }
+  }
   const maxEntries = options.maxEntries ?? BUBBLEWRAP_WALK_MAX_ENTRIES, fsOps = options.fsOps ?? fsOpsFor;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:
   // no write, rename or unlink lands); the deny masks inside them still follow. A floor path that does not exist yet is not covered here.
@@ -137,7 +177,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   // writable) — the inode floor's masks still apply.
   // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3): no writable common repository under a `--ro-bind`.
   // The same fact the card's text reads (`sandboxWriteView`).
-  const { repositoryWritable } = sandboxWriteView(layout, { writeFloorReadOnly: write.floorReadOnly === true, projectReadOnly: write.projectReadOnly === true });
+  const { repositoryWritable } = sandboxWriteView(layout, { writeFloorReadOnly: write.floorReadOnly === true, projectReadOnly: write.projectReadOnly === true, writeSet: overlay !== null });
   const gitReadOnly = (path: string) => { if (repositoryWritable) writable.add(path); else readOnly.add(path); };
   const gitEntry = async (path: string, rel: string, isDirectory: boolean, isFile: boolean): Promise<string | null> => {
     if (isDirectory) { if (!repositoryWritable) readOnly.add(path); return walkGit(path, 0); }
@@ -214,7 +254,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const scratchDir = layout.scratchDir;
   const homeDir = home && isAbsolute(home) ? home : null;
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
-  return { ok: true, view: Object.freeze({ projectRoot: root, ...(write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
+  return { ok: true, view: Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
 }
 
@@ -224,10 +264,11 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
  * and a working user namespace and the launcher is verified at a known path; otherwise it says why and the resolver decides.
  */
 export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: BubblewrapOptions = {}): ShellSandbox {
-  const run = (bwrap: string): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
+  const run = (bwrap: string, writeSets: boolean): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
     const started = performance.now();
-    const view = await resolveBubblewrapView(layout, request.environment ?? process.env, options,
-      { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true });
+    const view = request.writeSet && !writeSets ? { ok: false as const, reason: `bwrap at ${bwrap} has no overlay (bubblewrap ${BUBBLEWRAP_OVERLAY_MIN_VERSION.join('.')} or later is needed)` }
+      : await resolveBubblewrapView(layout, request.environment ?? process.env, options,
+        { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}) });
     if (!view.ok) {
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
@@ -250,6 +291,8 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null) }
           : { ok: false as const, reason: view.reason };
       };
-      return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: bubblewrapPosture, notice: null, containment: 'sandbox', launch };
+      const writeSets = bubblewrapHasOverlay(binary.path);
+      return { ok: true, realm: run(binary.path, writeSets), marker: 'sandbox: bubblewrap', posture: bubblewrapPosture, notice: null, containment: 'sandbox', launch,
+        ...(writeSets ? { writeSets: true } : {}) };
     } });
 }

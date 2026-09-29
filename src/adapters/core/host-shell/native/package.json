@@ -4,7 +4,7 @@
   "type": "module",
   "deckentNative": {
     "platforms": ["linux"],
-    "artifacts": ["build/Release/shell-capabilities", "build/Release/shell-sandbox"]
+    "artifacts": ["build/Release/shell-capabilities", "build/Release/shell-sandbox", "build/Release/shell-overlay-scan"]
   },
   "scripts": {
     "build": "node build.mjs",

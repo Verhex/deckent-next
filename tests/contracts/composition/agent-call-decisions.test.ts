@@ -254,15 +254,22 @@ describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
   // The one posture derivation, pinned per owner rule (2026-09-29): full access is comprehensive (never project read-only; only the configuration
   // file, its turn's floor, stays read-only); standart/full-auto keep the Astra 2170 postures; a revoked full-access turn's unattended call is
   // read-only whatever its tier.
-  it('derives every write posture from the call authority, the tier and the turn', () => {
+  // SHELL-OVERLAY: a full-auto relaxation past the narrow set, in a realm that keeps writes aside, gets the write set (the project is not
+  // read-only: its writes are decided like edits afterwards); without such a realm, or for any other authority, the postures above hold.
+  it('derives every write posture from the call authority, the tier, the turn and whether the realm keeps writes aside', () => {
     const tiers = ['read-none', 'read-low', 'narrow-mutating', 'destructive', 'always-ask', 'other-modify'] as const;
-    for (const authority of ['owner-approved', 'full-access', 'unattended'] as const satisfies readonly ShellCallAuthority[]) {
+    for (const authority of ['owner-approved', 'full-access', 'full-auto', 'unattended'] as const satisfies readonly ShellCallAuthority[]) {
       for (const tier of tiers) {
         for (const fullAccessTurn of [false, true]) {
-          const expected = authority === 'owner-approved' ? { writeFloorReadOnly: false, projectReadOnly: false }
-            : authority === 'full-access' ? { writeFloorReadOnly: true, projectReadOnly: false }
-              : { writeFloorReadOnly: true, projectReadOnly: fullAccessTurn || tier !== 'narrow-mutating' };
-          expect({ authority, tier, fullAccessTurn, ...shellWritePosture(authority, tier, fullAccessTurn) }).toEqual({ authority, tier, fullAccessTurn, ...expected });
+          for (const writeSets of [false, true]) {
+            const writeSet = authority === 'full-auto' && writeSets && tier !== 'narrow-mutating' && !fullAccessTurn;
+            const expected = authority === 'owner-approved' ? { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false }
+              : authority === 'full-access' ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false }
+                : writeSet ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true }
+                  : { writeFloorReadOnly: true, projectReadOnly: fullAccessTurn || tier !== 'narrow-mutating', writeSet: false };
+            expect({ authority, tier, fullAccessTurn, writeSets, ...shellWritePosture(authority, tier, fullAccessTurn, writeSets) })
+              .toEqual({ authority, tier, fullAccessTurn, writeSets, ...expected });
+          }
         }
       }
     }

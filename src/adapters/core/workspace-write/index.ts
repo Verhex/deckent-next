@@ -1,4 +1,5 @@
-export { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, fileContentVersion, readWritableFile, resolveWritable, writablePath, writeWorkspaceFile,
+export { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, deleteWorkspaceFile, ensureWorkspaceParents, fileContentVersion, readWritableFile, removeEmptyWorkspaceDirectory,
+  resolveWritable, writablePath, writeWorkspaceFile,
   WorkspaceWriteError, type CurrentFile, type WritablePath } from './internal/files.js';
 export { unifiedDiff } from './internal/diff.js';
 export { isWriteApprovalFloored, planWorkspaceEdit, projectEditArea, WORKSPACE_EDIT_TOOL_SPECS, WORKSPACE_WRITE_APPROVAL_FLOOR, WORKSPACE_FILE_TARGET_KIND,

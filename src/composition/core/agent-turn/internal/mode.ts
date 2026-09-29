@@ -3,7 +3,7 @@ import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type Ag
 import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
-import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
+import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createAgentFileEdits } from './edits.js';
@@ -67,9 +67,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   input.standing && { sessions: input.standing.memory, session: input.standing.session });
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
-  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>, shellInput?: Shell): Promise<AgentToolCallDecision | null> => {
+  const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>, shellInput?: Shell,
+    operation: { readonly id: string } | null = operationOf(tool)): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell, standing: standingOf(tool, cell, args),
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, standing: standingOf(tool, cell, args),
       ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}) }); }
     catch { return null; }
   };
@@ -91,6 +92,40 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const standingEvent = (phase: 'remembered' | 'used', tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cell: Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
     revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
     principal: context.principal, revision, atMs: clock.sample().wallMs, standing, cell, approvalId, tool, argsDigest: agentToolArgumentsDigest(tool.name, args), summary: callSummary(tool, args) });
+  /**
+   * SHELL-OVERLAY (design §6): the decider of one shell call's write set. Each entry is decided exactly like an edit of its path — the tool
+   * that wrote it (`run_shell`) on the agent-tool side, `workspace.file.write` on the operation side, the edit cell of its path — on a fresh
+   * snapshot. A relaxation is audited before the entry's effect (its own `permission-mode` event; no event, no write); a silent allow is
+   * counted; anything that still asks (the write floor, the configuration file, `askEdits`, a company rule no mode lowers) or denies is not
+   * applied. The entry's effect gate decides again and admits only the audited decision (as `execute` does for the call itself).
+   */
+  const writeSet = (tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string): SandboxWriteDecider => ({
+    async decide(rel: string, cell: SandboxWriteCell) {
+      const writeOperation = WORKSPACE_FILE_WRITE_OPERATION.operation;
+      const again = () => decide(tool, cell, undefined, undefined, undefined, writeOperation);
+      const fresh = await again();
+      if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
+      if (fresh.decision !== 'allow') return { ok: false, reason: cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor' };
+      const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined;
+      if (audited) {
+        const event = agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
+          eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write'),
+          call: { turnId, round: execution.round, index: execution.index, callId } }, fresh);
+        try { await withAudit(audit => audit.record(event)); } catch { return { ok: false, reason: 'audit-unavailable' }; }
+      } else await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS.edit, 1, clock.sample().wallMs)).catch(() => undefined);
+      return { ok: true, gate: {
+        // The operation side's own require-approval is what the audited relaxation lowered (as `execute` passes `allow` to its inner gate).
+        async admit(descriptor, _decision, _command, _principal, effect) {
+          const terminal = effect.record && (effect.record.state === 'settled' || effect.record.state === 'refused');
+          if (terminal) return;
+          if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+          const now = await again();
+          if (!now || now.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
+          if (!(audited ? isAuditedDecision(fresh, now) : now.decision === 'allow' && now.relaxation === null && now.fullAccess === undefined)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+        },
+      } };
+    },
+  });
   return {
     async authorize(tool: AgentToolSpec, args: Record<string, unknown> | undefined): Promise<'allow' | 'deny' | 'require-approval'> {
       if (!args) return (await decide(tool, 'read'))?.decision === 'deny' ? 'deny' : 'require-approval';
@@ -136,7 +171,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      * nothing runs), a mode relaxation is audited first, and a silent decision is counted.
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
-      run: (gate: EffectApprovalGate, authority: ShellCallAuthority) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      run: (gate: EffectApprovalGate, authority: ShellCallAuthority, writes?: SandboxWriteDecider) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
@@ -174,7 +209,9 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
             return inner.admit(descriptor, decision, command, principal, context);
           },
         // MODES-3 x Astra 2170 (owner 2026-09-29): a full-access call is owner-authorized by the launched mode (its own write posture).
-        }, fullAccess ? 'full-access' : 'unattended');
+        // SHELL-OVERLAY: a shell call a full-auto relaxation let run may keep its writes aside; each is then decided like an edit (`writeSet`).
+        }, fullAccess ? 'full-access' : relaxation?.mode === 'full-auto' && tool.toolClass === 'shell' ? 'full-auto' : 'unattended',
+        relaxation?.mode === 'full-auto' && tool.toolClass === 'shell' ? writeSet(tool, args, execution, callId) : undefined);
       } finally { await close(); }
     },
   };

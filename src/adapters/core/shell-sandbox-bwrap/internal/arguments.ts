@@ -7,6 +7,9 @@ export interface BubblewrapView {
   readonly projectRoot: string;
   /** Astra 2170 R1: the project bound read-only (an unbounded call the owner did not approve); absent = read-write. */
   readonly projectReadOnly?: boolean;
+  /** SHELL-OVERLAY: the project mounted as an overlay (the real project the only lower layer) whose writes land in `upper` (bubblewrap
+   * ≥ 0.11); both directories are Deckent's own, outside the project and outside this view. Replaces the project bind. */
+  readonly overlay?: { readonly upper: string; readonly work: string };
   /** The conversation's scratch area (SCR-A; the command's TMPDIR): read-write. */
   readonly scratchDir: string | null;
   /** The service user's HOME: an empty tmpfs (never bound — `~/.ssh`, `~/.aws`, tokens and the product ledger stay invisible). */
@@ -44,7 +47,8 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   if (view.home) args.push('--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home);
   for (const path of view.systemPaths) args.push('--ro-bind-try', path, path);
   for (const path of view.toolchainPaths) args.push('--ro-bind-try', path, path);
-  args.push(view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot);
+  if (view.overlay) args.push('--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot);
+  else args.push(view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot);
   for (const path of view.writablePaths ?? []) args.push('--bind', path, path);
   for (const path of view.readOnlyPaths) args.push('--ro-bind', path, path);
   for (const path of view.maskedDirectories) args.push('--tmpfs', path);

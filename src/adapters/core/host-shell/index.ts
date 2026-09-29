@@ -8,3 +8,6 @@ export { describeHostShellResult, hostShellCleanupNote } from './internal/result
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
 export { isVerifiedGitObject, scanGitDirectory, type GitDirectoryScan } from './internal/git-objects.js';
 export { ASYNC_FS_OPS, fsOpsFor, LOCAL_FILESYSTEM_TYPES, SYNC_FS_OPS, type FsOps } from './internal/fs-ops.js';
+export { applySandboxWriteSet, describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, SANDBOX_WRITE_SET_BOUNDS, scanSandboxWriteSet,
+  type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteDecider, type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetDirectory,
+  type SandboxWriteSetReport, type SandboxWriteSetScan } from './internal/write-set.js';
