@@ -143,7 +143,7 @@ async function filled(f: Awaited<ReturnType<typeof root>>, value: (index: number
   }
   return { store, secrets };
 }
-const full = { code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1' } };
+const full = { code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1', maxBytes: String(LIMIT) } };
 
 it('file backend: a change is admitted only when its whole document fits the reader bound — exact limit accepted, one byte over refused', async () => {
   const f = await root(), { store, secrets } = await filled(f, () => 'x'.repeat(65_536));

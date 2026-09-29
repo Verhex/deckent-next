@@ -227,7 +227,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     const before = await readFile(join(f.globalRoot, 'secrets.json'));
     const refused = await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'OVERFLOW', value: 'x'.repeat(65_536) })
       .then(() => null, (error: unknown) => error);
-    expect(refused).toMatchObject({ code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1' } });
+    expect(refused).toMatchObject({ code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1', maxBytes: '1048576' } });
     expect((await readFile(join(f.globalRoot, 'secrets.json'))).equals(before)).toBe(true);
     expect(await f.file.get('KEEP_ME')).toBe(CANARY);
     // The allowed intent was sealed before the store refused (intent first, as for a held lock): the audit is not the outcome.

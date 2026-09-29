@@ -90,7 +90,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions): SecretSt
         // Admission of the whole document (Astra 2185 R5): the exact text that would replace the file is measured against the reader's bound
         // before anything is written. Over it the change is refused and the old file stays as it was; a delete only shrinks the document.
         const text = serializeJsonDocument({ schemaVersion: 1, secrets: sorted });
-        if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_FULL');
+        if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_FULL', { maxBytes: String(FILE_SECRET_STORE_MAX_BYTES) });
         try { await writeTextAtomic(path!, text); } catch { throw fail('SECRET_STORE_UNAVAILABLE'); }
       }
       return outcome.result;
