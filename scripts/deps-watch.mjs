@@ -4,6 +4,8 @@
 // Sources: OSV querybatch + /v1/vulns/{id} (installed tree AND embedded components), npm registry (latest, deprecated, provenance =
 // dist.attestations, publish dates for direct dependencies and registry alternatives), `npm audit signatures --json`, lockfile licenses.
 // Writes <outDir>/deps-watch-<date>.json and .md; exit 1 when a finding's severity is in policy.failSeverities (default HIGH/CRITICAL).
+// dependencies.json `acceptedRisks` turn a vulnerability into MITIGATED (reported, not failing) only while the entry is unexpired and the
+// component's observed advisory set, version, carrier and severities match it exactly; any change fails again.
 // A source that cannot be read is itself a HIGH finding (an incomplete watch never passes).
 import { execFile } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -13,7 +15,7 @@ import { defaultHosts, scanEmbedded } from './check-embedded-deps.mjs';
 import { loadRegistry } from './dependencies.mjs';
 
 const OSV = 'https://api.osv.dev/v1', NPM = 'https://registry.npmjs.org', ABBREVIATED = 'application/vnd.npm.install-v1+json';
-const RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
+const RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0, MITIGATED: -1 };
 
 /** OSV record → severity. MAL- (malicious package) is CRITICAL; an unrated record counts as HIGH (fail-closed). */
 export function osvSeverity(record) {
@@ -29,6 +31,32 @@ export function licenseAllowed(expression, allowed) {
   if (typeof expression !== 'string' || !expression.trim()) return false;
   const ids = expression.replace(/[()]/gu, ' ').split(/\s+(?:OR|AND)\s+/u).map(id => id.trim()).filter(Boolean);
   return /\sAND\s/u.test(expression) ? ids.every(id => allowed.includes(id)) : ids.some(id => allowed.includes(id));
+}
+
+/** Marks vulnerabilities MITIGATED per accepted risk (exact package, version, carrier and advisory set; unexpired; severity not above the
+ * accepted one) and adds one finding per vulnerability. A risk no longer observed anywhere is reported (LOW) so it gets removed. */
+export function applyAcceptedRisks(vulnerable, risks, today, add) {
+  const groups = Map.groupBy(vulnerable, item => `${item.name}@${item.version}|${item.carrier}`);
+  const used = new Set();
+  for (const items of groups.values()) {
+    const { name, version, carrier } = items[0];
+    const risk = risks.find(entry => entry.package === name && entry.version === version && entry.carriers.includes(carrier));
+    let reason = null;
+    if (risk) {
+      used.add(risk.id);
+      const observed = new Set(items.map(item => item.id)), accepted = new Set(risk.advisories);
+      const added = [...observed].filter(id => !accepted.has(id)), gone = [...accepted].filter(id => !observed.has(id));
+      if (risk.expires < today) reason = `accepted risk ${risk.id} expired ${risk.expires}`;
+      else if (added.length || gone.length) reason = `accepted risk ${risk.id} no longer matches (new: ${added.join(', ') || '—'}; gone: ${gone.join(', ') || '—'})`;
+      else if (items.some(item => RANK[item.severity] > RANK[risk.severity])) reason = `accepted risk ${risk.id} covers up to ${risk.severity}`;
+    }
+    for (const item of items) {
+      const detail = `${item.id}${item.rated ? '' : ' (unrated; counted HIGH)'} ${item.summary}`.trim();
+      if (risk && !reason) { item.mitigated = risk.id; add('MITIGATED', 'vulnerability', item.subject, `${detail} [was ${item.severity}; accepted risk ${risk.id} until ${risk.expires}: ${risk.mitigation}]`); }
+      else add(item.severity, 'vulnerability', item.subject, reason ? `${detail} [${reason}]` : detail);
+    }
+  }
+  for (const risk of risks) if (!used.has(risk.id)) add('LOW', 'accepted-risk-unused', risk.id, `${risk.package}@${risk.version} in ${risk.carriers.join(', ')} is no longer observed; remove the entry`);
 }
 
 const pool = async (items, size, work) => {
@@ -94,10 +122,11 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
         if (record?.withdrawn) continue;
         const { severity, rated } = osvSeverity(record ?? { id });
         const subject = `${target.name}@${target.version}${target.via ? ` (embedded in ${target.via})` : ''}${target.runtime ? '' : ' [dev]'}`;
-        vulnerable.push({ id, subject, severity, summary: record?.summary ?? '', aliases: record?.aliases ?? [] });
-        add(severity, 'vulnerability', subject, `${id}${rated ? '' : ' (unrated; counted HIGH)'} ${record?.summary ?? ''}`.trim());
+        vulnerable.push({ id, subject, severity, rated, name: target.name, version: target.version, carrier: target.via ?? 'tree',
+          summary: record?.summary ?? '', aliases: record?.aliases ?? [] });
       }
     });
+    applyAcceptedRisks(vulnerable, registry.acceptedRisks, today, add);
   } catch (error) { add('HIGH', 'watch-incomplete', 'OSV', error.message); }
 
   // npm registry: abbreviated packuments for the installed tree; full packuments (publish times) for direct deps and alternatives.
@@ -164,6 +193,7 @@ export function renderMarkdown(report) {
     `Exit ${report.exitCode} (fails on ${report.failSeverities.join('/')}). Node ${report.node}. Tree: ${report.tree.packages} packages (${report.tree.runtime} runtime), ${report.tree.embedded} embedded components.`,
     `Findings: ${Object.entries(report.counts).map(([level, count]) => `${level} ${count}`).join(', ')}. Signatures: invalid ${report.signatures.invalid ?? '?'}, missing ${report.signatures.missing ?? '?'}.`, '',
     '## Findings', '', report.findings.length ? table(['Severity', 'Kind', 'Subject', 'Detail'], report.findings.map(item => [item.severity, item.kind, item.subject, item.detail])) : 'None.', '',
+    `MITIGATED findings come from dependencies.json acceptedRisks; they fail again on expiry or on any advisory/version/carrier change.`, '',
     '## Direct dependencies', '', table(['Package', 'Kind', 'Criticality', 'Installed', 'Latest', 'Latest date', 'Next review'],
       report.direct.map(row => [row.name, row.kind, row.criticality, row.installed, row.latest, row.latestDate, row.nextReview])), '',
     '## Alternatives (registry record vs npm now)', '', table(['Alternative', 'Package', 'Recorded', 'Recorded date', 'Latest', 'Latest date'],

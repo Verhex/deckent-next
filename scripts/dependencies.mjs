@@ -21,10 +21,17 @@ const reviewed = { purpose: text, owners: z.array(text).min(1), criticality: z.e
 const dependencySchema = z.object({ kind: z.enum(['runtime', 'dev']), reviewedVersion: text, features: z.array(text).min(1),
   embedded: z.array(z.object({ name: text, version: text.nullable() }).strict()).optional(), ...reviewed }).strict();
 const platformSchema = z.object({ requirement: text, ...reviewed }).strict();
-const registrySchema = z.object({ $comment: z.string().optional(), schemaVersion: z.literal(1),
+const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+/** A known, mitigated advisory set on one package@version in named carriers (`tree` or `<registry dependency>@<version>` that embeds it). */
+const riskSchema = z.object({ id: text, package: text, version: text, carriers: z.array(text).min(1), advisories: z.array(text).min(1),
+  severity: z.enum(SEVERITIES), mitigation: text, evidence: z.array(text).min(1, 'an accepted risk needs at least one evidence reference'),
+  decidedBy: text, decided: date, expires: date }).strict();
+/** Longest acceptance window by the accepted severity (owner/lead 2026-09-29: HIGH/CRITICAL at most 30 days). */
+export const RISK_WINDOW_DAYS = { LOW: 90, MEDIUM: 90, HIGH: 30, CRITICAL: 30 };
+const registrySchema = z.object({ $comment: z.string().optional(), schemaVersion: z.literal(2),
   policy: z.object({ reviewIntervalDays: z.object({ P0: z.number().int().positive(), P1: z.number().int().positive(), P2: z.number().int().positive() }).strict(),
-    licenses: z.object({ runtime: z.array(text).min(1), dev: z.array(text).min(1) }).strict(), failSeverities: z.array(z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])).min(1) }).strict(),
-  dependencies: z.record(z.string(), z.unknown()), platform: z.record(z.string(), z.unknown()) }).strict();
+    licenses: z.object({ runtime: z.array(text).min(1), dev: z.array(text).min(1) }).strict(), failSeverities: z.array(z.enum(SEVERITIES)).min(1) }).strict(),
+  dependencies: z.record(z.string(), z.unknown()), platform: z.record(z.string(), z.unknown()), acceptedRisks: z.array(z.unknown()) }).strict();
 
 /** `@scope/name/sub` → `@scope/name`; `name/sub` → `name`. */
 export const packageName = spec => spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/');
@@ -43,7 +50,12 @@ export function loadRegistry(root, registryFile) {
     if (parsed.success) return [[key, parsed.data]];
     errors.push(...issues(parsed.error, `${name}.${key}`)); return [];
   }));
-  return { registry: { ...top.data, dependencies: section('dependencies', dependencySchema), platform: section('platform', platformSchema) }, errors };
+  const acceptedRisks = top.data.acceptedRisks.flatMap((value, index) => {
+    const parsed = riskSchema.safeParse(value);
+    if (parsed.success) return [parsed.data];
+    errors.push(...issues(parsed.error, `acceptedRisks.${index}`)); return [];
+  });
+  return { registry: { ...top.data, dependencies: section('dependencies', dependencySchema), platform: section('platform', platformSchema), acceptedRisks }, errors };
 }
 
 /** Owner ids a src file answers to: its unit and its package (a file directly under src/<pkg>/ answers only to the package). */
@@ -107,6 +119,23 @@ export function lintDependencies({ root, registryFile: REGISTRY_FILE, registry, 
     reviewDays(entry, name);
   }
   for (const [id, entry] of Object.entries(registry.platform)) { unitOwners(entry, `platform ${id}`); reviewDays(entry, `platform ${id}`); }
+  const riskIds = new Set();
+  for (const risk of registry.acceptedRisks) {
+    const label = `accepted risk ${risk.id}`, days = (Date.parse(risk.expires) - Date.parse(risk.decided)) / DAY;
+    if (riskIds.has(risk.id)) fail('dependency-registry', REGISTRY_FILE, `${label} is declared twice`);
+    riskIds.add(risk.id);
+    if (new Set(risk.advisories).size !== risk.advisories.length) fail('dependency-registry', REGISTRY_FILE, `${label} lists an advisory twice`);
+    for (const carrier of risk.carriers) {
+      const host = carrier === 'tree' ? null : carrier.slice(0, carrier.lastIndexOf('@'));
+      if (carrier !== 'tree' && (!host || registry.dependencies[host]?.kind !== 'runtime' || !(registry.dependencies[host].embedded ?? [])
+        .some(component => component.name === risk.package && component.version === risk.version))) {
+        fail('dependency-registry', REGISTRY_FILE, `${label} carrier ${carrier} is neither "tree" nor a runtime dependency that embeds ${risk.package}@${risk.version}`);
+      }
+    }
+    if (days <= 0) fail('dependency-registry', REGISTRY_FILE, `${label} expires ${risk.expires}, not after its decision ${risk.decided}`);
+    else if (days > RISK_WINDOW_DAYS[risk.severity]) fail('dependency-registry', REGISTRY_FILE, `${label} window ${days} days exceeds ${RISK_WINDOW_DAYS[risk.severity]} for ${risk.severity}`);
+    if (risk.expires < today) warn('accepted-risk', REGISTRY_FILE, `${label} expired ${risk.expires}; deps-watch fails on its advisories again`);
+  }
 
   const used = new Map();
   for (const file of srcFiles) {

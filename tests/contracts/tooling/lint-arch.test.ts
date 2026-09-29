@@ -13,7 +13,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(r => rm(r, { recursive: true, force: true }))); });
 
 type FixtureDependencies = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; registry?: unknown };
-const emptyRegistry = { schemaVersion: 1, policy: { reviewIntervalDays: { P0: 30, P1: 60, P2: 90 }, licenses: { runtime: ['MIT'], dev: ['MIT'] }, failSeverities: ['HIGH', 'CRITICAL'] }, dependencies: {}, platform: {} };
+const emptyRegistry = { schemaVersion: 2, policy: { reviewIntervalDays: { P0: 30, P1: 60, P2: 90 }, licenses: { runtime: ['MIT'], dev: ['MIT'] }, failSeverities: ['HIGH', 'CRITICAL'] }, dependencies: {}, platform: {}, acceptedRisks: [] as unknown[] };
 async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
   const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { tiers: { enforce: boolean }; imports: { enforce: boolean }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
@@ -275,7 +275,7 @@ describe('lint-arch external dependency contract', () => {
   const review = { lastReview: '2026-09-29', nextReview: '2026-10-29' };
   const entry = (kind: 'runtime' | 'dev', owners: string[], extra: Record<string, unknown> = {}) => ({ kind, owners, purpose: 'fixture', features: ['fixture'],
     criticality: 'P0', reviewedVersion: '1.0.0', alternatives: [], ownSolution: 'none', ...review, ...extra });
-  const registry = (dependencies: Record<string, unknown>, platform: Record<string, unknown> = {}) => ({ ...emptyRegistry, dependencies, platform });
+  const registry = (dependencies: Record<string, unknown>, platform: Record<string, unknown> = {}, acceptedRisks: unknown[] = []) => ({ ...emptyRegistry, dependencies, platform, acceptedRisks });
   const owned = { dependencies: { 'acme-lib': '1.0.0', 'shared-lib': '1.0.0' }, devDependencies: { 'dev-lib': '1.0.0' },
     registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']), 'shared-lib': entry('runtime', ['src/domain', 'src/engine']),
       'dev-lib': entry('dev', ['package.json']) }) };
@@ -366,5 +366,26 @@ describe('lint-arch external dependency contract', () => {
       registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme'], { embedded: [{ name: 'fast-uri', version: '3.1.0' }, { name: 'ajv', version: '8.18.0' }] }) }) }));
     expect(declared.out).toContain('[external-embedded] dependencies.json — acme-lib declares ajv@8.18.0 but the installed sourcemaps no longer embed it');
     expect(declared.out).not.toContain('undeclared fast-uri');
+  });
+
+  it('validates accepted risks: evidence required, 30-day HIGH window, embedding carrier, expiry warning', async () => {
+    const risk = (extra: Record<string, unknown>) => ({ id: 'r', package: 'fast-uri', version: '3.1.0', carriers: ['acme-lib@1.0.0'], advisories: ['GHSA-a'],
+      severity: 'HIGH', mitigation: 'm', evidence: ['proof/X/review.md'], decidedBy: 'lead', decided: '2026-09-29', expires: '2026-10-29', ...extra });
+    const files = { 'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n" };
+    const acme = entry('runtime', ['src/adapters/core/acme'], { embedded: [{ name: 'fast-uri', version: '3.1.0' }] });
+    const ok = await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': acme }, {}, [risk({})]) });
+    const valid = await lint(ok, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-01' });
+    expect(valid.code).toBe(0);
+    expect(valid.out).not.toContain('accepted');
+    const expired = await lint(ok, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-30' });
+    expect(expired.code).toBe(0);
+    expect(expired.out).toContain('⚠ [accepted-risk] dependencies.json — accepted risk r expired 2026-10-29; deps-watch fails on its advisories again');
+    const bad = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': acme }, {}, [
+      risk({ id: 'no-evidence', evidence: [] }), risk({ id: 'long', expires: '2026-10-30' }), risk({ id: 'foreign', carriers: ['other@1.0.0', 'acme-lib@1.0.0'], version: '3.0.0' })]) }));
+    expect(bad.code).toBe(1);
+    expect(bad.out).toContain('[dependency-registry] dependencies.json — acceptedRisks.0.evidence: an accepted risk needs at least one evidence reference');
+    expect(bad.out).toContain('[dependency-registry] dependencies.json — accepted risk long window 31 days exceeds 30 for HIGH');
+    expect(bad.out).toContain('accepted risk foreign carrier other@1.0.0 is neither "tree" nor a runtime dependency that embeds fast-uri@3.0.0');
+    expect(bad.out).toContain('accepted risk foreign carrier acme-lib@1.0.0 is neither');
   });
 });

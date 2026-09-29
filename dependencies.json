@@ -1,6 +1,6 @@
 {
   "$comment": "External dependency registry (DEPS-GOV, owner 2026-09-29). Single source of truth for which arch unit (src/<pkg>/<tier>/<unit>) or package (src/<pkg>) may import each npm package; lint-arch enforces owners, package.json parity, embedded components and review intervals offline and warns when nextReview has passed; scripts/deps-watch.mjs refreshes versions, OSV, provenance and licenses over the network. Seeded from proof/DEPENDENCY-AUDIT-2026-09-29 (A/B/C) with npm registry data read 2026-09-29.",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "policy": {
     "reviewIntervalDays": { "P0": 30, "P1": 60, "P2": 90 },
     "licenses": {
@@ -305,5 +305,20 @@
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     }
-  }
+  },
+  "acceptedRisks": [
+    {
+      "id": "fast-uri-3.1.0-in-mcp-sdk-2.2.0",
+      "package": "fast-uri",
+      "version": "3.1.0",
+      "carriers": ["@modelcontextprotocol/client@2.2.0", "@modelcontextprotocol/server@2.2.0"],
+      "advisories": ["GHSA-4c8g-83qw-93j6", "GHSA-7p8r-x3mc-p8w7", "GHSA-f65p-4m7j-42xc", "GHSA-jqff-g426-hqxp", "GHSA-q3j6-qgpj-74h6", "GHSA-qw65-cvwx-89v3", "GHSA-v2hh-gcrm-f6hx", "GHSA-v39h-62p7-jpjc"],
+      "severity": "HIGH",
+      "mitigation": "Untrusted schemas never reach the bundled ajv/fast-uri: the client compiles a server's outputSchema with the SDK's cf-worker interpreter validator (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Server side: the low-level Server's only getValidator caller is form elicitation with our own schema, so no path reaches fast-uri. The bundled code is still installed and loaded until the SDK ships a rebuilt bundle (typescript-sdk#2042).",
+      "evidence": ["proof/MCP-VALIDATOR-2026-09-29/review.md (server side section; ajv-vs-cfworker.log; mutation-remove-validator.log)", "lane/mcp-pin-def c30a651 + proof/MCP-PIN-DEF-2026-09-29/review.md", "merged f6bd9d3 (lane/mcp-validator 35700a2)"],
+      "decidedBy": "lead (DEPS-GOV follow-up, 2026-09-29)",
+      "decided": "2026-09-29",
+      "expires": "2026-10-29"
+    }
+  ]
 }
