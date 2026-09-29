@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
-import { agentShellEffectCommandId, landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, type ShellSandboxFactory } from '#adapters/index.js';
+import { agentFileEffectCommandId, agentShellEffectCommandId, landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
@@ -17,7 +17,7 @@ import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, createConfiguredRunt
 import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
-import { agentFileEffectCommandId, chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
+import { chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';

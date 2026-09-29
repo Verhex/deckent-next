@@ -433,6 +433,7 @@
         "src/adapters/core/local-runtime-socket",
         "src/adapters/core/sqlite-agent-turn",
         "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/workspace-read",
         "src/composition/core/agent-turn",
         "src/composition/core/approvals",
         "src/composition/core/execution",
@@ -458,6 +459,7 @@
         "src/engine/core/provider-spend",
         "src/engine/core/runs",
         "src/engine/core/runtime",
+        "src/engine/core/secret-store",
         "src/engine/core/task-evaluation",
         "src/platform/core/config",
         "src/platform/core/errors",
@@ -616,7 +618,8 @@
         "src/engine/core/runs",
         "src/domain/core/provider-spend",
         "src/domain/core/effect",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/engine/core/secret-store"
       ],
       "plan": "EXECUTION"
     },
@@ -825,6 +828,7 @@
     },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/engine/core/secret-store",
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-kit",
@@ -1770,6 +1774,9 @@
       "dependencies": [
         "src/domain/core/adapter-registry",
         "src/domain/core/audit",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
         "src/platform/core/errors",
         "src/platform/core/host"
       ],

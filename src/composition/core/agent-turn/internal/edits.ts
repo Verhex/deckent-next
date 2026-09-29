@@ -1,19 +1,8 @@
-import { createHash } from 'node:crypto';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock, prepareProductDirectory } from '#platform/index.js';
-import { createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
+import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
-
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-
-/**
- * Effect identity of one file edit call (Astra 2113): the turn, the call's position in it (model round, index in the response), the
- * exact arguments and the planned version. A replay of the same call is the same C11 effect; a later call writing the same change
- * after the file returned to the same content is another effect, never answered with the first write's stored result.
- */
-export const agentFileEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string,
-  beforeVersion: string) => sha256(`agent-file-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}\0${beforeVersion}`);
 
 /**
  * Agent file edits of one turn in one area (T-L4 slice 2; SCR-A: the project, or the conversation's scratch area): the plan (version +

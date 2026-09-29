@@ -2,10 +2,8 @@ export { AGENT_READABLE_PRODUCT_RESOURCES, agentProductStateDeny, agentWorkspace
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn, withMcpNotices } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';
-export { agentFileEffectCommandId } from './internal/edits.js';
 export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTERS } from './internal/mode.js';
 export { sweepFullPreviews } from './internal/preview.js';
-export { attachPeerWorkspaceFile, createRuntimeWorkspaceFileHost, findPeerWorkspaceFiles } from './internal/workspace-files.js';
-export type { RuntimeWorkspaceFileHost } from './internal/workspace-files.js';
+export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';
 export { renderMcpStartNotice, runConfiguredMcpCommand } from './internal/mcp.js';

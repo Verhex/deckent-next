@@ -1,7 +1,7 @@
 import { isRuntimeServiceScratchOperation, runtimeServiceResultCapacity, RuntimeServiceProtocolError, type RuntimeServiceRequest } from '#engine/index.js';
-import type { LocalPeerIdentity } from '#adapters/index.js';
+import type { LocalPeerIdentity, RuntimeWorkspaceFileHost } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { attachPeerWorkspaceFile, executePeerScratchOperation, findPeerWorkspaceFiles, type RuntimeWorkspaceFileHost } from '#composition/core/agent-turn/index.js';
+import { attachPeerWorkspaceFile, executePeerScratchOperation, findPeerWorkspaceFiles } from '#composition/core/agent-turn/index.js';
 
 /** v15 composer `@file` and v16 `/scratch` operations: bounded single-frame answers; the peer identity is the socket's. */
 export function executeConfiguredRuntimeWorkspaceFileOperation(projectRoot: string, request: RuntimeServiceRequest, peer: LocalPeerIdentity,

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,6 +10,14 @@ import { ABSENT_FILE_VERSION, EMPTY_DIRECTORY_VERSION, WORKSPACE_WRITE_MAX_FILE_
   readWritableFile, removeWorkspaceDirectory, resolveWritable,
   temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
+
+/**
+ * Effect identity of one file edit call (Astra 2113): the turn, the call's position in it (model round, index in the response), the
+ * exact arguments and the planned version. A replay of the same call is the same C11 effect; a later call writing the same change
+ * after the file returned to the same content is another effect, never answered with the first write's stored result.
+ */
+export const agentFileEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string,
+  beforeVersion: string) => createHash('sha256').update(`agent-file-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}\0${beforeVersion}`).digest('hex');
 
 export const WORKSPACE_FILE_TARGET_KIND = 'workspace-file';
 /** Core operation of an agent edit (catalog data in code for the built-in Core target; Enterprise catalogs may add their own). */

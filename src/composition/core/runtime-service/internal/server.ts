@@ -8,7 +8,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig,
-  startScratchSweeper, sweepScratch, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
+  startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
@@ -20,7 +20,7 @@ import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
 import { executeConfiguredRuntimeChatTurnOperation } from './chat-turn.js';
-import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, scratchResource, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
+import { createRuntimeChatTurnHost, scratchResource, sweepFullPreviews } from '#composition/core/agent-turn/index.js';
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
