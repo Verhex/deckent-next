@@ -98,6 +98,24 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
       .toEqual({ shareNet: false, rootBind: false, homeTmpfs: true });
   });
 
+  it('the HOME walk skips only what is inside the project and the state roots, never their ancestors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-open-nested-')); roots.push(root);
+    const home = join(root, 'home'), project = join(home, 'work/proj'), hidden = join(home, '.local/state/x');
+    await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(hidden, { recursive: true }), mkdir(join(home, '.local/share'), { recursive: true }),
+      mkdir(join(home, 'work/other'), { recursive: true })]);
+    await Promise.all([writeFile(join(home, '.local/share/key.pem'), 'k'), writeFile(join(home, 'work/other/.env'), 'k'), writeFile(join(hidden, 'secrets.json'), 'k'),
+      writeFile(join(project, 'id.pem'), 'k')]);
+    const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project), scratchDir: null, writeFloor: () => false, repositoryWritable: true,
+      hardFloor: { roots: [join(project, '.deckent'), hidden], homeDenied } };
+    const resolved = await resolveBubblewrapView(layout, { HOME: home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true, open: true });
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const masked = resolved.view.maskedFiles;
+    expect(masked).toEqual(expect.arrayContaining([join(home, '.local/share/key.pem'), join(home, 'work/other/.env')]));
+    // Inside the hidden root nothing is masked one by one (the root is hidden whole); the project's own file is its walk's (the project deny).
+    expect(masked).not.toContain(join(hidden, 'secrets.json'));
+    expect(masked.filter(path => path === join(project, 'id.pem'))).toHaveLength(1);
+  });
+
   it('fails closed: no hard floor, a root holding the project or HOME, a read-only project', async () => {
     const f = await fixture();
     const env = { HOME: f.home, PATH: '/usr/bin:/bin' };

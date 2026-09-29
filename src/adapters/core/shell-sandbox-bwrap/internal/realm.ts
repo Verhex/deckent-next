@@ -115,7 +115,7 @@ async function maskHomeCredentials(home: string, denied: (rel: string) => boolea
     for (const entry of names) {
       if (++entries > BUBBLEWRAP_HOME_WALK_MAX_ENTRIES) return `HOME credential walk over its bound (${BUBBLEWRAP_HOME_WALK_MAX_ENTRIES} entries)`;
       const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
-      if (entry.isSymbolicLink() || skip.some(root => under(root, path))) continue;
+      if (entry.isSymbolicLink() || skip.some(root => under(path, root))) continue;
       if (denied(entryRel)) { if (entry.isDirectory()) maskedDirectories.push(path); else if (entry.isFile()) maskedFiles.push(path); continue; }
       if (!entry.isDirectory() || BASELINE_IGNORED_DIRS.has(entry.name) || depth + 1 >= BUBBLEWRAP_HOME_WALK_MAX_DEPTH) continue;
       const refused = await walk(path, entryRel, depth + 1);
