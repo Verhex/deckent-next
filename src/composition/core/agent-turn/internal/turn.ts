@@ -1,18 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { isAbsolute, relative, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
   requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, resolveLocale, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
+import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, resolveLocale, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
   type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   isWriteApprovalFloored, shippedShellSandboxes, MCP_PROJECT_REGISTRY_PATH, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
-  sandboxWriteSetRoot, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
+  sandboxWriteSetRoot, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type ShellSandboxLayout, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
 import { createAgentFetch } from './fetch.js';
@@ -84,6 +85,27 @@ export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout):
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return () => false;
   const matchers = [`${rel}*`, `${rel.slice(0, slash + 1)}.${rel.slice(slash + 1)}*`].map(createGlobMatcher);
   return path => matchers.some(match => match(path));
+}
+/**
+ * OPEN-SANDBOX (owner MODES-3 checkpoint 4): the hard floor of a full-access turn's open shell view (`ShellSandboxLayout.hardFloor`). Roots: the
+ * project's `.deckent` (MCP registry's directory), the data root, the bootstrap configuration's directory unless it holds the project, the global
+ * state root of the configuration and process environments, an existing conventional `~/.deckent` (never created). Credentials: the Core read
+ * floor without repository internals. `product` (owner Y, 2026-09-30): registry resources under this and the default layout, the data root, the
+ * bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads — any other existing subdirectory of a sealed root is the project's.
+ */
+export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, environments: readonly Readonly<Record<string, string | undefined>>[]): NonNullable<ShellSandboxLayout['hardFloor']> {
+  const bootstrap = dirname(layout.bootstrapConfigPath), rel = relative(bootstrap, projectRoot);
+  const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap])];
+  for (const environment of environments) {
+    const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
+    roots.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved && existsSync(conventional) ? [conventional] : []);
+  }
+  const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
+  const inProject = (path: string) => relative(projectRoot, path).split(sep).join('/'), resources = Object.keys(layout.resources) as ProductResource[];
+  const products = [...[layout, resolveProductLayout({ projectRoot })].flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
+    inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];
+  return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)), product: (path: string) =>
+    products.some(product => product === path || product.startsWith(`${path}/`) || path.startsWith(`${product}/`)) });
 }
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {
@@ -190,7 +212,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
-      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(fullAccess ? { repositoryWritable: true } : {}) }) }) : null;
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(fullAccess ? { repositoryWritable: true,
+        hardFloor: agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]) } : {}) }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a

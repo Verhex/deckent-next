@@ -111,6 +111,8 @@ describe.skipIf(process.platform !== 'linux')('the approval card describes the w
       expect(forcedCard.preview).toContain('the project is writable');
       expect(forcedCard.preview).toContain('.git writable');
       expect(forcedCard.preview).not.toContain('.git read-only');
+      // OPEN-SANDBOX: the card of a full-access turn names the open view (bubblewrap) or says it is not available (Landlock, require-sandbox).
+      expect(forcedCard.preview).toContain(realm === 'bubblewrap' ? 'network on, HOME visible, Deckent state and credentials hidden/read-only' : 'full access: no open sandbox');
 
       // The card's "write floor included" is not just wording: an owner-approved call in this same full-access turn actually opens the
       // installation's own configuration file for writing — `>>` with zero bytes only succeeds under O_WRONLY, content unchanged either

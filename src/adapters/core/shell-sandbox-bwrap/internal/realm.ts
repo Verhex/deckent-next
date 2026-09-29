@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from 'node:fs';
-import { lstat, realpath } from 'node:fs/promises';
+import { lstat, mkdir, readdir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
@@ -9,7 +9,10 @@ import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } fro
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
-export const bubblewrapPosture = (view: ShellSandboxWriteView): string => `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
+export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.open
+  ? `Runs in an open bubblewrap sandbox (full access): network on, HOME visible, Deckent state and credentials hidden/read-only; ${describeShellWritePosture(view)}; `
+    + 'the rest of the machine is reachable as your user, and every process it starts ends with the call.'
+  : `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
  * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
@@ -21,6 +24,10 @@ export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 export const BUBBLEWRAP_GIT_WALK_MAX_ENTRIES = 200_000;
 export const BUBBLEWRAP_MASK_MAX = 4_096;
 const MAX_DEPTH = 32;
+/** OPEN-SANDBOX: the HOME walk for credential-pattern files — HOME's entries to this depth (`~/a/b/c`), over this many entries the call is
+ * refused (never run with HOME half-masked beyond what the bound says). Measured on the owner's HOME: 3.9 k entries at depth 3. */
+export const BUBBLEWRAP_HOME_WALK_MAX_DEPTH = 3;
+export const BUBBLEWRAP_HOME_WALK_MAX_ENTRIES = 20_000;
 /** PATH entries under these prefixes are never bound: drives and mounts (WSL `/mnt/c`), sockets, devices, kernel views. */
 const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys', '/var'];
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
@@ -75,6 +82,51 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
 }
 
 /**
+ * OPEN-SANDBOX: the installation's state roots as the open view seals them. Each is made its own real path; a root that does not exist yet
+ * is created empty (0700) first — Deckent's own directory — because a mount over a missing path would create it on the host anyway, and a
+ * missing root left open is exactly where a new name (live finding 3: `.deckent/mcp.json`) could appear. A root inside the project is
+ * `sealed` (bound read-only; the deny walk masks its product state), one outside is `hidden` (an empty read-only tmpfs). A root that is,
+ * holds or equals the project, HOME or `/` cannot be sealed without sealing them: the call is refused. Nested roots collapse into the outer.
+ */
+async function sealedRoots(project: string, roots: readonly string[], home: string | undefined): Promise<{ readonly ok: true; readonly sealed: string[]; readonly hidden: string[] }
+  | { readonly ok: false; readonly reason: string }> {
+  const real: string[] = [];
+  for (const root of roots) {
+    if (!isAbsolute(root)) return { ok: false, reason: `a Deckent state root is not absolute (${root})` };
+    try { await mkdir(root, { recursive: true, mode: 0o700 }); real.push(await realpath(root)); }
+    catch { return { ok: false, reason: `a Deckent state root could not be prepared (${root})` }; }
+  }
+  const holdsAll = [project, '/', ...(home && isAbsolute(home) ? [home] : [])];
+  for (const root of real) if (holdsAll.some(path => under(path, root))) return { ok: false, reason: `the Deckent state root ${root} holds the project or HOME; the open view cannot seal it` };
+  const outer = [...new Set(real)].filter((root, _, all) => !all.some(other => other !== root && under(root, other)));
+  return { ok: true, sealed: outer.filter(root => under(root, project)), hidden: outer.filter(root => !under(root, project)) };
+}
+/**
+ * OPEN-SANDBOX: masks the Core floor's credential-pattern files in HOME (`~/.npmrc`, `~/.ssh/id_*`, `**\/*.pem`, `**\/.credentials.json`, …)
+ * over a bounded walk: HOME's entries to depth 3, generated/vendored trees (`BASELINE_IGNORED_DIRS`) and the skipped paths (the project,
+ * which its own walk covers, and the state roots, sealed whole) not entered, symbolic links neither followed nor masked (as in the project),
+ * an unreadable directory skipped (the command, the same user, cannot read it either). Over the entry bound the call is refused.
+ */
+async function maskHomeCredentials(home: string, denied: (rel: string) => boolean, skip: readonly string[], maskedDirectories: string[], maskedFiles: string[]): Promise<string | null> {
+  let entries = 0;
+  const walk = async (dir: string, rel: string, depth: number): Promise<string | null> => {
+    let names;
+    try { names = await readdir(dir, { withFileTypes: true }); } catch { return null; }
+    for (const entry of names) {
+      if (++entries > BUBBLEWRAP_HOME_WALK_MAX_ENTRIES) return `HOME credential walk over its bound (${BUBBLEWRAP_HOME_WALK_MAX_ENTRIES} entries)`;
+      const path = join(dir, entry.name), entryRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink() || skip.some(root => under(path, root))) continue;
+      if (denied(entryRel)) { if (entry.isDirectory()) maskedDirectories.push(path); else if (entry.isFile()) maskedFiles.push(path); continue; }
+      if (!entry.isDirectory() || BASELINE_IGNORED_DIRS.has(entry.name) || depth + 1 >= BUBBLEWRAP_HOME_WALK_MAX_DEPTH) continue;
+      const refused = await walk(path, entryRel, depth + 1);
+      if (refused) return refused;
+    }
+    return null;
+  };
+  return walk(home, '', 0);
+}
+
+/**
  * Resolves the sandbox's view for a layout: the deny floor is enumerated from the project root (no symlink is followed or masked;
  * `BASELINE`-ignored directories such as `node_modules` and `dist` are not entered), every `.git` becomes read-only, HOME comes
  * from the command's environment. What the walk could not see is closed, never left read-write (Astra 2154 R3): a directory it
@@ -84,7 +136,7 @@ async function toolchainOf(pathVariable: string | undefined, protectedPaths: { r
  */
 export async function resolveBubblewrapView(layout: ShellSandboxLayout, environment: Readonly<Record<string, string | undefined>>,
   options: Pick<BubblewrapOptions, 'maxEntries' | 'fsOps'> = {}, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean;
-    readonly writeSet?: { readonly upper: string; readonly work: string } } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
+    readonly writeSet?: { readonly upper: string; readonly work: string }; readonly open?: boolean } = {}): Promise<{ readonly ok: true; readonly view: BubblewrapView } | { readonly ok: false; readonly reason: string }> {
   // SHELL-OVERLAY: the overlay's directories must be real, private, outside the project and not holding it (undefined overlay behavior).
   let overlay: { readonly upper: string; readonly work: string } | null = null;
   if (write.writeSet) {
@@ -97,12 +149,18 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     } catch { return { ok: false, reason: 'the write set directories could not be checked' }; }
   }
   const maxEntries = options.maxEntries ?? BUBBLEWRAP_WALK_MAX_ENTRIES, fsOps = options.fsOps ?? fsOpsFor;
+  // OPEN-SANDBOX: the open view seals the hard floor structurally; asked of a layout that does not name it, it is refused (fail closed).
+  const openView = write.open === true && !overlay && write.projectReadOnly !== true;
+  if (write.open && !openView) return { ok: false, reason: 'the open view is only for a writable project' };
+  const seal = openView ? layout.hardFloor ? await sealedRoots(layout.project.root, layout.hardFloor.roots, environment['HOME']) : { ok: false as const, reason: 'the hard floor is not known to this open view' } : null;
+  if (seal && !seal.ok) return seal;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees are bound read-only (a mount point:
   // no write, rename or unlink lands); the deny masks inside them still follow. A floor path that does not exist yet is not covered here.
   // Fail closed (Astra 2170 R2): a read-only floor asked of a layout that does not know the floor is refused, never run with it writable.
   if (write.floorReadOnly && !layout.writeFloor) return { ok: false, reason: 'the write floor is not known to this sandbox view' };
   const floored = write.floorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
   const root = layout.project.root;
+  const openFloor = seal?.ok && !write.floorReadOnly && layout.writeFloor ? (rel: string) => seal.sealed.some(sealed => under(join(root, rel), sealed)) && layout.writeFloor!(rel) : () => false;
   const readOnly = new Set<string>(), writable = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
   let entries = 0, gitEntries = 0;
   const overMasks = () => maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX ? `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})` : null;
@@ -188,7 +246,14 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
       if (entry.name === '.git') { const refused = await gitEntry(path, rel, entry.isDirectory(), entry.isFile()); if (refused) return refused; continue; }
       if (layout.project.denied(entryRel)) { (entry.isDirectory() ? maskedDirectories : maskedFiles).push(path); continue; }
       // Another name of a protected inode (a hard link) is closed with the inode; a regular single-link file stays open.
-      if (entry.isFile()) { if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path); else if (floored(entryRel)) readOnly.add(path); continue; }
+      if (entry.isFile()) {
+        if ((links.get(entry.name) ?? 2) > 1) maskedFiles.push(path);
+        else if (floored(entryRel)) readOnly.add(path);
+        // OPEN-SANDBOX: the owner's card approved the write floor (an owner-approved call of a full-access turn: the configuration file); a
+        // sealed state root keeps every other name read-only, so the existing floor file alone is bound writable (content, never a new name).
+        else if (openFloor(entryRel)) writable.add(path);
+        continue;
+      }
       if (!entry.isDirectory()) continue;
       if (layout.project.denied(`${entryRel}/`)) { maskedDirectories.push(path); continue; }
       if (floored(`${entryRel}/-`)) readOnly.add(path);
@@ -210,6 +275,25 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const home = environment['HOME'];
   const scratchDir = layout.scratchDir;
   const homeDir = home && isAbsolute(home) ? home : null;
+  if (seal?.ok) {
+    // Owner Y (2026-09-30): an existing subdirectory of a sealed root that is not Deckent's state (a tracked `.deckent/docs`) is the project's —
+    // bound writable over the read-only root (the deny masks inside it still follow); the root's own names stay read-only, none can be added.
+    const product = layout.hardFloor?.product;
+    for (const sealed of product ? seal.sealed : []) {
+      let names;
+      try { names = await readdir(sealed, { withFileTypes: true }); } catch { continue; }
+      for (const entry of names) {
+        const path = join(sealed, entry.name), rel = relative(root, path);
+        if (entry.isDirectory() && !entry.isSymbolicLink() && !product!(rel) && !layout.project.denied(rel) && !layout.project.denied(`${rel}/`) && !onChain(rel)) writable.add(path);
+      }
+    }
+    // OPEN-SANDBOX: HOME is the host's; the Core floor's credential patterns are masked in it (bounded walk), the state roots skipped.
+    const refusedHome = homeDir && layout.hardFloor ? await maskHomeCredentials(homeDir, layout.hardFloor.homeDenied, [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles) : null;
+    if (refusedHome) return { ok: false, reason: refusedHome };
+    const over = overMasks(); if (over) return { ok: false, reason: over };
+    return { ok: true, view: Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
+      readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
+  }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
   return { ok: true, view: Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
     toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
@@ -225,7 +309,8 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
     const started = performance.now();
     const view = request.writeSet && !writeSets ? { ok: false as const, reason: `bwrap at ${bwrap} has no overlay (bubblewrap ${BUBBLEWRAP_OVERLAY_VERSION} or later is needed)` }
       : await resolveBubblewrapView(layout, request.environment ?? process.env, options,
-        { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}) });
+        { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true, ...(request.writeSet ? { writeSet: request.writeSet } : {}),
+          ...(request.open ? { open: true } : {}) });
     if (!view.ok) {
       return Object.freeze({ status: 'spawn-failed', exitCode: null, signal: null, output: `[deckent] sandbox: ${view.reason}; nothing was run.`, totalBytes: 0, omittedBytes: 0,
         durationMs: Math.round(performance.now() - started), cleanup: 'clean' });
@@ -257,7 +342,8 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       // SHELL-OVERLAY × BWRAP-SELECT: write sets are offered exactly when the selected launcher's measured version has the overlay options
       // (`launcher.overlay`, ≥ 0.11.0: the bundled 0.13 always, a system ≥ 0.12 too); otherwise a write-set request is refused (nothing runs).
       const writeSets = binary.overlay;
+      // OPEN-SANDBOX: every selected launcher builds the full-access open view (its options exist since long before 0.12).
       return { ok: true, realm: run(binary.path, writeSets), marker: 'sandbox: bubblewrap', posture: bubblewrapPosture, notice: null, containment: 'sandbox', launch,
-        ...(writeSets ? { writeSets: true } : {}) };
+        ...(writeSets ? { writeSets: true } : {}), opens: true };
     } });
 }

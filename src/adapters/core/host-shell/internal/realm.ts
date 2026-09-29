@@ -18,12 +18,15 @@ export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the proj
  */
 export interface ShellSandboxWriteView { readonly projectReadOnly: boolean; readonly writeFloorReadOnly: boolean; readonly repositoryWritable: boolean;
   /** SHELL-OVERLAY: the project's writes go to an overlay and are applied after the call by the edit rules (never with `projectReadOnly`). */
-  readonly writeSet?: boolean }
+  readonly writeSet?: boolean;
+  /** OPEN-SANDBOX: a full-access call's open view (host network, HOME visible and writable, the hard floor sealed structurally); never with
+   * `projectReadOnly` or `writeSet`. A realm that cannot build it never receives it (`openShellRealm`). */
+  readonly open?: boolean }
 export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWritable'>,
-  write: { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet?: boolean }): ShellSandboxWriteView {
+  write: { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet?: boolean; readonly open?: boolean }): ShellSandboxWriteView {
   return { projectReadOnly: write.projectReadOnly, writeFloorReadOnly: write.writeFloorReadOnly,
     repositoryWritable: layout.repositoryWritable === true && write.projectReadOnly !== true && write.writeSet !== true,
-    ...(write.writeSet && !write.projectReadOnly ? { writeSet: true } : {}) };
+    ...(write.writeSet && !write.projectReadOnly ? { writeSet: true } : {}), ...(write.open && !write.projectReadOnly && !write.writeSet ? { open: true } : {}) };
 }
 /**
  * The write posture of sandboxed work no card approves call by call (Astra 2170 R1): the write floor's existing paths are read-only (the
@@ -58,6 +61,8 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' 
  * configuration file) and `.git` (writable only in a full-access turn, never under a read-only project).
  * - owner-approved: the project writes, the write floor included;
  * - full-access: the project, the write floor and `.git` write; the configuration file stays read-only (the layout's floor in that turn);
+ *   the view is open (OPEN-SANDBOX: host network, HOME visible and writable, the product's state roots and credential-pattern files in
+ *   HOME sealed — `ShellSandboxLayout.hardFloor`), as is an owner-approved call of a full-access turn;
  * - unattended, the narrow mutating set: the project writes, the write floor's existing paths read-only (its literal targets passed the
  *   write check);
  * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
@@ -67,12 +72,14 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' 
  * variant is SHELL-OVERLAY's full-auto posture (the project's writes kept aside and applied like edits).
  */
 export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean,
-  writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean } {
-  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false };
-  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false };
+  writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean; readonly open: boolean } {
+  // OPEN-SANDBOX (owner MODES-3 checkpoint 4): a call the launched full-access mode or the owner's card stands behind, in a full-access
+  // turn, runs in the open view (network, HOME); an unattended call of that turn (the grant no longer holds) stays closed and read-only.
+  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false, open: fullAccessTurn };
+  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false, open: true };
   // Everything else is the one unattended derivation (shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
   // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
-  return unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn, authority === 'full-auto' && writeSets && !fullAccessTurn);
+  return { ...unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn, authority === 'full-auto' && writeSets && !fullAccessTurn), open: false };
 }
 /**
  * The write part of a sandbox realm's approval-card posture, in words, from `ShellSandboxWriteView` alone — never a second decision a
@@ -120,7 +127,9 @@ export function describeSandboxFallback(chosen: string, rejected: readonly Pick<
 export type ShellRealmResolution = { readonly ok: true; readonly realm: ShellRealm; readonly marker: string | null; readonly notice: string | null;
   readonly posture: (view: ShellSandboxWriteView) => string; readonly containment: ShellRealmContainment;
   /** SHELL-OVERLAY: the realm can run a call with the project as an overlay write set (`ShellRealmRequest.writeSet`); absent = cannot. */
-  readonly writeSets?: boolean; readonly rejected?: readonly ShellSandboxRejection[] }
+  readonly writeSets?: boolean;
+  /** OPEN-SANDBOX: the realm builds the full-access open view (`ShellRealmRequest.open`); absent = cannot (`openShellRealm` decides). */
+  readonly opens?: boolean; readonly rejected?: readonly ShellSandboxRejection[] }
   | { readonly ok: false; readonly code: 'SHELL_SANDBOX_UNAVAILABLE' | 'SHELL_REALM_UNSUPPORTED'; readonly rejected?: readonly ShellSandboxRejection[] };
 
 /** What a sandbox realm needs to lay out its view of the machine: the project scope (real root, deny floor, ignored names) and the
@@ -137,6 +146,17 @@ export interface ShellSandboxLayout {
   /** MODES-3: a full-access turn — `.git` (and a worktree's common repository) is writable (commit, branch) unless the call's project is
    * read-only; the inode floor still holds. */
   readonly repositoryWritable?: boolean;
+  /**
+   * OPEN-SANDBOX: the hard floor an open view seals structurally (a full-access turn's layout only; an open request without it is refused,
+   * fail closed). `roots`: the absolute state roots of this installation — the project's product root, the data root, the bootstrap
+   * configuration's directory, the global state root(s); one inside the project is bound read-only (its product state masked by the deny
+   * walk), one outside it is hidden (an empty read-only tmpfs), so no name, existing or new, is created in either. `homeDenied`: the Core
+   * floor's credential patterns over HOME-relative paths (a bounded walk of HOME masks the matches).
+   */
+  readonly hardFloor?: { readonly roots: readonly string[]; readonly homeDenied: (rel: string) => boolean;
+    /** Owner Y (2026-09-30): whether a project-relative path is, holds or lies in Deckent's own state; an EXISTING subdirectory of a sealed
+     * root that is not (e.g. a tracked `.deckent/docs`) is bound writable, so the root itself still takes no new name. Absent: none is. */
+    readonly product?: (rel: string) => boolean };
 }
 /** A sandbox mechanism (S9 bubblewrap, S11 Landlock) as a realm provider: usable on the measured host — then its realm, marker,
  * card posture and a notice when the posture falls short (typed DEGRADED) — or why not. A provider never falls back by itself; the
@@ -145,7 +165,7 @@ export interface ShellSandbox {
   readonly kind: Exclude<ShellRealm['kind'], 'host'>;
   usable(capabilities: ShellCapabilities): { readonly ok: true; readonly realm: ShellRealm; readonly marker: string;
     readonly posture: (view: ShellSandboxWriteView) => string; readonly notice: string | null; readonly containment: Exclude<ShellRealmContainment, 'host'>;
-    readonly launch?: ShellSandboxLaunch; readonly writeSets?: boolean }
+    readonly launch?: ShellSandboxLaunch; readonly writeSets?: boolean; readonly opens?: boolean }
     | { readonly ok: false; readonly reason: string; readonly restricted?: boolean };
 }
 /** A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
@@ -172,7 +192,7 @@ export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapab
   for (const sandbox of sandboxes) {
     const usable = sandbox.usable(capabilities);
     if (usable.ok) {
-      const writeSets = usable.writeSets ? { writeSets: true } : {}, passed = Object.freeze([...rejected]);
+      const writeSets = { ...usable.writeSets ? { writeSets: true } : {}, ...usable.opens ? { opens: true } : {} }, passed = Object.freeze([...rejected]);
       // A preferred mechanism passed over — the host restricts it (S3: AppArmor user namespaces, with the fix) or it is unusable for any
       // other reason (a launcher inside the project) — is a visible fallback: the notice reaches the live stream and the model result,
       // the posture the approval card.
@@ -190,4 +210,22 @@ export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapab
   const notice = `[deckent] sandbox: none; running on host (${why}). Files, processes and network are reachable.`;
   // No sandbox ran: the host fallback has no write boundary either, so the card's text is the same fixed notice (never the write view).
   return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host', rejected: passed };
+}
+
+/**
+ * OPEN-SANDBOX: the realm a call whose posture is open actually runs in. A realm that builds the open view keeps the call; the explicit host
+ * mode and a host fallback are the host already (unchanged). Otherwise — a sandbox that cannot open the network and HOME (Landlock) —
+ * `prefer-sandbox` runs the call on the host, as the owner's full access asks (owner 2026-09-29: host shell, network, HOME), and says so:
+ * Deckent's state and credentials are then protected by name only; `require-sandbox` keeps the closed sandbox (the configuration asked for
+ * one) and says the open view is not available. Never silent.
+ */
+export function openShellRealm(resolution: Extract<ShellRealmResolution, { ok: true }>, mode: ShellRealmMode): Extract<ShellRealmResolution, { ok: true }> {
+  if (resolution.opens || resolution.containment === 'host') return resolution;
+  const why = [...(resolution.rejected ?? []).map(item => `${item.kind}: ${boundSandboxReason(item.reason)}`), `${resolution.realm.kind} cannot open the network and HOME`].join('; ');
+  if (mode === 'require-sandbox') {
+    const notice = `[deckent] full access: no open sandbox (${why}); terminal.shell.realm require-sandbox keeps this call in the closed ${resolution.realm.kind} view (no network, HOME hidden).`;
+    return { ...resolution, notice: resolution.notice ? `${resolution.notice} ${notice}` : notice, posture: view => `${resolution.posture(view)}\n${notice}` };
+  }
+  const notice = `[deckent] full access: no open sandbox (${why}); running on host: files, processes and network are reachable, Deckent's state and credentials are protected by name only.`;
+  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host', ...(resolution.rejected ? { rejected: resolution.rejected } : {}) };
 }
