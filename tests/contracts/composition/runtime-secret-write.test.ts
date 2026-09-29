@@ -174,4 +174,66 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     await expect(f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'A', value: 'é'.repeat(40_000) })).rejects.toMatchObject({ code: 'SECRET_VALUE_INVALID' });
     expect(changes(f.audit())).toEqual([]);
   }, 60_000);
+
+  // SECRET-BOUNDS (Astra 2185 R6): the answer of a change is known before the change (scope, name, action, backend; `removed` is null for a
+  // set and at most `false` for a delete), so a delivery budget it cannot fit is refused before any decision, audit or write.
+  const raw = async (endpoint: string, operation: 'setSecret' | 'deleteSecret', maxResultBytes: number, input: Record<string, unknown>) => {
+    const socket = createConnection(endpoint); socket.on('error', () => undefined);
+    await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
+    const chunks: Buffer[] = []; socket.on('data', chunk => { chunks.push(chunk as Buffer); });
+    const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+    socket.end(encodeServiceFrame({ schemaVersion: 18, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
+      input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
+    await closed;
+    return JSON.parse(Buffer.concat(chunks).subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };
+  };
+  const answerBytes = (name: string, action: 'set' | 'delete', removed: boolean | null) => Buffer.byteLength(JSON.stringify({ schemaVersion: 1,
+    scopeId: 'installation', name, action, backend: 'core.secret-store.file@1', removed }), 'utf8');
+
+  it('a set whose answer cannot fit the delivery budget is refused before the decision: nothing stored, nothing audited; the exact budget is admitted', async () => {
+    const f = await fixture();
+    for (const budget of [1, answerBytes('BUDGET_SET', 'set', null) - 1]) {
+      expect(await raw(f.endpoint, 'setSecret', budget, { name: 'BUDGET_SET', value: CANARY })).toMatchObject({ ok: false, error: { code: 'RUNTIME_SERVICE_RESPONSE_LIMIT' } });
+    }
+    expect(await f.file.get('BUDGET_SET')).toBeUndefined();
+    // A delivery refusal is not an authority decision: no `secret-change` record of any effect (the read-only backend precedent).
+    expect(changes(f.audit())).toEqual([]);
+    const admitted = await raw(f.endpoint, 'setSecret', answerBytes('BUDGET_SET', 'set', null), { name: 'BUDGET_SET', value: CANARY });
+    expect(admitted).toMatchObject({ ok: true, result: { action: 'set', removed: null } });
+    expect(await f.file.get('BUDGET_SET')).toBe(CANARY);
+    expect(changes(f.audit()).map(subject => subject['action'])).toEqual(['set']);
+    expect(await f.scanForCanary()).toEqual([]);
+  }, 60_000);
+
+  it('a delete is admitted on its largest answer (`removed:false`): one byte less is refused even when the secret exists; nothing removed or audited', async () => {
+    const f = await fixture();
+    await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'BUDGET_DEL', value: CANARY });
+    const largest = answerBytes('BUDGET_DEL', 'delete', false);
+    expect(answerBytes('BUDGET_DEL', 'delete', true)).toBeLessThan(largest);
+    for (const budget of [1, largest - 1]) {
+      expect(await raw(f.endpoint, 'deleteSecret', budget, { name: 'BUDGET_DEL' })).toMatchObject({ ok: false, error: { code: 'RUNTIME_SERVICE_RESPONSE_LIMIT' } });
+    }
+    expect(await f.file.get('BUDGET_DEL')).toBe(CANARY);
+    expect(changes(f.audit()).map(subject => subject['action'])).toEqual(['set']);
+    expect(await raw(f.endpoint, 'deleteSecret', largest, { name: 'BUDGET_DEL' })).toMatchObject({ ok: true, result: { removed: true } });
+    expect(await raw(f.endpoint, 'deleteSecret', largest, { name: 'BUDGET_DEL' })).toMatchObject({ ok: true, result: { removed: false } });
+    expect(changes(f.audit()).map(subject => subject['action'])).toEqual(['set', 'delete', 'delete']);
+  }, 60_000);
+
+  it('a set that would push the file store past its reader bound is a typed SECRET_STORE_FULL over the socket; every secret stays readable and deletable', async () => {
+    const f = await fixture();
+    for (let index = 0; index < 15; index++) await f.file.set(`FILL_${String(index).padStart(2, '0')}`, 'x'.repeat(65_536));
+    await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'KEEP_ME', value: CANARY });
+    const before = await readFile(join(f.globalRoot, 'secrets.json'));
+    const refused = await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'OVERFLOW', value: 'x'.repeat(65_536) })
+      .then(() => null, (error: unknown) => error);
+    expect(refused).toMatchObject({ code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1' } });
+    expect((await readFile(join(f.globalRoot, 'secrets.json'))).equals(before)).toBe(true);
+    expect(await f.file.get('KEEP_ME')).toBe(CANARY);
+    // The allowed intent was sealed before the store refused (intent first, as for a held lock): the audit is not the outcome.
+    expect(changes(f.audit()).filter(subject => subject['name'] === 'OVERFLOW')).toHaveLength(1);
+    expect(await f.client.deleteSecret({ schemaVersion: 1, scopeId: 'installation', name: 'FILL_00' })).toMatchObject({ removed: true });
+    expect(await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'OVERFLOW', value: 'x'.repeat(65_536) })).toMatchObject({ action: 'set' });
+    expect(await f.scanForCanary()).toEqual([]);
+  }, 60_000);
 });

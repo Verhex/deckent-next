@@ -2,13 +2,14 @@ import { constants, type Stats } from 'node:fs';
 import { lstat, mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { DeckentError, ErrorRegistry, withConfigWriteLock, writeJsonAtomic } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, serializeJsonDocument, withConfigWriteLock, writeTextAtomic } from '#platform/index.js';
 import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue, type SecretStore, type SecretStoreErrorCode, type SecretStoreFactory,
   type SecretStoreContext, type SecretStoreInspection } from '#engine/index.js';
 
 export const FILE_SECRET_STORE_ID = 'core.secret-store.file@1';
 export const FILE_SECRET_STORE_NAME = 'secrets.json';
-const MAX_DOCUMENT_BYTES = 1_048_576;
+/** The one bound of the store document, in UTF-8 bytes of the file: the reader refuses a larger file and the writer never produces one. */
+export const FILE_SECRET_STORE_MAX_BYTES = 1_048_576;
 /** Store document v1: names in the `$DECK` grammar, bounded non-empty values; nothing else. */
 const documentSchema = z.object({ schemaVersion: z.literal(1),
   secrets: z.record(z.string().regex(SECRET_NAME_PATTERN), z.string().min(1).max(SECRET_VALUE_MAX_BYTES)) }).strict();
@@ -28,7 +29,8 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.cod
  * the directory is a real directory of this user with no group/other access (created 0700 on the first write); the file is opened without
  * following links and must be a single-linked regular file of this user with no group/other permission — anything else is
  * `SECRET_STORE_UNSAFE` and nothing is read or repaired. Writes hold the config writer lock of this path, re-read under it, and replace the
- * file atomically (0600 temporary file, fsync, rename, directory fsync). Content never enters an error: a JSON parse message can quote the
+ * file atomically (0600 temporary file, fsync, rename, directory fsync) only when the whole new document fits `FILE_SECRET_STORE_MAX_BYTES`, the
+ * bound the reader enforces (else `SECRET_STORE_FULL`, nothing written). Content never enters an error: a JSON parse message can quote the
  * text, so a corrupt store is `SECRET_STORE_CORRUPT` without a cause. POSIX only (Windows is later in the accepted OS order).
  * This is plaintext at rest protected by file ownership — a process of the same user can read it; the OS keyring backend is K2.
  */
@@ -67,7 +69,7 @@ export function createFileSecretStore(options: FileSecretStoreOptions): SecretSt
       const info = await handle.stat(), linked = await lstat(path!);
       if (!info.isFile() || info.uid !== owner || info.nlink !== 1 || (info.mode & 0o077) !== 0
         || linked.isSymbolicLink() || linked.ino !== info.ino || linked.dev !== info.dev) throw unsafe();
-      if (info.size > MAX_DOCUMENT_BYTES) throw fail('SECRET_STORE_CORRUPT');
+      if (info.size > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_CORRUPT');
       let parsed: unknown;
       try { parsed = JSON.parse(await handle.readFile('utf8')); } catch { throw fail('SECRET_STORE_CORRUPT'); }
       const document = documentSchema.safeParse(parsed);
@@ -85,7 +87,11 @@ export function createFileSecretStore(options: FileSecretStoreOptions): SecretSt
       const secrets = await read(owner), outcome = change(secrets);
       if (outcome.write) {
         const sorted = Object.fromEntries(Object.keys(secrets).sort().map(name => [name, secrets[name]!]));
-        try { await writeJsonAtomic(path!, { schemaVersion: 1, secrets: sorted }); } catch { throw fail('SECRET_STORE_UNAVAILABLE'); }
+        // Admission of the whole document (Astra 2185 R5): the exact text that would replace the file is measured against the reader's bound
+        // before anything is written. Over it the change is refused and the old file stays as it was; a delete only shrinks the document.
+        const text = serializeJsonDocument({ schemaVersion: 1, secrets: sorted });
+        if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_FULL');
+        try { await writeTextAtomic(path!, text); } catch { throw fail('SECRET_STORE_UNAVAILABLE'); }
       }
       return outcome.result;
     }, options.lockTimeoutMs ?? 2_000);

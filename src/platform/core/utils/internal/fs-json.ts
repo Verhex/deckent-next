@@ -45,14 +45,23 @@ export async function readJsonFile(path: string): Promise<JsonRead> {
     return (error as NodeJS.ErrnoException).code === 'ENOENT' ? { kind: 'absent' } : { kind: 'io', error };
   } finally { await handle?.close(); }
 }
+/** The exact text every JSON document of this module is written as (2-space indent, `undefined` as null, trailing newline). A writer that
+ * bounds its document measures this text and writes the same string with `writeTextAtomic`, so the admitted bytes are the written bytes. */
+export function serializeJsonDocument(value: unknown): string {
+  return `${JSON.stringify(value, (_key, item: unknown) => item === undefined ? null : item, 2)}\n`;
+}
 export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+  await writeTextAtomic(path, serializeJsonDocument(value));
+}
+/** Atomic replace: a 0600 temporary file in the same directory, fsync, rename, directory fsync; the temporary file never survives. */
+export async function writeTextAtomic(path: string, text: string): Promise<void> {
   const directory = dirname(path);
   await mkdir(directory, { recursive: true });
   const temp = join(directory, `.${basename(path)}.${randomUUID()}.tmp`);
   let handle;
   try {
     handle = await open(temp, 'wx', 0o600);
-    await handle.writeFile(`${JSON.stringify(value, (_key, item: unknown) => item === undefined ? null : item, 2)}\n`);
+    await handle.writeFile(text);
     await handle.sync(); await handle.close(); handle = undefined;
     await rename(temp, path);
     if (process.platform !== 'win32') { const dir = await open(directory, 'r'); try { await dir.sync(); } finally { await dir.close(); } }

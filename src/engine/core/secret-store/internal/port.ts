@@ -7,6 +7,7 @@ import type { Environment } from '#platform/index.js';
  * - refusals are typed `SECRET_*` codes (`SecretStoreErrorCode`), thrown as platform `DeckentError`s;
  * - `get` of an absent name is `undefined`, never a fallback to another backend;
  * - a backend that cannot write or enumerate says so in its descriptor and refuses with `SECRET_STORE_READ_ONLY` / `SECRET_STORE_UNSUPPORTED`.
+ * - a bounded backend refuses a change that would leave a store it cannot read back with `SECRET_STORE_FULL`, changing nothing;
  * The port bumps only on an incompatible change of this interface.
  */
 export const SECRET_STORE_PORT_VERSION = 1;
@@ -16,7 +17,7 @@ export const SECRET_VALUE_MAX_BYTES = 65_536;
 /** `<namespace>.secret-store.<name>@<version>`; Core owns the `core` namespace. */
 export const SECRET_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/;
 export type SecretStoreErrorCode = 'SECRET_NAME_INVALID' | 'SECRET_VALUE_INVALID' | 'SECRET_STORE_UNKNOWN' | 'SECRET_STORE_UNAVAILABLE'
-  | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED';
+  | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED' | 'SECRET_STORE_FULL';
 
 export interface SecretStoreDescriptor {
   /** The registry id this store was opened under (the audit names the backend by it). */
