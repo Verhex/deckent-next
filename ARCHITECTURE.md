@@ -1997,7 +1997,7 @@ take) and admits only while the server is still `trusted` as exactly the scope a
 carried by the registry view's launch settings, not part of the launch key) and the tool's pin is that digest. Otherwise nothing is sent:
 `trust-revoked` | `definition-changed` | `pin-revoked` | `trust-unavailable` (fail closed), ledger `refused` (`EFFECT_REJECTED`). The lock is
 not held across the RPC (a 120 s call must not make `reset` fail with `CONFIG_WRITE_LOCKED`): a trust change completed before the check is always
-seen, one after it is ordered after the send; residual window = local SDK steps between the lock release and `stdin.write`; hand edits of
+seen; a later change can race the actual send (the lock is released before `pool.call` → SDK `callTool` → send options → `stdin.write`); hand edits of
 `mcp.json` and the registry half of `remove` are caught only by the re-read. A revoked or changed server's process is retired from the service
 pool (at the refused call and at every turn start, `pool.retain`), so its next trusted use starts it after the cards. Open (C5, owner): a
 long-lived sandboxed MCP server can still create a new write-floor name in the project.

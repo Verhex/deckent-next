@@ -77,8 +77,9 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
  * before a call is handed to the SDK — after its approval wait — the current registry files and the scope's trust record are read again
  * (user trust in the global root, project and local trust in the data root) and the call is admitted only while the server is still
  * trusted as exactly the scope and definition the turn offered it under and the tool's pin is still that digest. The check runs under the
- * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before is always
- * seen; one that starts after it is ordered after the send (a revocation never recalls a call already sent). Fails closed.
+ * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before the check is
+ * always seen; a later change can race the actual send (the lock is released before the SDK sends; a revocation never recalls a call
+ * already sent). Fails closed.
  */
 export function mcpSendAuthority(registry: McpRegistryContext) {
   return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
