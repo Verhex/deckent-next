@@ -1155,7 +1155,8 @@
         "src/adapters/core/mcp-client",
         "src/adapters/core/local-principal",
         "src/adapters/core/provider-anthropic-messages",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/adapters/core/agent-workspace-floor"
       ],
       "plan": "SURFACES"
     },
@@ -1399,6 +1400,16 @@
         "src/adapters/core/workspace-read",
         "src/engine/core/shell-classification",
         "src/adapters/core/workspace-write"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/agent-workspace-floor": {
+      "dependencies": [
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/host-shell",
+        "src/adapters/core/mcp-client",
+        "src/platform/core/host"
       ],
       "plan": "SURFACES"
     },

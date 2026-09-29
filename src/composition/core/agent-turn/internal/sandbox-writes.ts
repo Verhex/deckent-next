@@ -2,24 +2,12 @@ import { createHash } from 'node:crypto';
 import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
 import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
-import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isDirectoryWriteApprovalFloored, isWriteApprovalFloored, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
-  removeSandboxWriteSetDirectory, scanSandboxWriteSet, writablePath, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
-  type LocalPeerIdentity, type SandboxWriteCell, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
+import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
+  removeSandboxWriteSetDirectory, scanSandboxWriteSet, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
+  type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-
-/**
- * The edit path rules for one write-set path: a denied path (`writablePath`), the configuration file (`edit-authority`), the write floor
- * (`edit-floor`), else `edit`. A directory — one removed, or a new parent one (Astra 2182 R3: `src/package.json/` is the floor name,
- * whatever it holds) — is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the rules for what it holds.
- */
-export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel: string) => boolean, rel: string,
-  kind: 'write' | 'delete' | 'rmdir' | 'mkdir'): SandboxWriteCell | 'denied' {
-  const directory = kind === 'rmdir' || kind === 'mkdir', lexical = writablePath(scope, rel);
-  if (!lexical.ok || lexical.rel !== rel || (directory && scope.denied(`${rel}/`))) return 'denied';
-  return authority(rel) ? 'edit-authority' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : 'edit';
-}
 
 /**
  * Settles one finished call's write set (design §5–§6): scan, then every entry through the edit path rules (`writablePath` → denied; the

@@ -1,9 +1,8 @@
 import { workspaceAttachmentRequestSchema, workspaceFileQuerySchema, WORKSPACE_ATTACHMENT_MAX_BYTES, type WorkspaceAttachment, type WorkspaceFileMatches } from '#domain/index.js';
 import { AgentTurnStoreError, type ModelInvocationDelivery } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { createWorkspaceScope, rankWorkspacePaths, readWorkspaceAttachment, type LocalPeerIdentity, type RuntimeWorkspaceFileHost } from '#adapters/index.js';
+import { agentWorkspaceDeny, createWorkspaceScope, rankWorkspacePaths, readWorkspaceAttachment, type LocalPeerIdentity, type RuntimeWorkspaceFileHost } from '#adapters/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
-import { agentWorkspaceDeny } from './turn.js';
 
 const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 

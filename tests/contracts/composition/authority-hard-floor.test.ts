@@ -2,10 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, projectEditArea } from '#adapters/index.js';
+import { agentWorkspaceDeny, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, projectEditArea } from '#adapters/index.js';
 import { classifyReadOnlyShellCommand, decideAgentToolCall } from '#engine/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, resolvePolicyBindings } from '#domain/index.js';
-import { agentWorkspaceDeny } from '#composition/core/agent-turn/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 
 // POLICY-ADMIN (owner F2): the hard floor — policy, bindings, approval records and key, ledger, credentials, `.git` internals — is never

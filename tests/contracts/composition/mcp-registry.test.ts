@@ -5,11 +5,11 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
+import { agentWorkspaceDeny, buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
   openMcpAgentTools } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
-import { agentWorkspaceDeny, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';

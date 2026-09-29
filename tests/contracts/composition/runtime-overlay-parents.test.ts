@@ -97,7 +97,7 @@ describe('the edit tools cannot make a floor-named directory either (Astra 2182 
   }, 120_000);
 
   it('the write-set path rules classify a new directory by its own name and as a tree, the configuration name included', async () => {
-    const { classifySandboxWritePath } = await import('#composition/core/agent-turn/internal/sandbox-writes.js');
+    const { classifySandboxWritePath } = await import('#adapters/core/agent-workspace-floor/index.js');
     const f = await modeRuntime({ grants: GRANTS, mode: 'full-auto' });
     const scope = await createWorkspaceScope(f.project);
     const authority = (rel: string) => rel.startsWith('cfg.json');

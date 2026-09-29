@@ -3,10 +3,9 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, landlockShellSandbox } from '#adapters/index.js';
+import { agentWorkspaceDeny, buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, landlockShellSandbox } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
-import { agentWorkspaceDeny } from '#composition/core/agent-turn/index.js';
 import { prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
