@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -76,5 +76,6 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     // A build output off the lock is never staged.
     writeFileSync(join(build, 'out', 'x86_64', 'bwrap'), 'tampered\n'); chmodSync(join(build, 'out', 'x86_64', 'bwrap'), 0o755);
     expect(() => stageBundle(build, join(root, 'again'), copy)).toThrow(/is not the locked/u);
+    expect(existsSync(join(root, 'again'))).toBe(false); // refused before anything is written
   });
 });
