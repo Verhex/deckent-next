@@ -325,6 +325,11 @@ refresh, usage and dogfood closure remain open.
   operations `inspectScratch` / `clearScratch` (`{ schemaVersion: 1, scopeId, sessionId }`, delivery required, current version only;
   the peer is the owner — scope membership read/write, no further grant). `inspectScratch` → path, exists, bytes, files newest first
   (≤ 200, bounded to the delivery), limits; `clearScratch` empties the area and keeps its directory (a shell's TMPDIR stays valid).
+  v17 was introduced 2026-09-29 (MODES-3) as the single v17 package: permission-mode names `standart | full-auto | full-access`, view
+  `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
+  (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
+  audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, summary `fetch`; old mode names stay readable); ledger
+  unchanged.
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -844,7 +849,8 @@ inside the root, not denied, parent not a symlinked directory), the file's versi
 content and a bounded unified diff (LCS ≤ 4M cells, else summarized); a plan error is the call's result and nothing is asked. The
 call's decision is the stricter of the `agent-tool` decision and the `operation` decision for `workspace.file.write` (`execute`), and
 the write floor (`.github/**`, CI files, hooks, package manifests, `.deckent/**`, agent configuration, `AGENTS.md`/`CLAUDE.md`,
-`Makefile`, `Dockerfile`) raises `allow` to `require-approval` in every mode; an approval shows the planned diff. The write is one
+`Makefile`, `Dockerfile`) raises `allow` to `require-approval` in standart and full-auto (a launched full-access turn lowers it,
+MODES-3 — except the installation's configuration file, `edit-authority`); an approval shows the planned diff. The write is one
 C11 effect of the Core `workspace.file.write` operation on the `workspace-file` target (record id = the workspace-relative path,
 resolved only through the workspace scope): live peer session, operation policy re-evaluated right before the effect, intent
 before effect, precondition = the planned version (a file changed since it was planned or shown is refused, nothing written),
@@ -1040,12 +1046,13 @@ build on this repository after Astra 2158 (≈ 125 ms with the withdrawn directo
 a carved `objects/` tree can approach the 8 192-rule bound in a large hard-linked clone whose objects do not verify); the product's own
 state inside the project is closed in every layout, an ignored ancestor included (Astra 2162: an ignored directory holding a protected
 anchor is carved — listing only, denied entries no rule, the ancestors carved in turn, every other entry keeps its read-write grant
-unscanned; a symbolic link on the chain refuses the set).
+unscanned, except a write-floor entry of a floor-read-only call, which takes a read-only rule (869c01f); a symbolic link on the chain
+refuses the set).
 **Agent shell tool (T-L4 slice 3c-i, Jev 82858581).** `run_shell {command}` (tool class `shell`) is declared beside the read and edit
 tools. Policy first: the `agent-tool` decision and the `operation` decision for Core `host.shell.run` v1 (`execute`), stricter wins, a
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
 only a read-only command of bounded reach (risk `none`) runs without asking, and only under allow; `low` (traversal, repository
-objects), modify and the destructive table ask the owner in every mode (slice 4 may relax modify, never the destructive floor). In full-auto inside an enforced sandbox realm a contained command of any other tier but destructive runs without asking when the company rule is mode-eligible (SHELL-AUTONOMY); the realm, not the classifier, bounds it — paths outside the project are left to the realm (bubblewrap: private `/tmp` tmpfs, empty HOME; Landlock: writes outside the project and scratch area refused). The
+objects), modify and the destructive table ask the owner in standart and full-auto (a launched full-access turn lowers them, MODES-3). In full-auto inside an enforced sandbox realm a contained command of any other tier but destructive runs without asking when the company rule is mode-eligible (SHELL-AUTONOMY; outside the narrow mutating set such a run sees the project read-only, Astra 2170); the realm, not the classifier, bounds it — paths outside the project are left to the realm (bubblewrap: private `/tmp` tmpfs, empty HOME; Landlock: writes outside the project and scratch area refused). The
 approval preview shows the exact command, its risk tier and reason, and where it runs (the realm's posture: bubblewrap, Landlock and its limits, or the host: not a sandbox). Every run is a C11 effect on the
 `host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn; the approval subject's
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
@@ -1083,7 +1090,7 @@ requests still receive the typed refusal. Large compacted frames and tails above
 the service environment and over an operator naming `TMPDIR` in `terminal.shell.environment`). The shell path port takes the area as
 a second root: an absolute path inside it is checked against the area's own scope (read-only `none` → may run without asking under
 allow; `cp/mv/mkdir/touch` into it → `narrow-mutating`); leaving it lexically or through a link is `PATH_OUTSIDE_ROOT`.
-`$TMPDIR/...` is a variable expansion and still asks in every mode. Project-root classification is unchanged. In the Landlock realm the area
+`$TMPDIR/...` is a variable expansion and asks unless full-auto in an enforced sandbox (SHELL-AUTONOMY) or full access lowers it. Project-root classification is unchanged. In the Landlock realm the area
 is also the command's `HOME`; in the bubblewrap realm HOME is an empty tmpfs and the area is a separate read-write bind.
 **Agent fetch tool (FETCH S6/S7/S10, owner 2026-09-28).** `terminal.fetch` (schemaVersion 1, optional): `egress: none | allowlist |
 approval` (default `none`), `allowedHosts[]` (exact lowercase DNS names; no wildcard, no IP), `maxBytes` (4 MiB), `timeoutMs` (30 s),
@@ -1096,7 +1103,9 @@ the owner approved) or an allowlisted host (decided, Q2). A timeout before the T
 no DNS query leaves the machine before a decision: https only, no userinfo, port 443, no IP literal, ≤ 2048 characters, fragment
 dropped. Decision: the one `decideAgentToolCall` over `agent-tool/invoke fetch_url` and `operation/execute network.fetch`; cells
 `fetch-listed` (the policy decision stands) and `fetch-unlisted` (allow → card); neither is relaxable, so no permission mode lowers a
-fetch and the `permission-mode` audit event is never written for one (schema unchanged); a fetch is not counted by the silent-decision
+fetch and the `permission-mode` audit event is never written for one (schema unchanged) — except a launched full-access turn (MODES-3;
+owner 2026-09-29: a trial, decided again after use), which lowers `fetch-unlisted` like every other cell and records it as a
+`full-access-call`; refusals of the egress setting stay refusals. A fetch is not counted by the silent-decision
 counters. The card shows `GET <whole URL>`, the allowlist verdict, the byte limit and `sha256(url)`; the approval resource is the URL
 cut at 200 characters and the arguments digest binds the rest (C12 G3 unchanged). Each call is a C11 effect of Core
 **`network.fetch@1`** on target kind **`network-fetch`** (root registry module `core.network-fetch`; the id closes the `network`
@@ -1186,15 +1195,25 @@ trailing `*` or `**` — without the dynamic program, on the platform's one wild
 with the general matcher is an oracle test. Measured on this repository (ext4/WSL2, warm): bubblewrap ~465 → ~60 ms, Landlock ~316 →
 ~51 ms per call. Open: execution off the event loop (~50 ms block), network file systems, `statfs`/`readdir` micro-costs.
 
-**Permission modes — decision and audit (T-L4 slice 4a, owner 2026-09-27 q1–q5).** A person's mode is `ask | auto-edit | full-auto`
-in `bindings.json` v2 `modes` (one exact principal, explicit scopes, one mode; bindings v1 stays readable = everyone `ask`; zero or
-two entries for the same person and scope = `ask`). The company marks a v2 `require-approval` rule or role permission
+**Permission modes (MODES-3, owner 2026-09-29; supersedes the slice 4a mode set).** Three modes: `standart` (the default — no bindings
+entry: reads, scratch and the in-project edits the company marked mode-eligible run without a card; shell and the write floor ask),
+`full-auto` (+ the narrow mutating shell set and MCP calls; inside an enforced sandbox also contained unbounded shell — SHELL-AUTONOMY),
+`full-access` (launched only; below). The person's "ask for edits too" preference is `askEdits: true` on their bindings entry — not a
+mode — and suppresses the `edit` lowering in standart and full-auto. `bindings.json` v3: `modes[] = {id, principal, scopes, mode ∈
+standart|full-auto|full-access, askEdits?: true}`; `standart` without `askEdits` is the absence of an entry; zero entries = standart,
+two for one person and scope = standart with every edit asked (fail closed). The reader accepts v1, v2 (mapped in memory: `ask` →
+standart + askEdits, `auto-edit` → standart, `full-auto` → full-auto; `upgradeBindingsDocument`) and v3; every write is v3 (the first
+`/mode` write upgrades the file; the authority writer's archive keeps the v2 document). A build before MODES-3 refuses v3 as a whole
+(`POLICY_INVALID` → `POLICY_UNAVAILABLE`). In the slice 4a and SHELL-AUTONOMY text below, `ask` reads as standart + `askEdits` and
+`auto-edit` as standart.
+**Permission modes — decision and audit (T-L4 slice 4a, owner 2026-09-27 q1–q5).** The company marks a v2 `require-approval` rule or role permission
 `modeEligible: true` (invalid on any other effect; v1 policy has no such field). A mode creates no authority. One pure function
 (`engine/core/policy` `decideAgentToolCall`) decides every agent tool call over the policy + bindings snapshot: the stricter of the
 `agent-tool`/`invoke` and operation/`execute` decisions (deny ends it, before the call is planned) → the floor raise (write floor,
 shell `low`, destructive, always-ask, other modify, narrow mutating raise allow) → the mode lowering, only when the policy decision
 itself is `require-approval`, every matching `require-approval` rule on each asking side is eligible, the cell is relaxable in the
-mode (ordinary edit: auto-edit/full-auto; narrow mutating shell: full-auto) and the person has exactly one mode entry. Allow rules
+mode (ordinary edit: standart/full-auto unless `askEdits`; narrow mutating shell: full-auto) and the person's mode is unambiguous (two
+entries decide as standart with every edit asked). Allow rules
 never lower; a raised allow is never lowered; read tools and read-only shell commands under require-approval always ask. The narrow mutating shell tier is a separate classifier layer (`classifyShellMutation`): exactly one simple command (one pipeline of
 one stage; no `&&`, `;`, `||`, newline or pipe — an earlier part could change what a later part writes, Astra 2133) of `mkdir [-p -v]`,
 `touch [-c]`, `cp [-n -v] src dst`, `mv [-n -v] src dst` whose sources pass the read check and whose targets pass a write check
@@ -1219,31 +1238,77 @@ Landlock below 6, `host` = host mode or a `prefer-sandbox` fallback; typed on `S
 whether the command is contained (`classifyShellContainment`). In full-auto, in a `sandbox` realm, for a contained command, the cells
 `shell-read-none`, `shell-read-low`, `shell-other-modify` and `shell-always-ask` (the strict scanner's construct refusals: compound,
 expansion, redirection, subshell) are relaxable too, under the same rule as before (policy decision itself `require-approval`, every
-asking rule `modeEligible`, one mode entry); `shell-destructive`, the write floor, read tools and fetch never are; host, fallback and
-degraded realms, and ask/auto-edit, are unchanged. The relaxation is audited as the existing `shell-modify` cell (ledger/audit schema
+asking rule `modeEligible`, one mode entry), and such a run sees the project read-only (shell write postures, below);
+`shell-destructive`, the write floor, read tools and fetch never are; host, fallback and degraded realms, and standart, are unchanged. The relaxation is audited as the existing `shell-modify` cell (ledger/audit schema
 unchanged; the realm is not in the record — open, audit event v2). This reopens, for the sandbox realm only, the earlier open note
-"read-only shell under an eligible rule still asks in full-auto". A call the owner did not approve runs with `writeFloorReadOnly`: both
-sandbox realms keep the write floor's existing paths read-only (bubblewrap `--ro-bind` before the deny masks; Landlock `r` rules with
-the parent carved); an owner-approved call keeps them writable (the floor means "the owner approves", not "never"). The destructive
-table asks in every mode; an `unrestricted` mode (bindings v3) that could lower it only in an enforced sandbox is a design note, not built.
+"read-only shell under an eligible rule still asks in full-auto". What a call may write in a sandbox is the one derivation under
+shell write postures (below). The destructive table asks in standart and full-auto; the earlier `unrestricted` design note became the
+launched full-access mode (MODES-3, below), which lowers it.
 The one decision orders its lowerings: the mode relaxation first (`relaxableFor(request)`: the static `RELAXABLE` cells, and in full-auto,
 in an enforced sandbox realm, for a contained command, the sandbox cells), the standing approval (PERSISTENT-APPROVALS G6) last — it lowers
 a standing cell only where no mode did. `shell-read-low` is both: in full-auto inside a sandbox it is lowered by the mode (a
-`permission-mode` audit event), on the host, a degraded sandbox, for a command that is not contained or in ask/auto-edit by the standing
+`permission-mode` audit event), on the host, a degraded sandbox, for a command that is not contained or in standart by the standing
 approval (a `standing-approval` event); the existing audit kinds already tell the two paths apart (no schema change). `standingWouldLower`
 takes the same request (shell field included), so no standing scope is offered where the mode already lowers the call. Every call the
-owner did not approve at its card — a mode relaxation, a standing approval, a decision silent without a mode — runs with
-`writeFloorReadOnly`; only an owner-approved call sees the write floor writable inside a sandbox.
+owner did not approve at its card — a mode relaxation, a standing approval, a decision silent without a mode — runs unattended in the
+sense of the postures below.
+**Shell write postures (Astra 2170 × MODES-3, lead merge 2026-09-29).** A sandboxed shell call's write posture is derived once, at the
+effect, from who stands behind the call (the call decision hands the effect a typed authority `owner-approved | full-access |
+unattended`, never text) and the planned tier (`shellWritePosture`, composition agent-turn):
+- **owner-approved** (the owner's card): the project writes, the write floor included; `.git` stays read-only except in a full-access turn.
+- **full-access** (an audited `full-access-call` of a turn launched in full access while the company grant holds; owner 2026-09-29: full
+  access is comprehensive and owner-authorized by the mode): the project, the write floor (existing and new names) and `.git` (and a
+  worktree's common repository) write; the configuration file stays read-only (that turn's sandbox floor is only the configuration
+  file); the hard floor — product state, credentials, the MCP registry — stays masked/denied.
+- **unattended, narrow mutating set**: the project writes, the write floor's existing paths read-only (literal targets passed the write
+  check; bubblewrap `--ro-bind` before the deny masks, Landlock `r` rules with the parent carved).
+- **unattended, every other tier** (the full-auto sandbox relaxation, silent or standing-approved reads): the whole project read-only
+  (bubblewrap `--ro-bind`, Landlock `r` rules; the scratch area and bubblewrap's private `/tmp` stay writable), so no name, existing or
+  new, appears without a card (Astra 2170 R1); a failed such run tells the model the project was read-only. In a full-access turn an
+  unattended call means the grant no longer holds (it reads as standart): it is project read-only whatever its tier.
+Standart and full-auto keep exactly the Astra 2170 postures. A read-only project also keeps its repository read-only (Landlock `git`
+class, bubblewrap's writable common repository follow the project posture). The write floor holds inside a Landlock carve too (an
+ignored ancestor holding product state, e.g. `.deckent/` in `.gitignore` with the data root beneath it): a floored entry takes a
+read-only rule and a floored directory's subtree is read-only (869c01f; before it, the carve granted every other entry read-write, so
+the `.deckent/**` floor of a narrow unattended call and the full-access configuration file were writable under Landlock — bubblewrap
+held). MCP server starts — in a turn and from the CLI (trust, health, restart) — build the same layout with the write floor
+(`writeFloor` is required on `ShellSandboxLayout`); both realms refuse a read-only-floor request whose layout carries no matcher (fail
+closed, the server does not start). MCP server views keep this behavior in every mode (the approval floor carried; no repository
+write); MODES-3 defined no full-access MCP posture. The host realm has no OS boundary for any posture. Open (C5, PLAN SHELL-OVERLAY): a
+long-lived MCP server can still create a floor name that does not exist yet; a full boundary needs an overlay with a post-run apply
+step (bubblewrap ≥ 0.11 or a native userns overlay) — a new effect class, an owner decision.
+**Full access (MODES-3).** A turn is full access only when `chatTurn.fullAccess: true` (protocol v17) — set by the terminal launched with
+`deckent --full-access` / `deckent terminal --full-access` or by the person's stored start mode `full-access` — and only while a company
+grant allows `permission-mode`/`set` on id `full-access` (`fullAccessGrant`; the decision asks it on every call, so a grant revoked
+mid-turn stops the next effect at its gate). A stored `full-access` entry without the flag decides as standart (headless/SDK/MCP need the
+explicit parameter; MCP/SDK expose no `chatTurn`). Admission (`admitFullAccessTurn`): no grant → `PERMISSION_MODE_DENIED {mode:
+full-access}`, recorded when possible; allowed → a sealed `full-access-turn` event before the first round (no record →
+`AUDIT_UNAVAILABLE`, no turn). Decision: a deny ends it (every mode); a company `require-approval` that is not `modeEligible` still asks
+(the Claude "ask rule" analog, Enterprise's lever); otherwise every cell runs without a card — the floor raise and eligible
+require-approvals are lowered — except `mcp-floor` (the owner's `alwaysAsk` pin / pinned `destructiveHint`) and the new `edit-authority`
+cell (a write of the installation's configuration file inside the project: it decides where policy, bindings and approvals live, the
+realm and the network; raising in every mode, never lowered, no standing approval). Every allowed effect call (edit, shell, fetch, MCP)
+writes a sealed `full-access-call` event (cell, policy decision, raised, lowered company rules, grant rule, summary; fetch = host +
+argument digest, never the URL) before its effect; the effect gate admits only that decision (`isAuditedDecision`). Read tools are not
+recorded per call. Hard floor unchanged in every mode: product state (every layout resource but `config`), credential patterns,
+`.deckent/host|audit-key|approvals`, the MCP project registry. A full-access turn opens only the repository internals: the workspace
+deny drops `REPOSITORY_INTERNALS_DENY` (`.git`, `.git/**`, `**/.git`, `**/.git/**`), and both sandboxes make Git metadata writable
+(`ShellSandboxLayout.repositoryWritable`: bubblewrap binds no `.git` read-only and binds a worktree's common repository read-write;
+Landlock gives clean Git entries `w`; the inode floor's masks stay); the sandbox posture is the full-access bullet above. Host realm: the
+hard floor for shell is name-based (a command naming product state is refused; an expanded name is not caught) — the realm is not
+changed by full access (config `terminal.shell.realm`; owner 2026-09-29: full access stays comprehensive, not forced into a sandbox —
+the OS boundary for product state is the planned OPEN-SANDBOX view, PLAN "İzin modları ve sandbox").
 **Mode status and `/mode` (T-L4 slice 4c, owner q7, protocol v15).** Two v15 operations, current version only (a v14 envelope is
-refused; window stays [15,14]): `inspectPermissionMode {scopeId}` → `{supported, mode, revision, eligible}` over the request's
+refused; window stays [15,14]). MODES-3 shapes (protocol v17): `inspectPermissionMode {scopeId}` → `{supported, mode, askEdits, revision, eligible,
+fullAccess}` over the request's
 policy + bindings snapshot (scope admission `read`; `eligible` = a mode-eligible require-approval rule can apply to this person here;
-`supported: false` for a v1 policy), and `setPermissionMode {scopeId, mode, expectedRevision}` → the view + `previous`, `changed`.
-No actor field: the socket peer is the principal and only that exact issuer + subject's bindings v2 `modes` entries change (the
-scope leaves them; unless `ask`, it joins the caller's entry of that mode or a new `m-<hash>` entry); every other entry and the role
+`supported: false` for a v1 policy), and `setPermissionMode {scopeId, mode, askEdits?, expectedRevision}` → the view + `previous`, `changed`.
+No actor field: the socket peer is the principal and only that exact issuer + subject's bindings `modes` entries change (the
+scope leaves them; unless standart without `askEdits`, it joins the caller's entry of that mode or a new `m-<hash>` entry); every other entry and the role
 `bindings` are kept. `PermissionModeApplication` (engine/core/policy) owns the transition: conditional on the effective
 `policy+bindings` revision (`PERMISSION_MODE_CONFLICT`), a company `permission-mode`/`set` grant whose resource id is the target
-mode (deny/no grant → `POLICY_DENIED`, require-approval → `POLICY_APPROVAL_UNSUPPORTED`); tightening to `ask` needs no set grant (owner 2026-09-27: the grant/deny rules
-are not consulted for `ask`, a company deny cannot keep a person in a relaxed mode, the scope boundary still applies; audited as
+mode (deny/no grant → `POLICY_DENIED`, require-approval → `POLICY_APPROVAL_UNSUPPORTED`); tightening to `standart` or setting `askEdits` needs no set grant (owner 2026-09-27, R4: the grant/deny rules
+are not consulted for them; a company deny cannot keep a person in a relaxed mode, the scope boundary still applies; audited as
 `decision {effect: 'allow', ruleId: null}` — a grant always names its rule, so a null rule means no grant was required), v1 policy →
 `PERMISSION_MODE_UNSUPPORTED`. Every decision writes a sealed `permission-mode-change` audit event (audit subject union extension;
 ledger v41 unchanged): `requested`, `previous`, `decision {effect, ruleId}`, `bindingsRevision {before, after|null}`; an allowed
@@ -1253,10 +1318,16 @@ leaves a record whose revision never reached the file. `FilePolicySource.update`
 is the conditional store: per-file serialization in the service process, policy + bindings read under the usual guards, the new
 document written to a same-directory `O_CREAT|O_EXCL|O_NOFOLLOW` file with the original 0400/0600 mode, flushed, the identities (dev/ino/size/mtime/ctime) of both authority files re-checked — the bindings target and the policy file that
 authorized the change and fixed the compared revision (Astra 2139 R1; either replaced → `PERMISSION_MODE_CONFLICT`, nothing replaced), then `rename` + directory fsync; the writer must be the trusted owner uid. The new
-bindings revision is `m-` + sha256(previous revision, new body) (chained, no ABA). A bindings v1 file becomes v2 on the first
-non-`ask` write. The terminal shows the mode as a droppable status-row segment (catalog text only; drop order notice → elapsed →
+bindings revision is `m-` + sha256(previous revision, new body) (chained, no ABA). Every write is bindings v3 (a v1/v2 file is upgraded on
+the first write). The terminal shows the mode as a droppable status-row segment (catalog text only; drop order notice → elapsed →
 mode → model → queue; hidden when unknown or unsupported), refreshed at open, after `/mode` and after each turn; `/mode` shows it
-and `/mode <mode>` sets it with the revision last read. The surface reads and writes no file.
+and `/mode <mode>` sets it with the revision last read. The surface reads and writes no file. MODES-3: `full-auto` and the stored
+`full-access` start mode need their grant; the `permission-mode-change` event gains optional `askEdits {requested, previous}` and the
+`permission-mode` event's `grants.person` may be null (the default standart). Terminal: the status segment `full-access` is
+non-droppable (role error); `/mode full-access` is refused in the surface (the service is not asked) with how to launch; `/mode
+standart|full-auto` in a full-access session ends full access for the session; `/mode ask-edits on|off`; `/mode start full-access`
+stores the start mode (next launch). Launch: the flag without the grant → the terminal does not open (`PERMISSION_MODE_DENIED`); a
+stored start mode without the grant → a standart session with a notice; full access → an opening warning notice.
 
 **`/mode` messages (MODE-UX G3, seventh batch).** On a v1 policy (`view.supported = false`) the surface never calls `set`; `/mode` shows
 the current mode with a one-line effect, the other modes with theirs, and says when nothing in this scope can change it. Typed refusals:
@@ -1274,9 +1345,11 @@ destructive, always-ask, other-modify, fetch and MCP cells cannot). A role's all
 never an approval. Persisting goes through `policy.administer@1` (P3): `PersistentStanding` submits the change, allows the pending
 operation approval as the same person through `ApprovalApplication.decide` (separation of duties applies) and resubmits; the delegation
 bound is that person's authority. Every use and every "this session" answer is a sealed `standing-approval` audit event (`remembered` /
-`used`) written before the memory holds it or the effect runs. The card offers a scope only when `standingWouldLower` holds. CLI:
+`used`) written before the memory holds it or the effect runs. The card offers a scope only when `standingWouldLower` holds. In the
+default standart an eligible ordinary edit is lowered by the mode first; a standing approval on an edit matters for a person who asks
+for edits too (`askEdits`) or where the mode does not lower. CLI:
 `deckent policy grants --mine` / `deckent policy revoke`. No version changed (policy v2, bindings v1/v2, ledger v42, protocol v16, layout 4);
-the vocabulary gains `agent-tool-call`. Not yet: protocol v17 (card scopes + decision field; MCP `decide_approval` keeps them out), the
+the vocabulary gains `agent-tool-call`. Not yet: the card scopes + decision field on protocol v17 (introduced by MODES-3; MCP `decide_approval` keeps them out), the
 service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`, the installation root (P4; a v1 live policy cannot offer
 "always"), `/policy`, listing this session's memory.
 

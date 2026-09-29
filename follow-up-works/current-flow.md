@@ -27,26 +27,23 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   - MCP SDK 2.2.0 + sayfalı araç listesi `d934c5b`; STARTUP-COST `3f879c6` (Ink ve MCP server SDK statik grafikten çıktı).
   - MODE-UX G3 `fd3c5e4`; PERSISTENT-APPROVALS G6 `d389bee` (kapsam seçmeli kalıcı onay; tel v17 ve servis kablosu açık).
   - SANDBOX-SPEED G2 `1ed884d`; TERM-UX-1 `3dbbed7`; ANTHROPIC-PROVIDER G8 `50d86ce` (checkpoint A/B açık).
-- **Birleştirilmedi: SHELL-AUTONOMY `e627273`** — PERSISTENT-APPROVALS ile aynı yetki fonksiyonunu farklı değiştiriyor (`decideAgentToolCall`: kalıcı onay
-  adımı ↔ sandbox hücre gevşetmesi; `mode.ts` `decide()` imzası ve `run(inner, ownerApproved)`), birleşik davranış için test yok. Lead kararı bekliyor;
-  realm dosyalarının çözümü hazır (şerit + SANDBOX-SPEED `fs-ops` birlikte).
+- SHELL-AUTONOMY birleşti: `9dd8dac` + `9679020` (mod gevşetmesi önce, kalıcı onay son); Astra 2170 düzeltmesi `33f0bec` (testler) + `bbd57f0`
+  (üç yazım duruşu; CLI MCP başlangıcı `writeFloor` taşır, eşleyicisiz kapalı başarısız). C5 açık → PLAN SHELL-OVERLAY.
+- MODES-3 birleşti: `7fbe476` (kod+test) + `5149c1f` (katalog metinleri), birleştirme `36ee9db` → `d8fb13a` (tek yazım duruşu türetimi `450edd9`,
+  Landlock oyma tabanı `869c01f`). Kanıt `proof/MODES-3-2026-09-29/`; canlı göç `review.md` §6 (betik `migrate-live-modes.mjs`, önce dry-run).
+  Owner checkpoint cevapları 2026-09-29: full-access'te fetch-unlisted deneme; `ask` → standart+askEdits; etkileşimli ilk kurulum owner tasarlar.
+- Astra 2169/2170 REVISE (`6a09a76` üzerinde) karşılandı; belge deltası bu commit'te.
 - Lead düzeltmeleri: MCP client SDK'sı tembel yükleniyor (`e7d6553`); 0e0ca63 ↔ MCP kayıt dosyası ajan deny listesi (ürün durumu deny'ı + `.deckent/mcp.json`);
   `surfaces/core/terminal` birim bütçesi (2000) aşımı iki bağımlılıksız parçanın taşınmasıyla çözüldü (kart tuş eşlemesi → `terminal-kit`, `ArrowPicker` →
   `terminal-render`); deny eşleyicisi hızlı yolu platformun tek `GLOB_WILDCARD` tanımını kullanıyor; `APPROVAL_SURFACE_RESTRICTED` ve MCP güven/`/mcp`,
   TERM-UX-1 metinleri en/tr + kayıt; MCP güven deposu okunamazsa typed hata.
-- Composition 5202/5500; lint-arch 0.
-- Sıradaki: lead SHELL-AUTONOMY kararı → tam verify (lead) → Astra incelemesi → PASS'te push → canlı geçiş (owner onayı).
+- lint-arch 0 ihlal (`d8fb13a`, belge güncellemesinde ölçüldü).
+- Sıradaki: tam verify (lead) → Astra yeniden incelemesi → PASS'te push → canlı geçiş + MODES-3 canlı göçü (owner onayı).
 
 ## Açık kalanlar
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).
-- SHELL-AUTONOMY açık owner soruları: C1 program tabanı sandbox'ta, C2 audit event v2 (realm/hücre), C3 `unrestricted` modu (bindings v3), C4 onaylı çağrıda
-  taban yazılabilir; `run_shell` model açıklaması sürümü.
+- SHELL-AUTONOMY açık owner soruları: C1 program tabanı sandbox'ta, C2 audit event v2 (realm/hücre); `run_shell` model açıklaması sürümü
+  (C3 → full-access, C4 → yazım duruşları ile kapandı).
 - LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek; ret kodunda uç nokta/ledger ayrımı.
 - Dogfood hattı: canlı execution/adoption profili ve doğrulama config'i; Deckent verify'ının sandbox'ta ölçümü; tek komut döngü; operatör aktivasyonu.
 - Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` + biten şeritler, stash'ler.
-
-## Yedinci parti — tam otonom kabuk birleşti (2026-09-29)
-- `lane/shell-autonomy` `9679020` (ff): full-auto + gerçek sandbox + contained komut → sessiz; sıra: mod gevşetmesi önce, kalıcı onay son; kart onayı
-  olmayan her çağrıda yazım tabanı sandbox'ta salt-okunur; MCP bwrap görünümünde de. Açık (owner C1–C4): program tabanı sandbox'ta, audit v2 (realm),
-  `unrestricted` → owner 2026-09-29 kararıyla `full-access` modu (MODES-3 dilimi), onaylı çağrıda taban.
-- Owner 2026-09-29 mod kararı: `standart` / `full-auto` / `full-access` (proof/POLICY-ADMIN-DESIGN-2026-09-28/owner-decisions.md) — uygulama MODES-3 şeridinde (8. parti).

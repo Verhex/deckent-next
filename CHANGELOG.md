@@ -4,6 +4,16 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CHANGED (MODES-3, owner 2026-09-29): permission modes are now `standart`, `full-auto` and `full-access`. `standart` (the default) runs
+  in-project edits the company marked mode-eligible without a card; `/mode ask-edits on` asks for every edit again. Full access starts
+  only at launch (`deckent --full-access`), needs a company grant, keeps Deckent's own state, policy and credentials closed, and audits
+  every call. Runtime protocol v17; bindings v3 (older builds refuse it).
+- ADDED (SHELL-AUTONOMY, owner 2026-09-28): in full-auto inside a real sandbox (bubblewrap, or Landlock ABI ≥ 6) a contained compound or
+  expanding command runs without a card when the company rule is mode-eligible; such a run sees the project read-only.
+- SECURITY (Astra 2170, MODES-3 merge): outside full access a sandboxed shell call without the owner's card cannot create a new
+  write-floor name (the project is read-only for it; the narrow mutating set keeps the floor read-only); MCP servers started from the CLI (trust, health, restart) carry
+  the write floor and fail closed without it; in Landlock the write floor now holds inside a carved ignored ancestor (before, with
+  `.deckent/` gitignored and the data root beneath it, the `.deckent/**` floor and the full-access configuration file were writable).
 - ADDED (MCP-CLIENT, owner 2026-09-28): `deckent mcp add` trusts personal servers in one step (two cards: start it?, trust these tools?),
   project MCP servers ask on first use in the terminal, user trust holds in every project, every trust change is audited, `/mcp`
   lists/approves/reconnects/removes servers. The client reads every tool-list page (at most 16 pages / 512 tools).
