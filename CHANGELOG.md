@@ -4,6 +4,19 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (SECRET-WRITE): `deckent secret set <NAME> [--scope <id>] [--json]` and `deckent secret delete <NAME>` change the installation's
+  secret store through the runtime service (protocol v17 `setSecret`/`deleteSecret`) under the new policy resource `secret` (actions
+  `set`/`delete`, id = the name or `all`). The value comes from piped stdin (one trailing newline dropped, at most 64 KiB) or a hidden
+  prompt (Ctrl-C cancels, `SECRET_INPUT_CANCELLED`); a value on the command line is refused. Every decision is a sealed `secret-change`
+  audit event with its `decision`; without a grant the change is `SECRET_CHANGE_DENIED` and the text names the grant to add. New
+  installations get the grant from first-run policy template v2; existing installations add it to `policy.json` by hand until `/policy`
+  exists. No MCP tool, SDK method or terminal `/secret` yet.
+- CHANGED (DEPS-P0): Core is licensed Apache-2.0 (LICENSE carries the full apache.org text; `package.json` `license`). `engines.node` is
+  `>=24.15.0` (the first Node 24 LTS bundling SQLite 3.51.3, which fixes the WAL-reset corruption present since SQLite 3.7.0), and every
+  `node:sqlite` open (10 sites) refuses an older engine with the typed `ATTEMPT_STORE_SQLITE_UNSUPPORTED`. react is pinned to 19.2.8
+  (+ `@types/react` 19.2.18) to match ink 7.1.1's react-reconciler 0.33.0 release train; `@types/node` follows the engines floor (24.19.0).
+  CI runs Node 24 (required) and 26 (advisory until its LTS) on every OS. Supported platforms today: Linux and Windows WSL2.
+- TEST (twelfth batch): every `error.*` catalog text (en/tr) rendered with sample parameters must pass the error redactor unchanged.
 - SECURITY (SHELL-OVERLAY, Astra 2180 R1): a directory a full-auto sandboxed command removed is no longer removed directly; each removal is decided like an edit and applied as its own `workspace.file.write` effect (a write deny keeps the directory).
 - SECURITY (MCP-SCHEMA-VALIDATOR): MCP tool schemas are validated by Deckent's own bounded JSON Schema validator with a linear-time
   pattern engine; the MCP SDK's @cfworker/json-schema (and ajv) are neither used nor shipped. Unsupported schema features (for example

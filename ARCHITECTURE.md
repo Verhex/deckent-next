@@ -327,7 +327,11 @@ refresh, usage and dogfood closure remain open.
   (≤ 200, bounded to the delivery), limits; `clearScratch` empties the area and keeps its directory (a shell's TMPDIR stays valid).
   v17 was introduced 2026-09-29 (MODES-3) as the single v17 package: permission-mode names `standart | full-auto | full-access`, view
   `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
-  (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
+  (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. SECRET-WRITE adds
+  `setSecret` / `deleteSecret` to v17 (owner 2026-09-29). v17 is on origin/main since `7fbe476c` (2026-09-29) but runs in no installed
+  service; per the lead's integration instruction (2026-09-29) its release point is the next live switch — an open reconciliation with
+  "once pushed … needs a version bump" above (owner: bump to v18, or amend the rule to "pushed and run by an installed service").
+  With it: bindings v3;
   audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, summary `fetch`; old mode names stay readable); ledger
   unchanged.
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
@@ -341,7 +345,7 @@ refresh, usage and dogfood closure remain open.
 
 ### Enterprise layering, effect settlement and ERP adapters — owner 2026-09-23 (accepted target; Lane B)
 
-Deckent-Enterprise is the commercial target; Core is standalone open source (MIT). Enterprise is layered on published
+Deckent-Enterprise is the commercial target; Core is standalone open source (Apache-2.0, DEPS-P0 2026-09-29). Enterprise is layered on published
 Core contracts and never requires editing Core. Core-memory law 10 records this rule (Jev 124d141b, two lanes 0.99).
 
 - **Contract gate.** New external effects use one Core effect-settlement port, never another module-specific
@@ -1435,8 +1439,13 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   and only `DECKENT.md` plus a bounded section in `CLAUDE.md`/`AGENTS.md`. That module does not exist yet
   (PLAN "Mimari kapı artıkları", W0-9); lint-arch `md-write` enforces the rule, so today no product code writes
   markdown, and no README/CHANGELOG/vision/sprint-log writers exist.
-- Every environment: Linux, macOS, Windows native, Windows WSL, Docker. A platform without proof reports a
-  typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback.
+- Platform order (owner 2026-09-29): Linux and Windows WSL2 today; macOS next (Seatbelt + getpeereid), then
+  native Windows. Docker stays a worker execution target, not a host platform. A platform without proof reports
+  a typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback. Node.js: `engines >=24.15.0` (the first 24.x bundling
+  SQLite 3.51.3, the WAL-reset corruption fix); 24 and 26 are supported (CI matrix [24, 26]; 24 is the required gate
+  until Node 26 LTS on 2026-10-28). Every `node:sqlite` open (the ledger connection, the read-only readers, the scope
+  registry reader and the upgrade backup: 10 sites) first refuses an engine below 3.51.3 with the typed
+  `ATTEMPT_STORE_SQLITE_UNSUPPORTED` (DEPS-P0, numeric comparison; an unparsable version is refused).
 - Project state lives under the project's `.deckent/` (gitignored; layout from `layout-resources.json`), and the
   transactional ledger carries its own schema version. Legacy `.brain/memory.db` is not a Next store; it stays on
   the workspace deny list and migrates only through the memory cards.
@@ -1467,8 +1476,8 @@ resolve as in the tested `dist`. Outputs that define esbuild's `__require` shim 
 shipped package are listed under it only when the embedding file was bundled) and `THIRD-PARTY-NOTICES.md`; `deps-watch --sbom` and
 OSV-Scanner read it. `scripts/pack-smoke.mjs` installs the tarball offline with an empty cache and drives version, MCP server, MCP client,
 runtime service, terminal and native addon per supported Node. Publication is gated (`summary.json publishable`) while public declarations
-name third-party packages, LICENSE is absent or a shipped component lacks license text. The Core license line under "Enterprise layering"
-(MIT) is not changed here: the Apache-2.0 decision lands with DEPS-P0.
+name third-party packages, LICENSE is absent or a shipped component lacks license text. Core is Apache-2.0 (DEPS-P0: the full
+apache.org LICENSE-2.0 text at the root, `package.json` `license`); no NOTICE file yet.
 Declarations (DEPS-TYPES, tenth batch): `scripts/dist-types.mjs` ships the declaration closure TypeScript loads from `dist/index.d.ts` under
 NodeNext and under Bundler (a specifier resolving differently in the two, not resolving, a non-node `/// <reference types>`, or a
 `declare module '…'` in vendored types fails the build). Own declarations keep the tsc layout; third-party declarations are copied to
@@ -1524,6 +1533,9 @@ lives in the transient tracker and external refactor archive, not an append-only
 |---|---|---|
 | 2026-09-29 | `ShellCapabilities` v1 → v2 (BWRAP-SELECT, owner S7): `bubblewrap` is the selected launcher's observation (`{ status, launcher, rejected, restriction, detail }`) instead of a PATH-scan status; `schemaVersion: 2`. In-process type, pushed at S5, so versioned (not amended in place); every caller moved in the same change. SHELL-OVERLAY reads `launcher.overlay`. | Launcher selection (system ≥ 0.12 → bundled 0.13) makes the observation richer than a status; overlay becomes active in production. |
 | 2026-09-29 | MCP tool schemas are validated by Deckent's own bounded JSON Schema validator (`src/platform/core/validate`); the SDK's @cfworker/json-schema and ajv are neither used nor shipped (MCP-SCHEMA-VALIDATOR). | Owner "problematic dependencies are not accepted": cf-worker maintenance stagnation, ReDoS in `pattern`, fail-open `$dynamicRef` (Astra 2180 R2). |
+| 2026-09-29 | Twelfth batch keeps `src/composition` within its 5500-line budget by moving two pure pieces to their owning adapter units: the `@file` index cache (`RuntimeWorkspaceFileHost`, `createRuntimeWorkspaceFileHost`, byte-identical) beside `indexWorkspaceFiles` in `adapters/core/workspace-read`, and `agentFileEffectCommandId` into `adapters/core/workspace-write` (as `agentShellEffectCommandId` in host-shell). 5501 → 5455 lines. | The SECRET-WRITE merge passed the budget by 1 line; FOUNDATION: pressure is answered by moving responsibility, not by raising the budget. |
+| 2026-09-29 | SECRET-WRITE: `secret set|delete` through the runtime service (protocol v17 in place) under the policy resource `secret` (`set`/`delete`, id = name); every decision sealed as `secret-change` with `decision`; first-run template v2 grants the installer; CLI value from stdin or a no-echo prompt, never argv. | Owner 2026-09-29 SECRET-K1 §5 option A + S3 (service socket). |
+| 2026-09-29 | DEPS-P0: Core license Apache-2.0; `engines.node >=24.15.0` with `@types/node` 24.x; `node:sqlite` below 3.51.3 refused at every open (`ATTEMPT_STORE_SQLITE_UNSUPPORTED`); react 19.2.8 + `@types/react` 19.2.18 (ink's react-reconciler 0.33 release train); CI Node [24, 26]; platform order Linux + WSL2, then macOS, then native Windows. | Owner decisions 1, 4, 9, 10 of the 2026-09-29 dependency audit (SQLite WAL-reset corruption fix in 3.51.3). |
 | 2026-09-29 | Tenth batch keeps `src/composition` within its 5500-line budget by moving pure host-shell responsibilities to their owning adapter unit, byte-identical: `shellWritePosture` + `ShellCallAuthority` (beside `unattendedWritePosture`), `sandboxWriteSetRoot`, `agentShellEffectCommandId` and the shell result notes/effect-refusal text into `adapters/core/host-shell`; composition keeps the EffectApplication wiring. 5510 → 5432 lines. | FASTURI-OUT, DEPS-TYPES, SECRET-K1 and SHELL-OVERLAY together passed the budget by 10 lines; the 2026-09-28 FOUNDATION rule answers pressure by moving responsibility, not by raising the budget. |
 | 2026-09-29 | SECRET-K1: `SecretStore` port + backend registry; env default, explicit installation-only file backend; one production resolver at every credential read site. | Owner keyring option B, S1/S2/S5; `secret set|delete` authority checkpoint open (PLAN). |
 | 2026-09-29 | Seventh batch keeps `surfaces/core/terminal` within the 2000-line unit budget by moving two dependency-free presentation pieces: the approval-card key mapping (`decisionKey`, `scopedDecisionKey`, `StandingScope`) to `terminal-kit` and `ArrowPicker` to `terminal-render`; `terminal` re-exports the key mapping unchanged. | MODE-UX, PERSISTENT-APPROVALS, `/mcp` and TERM-UX-1 together passed 2000 (2020, then 2041). No budget raise; the next terminal feature splits the unit by responsibility (e.g. a session unit), as TERM-UX-1 noted. |
@@ -2009,10 +2021,27 @@ fallback). Interpolation keeps a backend's `SECRET_STORE_*` code (other resolver
 Surfaces: `doctor` (`--json` `secretStore {schemaVersion, backend, writable, enumerable, status, code}` and a human `Secret store:` line; read
 for the selection only, no reference resolved; an unsafe/corrupt/unavailable store is reported, not thrown); `deckent secret list [--json]`
 (names only; env backend → `SECRET_STORE_UNSUPPORTED`). The `SECRET_*` catalog texts never contain "secret" followed by whitespace and a word:
-the error redactor would mask the next word as a value (observed at integration). Governed changes: `SecretStoreAdministration` (input →
-injected authorization → sealed audit `secret-change` {action set|delete, name, backend} — never value, digest or length — → write; no record,
-no change). `secret set|delete` surfaces are **not wired** (authority checkpoint, see PLAN). The approval/audit HMAC key stays in its 0600
-file (S2). Not yet: OS keyring backend (K2, `@napi-rs/keyring`, S5), per-scope namespace (S4), service-socket writer (S3).
+the error redactor would mask the next word as a value (observed at integration). Governed changes (SECRET-WRITE, owner 2026-09-29 SECRET-K1
+§5 option A + S3 = service socket, twelfth batch): the policy vocabulary (schema 1, additive) has resource kind `secret` with actions
+`set`/`delete`; the resource id is the secret's name (`$DECK:NAME` grammar, `ids: 'all'` for every name). The runtime service owns the
+change: protocol v17 (added in place, see the versioning rule) `setSecret {schemaVersion 1, scopeId, name, value}` and `deleteSecret
+{schemaVersion 1, scopeId, name}` (delivery required, current version only, no actor field — the socket peer is the principal; scope
+admission `write`) → `{schemaVersion 1, scopeId, name, action, backend, removed}`. `SecretStoreAdministration`: input (name grammar, value 1
+B–64 KiB, a writable backend — the env backend is `SECRET_STORE_READ_ONLY` before any decision) → `policySecretChangeAuthorization` (engine;
+`evaluatePolicy` for the verified principal only; a request naming another principal is refused) → a sealed `secret-change` audit event for
+**every** decision (`decision {effect, ruleId}`, required; never value, digest or length) in the installation's own ledger — the ledger of
+the layout whose policy decided (the MCP user-trust precedent; no global-root ledger exists) → the store write only on `allow`. `deny`/no
+grant → `SECRET_CHANGE_DENIED {action, name}` (text names the grant to add), `require-approval` → `POLICY_APPROVAL_UNSUPPORTED` (no approval
+card for a value-carrying change); an unrecordable refusal is still a refusal; an allowed change whose record fails is not applied; an
+allowed record followed by a failed write (e.g. the store's write lock held, `CONFIG_WRITE_LOCKED`) is an intent without effect. First-run
+policy template v2 grants the installing principal `first-run-secret-store` (allow set/delete, ids all, installed scope); doctor recognizes
+template versions 1..2; an existing installation gains the grant only by editing policy.json by hand until `/policy` (POLICY-ADMIN P5)
+exists. CLI `deckent secret set <NAME> [--scope <id>] [--json]` reads the value from piped stdin (one trailing LF/CRLF dropped, ≤ 64 KiB) or
+a no-echo raw-mode prompt on stderr (Enter ends, Backspace edits, Ctrl-C `SECRET_INPUT_CANCELLED`); a value on argv is `CLI_USAGE`; `deckent
+secret delete <NAME>`; the scope is `--scope` or `terminal.scopeId`. No MCP tool, no SDK surface, no terminal `/secret` yet. A catalog test
+renders every `error.*` template (en/tr) with sample parameters — a secret's `{name}` as `OPENAI_API_KEY` — and requires `redactSensitive`
+to leave it unchanged. The approval/audit HMAC key stays in its 0600 file (S2). Not yet: OS keyring backend (K2, `@napi-rs/keyring`, S5),
+per-scope namespace (S4), a grant-editing surface for existing installations (`/policy`, POLICY-ADMIN P5).
 **MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
 local stdio servers, managed like Claude Code's scoped files (code.claude.com/docs/en/mcp, checked 2026-09-28: local/project/user,
 managed on top, `mcp add|add-json|list|get|remove`), never in configuration: project `<project>/.deckent/mcp.json` (shared;

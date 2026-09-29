@@ -1,6 +1,6 @@
 # Enterprise katmanı ve ERP adapter ailesi
 
-Owner kararı 2026-09-23 (Jev 124d141b two_lanes_contract_gate 0,99): Deckent'in ticari hedefi Deckent-Enterprise'dır. Core açık kaynak (MIT) ve bağımsızdır; bilinirlik ve kullanıcı kazanımı içindir. Enterprise, Core'un yayımlanmış sözleşmelerinin üzerine giydirilir. Core, Enterprise'ın Core'u değiştirmeden takılamayacağı bir sözleşmeyle genişletilmez.
+Owner kararı 2026-09-23 (Jev 124d141b two_lanes_contract_gate 0,99): Deckent'in ticari hedefi Deckent-Enterprise'dır. Core açık kaynak (Apache-2.0; owner 2026-09-29 DEPS-P0, önceden MIT) ve bağımsızdır; bilinirlik ve kullanıcı kazanımı içindir. Enterprise, Core'un yayımlanmış sözleşmelerinin üzerine giydirilir. Core, Enterprise'ın Core'u değiştirmeden takılamayacağı bir sözleşmeyle genişletilmez.
 
 - Her Core sözleşmesi (etki, onay, kimlik/scope, registry, ledger, yüzey) şu soruyla tasarlanır: bir ERP operasyonu ve ayrı dağıtılan bir Enterprise paketi bunu Core'u düzenlemeden yeniden kullanabilir mi? Hayırsa önce genel sözleşme düzeltilir.
 - Sözleşme kapısı: modüle özel yeni niyet → talep → etki → kapanış akışı yazılmaz. Dış etkiler tek genel etki sözleşmesinden geçer (sürümlü operasyon, koşullu yazma ön koşulu, idempotency, operasyon düzeyi onay, belirsiz etki uzlaştırması, telafi). Git teslim/benimseme bu sözleşmenin bir adapter'ıdır.

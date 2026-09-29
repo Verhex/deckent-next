@@ -12,7 +12,7 @@ one capability at a time, each landing with contract tests and a real-binary pro
 
 ## Requirements
 
-- Node.js ≥ 24
+- Node.js ≥ 24.15.0 (bundles SQLite ≥ 3.51.3; Node 24 and 26 are supported) on Linux or Windows WSL2
 - Docker (exact-docker worker execution; worker image recipe in `assets/worker-image/`)
 
 ## Install and run
@@ -160,7 +160,7 @@ i18n, and the markdown policy are enforced by `scripts/lint-arch.mjs` and fail t
 
 ## License
 
-MIT
+Apache-2.0 (see [LICENSE](LICENSE); DEPS-P0, owner 2026-09-29).
 
 Patch capture compares the workspace with the base tree by Git object id and reads only changed base blobs;
 exhausted Git output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`,
