@@ -740,7 +740,7 @@ with `[deckent] grep: matches=N` (`N` = `:`-marked hit lines actually returned, 
 than found: hit cap, byte-cap cut, skipped or unscanned files). The terminal's grep count comes only from that last line, or 0 from
 the "no matches" line (`+` when the search was not complete); without it (older result, other producer, final byte-cap cut) no
 summary is shown — hit rows are never parsed back, since a workspace path may contain `:` (Astra 2145 R2). Tool `version` unchanged.
-**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 4),
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 5),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
@@ -758,6 +758,14 @@ System prompt **v4** (TERM-FEEDBACK-1): one line naming the running model from t
 model reference with versions; "running inside Deckent"; answer identity questions with it), and the data-root line no longer points at
 the ledger and saved conversations: Deckent's own state and authority, keys and credential files are named protected (the tools and the
 shell refuse them); the configuration is named readable. Every turn's request digest changes again.
+System prompt **v5** (LANG-CRASH): the reply language of the person's locale as the first rule and again as the last line
+(`AGENT_TURN_REPLY_LANGUAGES`: en → English, tr → Turkish (Türkçe); keyed like the catalog locales, so a new catalog locale without an entry
+does not compile). The service resolves the locale as elsewhere (its environment, then `config.language`). The compaction instruction ends with
+'Write every string in <language>' instead of 'the language of the conversation'. Every turn's request digest changes again. Not forced: a
+local model can still drift; no post-check exists (a post-answer language check is a separate card). The terminal's own locale is not on the
+wire: terminal and service differ only for `terminal --lang` or a service started from another environment. Lead decision (2026-09-30): B now —
+the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
+v19 (v18 is released) and ships with the next protocol bundle.
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
@@ -1010,7 +1018,7 @@ one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the s
 passed over and why, and the host measurement (`bubblewrap: {status, launcher {source, path, version, overlay}, rejected, detail}`,
 `landlock`), measured read-only with the state root the service uses (`globalStateRoot()`), so "probe available, provider refuses" is
 visible. Host mode also reports `preferSandbox` (the MCP registry default). Measured in the CLI process: a running service keeps its own
-measurement until it restarts; no conversation scratch area (a launcher inside only the scratch area is not detected by doctor). View per call: `--unshare-all` (network included; the
+measurement until it restarts; no conversation scratch area (a launcher inside only the scratch area is not detected by doctor). (Closed view — standart, full-auto and unattended calls; a full-access call's open view is under Full access (MODES-3).) View per call: `--unshare-all` (network included; the
 fetch tool is the only egress), `--die-with-parent`, `--new-session`, fresh `/proc`, minimal `/dev`, `/tmp` and HOME as 64 MiB tmpfs
 (HOME never bound: `~/.ssh`, tokens, a ledger under HOME invisible), system prefixes read-only by allowlist (`/usr /etc /bin /sbin
 /lib* /opt /snap /nix /sys`; never `/`, `/mnt`, `/run`, `/var`, `/home`), PATH program directories (`bin`/`.bin`/`sbin` by name; a
@@ -1315,7 +1323,10 @@ unattended`, never text) and the planned tier (`shellWritePosture`, host-shell, 
 - **full-access** (an audited `full-access-call` of a turn launched in full access while the company grant holds; owner 2026-09-29: full
   access is comprehensive and owner-authorized by the mode): the project, the write floor (existing and new names) and `.git` (and a
   worktree's common repository) write; the configuration file stays read-only (that turn's sandbox floor is only the configuration
-  file); the hard floor — product state, credentials, the MCP registry — stays masked/denied.
+  file); the hard floor — product state, credentials, the MCP registry — stays masked/denied. In a full-access turn the view is **open**
+  (OPEN-SANDBOX, e376f546): `shellWritePosture` returns `open` for the `full-access` authority and for an `owner-approved` call of a
+  full-access turn (never for an unattended or full-auto call); `sandboxWriteView` carries it (never with a read-only project or a write
+  set) and the card says "network on, HOME visible, Deckent state and credentials hidden/read-only".
 - **unattended, narrow mutating set**: the project writes, the write floor's existing paths read-only (literal targets passed the write
   check; bubblewrap `--ro-bind` before the deny masks, Landlock `r` rules with the parent carved).
 - **unattended, every other tier** (the full-auto sandbox relaxation, silent or standing-approved reads): the whole project read-only
@@ -1383,10 +1394,33 @@ recorded per call. Hard floor unchanged in every mode: product state (every layo
 `.deckent/host|audit-key|approvals`, the MCP project registry. A full-access turn opens only the repository internals: the workspace
 deny drops `REPOSITORY_INTERNALS_DENY` (`.git`, `.git/**`, `**/.git`, `**/.git/**`), and both sandboxes make Git metadata writable
 (`ShellSandboxLayout.repositoryWritable`: bubblewrap binds no `.git` read-only and binds a worktree's common repository read-write;
-Landlock gives clean Git entries `w`; the inode floor's masks stay); the sandbox posture is the full-access bullet above. Host realm: the
-hard floor for shell is name-based (a command naming product state is refused; an expanded name is not caught) — the realm is not
-changed by full access (config `terminal.shell.realm`; owner 2026-09-29: full access stays comprehensive, not forced into a sandbox —
-the OS boundary for product state is the planned OPEN-SANDBOX view, PLAN "İzin modları ve sandbox").
+Landlock gives clean Git entries `w`; the inode floor's masks stay); the sandbox posture is the full-access bullet above. Host realm (explicit, or a fallback): the
+shell hard floor stays name-based (a command naming product state is refused; an expanded name is not caught).
+**Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4; live findings 3/4 of session 1d428e9f).** A full-access call in a realm that
+`opens` (bubblewrap) runs with `--unshare-all --share-net`, `--bind / /` then a fresh `/proc` and minimal `/dev` (PID namespace,
+`--die-with-parent`, `--new-session` kept): host network, the real HOME readable and writable, the project and `.git` writable. The hard floor
+is structural, from `ShellSandboxLayout.hardFloor` (`agentShellHardFloor`, `adapters/core/agent-workspace-floor`, full-access turns only): the
+project's product root (`.deckent`), the data root, the bootstrap configuration's directory, the global state root of the service's
+configuration and process environments, and an existing conventional `~/.deckent`. A root inside the project is bound read-only over it (its
+product state still masked by the deny walk) — no name, existing or new, is created there (`.deckent/mcp.json` EROFS); a root outside it is an
+empty tmpfs remounted read-only after the scratch bind (bubblewrap copy, user MCP registry/trust, secrets hidden; man page: `--remount-ro`
+changes only that mount point). Owner Y (cef933a7, 2026-09-30): the sealed `.deckent` root takes no new name, but an EXISTING subdirectory
+that is not Deckent's state (`hardFloor.product`: every registry resource under the turn's and the default layout, the data root, the
+bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads; denied paths and protected anchors never) is bound writable
+over it — a tracked `.deckent/docs` checks out clean. Commits e376f546 + 46148e4f + cef933a7. A missing root is created empty (0700) first
+(bwrap would otherwise `mkdir` it on the host, measured 0.13). The Core credential patterns are masked in HOME over a bounded walk (depth 3,
+20 000 entries — over it the call is refused; vendored trees and symbolic links not entered). An owner-approved call of that turn keeps the
+existing configuration file writable (content only). Fail closed: an open request without the hard floor, a root that holds the project,
+HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`): `prefer-sandbox` runs the call on the host with a visible
+notice ("full access: no open sandbox (…); running on host … protected by name only"), `require-sandbox` keeps the closed view with a
+notice; the explicit host mode and a host fallback are unchanged. MCP server views are unchanged (`longLivedWritePosture`). Cost (this
+machine, empty project, wall clock with view resolution): open ≈ 55–63 ms, closed ≈ 11–13 ms. Open limits: HOME credential masking is by
+pattern and depth-bounded (deeper, linked or hard-linked credential files open); credential stores outside the Core patterns
+(`~/.config/gh/hosts.yml` — used by `git push` here —, `~/.codex/auth.json`, `~/.gnupg`, arbitrarily named `~/.ssh` keys) stay open (owner
+2026-09-30: name patterns for now; follow-up card OPEN-SANDBOX-HIDDEN-PATHS: a policy-managed hidden-path list); other projects' state and a
+missing `~/.deckent` under an override are not sealed; minimal `/dev`; Landlock has no open view; the view seals Deckent's state, not its
+code (the service's node under HOME and a dogfood checkout's `dist/` are writable, so a full-access shell can change what the next restart
+runs); non-product FILES at the `.deckent` root and NEW subdirectories stay read-only (a commit adding one fails to check out there).
 **Mode status and `/mode` (T-L4 slice 4c, owner q7, protocol v15).** Two v15 operations, current version only (a v14 envelope is
 refused; window stays [15,14]). MODES-3 shapes (protocol v17): `inspectPermissionMode {scopeId}` → `{supported, mode, askEdits, revision, eligible,
 fullAccess}` over the request's
@@ -1556,6 +1590,9 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-30 | Thirteenth batch keeps `src/composition` within its 5500-line budget by moving the agent's workspace/product-state posture derivation to a new adapter unit `adapters/core/agent-workspace-floor`, byte-identical: `AGENT_READABLE_PRODUCT_RESOURCES`, `agentWorkspaceDeny`, `agentAuthorityPaths`, `agentShellHardFloor`, `agentProductStateDeny` (from agent-turn `turn.ts`) and `classifySandboxWritePath` (from `sandbox-writes.ts`); composition keeps the wiring. 5506 → 5423 lines. | OPEN-SANDBOX + LANG-CRASH passed the budget; pure path derivation over workspace-read/-write, host-shell, mcp-client and platform host symbols is not wiring (FOUNDATION: move responsibility, never raise the budget). |
+| 2026-09-30 | OPEN-SANDBOX: a full-access shell call runs in an open bubblewrap view (host network, real HOME, project + `.git` writable) with a structural hard floor (Deckent state roots read-only/hidden, Core credential patterns masked in HOME); owner Y: existing non-product subdirectories of the sealed `.deckent` are writable; credentials stay name patterns for now (follow-up OPEN-SANDBOX-HIDDEN-PATHS, policy-managed hidden paths). | Owner MODES-3 checkpoint 4 ("full access is comprehensive") and live session 1d428e9f findings 3/4 (a hard-floor name created from a full-access sandbox; no network/HOME in full access). |
+| 2026-09-29 | LANG-CRASH: system prompt v5 states the reply language (first and last) and the compaction summary is written in it; the MCP command boundary maps managed-file refusals to typed errors. Lead decision 2026-09-30: live `language: tr` at the next live restart (B); protocol v19 `chatTurn.language` with the next protocol bundle (A). | Owner 2026-09-29 "tamamen Türkçe iletişim"; live crash reports of `mcp add` in the sandbox. |
 | 2026-09-29 | `ShellCapabilities` v1 → v2 (BWRAP-SELECT, owner S7): `bubblewrap` is the selected launcher's observation (`{ status, launcher, rejected, restriction, detail }`) instead of a PATH-scan status; `schemaVersion: 2`. In-process type, pushed at S5, so versioned (not amended in place); every caller moved in the same change. SHELL-OVERLAY reads `launcher.overlay`. | Launcher selection (system ≥ 0.12 → bundled 0.13) makes the observation richer than a status; overlay becomes active in production. |
 | 2026-09-29 | MCP tool schemas are validated by Deckent's own bounded JSON Schema validator (`src/platform/core/validate`); the SDK's @cfworker/json-schema and ajv are neither used nor shipped (MCP-SCHEMA-VALIDATOR). | Owner "problematic dependencies are not accepted": cf-worker maintenance stagnation, ReDoS in `pattern`, fail-open `$dynamicRef` (Astra 2180 R2). |
 | 2026-09-29 | Twelfth batch keeps `src/composition` within its 5500-line budget by moving two pure pieces to their owning adapter units: the `@file` index cache (`RuntimeWorkspaceFileHost`, `createRuntimeWorkspaceFileHost`, byte-identical) beside `indexWorkspaceFiles` in `adapters/core/workspace-read`, and `agentFileEffectCommandId` into `adapters/core/workspace-write` (as `agentShellEffectCommandId` in host-shell). 5501 → 5455 lines. | The SECRET-WRITE merge passed the budget by 1 line; FOUNDATION: pressure is answered by moving responsibility, not by raising the budget. |
@@ -2190,6 +2227,10 @@ pool (at the refused call and at every turn start, `pool.retain`), so its next t
 project read-only (C5, above); a failed answer (`isError` or a server JSON-RPC error) of such a server carries `MCP_PROJECT_READ_ONLY_NOTE`,
 decided from the typed `projectReadOnly` on `McpServerOpen`/`McpOfferedTool`, never from the answer text; the launch card carries a posture
 line (`mcpRealmPosture`). Not yet: a typed diagnosis for a server that crashes at start while writing the project.
+`runConfiguredMcpCommand` (the one host boundary of CLI `mcp *` and terminal `/mcp`) maps a `ManagedFileError` through `queryFailure`
+(registry code + diagnosis params, caller's locale, exit 1, no crash report); any other error is unchanged (LANG-CRASH, live session 1d428e9f).
+Open (LANG-CRASH finding): `mcp add`/`mcp remove` write the registry file before the trust audit; when the audit refuses, the registry has
+already changed, and after `remove` the trust record stays (the same definition added again can look trusted without a card).
 
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io

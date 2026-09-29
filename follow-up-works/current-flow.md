@@ -121,9 +121,21 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
 - Bilinen sınırlar: mevcut kurulumlarda secret grant'ı elle (§5; canlıda eklendi); v16 servisi canlı geçişte eski CLI ile durduruldu; Node 26 PTY
   kanıtı yalnız şeritte; eski SQLite'lı gerçek Node ile ret yalnız birim testinde (enjekte sürüm); `ci.yml` lead incelemesi bekliyor.
 
+## On üçüncü parti (`integrate/2026-09-29-n`, worktree `/home/alperen/deckent-next-integrate-n`, taban main `0360bab9`)
+- Birleşenler (`--no-ff`): REALM-NOTICE `5bd4a3dd`; LANG-CRASH `19d7caee` (`044f7b90` MCP managed-file tipli hata + `dfce9015` sistem istemi v5 yanıt dili,
+  özet o dilde); OPEN-SANDBOX `bf21ec73` (`e376f546` + `46148e4f` + `cef933a7`: full-access açık bubblewrap görünümü, yapısal sert taban, owner Y).
+  Şerit teslimleri bağımsız inceleme bekliyor.
+- Entegrasyon: composition 5506 → 5423 (bütçe 5500 yükseltilmedi): ajan çalışma alanı/ürün durumu duruş türetimi bayt-özdeş
+  `adapters/core/agent-workspace-floor`'a taşındı (arch kenarları); belge commit'i (OPEN-SANDBOX + LANG-CRASH deltaları, oturum 1d428e9f analizi PLAN'da).
+- Doğrulama (tam verify değil): typecheck 0; değişen dosyalarda eslint 0 hata (1 önceden var uzunluk uyarısı, `runPeerConfiguredChatTurn`); lint-arch 0 ihlal;
+  `npm run build` ✓; hedefli vitest (taşınan kod, open-sandbox, full-access, dil/MCP; VITEST_MAX_FORKS=2, FORCE_COLOR yok, Docker imajı değişkeni)
+  19 dosya 163/163, 0 atlanan; `~/.deckent` ve `~/.local/state/deckent-next-dev` test sırasında değişmedi.
+- Lead kararı (dil, 2026-09-30): B — canlı config `language: tr` bir sonraki canlı yeniden başlatmada; A — protokol v19 `chatTurn.language` bir sonraki
+  protokol paketinde; yanıt dili son-kontrolü ayrı kart. Açık bulgu: `mcp add`/`remove` kayıt dosyasını denetimden önce yazıyor.
+
 ## Sıradaki
-1. On üçüncü parti (`integrate/2026-09-29-n`, worktree `/home/alperen/deckent-next-integrate-n`: main `0360bab9` + REALM-NOTICE `5bd4a3dd` + belge
-   commit'leri): tam verify → Astra → PASS'te push (`0360bab9` dahil). Canlıya alma ayrı owner onayı.
+1. On üçüncü parti (`integrate/2026-09-29-n`: main `0360bab9` + REALM-NOTICE + LANG-CRASH + OPEN-SANDBOX + bütçe taşıması + belge commit'leri):
+   tam verify → Astra → PASS'te push (`0360bab9` dahil). Canlıya alma ayrı owner onayı; o yeniden başlatmada canlı config `language: tr`.
 2. REALM-NOTICE açığı: MCP ön-başlatma launch kartı gerçek realm'i önceden adlandırmıyor — (a) `usable()` ön-seçimi / (b) olduğu gibi; lead/owner.
 3. Owner kararları: SHELL-OVERLAY O1/O3/O5/O6/O7; `format` denetleyicisi, şema korpusu ölçümü, AppArmor kurulum belgesi, CI `bwrap-bundle.yml` ilk koşu;
    DEPS-SCHEMA C1 kanıtı; sabah listesi `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları;
@@ -133,6 +145,8 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
    canlı servis Node 26; o güne kadar canlı Node 24.21 (PLAN "On ikinci parti").
 
 ## Açık kalanlar
+- Oturum 1d428e9f açık P1'leri (PLAN "Owner terminal oturumu 1d428e9f"): `/policy` + `/permissions` (POLICY-ADMIN P5); ajan yönetim araçları (yetki isteği
+  kartı, MCP durumu); terminal Agent OS komutları (O1) + UI/UX tasarımı; OPEN-SANDBOX-HIDDEN-PATHS takip kartı; MCP kayıt-önce-denetim sırası.
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).
 - SHELL-AUTONOMY açık owner soruları: C1 program tabanı sandbox'ta, C2 audit event v2 (realm/hücre); `run_shell` model açıklaması sürümü
   (C3 → full-access, C4 → yazım duruşları ile kapandı).

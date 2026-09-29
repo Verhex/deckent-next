@@ -4,6 +4,17 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SECURITY (OPEN-SANDBOX): full access: shell calls run in an open bubblewrap sandbox — network and HOME available, Deckent's state roots
+  sealed read-only/hidden and credential-pattern files in HOME masked; without bubblewrap a full-access call runs on the host
+  (prefer-sandbox) or stays closed (require-sandbox), with a visible notice. Existing non-product subdirectories of the project's
+  `.deckent` (for example a tracked `.deckent/docs`) stay writable; no new name can be created there.
+- FIX (LANG-CRASH): `deckent mcp …` no longer crashes (and writes a crash report) when a managed product file fails its ownership/mode
+  checks; it reports `MANAGED_FILE_UNSAFE` with its diagnosis and exits 1.
+- CHANGED (LANG-CRASH): the terminal agent's service instructions (system prompt v5) name the reply language of the configured locale
+  first and last; conversation summaries are written in that language.
+- REFACTOR (thirteenth batch): the agent workspace/product-state floor derivation moved from composition to
+  `adapters/core/agent-workspace-floor` unchanged (composition line budget).
+
 - FIX (REALM-NOTICE, live 2026-09-29): a preferred sandbox passed over for any reason (not only a host restriction; for example a
   bubblewrap launcher inside the project) is now a visible fallback — `[deckent] sandbox: <chosen> instead of <preferred> (<preferred>:
   <reason>)` on the live stream, the model result, the approval card and MCP server postures, with every reason on one bounded line;
