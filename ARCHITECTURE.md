@@ -1401,6 +1401,11 @@ non-droppable (role error); `/mode full-access` is refused in the surface (the s
 standart|full-auto` in a full-access session ends full access for the session; `/mode ask-edits on|off`; `/mode start full-access`
 stores the start mode (next launch). Launch: the flag without the grant → the terminal does not open (`PERMISSION_MODE_DENIED`); a
 stored start mode without the grant → a standart session with a notice; full access → an opening warning notice.
+After a written entry's own decision, each new parent directory it needs is decided like an edit of that directory (its own name and as a tree:
+deny, write floor, configuration name), once per set and before any is made; a refused one keeps the entry, every entry beneath it and all its new
+ancestors out (Astra 2183 R3, `dc57015`); `ensureWorkspaceParents` refuses a floor-named or undecided parent before the first `mkdir` (defense in
+depth). Parent creation is not a C11 record of its own (decided and audited, reported as `new directories created`). The write floor's `.github/**`
+is anchored at the project root (T-L4 §5): a nested `a/.github/workflows/x.yml` is an ordinary path (owner checkpoint in PLAN).
 
 **`/mode` messages (MODE-UX G3, seventh batch).** On a v1 policy (`view.supported = false`) the surface never calls `set`; `/mode` shows
 the current mode with a one-line effect, the other modes with theirs, and says when nothing in this scope can change it. Typed refusals:
@@ -2123,7 +2128,7 @@ cf-worker ignored and answered fail-open is now refused, `astra-2180-dynamic-ref
 controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Validation is bounded by
 a weighted step budget (5 000 000 ≈ 50 ms on the calibration machine) and instance/evaluation depth; an exhausted bound is `valid: false`
 (fail closed; the SDK reports -32602, `kind: 'output-schema'`, answered, never re-sent). `format` is an annotation unless a checker is
-registered (none in Deckent's wiring) — a relaxation against cf-worker, which asserted formats (owner item in PLAN). The development tree still
+registered (none in Deckent's wiring) — a relaxation against cf-worker, which asserted formats; owner decision 2026-09-29 (Astra 2183 R4): keep the JSON Schema 2020-12 default (annotation only). The development tree still
 installs the SDK's bundled ajv/fast-uri copy (not loaded by Deckent). Since FASTURI-OUT (tenth batch) the published package does not contain
 that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one `ajvProvider` import
 turned into a stub that throws `DeckentRemovedValidatorError` (`MCP_DEFAULT_VALIDATOR_REMOVED`); the build fails when the stub is not applied
