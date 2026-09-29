@@ -178,6 +178,8 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
     kind: 'landlock' as const,
     async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
       if (resolve(request.cwd) !== input.project.root) return refuse('the working directory is not the sandboxed project root');
+      // SHELL-OVERLAY: Landlock mounts nothing, so it cannot keep a call's writes aside (design §9); a caller that asks anyway is refused.
+      if (request.writeSet) return refuse('this sandbox cannot keep writes aside for review');
       if (!await exists(HELPER, 'any')) return refuse('the sandbox helper is not installed (native build missing)');
       const built = await buildLandlockRules(input, {}, fsOpsFor, { floorReadOnly: request.writeFloorReadOnly === true, projectReadOnly: request.projectReadOnly === true });
       if (!built.ok) return refuse(built.reason);

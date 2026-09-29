@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, open, readlink, rename, unlink, type FileHandle } from 'node:fs/promises';
+import { lstat, mkdir, open, readlink, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { posix } from 'node:path';
 import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -90,6 +90,9 @@ export interface WriteAttempt {
   readonly createMode?: number;
   /** Largest file read or written; absent: WORKSPACE_WRITE_MAX_FILE_BYTES. */
   readonly maxFileBytes?: number;
+  /** SHELL-OVERLAY: permission bits the written file gets whether it existed or not (a sandbox write set carries the mode the command
+   * left, e.g. an executable bit); absent: an existing file keeps its own, a new one gets `createMode`. */
+  readonly mode?: number;
   readonly phase: (phase: WritePhase) => Promise<void>;
 }
 export const writeAttemptTemporary = (name: string) => `.${name}.deckent-${randomBytes(6).toString('hex')}.tmp`;
@@ -118,9 +121,10 @@ export async function writeWorkspaceFile(scope: WorkspaceScope, target: Extract<
     if (current.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed since it was read');
     await attempt.phase({ state: 'prepared' });
     pending = true;
-    const mode = current.version === ABSENT_FILE_VERSION ? attempt.createMode ?? current.mode : current.mode;
+    const mode = attempt.mode ?? (current.version === ABSENT_FILE_VERSION ? attempt.createMode ?? current.mode : current.mode);
     const out = await open(proc(dir, temporary), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);
-    try { await out.writeFile(content); await out.sync(); } finally { await out.close(); }
+    // The umask narrows `open`'s mode; an explicit mode is the file's mode exactly.
+    try { await out.writeFile(content); if (attempt.mode !== undefined) await out.chmod(attempt.mode); await out.sync(); } finally { await out.close(); }
     if (!(await scope.verify(dir, target.parentRel))) throw new WorkspaceWriteError('changed', 'directory moved during the write');
     const again = await currentUnder(dir, target.name, maxBytes);
     if (!again.ok || again.version !== expectedVersion) throw new WorkspaceWriteError('precondition', 'file changed during the write');
@@ -153,4 +157,72 @@ export async function temporaryPresent(scope: WorkspaceScope, target: Extract<Wr
   try { await lstat(proc(opened.handle, temporary)); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? false : null; }
   finally { await opened.handle.close(); }
+}
+
+/**
+ * SHELL-OVERLAY: conditional removal of one workspace file (a sandbox write set's deletion). The file must still be at
+ * `expectedVersion` (a single-link regular file); the attempt is journaled `prepared` before the unlink and `committed` after it
+ * (directory fsync). A crash between the two leaves `prepared`, which its effect reads as unknown: an absent file is not evidence of who
+ * removed it (Astra 2100). The parent is re-verified before the unlink; a moved parent refuses (`changed`), nothing is removed.
+ */
+export async function deleteWorkspaceFile(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, expectedVersion: string,
+  attempt: Pick<WriteAttempt, 'phase' | 'maxFileBytes'>): Promise<void> {
+  const maxBytes = attempt.maxFileBytes ?? WORKSPACE_WRITE_MAX_FILE_BYTES;
+  const dir = await openParent(scope, target);
+  try {
+    const current = await currentUnder(dir, target.name, maxBytes);
+    if (!current.ok) throw new WorkspaceWriteError('rejected', current.error);
+    if (current.version !== expectedVersion || expectedVersion === ABSENT_FILE_VERSION) throw new WorkspaceWriteError('precondition', 'file changed since it was read');
+    if (!(await scope.verify(dir, target.parentRel))) throw new WorkspaceWriteError('changed', 'directory moved before the removal');
+    await attempt.phase({ state: 'prepared' });
+    const again = await currentUnder(dir, target.name, maxBytes);
+    if (!again.ok || again.version !== expectedVersion) {
+      await attempt.phase({ state: 'aborted' });
+      throw new WorkspaceWriteError('precondition', 'file changed during the removal');
+    }
+    await unlink(proc(dir, target.name));
+    await dir.sync();
+    await attempt.phase({ state: 'committed' });
+  } finally { await dir.close(); }
+}
+
+/**
+ * SHELL-OVERLAY: creates the missing directories above `rel` (a workspace-relative file path) one component at a time, each from its
+ * opened parent (no link followed), with `modeOf(directoryRel)`. A denied component, a component that exists but is not a real
+ * directory, or a parent that moved refuses (false); nothing above the first missing component is touched.
+ */
+export async function ensureWorkspaceParents(scope: WorkspaceScope, rel: string, modeOf: (directoryRel: string) => number): Promise<boolean> {
+  const segments = posix.dirname(rel) === '.' ? [] : posix.dirname(rel).split('/');
+  for (let i = 0; i < segments.length; i++) {
+    const directory = segments.slice(0, i + 1).join('/');
+    if (scope.denied(directory) || scope.denied(`${directory}/`)) return false;
+    const existing = await scope.open(directory, 'dir');
+    if (existing.ok) { await existing.handle.close(); continue; }
+    if (existing.error !== 'not-found') return false;
+    const parentRel = segments.slice(0, i).join('/');
+    const parent = await scope.open(parentRel, 'dir');
+    if (!parent.ok) return false;
+    try {
+      await mkdir(proc(parent.handle, segments[i]!), { mode: 0o700 });
+      const made = await open(proc(parent.handle, segments[i]!), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+      try { await made.chmod(modeOf(directory) & 0o777); } finally { await made.close(); }
+      if (!(await scope.verify(parent.handle, parentRel))) return false;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') return false; }
+    finally { await parent.handle.close(); }
+  }
+  return true;
+}
+
+/** SHELL-OVERLAY: removes an empty workspace directory (after a write set's deletions); a denied, missing or non-empty one stays. */
+export async function removeEmptyWorkspaceDirectory(scope: WorkspaceScope, rel: string): Promise<boolean> {
+  if (!rel || scope.denied(rel) || scope.denied(`${rel}/`)) return false;
+  const parentRel = posix.dirname(rel) === '.' ? '' : posix.dirname(rel);
+  const parent = await scope.open(parentRel, 'dir');
+  if (!parent.ok) return false;
+  try {
+    const info = await lstat(proc(parent.handle, posix.basename(rel))).catch(() => null);
+    if (!info?.isDirectory()) return false;
+    await rmdir(proc(parent.handle, posix.basename(rel)));
+    return true;
+  } catch { return false; } finally { await parent.handle.close(); }
 }

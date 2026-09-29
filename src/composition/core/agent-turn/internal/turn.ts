@@ -15,6 +15,7 @@ import { createGlobMatcher, createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DEN
   type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
+import { sandboxWriteSetRoot } from './sandbox-writes.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
@@ -189,7 +190,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       ...(project ? { authority } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
-      config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess,
+      config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
       sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(fullAccess ? { repositoryWritable: true } : {}) }) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
@@ -329,8 +330,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         await channel.drained();
         if (!workspace) return { status: 'error', text: `[deckent] ${tool.name}: error=unknown-tool` };
         if ((tool.toolClass === 'edit' && editsOf(tool.name)) || (tool.toolClass === 'shell' && shell)) {
-          return decisions.execute(tool, args, execution, callId, (gate, authority) => tool.toolClass === 'edit'
-            ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, authority));
+          return decisions.execute(tool, args, execution, callId, (gate, authority, writes) => tool.toolClass === 'edit'
+            ? editsOf(tool.name)!.apply(tool.name, args, execution, gate) : shell!.apply(tool.name, args, toolSignal, callId, execution, gate, authority, writes));
         }
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));

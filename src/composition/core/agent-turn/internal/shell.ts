@@ -5,10 +5,12 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
-  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, sandboxWriteView, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
+  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, describeSandboxWriteSet, prepareSandboxWriteSetDirectory,
+  removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
+import { settleSandboxWriteSet } from './sandbox-writes.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 /**
@@ -19,11 +21,16 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
 export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
   sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 /** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */
+/** SHELL-OVERLAY: a full-auto call whose writes could not be kept aside (no private directory outside the project) ran read-only. */
+const WRITE_SET_UNAVAILABLE_NOTE = '[deckent] write set: unavailable here (no private directory outside the project); the project was read-only for this run.';
+/** SHELL-OVERLAY: a run that was stopped kept its writes aside; none of them reached the project. */
+const WRITE_SET_DISCARDED_NOTE = '[deckent] the command was stopped; what it changed was kept aside and not applied (the project is unchanged by it).';
 const PROJECT_READ_ONLY_NOTE = '[deckent] the project was read-only for this unattended run: change project files with the edit tools, or with a command the owner approves.';
 /** Who stands behind one shell call at its effect, as the call decision decided it (`createAgentCallDecisions.execute`, typed, never read from
- * text): the owner's card, the launched full-access mode (an audited `full-access-call`, MODES-3), or nobody (a silent, standing-approved or
- * mode-relaxed call). */
-export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'unattended';
+ * text): the owner's card, the launched full-access mode (an audited `full-access-call`, MODES-3), a full-auto mode relaxation (an audited
+ * `permission-mode` event of mode full-auto: nobody approved the call, the person's mode did — SHELL-OVERLAY), or nobody (a silent or
+ * standing-approved call). */
+export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' | 'unattended';
 /**
  * The one derivation of a sandboxed call's write posture (SHELL-AUTONOMY, Astra 2170 R1, MODES-3; owner 2026-09-29: full access is
  * comprehensive). The realm reads it with the turn's layout: its write floor (the approval floor; in a full-access turn only the
@@ -36,10 +43,14 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'unattended'
  *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
  *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
  */
-export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean } {
-  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false };
-  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false };
-  return { writeFloorReadOnly: true, projectReadOnly: tier !== 'narrow-mutating' || fullAccessTurn };
+export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean,
+  writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean } {
+  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false };
+  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false };
+  // SHELL-OVERLAY (design §2): only a full-auto relaxation of a command past the narrow set gets a write set, and only in a realm that can
+  // keep writes aside; everything else keeps the Astra 2170 postures (a full-access turn's unattended call stays read-only).
+  if (authority === 'full-auto' && writeSets && tier !== 'narrow-mutating' && !fullAccessTurn) return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true };
+  return { writeFloorReadOnly: true, projectReadOnly: tier !== 'narrow-mutating' || fullAccessTurn, writeSet: false };
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
@@ -62,7 +73,11 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** Astra 2162 (owner F2): deny patterns of the product's own state — a command that names one is refused, never offered for approval. */
   readonly productState: readonly string[];
   /** MODES-3: the turn was launched in full access (its sandbox layout: the configuration file as the floor, `.git` writable). */
-  readonly fullAccess?: boolean }) {
+  readonly fullAccess?: boolean;
+  /** SHELL-OVERLAY: the installation's configuration file inside the project (a write-set entry there is `edit-authority`). */
+  readonly authority?: (rel: string) => boolean;
+  /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
+  readonly writeSetRoot?: () => Promise<string | null> }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
@@ -110,7 +125,8 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
-      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, authority: ShellCallAuthority = 'unattended'): Promise<AgentToolOutcome> {
+      execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, authority: ShellCallAuthority = 'unattended',
+      writes?: SandboxWriteDecider): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);
       if (!planned.ok) return { status: 'error', text: planned.text };
@@ -139,8 +155,14 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       // The call's write posture in a sandbox realm, derived once (`shellWritePosture`); the host realm has no such boundary.
-      const { writeFloorReadOnly, projectReadOnly } = shellWritePosture(authority, planned.tier, input.fullAccess === true);
+      const posture = shellWritePosture(authority, planned.tier, input.fullAccess === true, planned.realm.writeSets === true && writes !== undefined);
+      // SHELL-OVERLAY: the write set's private directory; where none can be made, the call keeps the read-only posture (said in the result).
+      const root = posture.writeSet ? await input.writeSetRoot?.() ?? null : null;
+      const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
+      const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
+      const unavailable = posture.writeSet && !directory ? `\n${WRITE_SET_UNAVAILABLE_NOTE}` : '';
       const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
+        ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
@@ -155,15 +177,23 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
         const note = projectReadOnly && ran.exitCode !== 0 && planned.realm.containment !== 'host' ? `\n${PROJECT_READ_ONLY_NOTE}` : '';
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${note}`, cleanup: ran.cleanup };
+        // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
+        // and applied now, entry by entry, like edits; the directory is removed afterwards.
+        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false),
+          context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${note}${unavailable}${settled ? `\n${settled}` : ''}`,
+          cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
+        // A run that did not finish (stopped, timed out, not started) leaves nothing to apply: its write set is discarded.
+        const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${WRITE_SET_DISCARDED_NOTE}` : '';
         if (ran && ran.status !== 'exited') {
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? '' : '\n[deckent] the command was stopped; what it changed before that is unknown.'}`, cleanup: ran.cleanup };
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? ''
+            : discarded || '\n[deckent] the command was stopped; what it changed before that is unknown.'}`, cleanup: ran.cleanup };
         }
         const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
           : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
@@ -171,7 +201,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
           : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
           : typeof code === 'string' ? code : 'failed';
         return { status: 'error', text: `[deckent] run_shell: error=${why}` };
-      } finally { store.close(); }
+      } finally {
+        store.close();
+        if (directory) await removeSandboxWriteSetDirectory(directory.dir);
+      }
     },
   };
 }

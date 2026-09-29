@@ -33,6 +33,10 @@ export interface ShellRealmRequest {
    * keeps the whole project read-only — only the scratch area (and bubblewrap's private `/tmp`) are writable — so no name, existing or
    * new, can appear in the project without a card (Astra 2170 R1). */
   readonly projectReadOnly?: boolean;
+  /** SHELL-OVERLAY: the project is mounted as an overlay whose writes land in `upper` (with the kernel's `work` directory beside it), both
+   * Deckent's own private directories outside the project; the caller reads and applies the change set after the call. Only a realm that
+   * reported `writeSets` accepts it (any other refuses the call, nothing runs); it replaces `projectReadOnly`. */
+  readonly writeSet?: { readonly upper: string; readonly work: string };
 }
 export interface ShellRealmResult {
   /** `exited` with its code (or the signal that ended it), `timed-out` / `cancelled` after the group was killed, `spawn-failed`. */

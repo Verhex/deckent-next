@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { AgentToolSpec, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { createGlobMatcher, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
-import { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, fileContentVersion, readWritableFile, resolveWritable,
+import { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, deleteWorkspaceFile, fileContentVersion, readWritableFile, resolveWritable,
   temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
 
@@ -25,6 +25,32 @@ const floorMatchers = WORKSPACE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
 /** True when a resolved workspace-relative path is on the approval floor. */
 export const isWriteApprovalFloored = (rel: string) => floorMatchers.some(match => match(rel));
 const inputSchema = z.object({ content: z.string() }).strict();
+/**
+ * SHELL-OVERLAY: one entry of a sandbox write set (the same `workspace.file.write@1`, a target-internal input form): write the bytes the
+ * sandboxed command left in the overlay upper directory at `ref.id` (verified against `digest`, permission bits `mode`), or remove the file.
+ * The content never rides the input (the ledger keeps only the input's digest either way); only a target constructed with that upper
+ * directory accepts this form — the edit tools' target refuses it.
+ */
+const writeSetInputSchema = z.object({ writeSet: z.discriminatedUnion('change', [
+  z.object({ change: z.literal('write'), digest: z.string().regex(/^[0-9a-f]{64}$/), mode: z.number().int().min(0).max(0o777) }).strict(),
+  z.object({ change: z.literal('delete') }).strict(),
+]) }).strict();
+const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+/** The bytes of `rel` under the (private, settled) upper directory, opened one component at a time with no link followed. */
+async function readUpperFile(upper: string, rel: string, maxBytes: number): Promise<Buffer | null> {
+  const segments = rel.split('/');
+  let current = await open(upper, DIRECTORY_FLAGS);
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      const last = i === segments.length - 1;
+      const next = await open(`/proc/self/fd/${current.fd}/${segments[i]}`, last ? constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK : DIRECTORY_FLAGS);
+      await current.close(); current = next;
+    }
+    const info = await current.stat();
+    if (!info.isFile() || info.size > maxBytes) return null;
+    return await current.readFile();
+  } catch { return null; } finally { await current.close().catch(() => undefined); }
+}
 /** Journal v2 (Astra 2094 R1): the attempt's own evidence. v1 files (content-equality recovery) were never live and read as unknown. */
 const journalSchema = z.object({ schemaVersion: z.literal(2), rel: z.string(), expected: z.string(), next: z.string(), temporary: z.string().min(1),
   state: z.enum(['prepared', 'committed', 'aborted', 'escaped']), escapedTo: z.string().nullable() }).strict();
@@ -47,7 +73,9 @@ export class WorkspaceFileTarget implements EffectTarget {
   /** `createMode`: permission bits of a file a write creates (the scratch area's 0600), else the project default 0644; `maxFileBytes`:
    * largest file read or written, else WORKSPACE_WRITE_MAX_FILE_BYTES. */
   constructor(private readonly scope: WorkspaceScope, private readonly journalDirectory: string,
-    private readonly options: { readonly createMode?: number; readonly maxFileBytes?: number } = {}) {}
+    private readonly options: { readonly createMode?: number; readonly maxFileBytes?: number;
+      /** SHELL-OVERLAY: the settled overlay upper directory of one sandbox write set; only then is the `writeSet` input form accepted. */
+      readonly writeSet?: { readonly upper: string } } = {}) {}
   private get maxBytes() { return this.options.maxFileBytes ?? WORKSPACE_WRITE_MAX_FILE_BYTES; }
   identity() { return `workspace-file:${this.scope.root}`; }
   private async writable(ref: EffectTargetRef) {
@@ -75,11 +103,21 @@ export class WorkspaceFileTarget implements EffectTarget {
     try { await directory.sync(); } finally { await directory.close(); }
   }
   async observe(ref: EffectTargetRef) { return { version: await this.version(ref) }; }
+  /** The change one request asks for: new bytes (and, for a write set, their mode) or a removal; null when the input is not accepted here. */
+  private async change(request: EffectApplyRequest): Promise<{ readonly bytes: Buffer | null; readonly mode?: number } | null> {
+    const edit = inputSchema.safeParse(request.input);
+    if (edit.success) return { bytes: Buffer.from(edit.data.content, 'utf8') };
+    const entry = writeSetInputSchema.safeParse(request.input), upper = this.options.writeSet?.upper;
+    if (!entry.success || !upper) return null;
+    if (entry.data.writeSet.change === 'delete') return request.expectedVersion === ABSENT_FILE_VERSION ? null : { bytes: null };
+    const bytes = await readUpperFile(upper, request.target.id, this.maxBytes);
+    return bytes && fileContentVersion(bytes) === entry.data.writeSet.digest ? { bytes, mode: entry.data.writeSet.mode } : null;
+  }
   async apply(request: EffectApplyRequest) {
-    const parsed = inputSchema.safeParse(request.input);
-    if (!parsed.success || request.expectedVersion === null) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
-    const bytes = Buffer.from(parsed.data.content, 'utf8');
-    if (bytes.length > this.maxBytes) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
+    const change = request.expectedVersion === null ? null : await this.change(request);
+    if (!change || request.expectedVersion === null) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
+    const bytes = change.bytes;
+    if (bytes && bytes.length > this.maxBytes) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     const target = await this.writable(request.target);
     // A stale precondition is refused before anything is journaled, so it leaves no trace a later lookup could misread.
     if (await this.version(request.target) !== request.expectedVersion) throw new EffectTargetError('EFFECT_TARGET_PRECONDITION');
@@ -89,13 +127,20 @@ export class WorkspaceFileTarget implements EffectTarget {
     if (earlier === null || (typeof earlier === 'object' && earlier.state !== 'prepared' && earlier.state !== 'aborted')) {
       throw new EffectTargetError('EFFECT_TARGET_UNKNOWN');
     }
-    const record = { schemaVersion: 2 as const, rel: target.rel, expected: request.expectedVersion, next: fileContentVersion(bytes),
+    // A removal is journaled with `next: absent` (a write's next version is always a content digest); its temporary name is never created.
+    const record = { schemaVersion: 2 as const, rel: target.rel, expected: request.expectedVersion, next: bytes ? fileContentVersion(bytes) : ABSENT_FILE_VERSION,
       temporary: writeAttemptTemporary(target.name), escapedTo: null };
     const phase = (next: WritePhase) => this.writeJournal(request.idempotencyKey, { ...record, state: next.state,
       escapedTo: next.state === 'escaped' ? next.where : null });
+    const { createMode, maxFileBytes } = this.options;
     try {
+      if (!bytes) {
+        await deleteWorkspaceFile(this.scope, target, request.expectedVersion, { phase, ...(maxFileBytes ? { maxFileBytes } : {}) });
+        return { version: ABSENT_FILE_VERSION };
+      }
       return { version: await writeWorkspaceFile(this.scope, target, request.expectedVersion, bytes,
-        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...this.options }) };
+        { temporary: record.temporary, stale: typeof earlier === 'object' ? earlier.temporary : null, phase, ...(createMode !== undefined ? { createMode } : {}),
+          ...(maxFileBytes ? { maxFileBytes } : {}), ...(change.mode !== undefined ? { mode: change.mode } : {}) }) };
     } catch (error) {
       if (error instanceof WorkspaceWriteError) {
         throw new EffectTargetError(error.code === 'precondition' ? 'EFFECT_TARGET_PRECONDITION' : error.code === 'rejected' ? 'EFFECT_TARGET_REJECTED' : 'EFFECT_TARGET_UNKNOWN', { cause: error });
@@ -110,6 +155,8 @@ export class WorkspaceFileTarget implements EffectTarget {
     if (journal.state === 'committed') return { status: 'applied' as const, version: journal.next };
     if (journal.state === 'aborted') return { status: 'absent' as const };
     if (journal.state === 'escaped') return null;
+    // A removal that reached `prepared` is unknown: an absent file does not say who removed it, a present one may be a re-creation.
+    if (journal.next === ABSENT_FILE_VERSION) return null;
     const target = await resolveWritable(this.scope, ref.id);
     if (!target.ok || target.rel !== ref.id) return null;
     // The temporary file is the only causal evidence a `prepared` attempt leaves; the file's content is not (Astra 2100).
