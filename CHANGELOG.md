@@ -4,6 +4,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SECURITY (SHELL-OVERLAY, Astra 2180 R1): a directory a full-auto sandboxed command removed is no longer removed directly; each removal is decided like an edit and applied as its own `workspace.file.write` effect (a write deny keeps the directory).
 - SECURITY (MCP-SCHEMA-VALIDATOR): MCP tool schemas are validated by Deckent's own bounded JSON Schema validator with a linear-time
   pattern engine; the MCP SDK's @cfworker/json-schema (and ajv) are neither used nor shipped. Unsupported schema features (for example
   `$dynamicRef`, which cf-worker silently ignored) are refused before a tool call is sent. `format` is now an annotation (cf-worker asserted it).

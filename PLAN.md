@@ -280,6 +280,11 @@ Uygulanan Acil satırı (ambient keşif kapalı, sürümlü profil istisnası) v
   (`~/.deckent` hedefli koşuda değişmedi). `package.json` `build:bwrap`. Hedefli koşu: 59 dosya 775/775, 0 atlanan (4 üst satır değişmeden: `turn.ts:140`,
   `runtime-chat-turn.test.ts:155`, `server.ts` 155 satır uyarıları). build-dist `--bwrap` → `bubblewrap.shipped: true` (engeller yalnız önceden var olan LICENSE/lisans metinleri); pack-smoke Node 24.21 ✓ / 26.10 ✓;
   paketlenmiş dist'ten seçim `bundled`, `overlay: true`.
+  **Astra 2180 R1 (lane/shell-overlay `088edf75`, bu dala birleştirildi):** overlay dizin kaldırmaları artık sınıflama → karar → girdi başına
+  `workspace.file.write@1` C11 etkisi (`writeSet.change: 'rmdir'`, önkoşul `empty-directory`) → rapor; doğrudan `removeEmptyWorkspaceDirectory` silindi. Astra testi
+  (`astra-2180-directory-deny.test.ts`) yalnız kurulumu seçilen-launcher modeline taşınarak ve kullanılmayan importları kaldırılarak eklendi (gövde aynı;
+  `proof/SHELL-OVERLAY-2026-09-29/astra-2180-r1-adaptation.md`); yeşil. İki mutasyon (etki yerine doğrudan `rmdir`; karar öncesi doğrudan `rmdir`) kırmızı, geri
+  alındı. Hedefli 49 dosya 717/717, 0 atlanan.
   **Açık owner maddeleri:** (a) **`format` artık yalnız açıklama** (cfworker `format`'ı doğruluyordu) — bir gevşeme; format denetleyicisi kaydedilsin mi (hangi
   formatlar, hata politikası) owner kararı; (b) **gerçek sunucu şema korpusu ölçüm kartı** — bilinmeyen anahtar / 2019-09 / `$dynamicRef` retlerinin gerçek MCP
   sunucularında ne sıklıkla araç kaybettirdiği ölçülmedi (ölçüm kartı: yaygın sunucuların `tools/list` şemaları → derleme sonucu dağılımı); (c)
