@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, formatValue, principalToActor, resolveLocalOsPrincipal, resolveLocale, assertActorAssurance, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** The installation's secret store as `doctor` shows it (SECRET-K1, owner S1): the active backend and whether it can be read now. */
@@ -26,8 +26,7 @@ export async function secretCommand(argv: readonly string[], context: CommandCon
   if (!context.listSecretNames) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env;
   context.onLocale?.(resolveLocale(language, env));
-  // The local OS person reads the names of their own installation store (the file is theirs by ownership); assurance is checked like doctor.
-  assertActorAssurance(principalToActor(resolveLocalOsPrincipal('cli')), 'secret-list');
+  // The handler checks the local person's assurance with the installation's `enforce_principal_assurance` (as doctor does).
   const view = await context.listSecretNames(root, { env });
   emit(view, { json, render: data => formatValue(data), ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 }

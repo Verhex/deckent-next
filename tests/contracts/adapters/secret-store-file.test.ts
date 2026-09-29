@@ -93,9 +93,11 @@ it('file backend: corrupt or foreign-schema content is a typed refusal whose err
 it('file backend: a held config write lock on the store is contention, not a lost or partial write', async () => {
   const f = await root(), store = createFileSecretStore({ root: f.global, platform: 'linux', lockTimeoutMs: 150 });
   await store.set('A', 'synthetic-a');
-  let release!: () => void;
-  const held = withConfigWriteLock(f.path, () => new Promise<void>(resolve => { release = resolve; }));
-  await new Promise(resolve => setTimeout(resolve, 20));
+  let release!: () => void, acquired!: () => void;
+  const holding = new Promise<void>(resolve => { acquired = resolve; });
+  // Deterministic: the contender starts only once the holder is inside the lock (no timing assumption under load).
+  const held = withConfigWriteLock(f.path, () => new Promise<void>(resolve => { release = resolve; acquired(); }));
+  await holding;
   await expect(store.set('B', 'synthetic-b')).rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
   release(); await held;
   expect(await store.listNames()).toEqual(['A']);
