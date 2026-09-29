@@ -102,17 +102,19 @@ export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly Shell
 export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapabilities, sandboxes: readonly ShellSandbox[] = []): ShellRealmResolution {
   if (capabilities.platform !== 'linux') return { ok: false, code: 'SHELL_REALM_UNSUPPORTED' };
   if (mode === 'host') return { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: () => HOST_SHELL_POSTURE, containment: 'host' };
-  const reasons: string[] = [], restricted: string[] = [];
+  const reasons: string[] = [], restricted: { readonly kind: string; readonly line: string }[] = [];
   for (const sandbox of sandboxes) {
     const usable = sandbox.usable(capabilities);
     if (usable.ok) {
-      // A preferred mechanism the host restricts (S3: AppArmor user namespaces) is a visible fallback, with the fix, on every surface.
-      const fallback = restricted.length ? `[deckent] sandbox: ${sandbox.kind} instead of ${restricted.map(line => line.split(':')[0]).join(', ')} (${restricted.join('; ')}).` : null;
-      const notice = fallback && usable.notice ? `${fallback} ${usable.notice}` : fallback ?? usable.notice;
-      return { ok: true, realm: usable.realm, marker: usable.marker, notice, posture: usable.posture, containment: usable.containment };
+      // A preferred mechanism the host restricts (S3: AppArmor user namespaces) is a visible fallback, with the fix: the notice reaches the
+      // live stream and the model result, the posture the approval card.
+      const fallback = restricted.length ? `[deckent] sandbox: ${sandbox.kind} instead of ${restricted.map(item => item.kind).join(', ')} (${restricted.map(item => item.line).join('; ')}).` : null;
+      if (!fallback) return { ok: true, realm: usable.realm, marker: usable.marker, notice: usable.notice, posture: usable.posture, containment: usable.containment };
+      const posture = (view: ShellSandboxWriteView) => `${usable.posture(view)}\n${fallback}`;
+      return { ok: true, realm: usable.realm, marker: usable.marker, notice: usable.notice ? `${fallback} ${usable.notice}` : fallback, posture, containment: usable.containment };
     }
     reasons.push(`${sandbox.kind}: ${usable.reason}`);
-    if (usable.restricted) restricted.push(`${sandbox.kind}: ${usable.reason}`);
+    if (usable.restricted) restricted.push({ kind: sandbox.kind, line: `${sandbox.kind}: ${usable.reason}` });
   }
   if (mode === 'require-sandbox') return { ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' };
   const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';

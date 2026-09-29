@@ -159,6 +159,9 @@ describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
     const resolved = resolveShellRealm('prefer-sandbox', linux(observed), [sandbox, landlock]);
     expect(resolved).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock',
       notice: expect.stringMatching(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: .*AppArmor/u) });
+    // The approval card reads the posture: it carries the same line (the live stream and the model result carry the notice).
+    const view = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
+    expect(resolved.ok && resolved.posture(view)).toBe(`landlock\n${resolved.ok ? resolved.notice : ''}`);
     // An ordinary unusable bubblewrap (not a restriction) keeps today's behaviour: Landlock without a notice.
     expect(resolveShellRealm('prefer-sandbox', linux({ ...observed, status: 'unavailable', restriction: null }), [sandbox, landlock])).toMatchObject({ notice: null });
   });
