@@ -13,6 +13,7 @@ import { configSections, configRegistryGeneration, type DeckentConfig } from './
 import { versionedConfig } from './validate/version.js';
 import { applyConfigEnvironment } from './validate/environment.js';
 import { resolveConfigSecrets, type SecretResolver } from './validate/interpolate.js';
+import { configuredSecretResolver } from './secret-resolver.js';
 import { ConfigValidationError, type ConfigWarning } from './validate/issues.js';
 import { validateConfig } from './validate/sections.js';
 import { assertConfigSecretPolicies } from './validate/secret-policy.js';
@@ -96,7 +97,8 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   warnings.push(...checked.warnings);
   const recommended = getSystemProfile().recommendedMaxWorkers;
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });
-  const resolver = options.secretResolver ?? (async (name: string) => Object.hasOwn(env, name) ? env[name] : undefined);
+  // SECRET-K1: the one production resolver (explicit resolver > configured backend > environment), chosen from the validated, unresolved config.
+  const resolver = configuredSecretResolver(checked.config, { secretResolver: options.secretResolver, env, platform });
   const secrets = await resolveConfigSecrets(checked.config, resolver, name => warnings.push({ code: 'CONFIG_SECRET_UNRESOLVED', path: name, message: t('config.secretMissing', { key: name }, locale) }));
   let productLayout: ProductLayout;
   try {

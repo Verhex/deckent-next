@@ -9,6 +9,7 @@ export * from './internal/schema.js';
 export * from './internal/validate/version.js';
 export * from './internal/validate/environment.js';
 export * from './internal/validate/interpolate.js';
+export * from './internal/secret-resolver.js';
 export * from './internal/validate/issues.js';
 export * from './internal/validate/sections.js';
 export * from './internal/write.js';

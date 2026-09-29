@@ -81,6 +81,9 @@ export interface CommandContext extends ModelCommandContext {
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
+  // SECRET-K1 (owner S1): the active secret backend and its state; doctor-only, never a hard failure of doctor. `secret list` names only.
+  inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
+  listSecretNames?: import('./secret.js').SecretNamesHandler;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
@@ -168,14 +171,16 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // before this); [] when unwired or every declared profile fits. Read-only, network-free, never blocks doctor.
   const modelInvocationDelivery = context.assessModelInvocationDelivery
     ? await context.assessModelInvocationDelivery(root, options) : [];
+  // SECRET-K1: additive; null when unwired. The configuration is read for the selection only (no reference resolved for this report).
+  const secretStore = context.inspectSecretStore ? await context.inspectSecretStore(root, options) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery,
+    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery, secretStore,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
     ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : [])].join('\n'));
-  // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet (i18n-delta.json).
+  // modelInvocationDelivery and secretStore are JSON-only for now, like policyTemplate: no human-text rendering yet (i18n-delta.json).
 }
