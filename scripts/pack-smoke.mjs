@@ -8,20 +8,53 @@
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
 //   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP code, of `deckent-mcp` only the MCP server
 //   imports  every shipped .js file names only node: builtins, relative files or the package's own #imports (nothing left to resolve)
-//   types    (release gate, only with --types <typescript dir>) a consumer project type-checks `import * from 'deckent'` with
-//            skipLibCheck off and nothing but the installed package and @types/node on its resolution path
-// Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <typescript dir>] [--keep] [--only a,b]
+//   types    (release gate, only with --types <typescript dir>[,<dir>…]) a consumer project using the SDK type-checks with skipLibCheck off,
+//            NodeNext and Bundler resolution, per given TypeScript, with nothing but the installed package and @types/node on its path
+// Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <ts dir>[,<ts dir>]]
+//        [--types-root <dir holding @types/node>] [--keep] [--only a,b]
 // Prints a JSON report; exit 1 when any check fails. Not part of verify (needs a packed tarball): run per supported Node before a release.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** Typical SDK use by a zero-dependency consumer: values, derived zod types (must be real types, not `any`), a hand-written Standard Schema,
+ * the i18n key union, errors — and the zod schema values removed from the entry (DEPS-SCHEMA C2-b) must stay absent. */
+const TYPES_CONSUMER = `import * as deckent from 'deckent';
+import { createRun, inspectRun, createDefaultConfig, validateConfig, getConfigFieldDefault, t, isStandardSchemaV1, validateStandardSchemaSync, DeckentError,
+  type RunAdmission, type RunQuery, type DeckentConfig, type MessageKey, type StandardSchemaV1 } from 'deckent';
+
+export const api: readonly string[] = Object.keys(deckent);
+export const version: string = deckent.PACKAGE_VERSION;
+const config: DeckentConfig = createDefaultConfig();
+export const warnings: number = validateConfig(config).warnings.length;
+export const schemaVersion: 3 = getConfigFieldDefault('schema_version');
+// @ts-expect-error the default is the literal 3; an any from an unresolved zod type would make this line compile
+export const notAny: 'x' = getConfigFieldDefault('schema_version');
+const key: MessageKey = 'cli.agent.desc';
+export const text: string = t(key);
+// @ts-expect-error not a message key
+export const badKey: MessageKey = 'no.such.key';
+const positive: StandardSchemaV1<unknown, number> = { '~standard': { version: 1, vendor: 'consumer',
+  validate: value => (typeof value === 'number' && value > 0 ? { value } : { issues: [{ message: 'not positive' }] }) } };
+export const validated = isStandardSchemaV1(positive) ? validateStandardSchemaSync(positive, 3) : null;
+export async function admit(root: string, admission: RunAdmission): Promise<readonly string[]> {
+  const receipt = await createRun(root, admission);
+  return receipt.admission.run.tasks.map(task => task.phase);
+}
+export const query = (root: string, input: RunQuery) => inspectRun(root, input);
+export const describe = (error: unknown): string => (error instanceof DeckentError ? error.code : String(error));
+// @ts-expect-error removed from the SDK entry (live zod schema values are Core-internal)
+export const removed = deckent.CORE_SCHEMA;
+`;
 
 const args = process.argv.slice(2);
 const option = name => { const at = args.indexOf(`--${name}`); return at > -1 ? args.splice(at, 2)[1] : undefined; };
 const flag = name => { const at = args.indexOf(`--${name}`); if (at > -1) args.splice(at, 1); return at > -1; };
 const node = resolve(option('node') ?? process.execPath), presetRoot = option('root'), typescript = option('types'), keep = flag('keep'), only = option('only')?.split(',');
+const typesRoot = resolve(option('types-root') ?? join(dirname(dirname(fileURLToPath(import.meta.url))), 'node_modules/@types'));
 const tarball = args[0] ? resolve(args[0]) : undefined;
 if (!tarball && !presetRoot) { process.stderr.write('usage: pack-smoke.mjs <tarball> [--node /abs/node] [--root dir] [--keep] [--only checks]\n'); process.exit(2); }
 
@@ -155,17 +188,25 @@ if (want('imports') && report.checks.install?.ok !== false) {
 }
 
 if (typescript && report.checks.install?.ok !== false) {
-  // The consumer is the install project itself (node_modules holds only deckent) or, with --root, a bare directory mapped onto the root;
-  // nothing that could hold zod/react/MCP types is on its resolution path. @types/node comes from the given TypeScript's sibling tree.
+  // Release gate (DEPS-TYPES): a library consumer type-checks with skipLibCheck OFF, for every given TypeScript (comma-separated package
+  // dirs) × both consumer resolutions (NodeNext, Bundler). The consumer is the install project itself (node_modules holds only deckent) or,
+  // with --root, a bare directory mapped onto the root; nothing that could hold zod/react/MCP types is on its resolution path. @types/node
+  // (the only external types the package expects) comes from --types-root (default: this repository's node_modules/@types).
   const consumer = installDir ?? join(base, 'types-consumer'); mkdirSync(consumer, { recursive: true });
-  writeFileSync(join(consumer, 'index.ts'), "import * as deckent from 'deckent';\nexport const api: readonly string[] = Object.keys(deckent);\n");
-  writeFileSync(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: { module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2022', strict: true,
-    noEmit: true, skipLibCheck: false, resolveJsonModule: true, types: ['node'], typeRoots: [join(resolve(typescript), '../@types')],
-    ...(installDir ? {} : { paths: { deckent: [join(root, 'dist/index.d.ts')] } }) }, files: ['index.ts'] }));
-  const result = run([node, join(resolve(typescript), 'bin/tsc'), '-p', consumer], { cwd: consumer, timeout: 300_000 });
-  const errors = [...result.stdout.matchAll(/error (TS\d+): (.*)/g)].map(match => `${match[1]} ${match[2]}`);
-  const unresolved = [...new Set(errors.map(text => /Cannot find module '([^']+)'/.exec(text)?.[1]).filter(Boolean))].sort();
-  record('types', result.status === 0, { status: result.status, errors: errors.length, unresolved, sample: errors.slice(0, 5) });
+  writeFileSync(join(consumer, 'index.mts'), TYPES_CONSUMER);
+  const modes = { nodenext: { module: 'NodeNext', moduleResolution: 'NodeNext' }, bundler: { module: 'ESNext', moduleResolution: 'Bundler' } };
+  for (const dir of typescript.split(',').map(entry => resolve(entry))) {
+    const version = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version;
+    for (const [mode, resolution] of Object.entries(modes)) {
+      const config = join(consumer, `tsconfig.${mode}.json`);
+      writeFileSync(config, JSON.stringify({ compilerOptions: { ...resolution, target: 'ES2022', lib: ['ES2022'], strict: true, noEmit: true, skipLibCheck: false,
+        resolveJsonModule: false, types: ['node'], typeRoots: [typesRoot], ...(installDir ? {} : { paths: { deckent: [join(root, 'dist/index.d.ts')] } }) }, files: ['index.mts'] }));
+      const result = run([node, join(dir, 'bin/tsc'), '-p', config], { cwd: consumer, timeout: 300_000 });
+      const errors = [...result.stdout.matchAll(/error (TS\d+): (.*)/g)].map(match => `${match[1]} ${match[2]}`);
+      const unresolved = [...new Set(errors.map(text => /Cannot find module '([^']+)'/.exec(text)?.[1]).filter(Boolean))].sort();
+      record(`types:${version}:${mode}`, result.status === 0, { status: result.status, errors: errors.length, unresolved, sample: errors.slice(0, 5) });
+    }
+  }
 }
 
 report.ok = Object.values(report.checks).every(check => check.ok);
