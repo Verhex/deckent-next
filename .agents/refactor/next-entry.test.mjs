@@ -18,7 +18,10 @@ test('Next host launchers pin both surfaces and SDK to Next without legacy data 
       const bin = join(root, surface === 'cli' ? 'deckent' : 'deckent-mcp'); await symlink(entry, bin);
       const run = spawnSync(process.execPath, [bin, '--probe'], { cwd: tmpdir(), encoding: 'utf8', env: { ...process.env, DECKENT_HOME: '/legacy/runtime', DECKENT_GLOBAL_HOME: '/legacy/global' } });
       assert.equal(run.status, 0, run.stderr);
-      assert.deepEqual(JSON.parse(run.stdout), { cwd: root, global: join(root, '.deckent/host/global'), data: null, home: process.env.HOME, args: ['--probe'] });
+      // The global root lives outside the checkout (a bundled bwrap copy inside the project is refused; live 2026-09-29).
+      const seen = JSON.parse(run.stdout);
+      assert.deepEqual(seen, { cwd: root, global: join(process.env.HOME, '.local/state/deckent-next-dev'), data: null, home: process.env.HOME, args: ['--probe'] });
+      assert.equal(seen.global.startsWith(`${root}/`), false);
     }
     const run = spawnSync(process.execPath, [entry, 'node', '-e', probe], { encoding: 'utf8' });
     assert.equal(run.status, 0); assert.equal(JSON.parse(run.stdout).cwd, root);
