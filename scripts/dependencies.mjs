@@ -19,7 +19,7 @@ const alternative = z.object({ name: text, package: text.optional(), version: te
 const reviewed = { purpose: text, owners: z.array(text).min(1), criticality: z.enum(['P0', 'P1', 'P2']), alternatives: z.array(alternative),
   ownSolution: text, watch: z.array(text).optional(), lastReview: date, nextReview: date };
 const dependencySchema = z.object({ kind: z.enum(['runtime', 'dev']), reviewedVersion: text, features: z.array(text).min(1),
-  embedded: z.array(z.object({ name: text, version: text.nullable() }).strict()).optional(), ...reviewed }).strict();
+  embedded: z.array(z.object({ name: text, version: text.nullable(), license: text.optional() }).strict()).optional(), ...reviewed }).strict();
 const platformSchema = z.object({ requirement: text, ...reviewed }).strict();
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 /** A known, mitigated advisory set on one package@version in named carriers (`tree` or `<registry dependency>@<version>` that embeds it). */
