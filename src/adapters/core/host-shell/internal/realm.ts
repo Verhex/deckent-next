@@ -153,7 +153,10 @@ export interface ShellSandboxLayout {
    * walk), one outside it is hidden (an empty read-only tmpfs), so no name, existing or new, is created in either. `homeDenied`: the Core
    * floor's credential patterns over HOME-relative paths (a bounded walk of HOME masks the matches).
    */
-  readonly hardFloor?: { readonly roots: readonly string[]; readonly homeDenied: (rel: string) => boolean };
+  readonly hardFloor?: { readonly roots: readonly string[]; readonly homeDenied: (rel: string) => boolean;
+    /** Owner Y (2026-09-30): whether a project-relative path is, holds or lies in Deckent's own state; an EXISTING subdirectory of a sealed
+     * root that is not (e.g. a tracked `.deckent/docs`) is bound writable, so the root itself still takes no new name. Absent: none is. */
+    readonly product?: (rel: string) => boolean };
 }
 /** A sandbox mechanism (S9 bubblewrap, S11 Landlock) as a realm provider: usable on the measured host — then its realm, marker,
  * card posture and a notice when the posture falls short (typed DEGRADED) — or why not. A provider never falls back by itself; the

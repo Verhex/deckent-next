@@ -122,6 +122,31 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     expect({ ran: /sandbox: bubblewrap; exit [1-9]/u.test(closedHome.text), read: closedHome.text.includes('home-notes') }).toEqual({ ran: true, read: false });
   }, 240_000);
 
+  it.skipIf(!bwrapReady)('owner Y: an existing non-product subdirectory of .deckent (tracked docs) is writable — git checkout completes clean; the root and product dirs take no name', async () => {
+    const f = await openRuntime({ schemaVersion: 1, realm: 'require-sandbox' });
+    await mkdir(join(f.project, '.deckent/docs'), { recursive: true });
+    await mkdir(join(f.project, '.deckent/crashes'), { recursive: true });
+    await writeFile(join(f.project, '.gitignore'), '.deckent/*\n!.deckent/docs/\n');
+    await writeFile(join(f.project, '.deckent/docs/a.md'), 'v1\n');
+    git(f.project, 'add', '-A'); git(f.project, 'commit', '-qm', 'docs v1');
+    await writeFile(join(f.project, '.deckent/docs/a.md'), 'v2\n');
+    git(f.project, 'commit', '-qam', 'docs v2');
+    const checkout = await f.call('run_shell', { command: 'git checkout -q HEAD~1 && git status --porcelain && echo CHECKOUT_DONE' }, 'deny', fa);
+    expect({ status: checkout.status, done: checkout.text.includes('CHECKOUT_DONE') }).toEqual({ status: 'ok', done: true });
+    expect(await readFile(join(f.project, '.deckent/docs/a.md'), 'utf8')).toBe('v1\n');
+    expect(git(f.project, 'status', '--porcelain')).toBe('');
+    const back = await f.call('run_shell', { command: 'git checkout -q - && echo new > .deckent/docs/new.md && echo DOCS_OK' }, 'deny', fa);
+    expect(back.text).toContain('DOCS_OK');
+    expect(await readFile(join(f.project, '.deckent/docs/a.md'), 'utf8')).toBe('v2\n');
+    // The root takes no new name, and a registry resource directory (`crashes`) and the data root stay read-only.
+    for (const command of ['mkdir "$(printf .deck)ent/docs2"', 'echo {} > "$(printf .deck)ent/mcp.json"', 'mkdir "$(printf .deck)ent/newdir"',
+      'touch "$(printf .deck)ent/crashes/x"', 'touch "$(printf .deck)ent/data/x"']) {
+      const refused = await f.call('run_shell', { command }, 'deny', fa);
+      expect({ command, failed: /exit [1-9]/u.test(refused.text), erofs: /Read-only file system|Permission denied/u.test(refused.text) }).toEqual({ command, failed: true, erofs: true });
+    }
+    for (const path of ['.deckent/docs2', '.deckent/mcp.json', '.deckent/newdir', '.deckent/crashes/x', '.deckent/data/x']) expect({ path, exists: await exists(join(f.project, path)) }).toEqual({ path, exists: false });
+  }, 180_000);
+
   it.skipIf(landlockAbi < 6)('without bubblewrap: prefer-sandbox runs a full-access call on the host with a visible notice; require-sandbox keeps the closed Landlock view', async () => {
     const f = await openRuntime({ schemaVersion: 1, realm: 'prefer-sandbox' }, landlockOnly);
     const port = await loopback();

@@ -127,8 +127,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
       const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
       const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
-      // OPEN-SANDBOX: a full-access call runs in the open view where the realm builds it; otherwise `openShellRealm` moves it to the host
-      // (prefer-sandbox) or keeps it closed (require-sandbox), visibly. The realm the result names is the one that ran.
+      // OPEN-SANDBOX: the open view where the realm builds it, else `openShellRealm` (host under prefer-sandbox, closed under require-sandbox).
       const realm = posture.open ? openShellRealm(planned.realm, input.config.realm) : planned.realm, open = posture.open && realm.opens === true;
       const target = new HostShellTarget(scope.root, { realm, ...(open ? { open: true } : {}), timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),

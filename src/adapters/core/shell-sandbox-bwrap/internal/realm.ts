@@ -276,6 +276,17 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const scratchDir = layout.scratchDir;
   const homeDir = home && isAbsolute(home) ? home : null;
   if (seal?.ok) {
+    // Owner Y (2026-09-30): an existing subdirectory of a sealed root that is not Deckent's state (a tracked `.deckent/docs`) is the project's —
+    // bound writable over the read-only root (the deny masks inside it still follow); the root's own names stay read-only, none can be added.
+    const product = layout.hardFloor?.product;
+    for (const sealed of product ? seal.sealed : []) {
+      let names;
+      try { names = await readdir(sealed, { withFileTypes: true }); } catch { continue; }
+      for (const entry of names) {
+        const path = join(sealed, entry.name), rel = relative(root, path);
+        if (entry.isDirectory() && !entry.isSymbolicLink() && !product!(rel) && !layout.project.denied(rel) && !layout.project.denied(`${rel}/`) && !onChain(rel)) writable.add(path);
+      }
+    }
     // OPEN-SANDBOX: HOME is the host's; the Core floor's credential patterns are masked in it (bounded walk), the state roots skipped.
     const refusedHome = homeDir && layout.hardFloor ? await maskHomeCredentials(homeDir, layout.hardFloor.homeDenied, [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles) : null;
     if (refusedHome) return { ok: false, reason: refusedHome };

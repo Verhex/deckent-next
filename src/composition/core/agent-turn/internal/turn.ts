@@ -7,7 +7,7 @@ import { AGENT_COMPACTION_INSTRUCTION, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PRE
   agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
   requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
+import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions, type ProductLayout,
   type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
@@ -87,22 +87,25 @@ export function agentAuthorityPaths(projectRoot: string, layout: ProductLayout):
   return path => matchers.some(match => match(path));
 }
 /**
- * OPEN-SANDBOX (owner MODES-3 checkpoint 4, 2026-09-29): the hard floor a full-access turn's open shell view seals (`ShellSandboxLayout.hardFloor`).
- * Roots: the project's product root (`.deckent`, the MCP registry's directory: bootstrap configuration, MCP registry, Core floor host/approvals/
- * audit-key), the data root, the bootstrap configuration's directory unless it holds the project (the file stays read-only by the write floor),
- * the global state root of the service's configuration and process environments (bubblewrap copy, user MCP registry and trust, secrets) and
- * the conventional `~/.deckent` of each HOME when it exists (never created). Credentials: the Core read floor without repository internals.
+ * OPEN-SANDBOX (owner MODES-3 checkpoint 4): the hard floor of a full-access turn's open shell view (`ShellSandboxLayout.hardFloor`). Roots: the
+ * project's `.deckent` (MCP registry's directory), the data root, the bootstrap configuration's directory unless it holds the project, the global
+ * state root of the configuration and process environments, an existing conventional `~/.deckent` (never created). Credentials: the Core read
+ * floor without repository internals. `product` (owner Y, 2026-09-30): registry resources under this and the default layout, the data root, the
+ * bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads — any other existing subdirectory of a sealed root is the project's.
  */
 export function agentShellHardFloor(projectRoot: string, layout: ProductLayout, environments: readonly Readonly<Record<string, string | undefined>>[]): NonNullable<ShellSandboxLayout['hardFloor']> {
   const bootstrap = dirname(layout.bootstrapConfigPath), rel = relative(bootstrap, projectRoot);
   const roots = [join(projectRoot, dirname(MCP_PROJECT_REGISTRY_PATH)), layout.root, ...(rel === '' || !rel.startsWith('..') && !isAbsolute(rel) ? [] : [bootstrap])];
   for (const environment of environments) {
     const resolved = globalStateRoot(environment), home = environment['HOME'], conventional = home ? globalStateRoot({ HOME: home }) : null;
-    if (resolved) roots.push(resolved);
-    if (conventional && conventional !== resolved && existsSync(conventional)) roots.push(conventional);
+    roots.push(...resolved ? [resolved] : [], ...conventional && conventional !== resolved && existsSync(conventional) ? [conventional] : []);
   }
   const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
-  return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)) });
+  const inProject = (path: string) => relative(projectRoot, path).split(sep).join('/'), resources = Object.keys(layout.resources) as ProductResource[];
+  const products = [...[layout, resolveProductLayout({ projectRoot })].flatMap(each => resources.map(resource => inProject(productResourcePath(each, resource)))),
+    inProject(layout.root), inProject(layout.bootstrapConfigPath), MCP_PROJECT_REGISTRY_PATH, ...DEFAULT_WORKSPACE_READ_DENY.filter(pattern => pattern.startsWith(`${dirname(MCP_PROJECT_REGISTRY_PATH)}/`)).map(pattern => pattern.split('/*')[0]!)];
+  return Object.freeze({ roots: Object.freeze([...new Set(roots)]), homeDenied: (path: string) => credentials.some(match => match(path)), product: (path: string) =>
+    products.some(product => product === path || product.startsWith(`${path}/`) || path.startsWith(`${product}/`)) });
 }
 /** Project-relative POSIX paths of the product's protected resources inside the project. */
 function agentProductStatePaths(projectRoot: string, layout: ProductLayout): readonly string[] {

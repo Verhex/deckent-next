@@ -116,6 +116,24 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     expect(masked.filter(path => path === join(project, 'id.pem'))).toHaveLength(1);
   });
 
+  it('owner Y: existing non-product subdirectories of a sealed root are writable; product ones, denied ones and the root itself are not', async () => {
+    const f = await fixture();
+    await Promise.all(['docs', 'recently-works', 'crashes', 'host'].map(name => mkdir(join(f.project, '.deckent', name), { recursive: true })));
+    const productPaths = ['.deckent/data', '.deckent/crashes', '.deckent/mcp.json', '.deckent/host'];
+    const product = (rel: string) => productPaths.some(path => path === rel || path.startsWith(`${rel}/`) || rel.startsWith(`${path}/`));
+    const layout: ShellSandboxLayout = { ...f.layout, hardFloor: { ...f.layout.hardFloor!, product } };
+    const resolved = await resolveBubblewrapView(layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true, open: true });
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const writable = (resolved.view.writablePaths ?? []).filter(path => path.startsWith(join(f.project, '.deckent')));
+    expect(writable.sort()).toEqual([join(f.project, '.deckent/docs'), join(f.project, '.deckent/recently-works')]);
+    const args = bubblewrapArguments(resolved.view).join('\0');
+    expect(args.indexOf(['--ro-bind', join(f.project, '.deckent'), join(f.project, '.deckent')].join('\0')))
+      .toBeLessThan(args.indexOf(['--bind', join(f.project, '.deckent/docs'), join(f.project, '.deckent/docs')].join('\0')));
+    // Without the product predicate nothing under the sealed root is rebound (fail safe).
+    const bare = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true, open: true });
+    expect(bare.ok && (bare.view.writablePaths ?? []).some(path => path.startsWith(join(f.project, '.deckent')))).toBe(false);
+  });
+
   it('fails closed: no hard floor, a root holding the project or HOME, a read-only project', async () => {
     const f = await fixture();
     const env = { HOME: f.home, PATH: '/usr/bin:/bin' };
