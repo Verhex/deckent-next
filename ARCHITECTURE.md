@@ -1890,6 +1890,13 @@ service replaces the process on next use) and remove. The compiled `deckent-mcp`
 pinned-2026 modes (`mcp-eras-process.test.ts`).
 A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's existing paths read-only (third-party code that no card approves
 call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
+The pool builds the SDK `Client` with `jsonSchemaValidator: new CfWorkerJsonSchemaValidator()` (`@modelcontextprotocol/client/validators/cf-worker`,
+interpreter-based @cfworker/json-schema 4.1.1; MCP-VALIDATOR 2026-09-29): a server's `outputSchema` is untrusted input and never reaches the ajv 8.18 +
+fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the module still loads with the SDK). Because the pool
+lists tools with `cacheMode: 'bypass'`, the SDK's output-schema validation does not run on an ordinary call; the one compile path is the SDK's
+re-list and resend after a modern-era HEADER_MISMATCH (-32020) — open: that resend bypasses the pool's no-resend rule and the pin, and structured
+results are not validated (MCP SHOULD); proposed fix passes the pinned definition as `toolDefinition`. The MCP server side validates schemas only in
+`elicitInput`, which Deckent does not use.
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,

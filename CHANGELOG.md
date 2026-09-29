@@ -10,6 +10,10 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   every call. Runtime protocol v17; bindings v3 (older builds refuse it).
 - ADDED (SHELL-AUTONOMY, owner 2026-09-28): in full-auto inside a real sandbox (bubblewrap, or Landlock ABI ≥ 6) a contained compound or
   expanding command runs without a card when the company rule is mode-eligible; such a run sees the project read-only.
+- SECURITY (MCP-VALIDATOR): the MCP client no longer compiles a server-supplied `outputSchema` with the ajv/fast-uri copy bundled inside
+  `@modelcontextprotocol/client` 2.2.0 (fast-uri 3.1.0: GHSA-q3j6-qgpj-74h6, GHSA-v39h-62p7-jpjc, GHSA-4c8g-83qw-93j6, GHSA-v2hh-gcrm-f6hx,
+  GHSA-7p8r-x3mc-p8w7, GHSA-f65p-4m7j-42xc, GHSA-jqff-g426-hqxp, GHSA-qw65-cvwx-89v3); it uses the SDK's interpreter validator
+  (`validators/cf-worker`). The bundled copy is still installed and loaded until the SDK ships a rebuilt bundle.
 - SECURITY (Astra 2170, MODES-3 merge): outside full access a sandboxed shell call without the owner's card cannot create a new
   write-floor name (the project is read-only for it; the narrow mutating set keeps the floor read-only); MCP servers started from the CLI (trust, health, restart) carry
   the write floor and fail closed without it; in Landlock the write floor now holds inside a carved ignored ancestor (before, with
