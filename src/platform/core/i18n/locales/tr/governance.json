@@ -1040,6 +1040,7 @@
   "error.SECRET_STORE_UNAVAILABLE": "{backend} secret'lar deposu burada kullanılamıyor (kurulum dizini yok, G/Ç hatası ya da henüz desteklenmeyen platform). Hiçbir şey okunmadı ya da yazılmadı.",
   "error.SECRET_STORE_UNSAFE": "{path} içindeki secret'lar deposu özel değil: dizin ve secrets.json size ait olmalı, grup ya da diğerlerine erişim vermemeli (0700 / 0600) ve bağlantı olmamalı. Okunmadı ve onarılmadı.",
   "error.SECRET_STORE_CORRUPT": "{backend} secret'lar deposu schemaVersion 1 belgesi olarak okunamadı. İçeriği gösterilmiyor.",
+  "error.SECRET_STORE_FULL": "{backend} secret'lar deposunda bu değişiklik için yer yok: saklanan belge boyut sınırını ({maxBytes} bayt) aşacaktı; hiçbir şey yazılmadı ve kayıtlı bütün girdiler okunabilir kalıyor. Artık gerekmeyen bir girdiyi silip yeniden deneyin.",
   "error.SECRET_STORE_READ_ONLY": "{backend} secret'lar deposu salt okunur; kurulum config'inde yazılabilir bir arka uç seçin (örneğin core.secret-store.file@1).",
   "error.SECRET_STORE_UNSUPPORTED": "{backend} secret'lar deposu secret'larını listeleyemez (ortam değişkenleri secret'lardan oluşan bir liste değildir).",
   "error.SECRET_CHANGE_DENIED": "Hiçbir policy grant'i secret-store kaydında `{action}` işlemine izin vermiyor [{name}]; hiçbir şey yazılmadı. policy.json'a bir allow grant ekleyin: kaynak türü `secret`, eylemler [\"{action}\"], kimlikler [\"{name}\"] ya da \"all\", kendi principal'ınız ve bu kapsam (ilk kurulum şablonu v2 kurulumunda vardır).",

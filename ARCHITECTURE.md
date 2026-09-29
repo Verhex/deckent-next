@@ -2021,7 +2021,11 @@ name grammar ≤128, typed `SECRET_*` refusals whose params/cause never carry a 
 id `<namespace>.secret-store.<name>@<n>`: Core ships `core.secret-store.env@1` (default; read-only, not enumerable — exactly the previous
 behaviour) and `core.secret-store.file@1` (`<global root>/secrets.json`, schemaVersion 1; directory owner-only, file owner-only, single-linked,
 opened with `O_NOFOLLOW`, re-checked by `lstat`; unsafe → `SECRET_STORE_UNSAFE`, nothing read or repaired; writes under the config writer lock
-of that path with atomic 0600 replace + fsync; corrupt → `SECRET_STORE_CORRUPT` without cause; POSIX only). Enterprise/custom backends
+of that path with atomic 0600 replace + fsync, admitted only when the whole new document (the exact UTF-8 text written, after JSON
+escaping) fits `FILE_SECRET_STORE_MAX_BYTES` (1 MiB), the bound the reader enforces — over it `SECRET_STORE_FULL {backend, maxBytes}`, the old
+file byte-identical (Astra 2185 R5); corrupt or over the bound on read → `SECRET_STORE_CORRUPT` without cause; POSIX only). A v18 secret change
+whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
+(Astra 2185 R6). Enterprise/custom backends
 (vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is
 reserved. Selection: config section `secrets.store`, installation (global) layer only (a project file carrying `secrets` is refused,
 `SECRETS_PROJECT_LAYER_FORBIDDEN`), absent by default so a healed/default-filled project file never carries one, never a `$DECK` reference,
