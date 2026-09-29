@@ -8,7 +8,7 @@ const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decide
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch'] as const;
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'setSecret', 'deleteSecret'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const binding = { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) };
 const invocation = {
@@ -54,6 +54,25 @@ describe('runtime service protocol', () => {
         expect(runtimeServiceRequestSchema.safeParse(invalid).success).toBe(false);
       }
     }
+  });
+
+  it('carries the v17 secret operations (SECRET-WRITE): bounded delivery, no actor field, a bounded value only on set, never in v16', () => {
+    const set = { schemaVersion: 17, requestId: 'request-1', operation: 'setSecret', input: { schemaVersion: 1, scopeId: 'scope-1', name: 'PROVIDER_TOKEN', value: 'v' },
+      delivery: { maxResultBytes: 4096 } };
+    const remove = { ...set, operation: 'deleteSecret', input: { schemaVersion: 1, scopeId: 'scope-1', name: 'PROVIDER_TOKEN' } };
+    for (const request of [set, remove]) {
+      expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+      expect(classifyRuntimeServiceOperation(request.operation as 'setSecret')).toBe('control');
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, delivery: undefined }).success).toBe(false);
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 16 }).success).toBe(false);
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, input: { ...request.input, principal: 'someone' } }).success).toBe(false);
+      expect(runtimeServiceRequestSchema.safeParse({ ...request, input: { ...request.input, name: 'lower-case' } }).success).toBe(false);
+    }
+    expect(runtimeServiceRequestSchema.safeParse({ ...remove, input: { ...remove.input, value: 'v' } }).success).toBe(false);
+    for (const value of ['', 'x'.repeat(65_537), 42]) expect(runtimeServiceRequestSchema.safeParse({ ...set, input: { ...set.input, value } }).success).toBe(false);
+    // A refused shape never echoes the value: the protocol collapses every input issue into one code.
+    const refused = runtimeServiceRequestSchema.safeParse({ ...set, input: { ...set.input, value: 'x'.repeat(65_537) } });
+    expect(refused.success ? '' : JSON.stringify(refused.error.issues)).not.toContain('xxxx');
   });
 
   it('streams an invocation with bounded delivery and strict ordered delta frames', () => {

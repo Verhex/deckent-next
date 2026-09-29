@@ -1,6 +1,6 @@
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
-import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, runtimeServiceErrorParams } from '#engine/index.js';
+import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +24,7 @@ import { createRuntimeChatTurnHost, createRuntimeWorkspaceFileHost, scratchResou
 import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-files.js';
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
+import { executeConfiguredRuntimeSecretOperation } from './secret.js';
 
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
@@ -175,6 +176,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
           ? executeConfiguredRuntimeEffectOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
           : isRuntimeServicePermissionModeOperation(request.operation)
           ? executeConfiguredRuntimePermissionModeOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
+          : isRuntimeServiceSecretOperation(request.operation)
+          ? executeConfiguredRuntimeSecretOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
           : executeConfiguredRuntimeOperation(projectRoot, request, options), classifyRuntimeServiceOperation(request.operation));
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
     } catch (error) {

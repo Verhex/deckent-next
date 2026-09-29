@@ -91,7 +91,7 @@ it('doctor names the active backend and its state; secret list shows names only'
   expect(await main(['secret', 'list', '--json'], { root: f.project, env: f.env, stdout: unwired.sink, stderr: err.sink })).not.toBe(0);
 });
 
-it('secret set/delete are not wired yet (authority checkpoint); a value given on argv is refused and never echoed or stored', async () => {
+it('without the service handlers secret set/delete are usage refusals; a value given on argv is refused and never echoed or stored', async () => {
   const f = await fixture(); await f.selectFile();
   for (const argv of [['secret', 'set', 'PROVIDER_TOKEN', CANARY], ['secret', 'delete', 'PROVIDER_TOKEN']]) {
     const out = capture(), err = capture();

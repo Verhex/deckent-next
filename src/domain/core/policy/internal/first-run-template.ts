@@ -20,7 +20,9 @@ import { bindingsFileSchema, policyFileSchema, type PolicyFile } from './schema.
  * ("operasyon/servis yönetimi owner'a"), so any such request defaults to `NO_GRANT` (deny) until granted elsewhere.
  */
 export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 1;
+/** v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of the installation's store in the
+ * installed scope (`secret`/`set|delete`, all names). v1 had no secret grant. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 2;
 const REVISION_PATTERN = /^first-run-template-v(\d+)$/;
 
 export interface FirstRunPolicyTemplateInput {
@@ -46,9 +48,10 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`;
-  const grant = (id: string, effect: 'allow' | 'require-approval', kind: 'agent-tool' | 'operation', ids: readonly string[], modeEligible?: boolean) =>
-    Object.freeze({ id, effect, actions: kind === 'operation' ? ['execute'] : ['invoke'], scopes: [scopeId], principals: [principal],
-      resource: { kind, ids: [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'] } as const;
+  const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
+    Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
+      resource: { kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
   const policy = policyFileSchema.parse({
     schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
     grants: [
@@ -58,6 +61,8 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
       grant('first-run-write-operation', 'allow', 'operation', [input.writeOperationId]),
       grant('first-run-shell-operation', 'allow', 'operation', [input.shellOperationId]),
       grant('first-run-scratch-write-operation', 'allow', 'operation', [input.scratchWriteOperationId]),
+      // v2: the owner manages their own installation's secrets (every name; still decided per call and audited as `secret-change`).
+      grant('first-run-secret-store', 'allow', 'secret', 'all'),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -68,12 +73,13 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
  * Doctor's recognition (never authority): whether a v2 policy document's own revision (its `revision` when read
  * as a plain file, or its `policyRevision` once resolved with bindings — the caller passes the right one; both
  * are the *policy's* revision, never the merged `policy+bindings` string) is exactly this template's revision
- * for a known version. Any other revision (a custom or hand-edited policy, or v1) is not recognized — this
- * never inspects grants, only the revision identity the template itself writes.
+ * for a published template version (1..current). Any other revision (a custom or hand-edited policy, or an unknown template
+ * version) is not recognized — this never inspects grants, only the revision identity the template itself writes.
  */
 export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly id: string; readonly version: number } | null {
   const match = REVISION_PATTERN.exec(policyRevision);
   if (!match) return null;
   const version = Number(match[1]);
-  return version === FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
+  // Every published version is recognized (a v1 installation keeps its name; it lacks the v2 secret grant).
+  return version >= 1 && version <= FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
 }

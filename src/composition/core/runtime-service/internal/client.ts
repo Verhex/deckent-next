@@ -1,5 +1,6 @@
 import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, isRuntimeServiceScratchOperation,
-  type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest } from '#engine/index.js';
+  isRuntimeServiceSecretOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
+  type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
@@ -57,6 +58,9 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   /** v16 (SCR-A `/scratch`): the caller's own scratch area of one conversation — its files, or emptied (the directory stays). */
   inspectScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchView>;
   clearScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchClearance>;
+  /** v17 (SECRET-WRITE): one secret of the installation's store, set or deleted by the socket peer under the `secret` policy cell. */
+  setSecret(command: SecretSetCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
+  deleteSecret(command: SecretDeleteCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
 }>;
 
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
@@ -155,6 +159,19 @@ function scratchMethods(call: RuntimeCall) {
     clearScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchClearance>('clearScratch', scratchClearanceSchema, input, signal) };
 }
 
+/** v17 secret methods: name and value are checked before anything is sent (typed, never echoed); an answer for another change is not trusted. */
+function secretMethods(call: RuntimeCall) {
+  const change = async (operation: 'setSecret' | 'deleteSecret', input: SecretSetCommand | SecretDeleteCommand, signal?: AbortSignal) => {
+    try {
+      const command = prepareSecretChange(operation, input), result = acceptSecretChangeResult(operation, command, await call(operation, command, undefined, signal));
+      if (!result) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+      return result;
+    } catch (error) { throw queryFailure(error); }
+  };
+  return { setSecret: (input: SecretSetCommand, signal?: AbortSignal) => change('setSecret', input, signal),
+    deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal) };
+}
+
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
@@ -173,6 +190,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
         || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
         || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation) || isRuntimeServiceScratchOperation(operation)
+        || isRuntimeServiceSecretOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -211,7 +229,8 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
     && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
     && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile'
-    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation) && !isRuntimeServiceScratchOperation(operation)).map(operation =>
+    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation) && !isRuntimeServiceScratchOperation(operation)
+    && !isRuntimeServiceSecretOperation(operation)).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
@@ -236,6 +255,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     ...effectOperationMethods(call),
     ...permissionModeMethods(call),
     ...scratchMethods(call),
+    ...secretMethods(call),
     async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
       try {
         const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);
