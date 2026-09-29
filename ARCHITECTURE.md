@@ -1402,6 +1402,17 @@ advisory/version/carrier/severity change fails again; lint-arch validates the en
 fast-uri 3.1.0 inside MCP SDK 2.2.0 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
 Not yet: weekly scheduling of deps-watch (CI `schedule` or host cron; the pre-batch run is manual).
 
+**Published package (DEPS-DIST, 2026-09-29; ninth batch).** The npm package has no `dependencies`: `scripts/build-dist.mjs` bundles
+third-party runtime code into `dist/vendor/` chunks with esbuild (ESM, code splitting, lazy `import()` preserved) while every Deckent module
+keeps its tsc path, so `import.meta.url`-relative resources (build identity, package root, N-API addon, sandbox helpers, spawned entries)
+resolve as in the tested `dist`. Outputs that define esbuild's `__require` shim get a `createRequire` banner. The package ships
+`sbom.cdx.json` (CycloneDX 1.6 from the bundler metafile: a package is shipped only if it contributed bytes; components embedded inside a
+shipped package are listed under it only when the embedding file was bundled) and `THIRD-PARTY-NOTICES.md`; `deps-watch --sbom` and
+OSV-Scanner read it. `scripts/pack-smoke.mjs` installs the tarball offline with an empty cache and drives version, MCP server, MCP client,
+runtime service, terminal and native addon per supported Node. Publication is gated (`summary.json publishable`) while public declarations
+name third-party packages, LICENSE is absent or a shipped component lacks license text. The Core license line under "Enterprise layering"
+(MIT) is not changed here: the Apache-2.0 decision lands with DEPS-P0.
+
 ## Testing policy
 
 - `tests/contracts/<package>/` — public API and invariant tests only; no internal-function tests.
@@ -1891,7 +1902,9 @@ function (`REGISTRY_FACTORY_MISMATCH`) and snapshots `~standard.validate`, so re
 stays 1 (the change widens what a module may pass; zod 3.25 schemas already satisfy it). The SDK exports the Standard Schema types and
 `isStandardSchemaV1`/`validateStandardSchemaSync` through `platform`. Not yet: config sections (`registerConfigSection`) still take a strict
 zod object (owner checkpoint C1); the SDK entry still publishes six live zod schema values and 44 `z.infer` types (owner checkpoint C2);
-Standard JSON Schema is vendored but unused until zod ≥ 4.2.
+Standard JSON Schema is vendored but unused until zod ≥ 4.2. The MCP `tools/list` inputSchema dialect is pinned by
+`tests/fixtures/mcp-wire/tool-input-schemas.json` (draft-07 today; ZOD4-PREP, ninth batch); a dialect change happens only through a reviewed
+diff of that fixture.
 
 **Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
 
@@ -1913,7 +1926,27 @@ stdio the SDK probes with a sibling process), is listed every turn and kept for 
 server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
 SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the shell (`prefer-sandbox` default:
 bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network, HOME hidden; `require-sandbox`
-refuses without it; `host` explicit; Landlock is not offered for MCP servers). Pin digest = sha256 over name, title, description,
+refuses without it; `host` explicit; Landlock is not offered for MCP servers). A sandboxed start that fails is diagnosed in the same view
+(MCP-SANDBOX-PATHS, 2026-09-29; `mcp-client/internal/diagnose.ts`): the command is resolved on this machine with the server's PATH (not found
+→ `start-failed` "command not found", no name), then it and every existing absolute-path argument (≤ 16) are probed through the launcher's
+own prefix (`bwrap <view> -- /bin/sh -c '[ -e … ]'`; our `sh`/`test` only, never server code; 5 s bound; a failed probe leaves the SDK
+reason). The first path the view hides is named (`sandbox-unreachable`, `path-hidden` with role command/argument and the link target when
+it differs); without one, a package runner (npx, pnpx, bunx, uvx, pipx: no network, empty HOME) or container client (docker, podman,
+nerdctl: daemon socket outside the view) is named by the command's own name. Never parsed from the server's stderr (untrusted). The
+outcome is unchanged: a failure, never a start on the host (prefer-sandbox falls back only when no sandbox is usable, as before). `mcp
+add|approve` raise `MCP_SANDBOX_COMMAND_UNREACHABLE` (params name, kind, role, path, target, runner; a `${VAR}` path is shown as the
+template, without target; the message is one catalog sentence per kind, `error.MCP_SANDBOX_COMMAND_UNREACHABLE.*`); `mcp list` adds
+`detail` and `diagnosis` to a failed health. Measured on this machine: +10–30 ms on a failed start only. No MCP failure is silent (lead
+follow-up, `0b24ead`): a server a turn could not decide or start is named in the turn's result note (protocol v17's `note`; MCP notices
+first, the engine's note kept whole, the MCP part shortened to 4096) with its display-safe diagnosis; a start failure is recorded per
+project in `integrations/mcp-start-failures.json` (0600, atomic, config write lock; key scope + name + definition digest; advisory only —
+it suppresses a repeated first-use card and never offers or trusts anything), removed by `/mcp approve|reconnect|remove`, a successful
+approval or start; `mcp list` carries `lastStart` and `/mcp` prints it. The adapter returns a structured notice (`McpStartNotice`:
+start-failed, not-recorded, not-decided) and never renders owner text; composition's one renderer (`renderMcpStartNotice`, catalog
+`mcp.start.*`) writes the turn note in the service's locale (its environment, then `language`) and `lastStart.text` in the calling
+surface's locale (`/mcp`, `mcp list|get --lang`). Open: the notice arrives at the turn's end (a start-of-turn notice needs a new stream
+event kind, v18); the view's toolchain comes from the service environment's PATH while the server's PATH comes from the service process
+or the entry's `env.PATH` (an entry that sets PATH can search a directory the view did not bind). Pin digest = sha256 over name, title, description,
 input/output schema, annotations; only pinned tools whose live definition matches are offered (`mcp__<server>__<tool>`; display and audit
 `mcp:<server>/<tool>`); a changed definition is withdrawn until re-approved. A call is a C11 effect of `mcp.tool.call@1` on `mcp-tool` (input:
 server, tool, digest, arguments), decided by `decideAgentToolCall` over `agent-tool/invoke` ∧ `operation/execute`; cells `mcp-call`

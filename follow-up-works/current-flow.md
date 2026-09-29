@@ -47,13 +47,27 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   `3be2c7a` (model yetenek kaydı, `effort`, adapter v2); GIT-NET `37be829` … `b838569` (birleştirme `dda792e`; `protocol.allow=never` +
   `GIT_ALLOW_PROTOCOL=''` + lazy fetch yok). Kanıtlar `proof/<KART>-2026-09-29/`. Belge deltası bu commit'te.
 
+## Dokuzuncu parti (`integrate/2026-09-29-j`, worktree `/home/alperen/deckent-next-integrate-j`, taban `61a5eac`)
+- Birleşenler (her biri `--no-ff`): ZOD4-PREP `ab3be14` (zod 3 oracle'ları: config varsayılan/hata şekli golden'ı, MCP `tools/list` inputSchema
+  fixture'ı, sınır davranışları; çalışma zamanı değişmedi); MCP-SANDBOX-PATHS `07f9717` + lead takibi `0b24ead` (tipli teşhis
+  `MCP_SANDBOX_COMMAND_UNREACHABLE`; turda/`/mcp`'de sessiz başarısızlık yok; `integrations/mcp-start-failures.json`); DEPS-DIST `5b58fa7`
+  (`pack:dist` bağımlılıksız tarball + CycloneDX SBOM + `smoke:dist`). Kanıtlar `proof/<KART>-2026-09-29/`.
+- Entegrasyon düzeltmesi (`ed8cffd`): MCP-SANDBOX-PATHS i18n deltası (`add` + `followUp`, 13 anahtar en/tr) uygulandı. Ret mesajı teşhis türüne göre
+  üç katalog cümlesinden biri (rol etiketi yerelleştirilmiş); adaptör artık metin yazmıyor (`McpStartNotice`), tek render sahibi composition
+  (`renderMcpStartNotice`): tur notu servisin locale'inde, `lastStart.text` (`/mcp`, `mcp list|get`) çağıran yüzeyin locale'inde. Testler: en/tr saf
+  render, gerçek bwrap tur testi (en servis + tr servis notu, `/mcp` tr/en), kayıt testi reddi en/tr. İki mutasyon (servis locale'i yok sayılır; yüzey
+  locale'i geçirilmez) testleri kırdı, geri alındı. Belge deltası (ARCHITECTURE/PLAN/CHANGELOG/current-flow) ayrı commit'te.
+
 ## Sıradaki
 1. Yedinci parti `ce2440f`: Astra 2171 incelemesi → PASS'te push.
-2. Sekizinci parti `integrate/2026-09-29-i`: tam verify (lead; öncesinde `deps-watch` parti öncesi koşusu) → Astra → PASS'te push.
-3. DEPS-P0 yedinci parti push'undan sonra başlar.
-4. Owner sabah kararları: P1 tasarımları (anahtar zinciri / OTel / uzak MCP, 17 soru; önce K1 — üretimde `secretResolver` bağlı değil),
-   DEPS-SCHEMA C1/C2, canlı geçiş (bindings v3 + MODES-3 canlı göçü, Node 24.21 varsayılan geçişi dahil); ANTHROPIC ilk faturalı duman çağrısı
-   ve legacy tarifeler.
+2. Sekizinci parti `61a5eac`: Astra 2172 incelemesi → PASS'te push.
+3. Dokuzuncu parti `integrate/2026-09-29-j`: tam verify (lead) → Astra → PASS'te push. Sıra her partide aynı: tam verify → Astra → push.
+4. DEPS-P0 yedinci parti push'undan sonra başlar.
+5. Owner sabah kararları: liste `proof/MORNING-REPORT-2026-09-29.md` — P1 tasarımları (anahtar zinciri / OTel / uzak MCP; önce K1 — üretimde
+   `secretResolver` bağlı değil), DEPS-SCHEMA C1/C2 (= DEPS-DIST kütüphane tipleri engeli), zod 4 hata kodları (eşle / kabul et), MCP sandbox
+   seçenekleri B/C/D/E + tur başı `notice` olayı (v18), DEPS-DIST yayın engelleri (tipler, LICENSE, gömülü lisans metinleri) ve DEPS-DIST-B1 kartı
+   (271→133 ms), ANTHROPIC ilk faturalı duman çağrısı ve legacy tarifeler, fast-uri kabul edilmiş riski (2026-10-29), canlı geçiş (bindings v3 +
+   MODES-3 canlı göçü, Node 24.21 varsayılan geçişi dahil).
 
 ## Açık kalanlar
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).

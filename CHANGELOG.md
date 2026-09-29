@@ -4,6 +4,19 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (MCP-SANDBOX-PATHS): an MCP server the default sandbox (bubblewrap) cannot start now says why — the hidden command or argument
+  path (a `${VAR}` path as written), a package runner (npx, uvx, …) that needs network and a package cache, or a container client whose
+  daemon socket is outside the sandbox — as the typed `MCP_SANDBOX_COMMAND_UNREACHABLE` on `mcp add|approve` and as `diagnosis` in
+  `mcp list`. No MCP failure in a turn is silent: the turn's note names it, the failure is remembered per definition so the first-use card is
+  not asked again every turn until `/mcp approve` (or `reconnect`), and `/mcp` shows the last start failure. All of this text is in English
+  and Turkish.
+- BUILD (DEPS-DIST): `npm run pack:dist` produces a dependency-free npm tarball (runtime dependencies bundled with esbuild into `dist/vendor/`,
+  Deckent's own module layout unchanged) with a CycloneDX 1.6 SBOM (`sbom.cdx.json`, including components embedded inside bundled packages)
+  and `THIRD-PARTY-NOTICES.md`; `npm run smoke:dist` installs it offline from an empty cache and exercises CLI, MCP server/client, runtime
+  service (N-API addon) and terminal on Node 24 and 26; `deps-watch --sbom` scans the shipped components. Not yet publishable: public type
+  declarations still reference zod/MCP types, LICENSE and some license texts are missing.
+- TEST (ZOD4-PREP): zod 3 oracles before the zod 4 migration — golden config defaults and error shape, the MCP `tools/list` inputSchema
+  fixture (draft-07 dialect) and boundary behaviours; no runtime change.
 - CHANGED (MCP-PIN-DEF, Jev 12e80d38): an MCP tool call now carries its pinned definition. A server's HEADER_MISMATCH (-32020) is reported
   to the model as a header mismatch and the call is not sent a second time (before, the SDK re-listed and re-sent it, bypassing the pin).
   Structured results are checked against the pinned output schema: a nonconforming or missing structured result is an error for the model
