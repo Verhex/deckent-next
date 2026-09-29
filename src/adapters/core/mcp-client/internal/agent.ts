@@ -2,7 +2,7 @@ import type { AgentToolSpec, EffectCommand, JsonObject } from '#domain/index.js'
 import { bubblewrapShellSandbox } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { landlockShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import type { McpClientPool, McpLaunchContext, McpServerOpen } from './pool.js';
-import type { McpClientSettings, McpToolCell } from './pin.js';
+import type { McpClientSettings, McpToolCell, McpTrustBinding } from './pin.js';
 import { agentMcpEffectCommandId, describeMcpApproval, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND } from './target.js';
 
 /** One offered MCP tool as a turn knows it: where it lives, its pinned definition and the permission cell it is decided in. */
@@ -16,6 +16,8 @@ export interface McpOfferedTool {
   readonly command: string;
   readonly posture: string;
   readonly timeoutMs: number;
+  /** The server's scope and definition as trusted when the turn read them (MCP-REVOKE: the send re-checks them; null: never sent). */
+  readonly binding: McpTrustBinding | null;
 }
 /**
  * The MCP tools one turn may offer (MCP-CLIENT): every configured server is opened (started, listed, verified) and only its `pinned` tools
@@ -31,7 +33,8 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs }));
+        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
+        binding: server.binding ?? null }));
     }
   }
   return offered;

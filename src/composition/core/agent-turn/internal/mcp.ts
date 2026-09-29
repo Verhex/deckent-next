@@ -2,7 +2,7 @@ import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { loadConfig, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
-  McpToolTarget, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, registerProviderConfig, runMcpCommand, type LocalPeerIdentity,
+  McpToolTarget, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, registerProviderConfig, runMcpCommand, type LocalPeerIdentity,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { agentWorkspaceDeny } from './turn.js';
@@ -35,20 +35,23 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
   // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
   const locale = resolveLocale(undefined, environment, config.language);
-  const opened = await openTurnMcp({ registry: { projectRoot: input.projectRoot, layout: context.layout, environment, secret: async name => input.options.secretResolver
-    ? input.options.secretResolver(name) : environment[name] }, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: async (name: string) => input.options.secretResolver
+    ? input.options.secretResolver(name) : environment[name] };
+  const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), policyRevision: async () => String((await context.policy.load().catch(() => null) as { revision?: unknown } | null)?.revision ?? 'unknown') });
   if (opened.notices.length) input.onNotices?.(opened.notices);
   if (!opened.settings) return null;
-  const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered);
+  // MCP-REVOKE: every call re-reads the current registry and trust at its send (the same registry context the turn opened with).
+  const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered), authority = mcpSendAuthority(registry);
   return { ...tools, async apply(name: string, args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number },
     gate: EffectApprovalGate): Promise<AgentToolOutcome> {
     const entry = tools.entry(name);
     if (!entry) return { status: 'error', text: `[deckent] ${name}: error=unknown-tool` };
     const command = tools.command(entry, args, { scopeId, turnId, ...execution, argsDigest: agentToolArgumentsDigest(name, args) }), clock = new SystemTrustedClock();
     let ran: McpCallOutcome | null = null;
-    const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; } });
+    const target = new McpToolTarget({ pool, timeoutMs: entry.timeoutMs, signal, onResult: value => { ran = value; },
+      admit: call => authority({ ...call, binding: call.server === entry.server ? entry.binding : null }) });
     const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
     const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
     try {

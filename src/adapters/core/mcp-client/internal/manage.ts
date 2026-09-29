@@ -1,19 +1,19 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type ProductLayout } from '#platform/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
 import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
   type McpStartNoticeRenderer } from './failures.js';
-import { McpClientPool, type McpLaunchContext, type McpServerOpen } from './pool.js';
-import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings } from './pin.js';
+import { McpClientPool, type McpLaunchContext, type McpSendRefusal, type McpServerOpen } from './pool.js';
+import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings, type McpTrustBinding } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { expandMcpEntry, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy,
   type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
-import { findMcpTrust, readMcpTrust, type McpTrustRecord } from './trust.js';
+import { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, type McpTrustRecord } from './trust.js';
 
 /** What the registry needs from its host: the project, its layout (trust lives in the data root), the environment and secret resolver of the
  * launch, and the company policy (none in Core yet). */
@@ -65,11 +65,40 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
     const reason = !trust.ok ? trust.reason : !expanded.ok ? expanded.reason : undefined;
     const launch = decided === 'trusted' && expanded.ok && record ? Object.freeze({ id: server.name, command: expanded.command, args: expanded.args, env: expanded.env,
       realm: server.entry.realm ?? 'prefer-sandbox', ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools,
-      label: [server.entry.command, ...(server.entry.args ?? [])].join(' '), generation: record.reconnect }) : null;
+      label: [server.entry.command, ...(server.entry.args ?? [])].join(' '), generation: record.reconnect,
+      binding: Object.freeze({ scope: server.scope, definitionDigest: server.definitionDigest }) }) : null;
     return Object.freeze({ name: server.name, scope: server.scope, file: server.file, shadows: server.shadows, definitionDigest: server.definitionDigest, entry: server.entry,
       status: decided, ...(reason ? { reason } : {}), trust: record, launch });
   }));
   return { projectKey, paths, servers, problems: [...problems, ...registry.problems] };
+}
+/**
+ * The send authority of the turn's MCP calls (MCP-REVOKE, Astra 2174–2176): a one-shot approval of a call is not the server's trust. Right
+ * before a call is handed to the SDK — after its approval wait — the current registry files and the scope's trust record are read again
+ * (user trust in the global root, project and local trust in the data root) and the call is admitted only while the server is still
+ * trusted as exactly the scope and definition the turn offered it under and the tool's pin is still that digest. The check runs under the
+ * trust record's config write lock, the lock `reset`/`remove`/`approve` take to change it: a trust change that completed before is always
+ * seen; one that starts after it is ordered after the send (a revocation never recalls a call already sent). Fails closed.
+ */
+export function mcpSendAuthority(registry: McpRegistryContext) {
+  return async (call: { readonly server: string; readonly tool: string; readonly digest: string; readonly binding: McpTrustBinding | null }): Promise<McpSendRefusal | null> => {
+    const { binding } = call;
+    if (!binding) return 'trust-revoked';
+    const directory = mcpTrustDirectory(binding.scope, registry.layout, registry.environment);
+    // No trust directory: nothing is trusted in this scope (and the lock does not create one).
+    if (!(await lstat(directory).then(info => info.isDirectory(), () => false))) return 'trust-revoked';
+    const check = async (): Promise<McpSendRefusal | null> => {
+      const server = (await loadMcpRegistry(registry)).servers.find(entry => entry.name === call.server);
+      if (!server) return 'trust-revoked';
+      if (server.status === 'trust-store-unavailable') return 'trust-unavailable';
+      if (server.scope !== binding.scope || server.definitionDigest !== binding.definitionDigest) return 'definition-changed';
+      if (server.status === 'pending-approval' || server.status === 'declined') return 'trust-revoked';
+      if (server.status !== 'trusted' || !server.trust) return 'definition-changed';
+      return server.trust.tools.some(pin => pin.name === call.tool && pin.digest === call.digest) ? null : 'pin-revoked';
+    };
+    try { return await withConfigWriteLock(join(directory, MCP_TRUST_FILE), check, 10_000); }
+    catch { return 'trust-unavailable'; }
+  };
 }
 /** The client settings of the trusted servers (null when there is none): code defaults, the agent's result bound and the MCP message bound. */
 export function mcpClientSettings(view: McpRegistryView, limits: { readonly resultMaxBytes?: number; readonly inputMaxBytes?: number }): McpClientSettings | null {
@@ -248,6 +277,9 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     catch { if (failure) notices.push({ kind: 'not-recorded', name: server.name }); }
   };
   let view = await loadMcpRegistry(registry);
+  // MCP-REVOKE: a process whose server is no longer trusted (reset, removed, declined, changed) stops; its next use starts it after the cards.
+  const trustedIds = (current: McpRegistryView) => new Set(current.servers.flatMap(server => server.launch ? [server.name] : []));
+  pool.retain(trustedIds(view));
   const undecided = view.servers.filter(server => server.status === 'pending-approval' || server.status === 'changed');
   if (undecided.length) {
     const policyRevision = await input.policyRevision(), layout = registry.layout;
@@ -272,6 +304,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
       }
     }
     view = await loadMcpRegistry(registry);
+    pool.retain(trustedIds(view));
   }
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });
   const byName = new Map(view.servers.map(server => [server.name, server])), outcomes: [McpServerView, McpServerOpen][] = [];

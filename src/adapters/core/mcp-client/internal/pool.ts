@@ -59,8 +59,14 @@ export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legac
  * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
  * server answered, so its effect may have happened). */
 export interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' }
+/** Why the current registry and trust no longer admit a call (MCP-REVOKE): the trust was reset or the server removed or declined
+ * (`trust-revoked`), its definition or scope is not the one the call was offered under (`definition-changed`), the tool's pin is gone or
+ * different (`pin-revoked`), or the trust record cannot be read or locked (`trust-unavailable`, fail closed). */
+export type McpSendRefusal = 'trust-revoked' | 'definition-changed' | 'pin-revoked' | 'trust-unavailable';
+/** The send authority of one call: asked right before the request is handed to the SDK, after every local pre-send check; null admits. */
+export type McpSendAdmission = () => Promise<McpSendRefusal | null>;
 export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: McpAnsweredError }
-  | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' | 'invalid-output-schema' }
+  | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' | 'invalid-output-schema' | McpSendRefusal }
   | { readonly outcome: 'unknown'; readonly reason: 'timed-out' | 'connection-closed' | 'cancelled' | 'failed' };
 
 interface ServerState {
@@ -196,8 +202,10 @@ export class McpClientPool {
    * re-sends (MCP-PIN-DEF). Nothing is sent when the server is not connected, the pin no longer matches, the pinned outputSchema cannot be
    * compiled or the call was cancelled first. After sending: an answer (a result or a JSON-RPC error, HEADER_MISMATCH and a nonconforming
    * structured result included) is `answered`; a timeout, a cancellation or a closed connection is `unknown` — it is never sent again here.
+   * `admit` (MCP-REVOKE) is the caller's send authority, asked last, right before the request is handed to the SDK: a refusal sends nothing.
    */
-  async call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal }): Promise<McpCallOutcome> {
+  async call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
+    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome> {
     const state = this.states.get(serverId), client = state?.client;
     if (!state || !client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
@@ -214,6 +222,11 @@ export class McpClientPool {
       if (!pinned.compiles) return { outcome: 'refused', reason: 'invalid-output-schema' };
     }
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
+    // The current trust decides last (after the approval wait and every local check): only local SDK steps separate it from the write.
+    const refusal = options.admit ? await options.admit() : null;
+    if (refusal) return { outcome: 'refused', reason: refusal };
+    if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
+    if (state.client !== client) return { outcome: 'refused', reason: 'not-connected' };
     try {
       return { outcome: 'answered', result: await client.callTool({ name: tool, arguments: args },
         { timeout: options.timeoutMs, signal: options.signal, toolDefinition: definition }) as CallToolResult };
@@ -235,6 +248,22 @@ export class McpClientPool {
   stderr(serverId: string): string {
     const tail = this.states.get(serverId)?.stderr;
     return tail ? redactText(tail.toString('utf8'), [], MCP_CLIENT_STDERR_TAIL_BYTES) : '';
+  }
+  /**
+   * Stops one server's process (MCP-REVOKE: its trust is gone, so an untrusted process does not keep running or serving): forgotten at once
+   * (a later `open` starts it again, after its cards), closed after any open already queued on it, so nothing started is left behind.
+   */
+  retire(serverId: string): Promise<void> {
+    const state = this.states.get(serverId);
+    if (!state) return Promise.resolve();
+    this.states.delete(serverId);
+    const run = state.lock.then(async () => { const client = state.client; state.client = null; state.listing = null; await client?.close().catch(() => undefined); });
+    state.lock = run.catch(() => undefined);
+    return run.catch(() => undefined);
+  }
+  /** Stops every server process whose id is not in `trusted` (a turn's current registry view). */
+  retain(trusted: ReadonlySet<string>): void {
+    for (const id of [...this.states.keys()]) if (!trusted.has(id)) void this.retire(id);
   }
   async close(): Promise<void> {
     this.closed = true;
