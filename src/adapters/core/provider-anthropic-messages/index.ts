@@ -3,6 +3,8 @@ export { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VER
   parseAnthropicMessagesDefinition } from './internal/contract.js';
 export type { AnthropicMessagesDefinition, AnthropicPublishedTariff, AnthropicThinking } from './internal/contract.js';
 export { ANTHROPIC_PUBLISHED_TARIFFS, anthropicPublishedTariff } from './internal/pricing-catalog.js';
+export { ANTHROPIC_EFFORT_LEVELS, ANTHROPIC_MODEL_CAPABILITIES, anthropicControlsAdmitted, anthropicModelCapability } from './internal/model-capabilities.js';
+export type { AnthropicEffort, AnthropicModelCapability } from './internal/model-capabilities.js';
 export { anthropicMessagesBody } from './internal/messages.js';
 export { createAnthropicMessagesStream, ANTHROPIC_STREAM_TOKEN_WIRE_BYTES, ANTHROPIC_STREAM_WIRE_FACTOR } from './internal/stream.js';
 export { anthropicMaxChargeMinorUnits, quoteAnthropicPublishedTariff } from './internal/tariff.js';

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-09-29",
+  "sources": {
+    "thinking": "https://platform.claude.com/docs/en/build-with-claude/thinking",
+    "effort": "https://platform.claude.com/docs/en/build-with-claude/effort",
+    "models": "https://platform.claude.com/docs/en/about-claude/models/overview"
+  },
+  "note": "What the Messages API accepts per model: thinking.type adaptive / enabled (+budget_tokens) / the one off type (disabled or between_tools) and the highest effort that off type allows, output_config.effort levels and default, synchronous max output. Omitting thinking and effort is accepted by every model. Mythos models (access-program only) are not listed.",
+  "models": [
+    { "modelId": "claude-fable-5-1", "thinking": { "adaptive": true, "enabled": false, "off": null }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/fable-5-1/overview" },
+    { "modelId": "claude-fable-5", "thinking": { "adaptive": true, "enabled": false, "off": null }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/fable-5/overview" },
+    { "modelId": "claude-opus-5-5", "thinking": { "adaptive": true, "enabled": false, "off": null }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "medium" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/opus-5-5/overview" },
+    { "modelId": "claude-opus-5", "thinking": { "adaptive": true, "enabled": false, "off": "disabled", "offMaxEffort": "high" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/opus-5/overview" },
+    { "modelId": "claude-opus-4-8", "thinking": { "adaptive": true, "enabled": false, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/opus-4-8/overview" },
+    { "modelId": "claude-opus-4-7", "thinking": { "adaptive": true, "enabled": false, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/opus-4-7/overview" },
+    { "modelId": "claude-opus-4-6", "thinking": { "adaptive": true, "enabled": true, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/opus-4-6/overview" },
+    { "modelId": "claude-opus-4-5-20251101", "thinking": { "adaptive": false, "enabled": true, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high"], "default": "high" }, "maxOutputTokens": 64000, "source": "https://platform.claude.com/docs/en/models/opus-4-5/overview" },
+    { "modelId": "claude-sonnet-5-5", "thinking": { "adaptive": true, "enabled": false, "off": "between_tools", "offMaxEffort": "high" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/sonnet-5-5/overview" },
+    { "modelId": "claude-sonnet-5", "thinking": { "adaptive": true, "enabled": false, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/sonnet-5/overview" },
+    { "modelId": "claude-sonnet-4-6", "thinking": { "adaptive": true, "enabled": true, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/sonnet-4-6/overview" },
+    { "modelId": "claude-sonnet-4-5-20250929", "thinking": { "adaptive": false, "enabled": true, "off": "disabled" }, "effort": null, "maxOutputTokens": 64000, "source": "https://platform.claude.com/docs/en/models/sonnet-4-5/overview" },
+    { "modelId": "claude-haiku-4-5-20251001", "thinking": { "adaptive": false, "enabled": true, "off": "disabled" }, "effort": null, "maxOutputTokens": 64000, "source": "https://platform.claude.com/docs/en/models/haiku-4-5/overview" }
+  ]
+}
