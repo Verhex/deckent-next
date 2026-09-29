@@ -73,7 +73,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
     // One C11 effect of the Core network operation, settled; the model learned the tool from the system prompt v3.
     expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'network-fetch', state: 'settled' }]);
     const system = systemOf(f.state.requests[0]!);
-    expect(system.startsWith('[Deckent runtime instructions v4]')).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v5]')).toBe(true);
     expect(system).toContain('fetch_url'); expect(system).toContain('docs.example');
     expect(toolNames(f.state.requests[0]!)).toContain('fetch_url');
   }, 60_000);

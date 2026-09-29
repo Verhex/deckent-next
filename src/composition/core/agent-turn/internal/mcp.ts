@@ -1,10 +1,11 @@
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { configuredSecretResolver, loadConfig, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { configuredSecretResolver, loadConfig, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
   McpToolTarget, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, registerProviderConfig, runMcpCommand, type LocalPeerIdentity,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { agentWorkspaceDeny } from './turn.js';
 
 /**
@@ -75,8 +76,11 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
+  // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
+  // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
   return runMcpCommand(request, { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
-    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) });
+    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) })
+    .catch((error: unknown) => { throw error instanceof ManagedFileError ? queryFailure(error) : error; });
 }

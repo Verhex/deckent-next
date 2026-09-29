@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { AgentTurnMessage } from '#domain/index.js';
+import { AGENT_TURN_REPLY_LANGUAGES, type AgentTurnReplyLanguage } from './system-prompt.js';
 
 /** Compaction starts when a round's measured prompt plus its reserves passes this share of the window (legacy high-water). */
 export const AGENT_COMPACTION_HIGH_WATER = 0.75;
@@ -93,13 +94,18 @@ export function renderAgentCompaction(plan: AgentCompactionPlan, summary: AgentC
   return Object.freeze({ role: 'user' as const, content });
 }
 
-/** Model-facing instruction of the compaction call (protocol text, like tool descriptions). */
-export const AGENT_COMPACTION_INSTRUCTION = 'You compress an earlier part of a conversation between a user and a coding assistant into one JSON object. Output only '
+/**
+ * Model-facing instruction of the compaction call (protocol text, like tool descriptions). LANG-CRASH: the summary is written in the person's
+ * locale, never "the language of the conversation" (a drifted conversation would carry its drift into every later round).
+ */
+export function agentCompactionInstruction(language: AgentTurnReplyLanguage): string {
+  return `${COMPACTION_INSTRUCTION} Write every string in ${AGENT_TURN_REPLY_LANGUAGES[language]}; paths, code, commands and identifiers stay as written.`;
+}
+const COMPACTION_INSTRUCTION = 'You compress an earlier part of a conversation between a user and a coding assistant into one JSON object. Output only '
   + 'that object, with no prose and no markdown fences, of exactly this shape: {"objective":string,"findings":string[],"decisions":string[],'
   + '"unresolved":string[],"nextActions":string[],"inspectedAreas":string[]}. Every string is short, concrete and drawn from the conversation: '
   + 'facts found in files or tool results with their paths, decisions made, open questions, what should happen next, files and areas '
-  + 'inspected. Invent nothing. Do not copy the user\'s messages or list the tool calls: Deckent records those itself. Write in the '
-  + 'language of the conversation.';
+  + 'inspected. Invent nothing. Do not copy the user\'s messages or list the tool calls: Deckent records those itself.';
 /** Each message of the summary input is cut to this many characters (legacy bound). */
 const COMPACTION_MESSAGE_CHARS = 2_000;
 

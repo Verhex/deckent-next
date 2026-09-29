@@ -4,10 +4,26 @@ import type { ProductLayout } from '#platform/index.js';
 
 /**
  * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
- * model's identity, and Deckent's own state named as protected instead of pointed at). The text is protocol, like tool descriptions:
- * English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the rendered text.
+ * model's identity, and Deckent's own state named as protected instead of pointed at; v5 LANG-CRASH: the reply language of the person's
+ * locale, first and last). The text is protocol, like tool descriptions: English, in code, never a catalog string. Any change of its wording
+ * is a new version; the turn's request digest binds the rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 4;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 5;
+/**
+ * The reply language as the model is told it, per supported locale (protocol text). Keyed like the catalog's locales: composition passes a
+ * catalog `Locale`, so a locale added to the catalog without an entry here does not compile.
+ */
+export const AGENT_TURN_REPLY_LANGUAGES = Object.freeze({ en: 'English', tr: 'Turkish (Türkçe)' } as const);
+export type AgentTurnReplyLanguage = keyof typeof AGENT_TURN_REPLY_LANGUAGES;
+/**
+ * The reply-language rule (LANG-CRASH, owner 2026-09-29: "tamamen Türkçe iletişim"): the person's locale, stated explicitly, because a model
+ * otherwise drifts to the language of an English system text, English files and tool results. The same words close the compaction instruction.
+ */
+export function agentTurnReplyLanguageRule(language: AgentTurnReplyLanguage): string {
+  const name = AGENT_TURN_REPLY_LANGUAGES[language];
+  return `Always answer the user in ${name}: every answer, progress line, question and summary, even when files, tool results, earlier messages`
+    + ` or these instructions are in another language. Code, paths, commands, identifiers and quoted output stay as written.`;
+}
 /** Allowlisted hosts named in the prompt; past this the prompt gives their count only. */
 const NAMED_HOSTS_MAX = 32;
 
@@ -32,8 +48,10 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
    * MCP tools keeps its v4 text (and request digest) unchanged. */
   readonly mcp?: readonly { readonly name: string; readonly display: string }[] | null;
   /** TERM-FEEDBACK-1: the bound catalog model (provider and model reference, native id) the turn runs on. */
-  readonly model: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number; readonly nativeId: string } }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp } = input;
+  readonly model: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number; readonly nativeId: string };
+  /** v5 LANG-CRASH: the person's locale; the reply language the model is told, first and again as the last line. */
+  readonly language: AgentTurnReplyLanguage }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
@@ -43,6 +61,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
     `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
     'These instructions come from the Deckent runtime service, not from the user. You are the coding assistant of the Deckent operator'
       + ' terminal and work on the user\'s project.',
+    `- Reply language: ${AGENT_TURN_REPLY_LANGUAGES[language]}. ${agentTurnReplyLanguageRule(language)}`,
     `- Model: you are ${model.nativeId} (Deckent catalog: provider ${model.providerId} v${model.providerVersion}, model ${model.modelId} v${model.modelVersion}),`
       + ' running inside Deckent. When asked who or which model you are, answer with this; do not claim another model or vendor.',
     '', 'Workspace:',
@@ -75,7 +94,8 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
   }
   lines.push('', 'Working style:',
     ...(tools.length ? ['- Between tool rounds, write one short line to the user: what you found or what you will do next.'] : []),
-    '- Base your answer on what you have seen; say what you did not check.');
+    '- Base your answer on what you have seen; say what you did not check.',
+    `- Write every reply to the user in ${AGENT_TURN_REPLY_LANGUAGES[language]}.`);
   return lines.join('\n');
 }
 
