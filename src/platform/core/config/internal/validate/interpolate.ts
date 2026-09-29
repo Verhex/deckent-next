@@ -1,4 +1,5 @@
 import { isRecord } from '#platform/core/utils/index.js';
+import { DeckentError } from '#platform/core/errors/index.js';
 
 /** Composition supplies the authorized secret backend; no file-format or keyring policy lives here. */
 export type SecretResolver = (reference: string) => Promise<string | undefined>;
@@ -16,7 +17,14 @@ export async function resolveConfigSecrets<T>(config: T, resolver: SecretResolve
       if (!key) return value;
       if (!resolved.has(key)) {
         let secret: string | undefined;
-        try { secret = await resolver(key); } catch { throw new Error('SECRET_RESOLUTION_FAILED'); }
+        // A backend's typed refusal (SECRET_STORE_*: unsafe, corrupt, unavailable) keeps its code so the owner sees why; any other failure
+        // stays the generic, content-free error (a foreign backend's message may carry private context).
+        let failed = false, failure: unknown;
+        try { secret = await resolver(key); } catch (error) { failed = true; failure = error; }
+        if (failed) {
+          if (failure instanceof DeckentError && failure.code.startsWith('SECRET_STORE_')) throw failure;
+          throw new Error('SECRET_RESOLUTION_FAILED');
+        }
         if (secret !== undefined && typeof secret !== 'string') throw new Error('SECRET_RESOLVER_RESULT_INVALID');
         resolved.set(key, secret);
       }

@@ -37,6 +37,8 @@ export { ConfigValidationError } from '#platform/core/config/index.js';
 export type { ConfigWarning } from '#platform/core/config/index.js';
 export { validateConfig, versionedConfig } from '#platform/core/config/index.js';
 export { resolveConfigSecrets } from '#platform/core/config/index.js';
+export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
+export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView } from '#platform/core/config/index.js';
 export { loadConfig, loadGlobalConfig, clearConfigCache } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';

@@ -1,7 +1,7 @@
 import type { ModelInvocationProfile } from '#domain/index.js';
 import { ModelInvocationStoreError } from '#engine/index.js';
 import type { NativeJsonHttpAuthentication } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { configuredSecretResolver, type ConfigLoadOptions } from '#platform/index.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
 
@@ -14,8 +14,8 @@ export function scopedInvocationCredentialResolver(context: Awaited<ReturnType<t
     if (authentication.type === 'none' || authentication.credentialRef !== reference
       || !context.principal.scopeIds.includes(profile.scopeId)) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     await revalidate(signal);
-    const env = options.env ?? process.env;
-    const value = options.secretResolver ? await options.secretResolver(reference) : Object.hasOwn(env, reference) ? env[reference] : undefined;
+    // SECRET-K1: the installation's one configured resolver (explicit > selected backend > environment); a backend refusal stays typed.
+    const value = await configuredSecretResolver(context.config, options)(reference);
     // A backend may finish after revocation or deadline. It never authorizes a socket by itself.
     guard(signal); await revalidate(signal);
     return value;

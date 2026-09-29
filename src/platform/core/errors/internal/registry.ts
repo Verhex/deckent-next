@@ -249,6 +249,16 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
   POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
   POLICY_ADMINISTER_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_ADMINISTER_UNSUPPORTED', p, l) }) },
+  // SECRET-K1: typed refusals of the SecretStore port (engine) and its backends. No parameter or cause ever carries a secret value or store
+  // content. Text is temporary via error.unknown until the lead adds the en/tr strings (proof/SECRET-K1-2026-09-29/i18n-delta.json).
+  SECRET_NAME_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_NAME_INVALID' }, l) }) },
+  SECRET_VALUE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_VALUE_INVALID' }, l) }) },
+  SECRET_STORE_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_UNKNOWN' }, l) }) },
+  SECRET_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_UNAVAILABLE' }, l) }) },
+  SECRET_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_UNSAFE' }, l) }) },
+  SECRET_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_CORRUPT' }, l) }) },
+  SECRET_STORE_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_READ_ONLY' }, l) }) },
+  SECRET_STORE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_STORE_UNSUPPORTED' }, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },

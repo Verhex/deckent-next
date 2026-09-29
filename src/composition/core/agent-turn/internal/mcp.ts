@@ -1,6 +1,6 @@
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { loadConfig, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { configuredSecretResolver, loadConfig, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
   McpToolTarget, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, registerProviderConfig, runMcpCommand, type LocalPeerIdentity,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
@@ -35,8 +35,9 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
   // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
   const locale = resolveLocale(undefined, environment, config.language);
-  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: async (name: string) => input.options.secretResolver
-    ? input.options.secretResolver(name) : environment[name] };
+  // SECRET-K1: personal-file `$DECK:NAME` goes through the installation's one configured resolver, never straight to the environment.
+  const resolveSecret = configuredSecretResolver(config, input.options);
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), policyRevision: async () => String((await context.policy.load().catch(() => null) as { revision?: unknown } | null)?.revision ?? 'unknown') });
@@ -76,6 +77,6 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
   return runMcpCommand(request, { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
     describeNotice: notice => renderMcpStartNotice(notice, shown),
-    secret: async name => options.secretResolver ? options.secretResolver(name) : environment[name], limits: { inputMaxBytes: config.mcp.inputMaxBytes },
+    secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) });
 }
