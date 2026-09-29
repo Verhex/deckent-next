@@ -72,3 +72,40 @@ describe.skipIf(process.platform !== 'linux')('full access composed with the Ast
     }, 180_000);
   }
 });
+
+// A company rule that is `require-approval` but not `modeEligible`: `decideAgentToolCall` never lowers it (`lowerable` fails before the
+// full-access grant is even consulted), so it asks in a full-access turn too. Once the owner answers such a card, `execute` runs the call
+// as `owner-approved` (mode.ts), the same authority any other card gets — never `full-access` — so the card's write text must read like
+// any other owner-approved card except for `.git`, which still follows the turn's layout (MODES-3).
+const NOT_ELIGIBLE = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS];
+
+describe.skipIf(process.platform !== 'linux')('the approval card describes the write posture the call will actually get, not a static per-realm line', () => {
+  for (const realm of ['bubblewrap', 'landlock'] as const) {
+    it.skipIf(realm === 'bubblewrap' ? !bwrapReady : landlockAbi < 6)(`${realm}: a standart owner-approved card says .git read-only; the same authority in a full-access turn says .git writable`, async () => {
+      // Standart (no stored permission mode: a require-approval rule never lowers on its own): an ordinary owner-approved card. Outside a
+      // full-access turn `.git` is never writable, whatever approves the call.
+      const standart = await modeRuntime({ grants: GRANTS, mode: null, dataRoot: DATA, ...REALMS[realm] });
+      const approvedStandart = await standart.call('run_shell', { command: 'echo hi' }, 'allow');
+      expect(approvedStandart.card).toBe(true);
+      const standartCard = approvedStandart.events.find(event => event.kind === 'approval.requested');
+      if (standartCard?.kind !== 'approval.requested') throw new Error('no card was requested');
+      expect(standartCard.preview).toContain(realm === 'bubblewrap' ? 'bubblewrap' : 'Landlock');
+      expect(standartCard.preview).toContain('the project is writable');
+      expect(standartCard.preview).toContain('.git read-only');
+      expect(standartCard.preview).not.toContain('.git writable');
+
+      // Full access, a non-eligible company rule: the call still asks. Approved, it runs as `owner-approved` (never `full-access`), so
+      // the card already said what the effect will do: the project (write floor included) writes, and this turn also writes `.git`.
+      const forced = await modeRuntime({ grants: NOT_ELIGIBLE, mode: 'full-auto', dataRoot: DATA, ...REALMS[realm] });
+      const approvedForced = await forced.call('run_shell', { command: 'echo hi' }, 'allow', { fullAccess: true });
+      expect(approvedForced.card).toBe(true);
+      const forcedCard = approvedForced.events.find(event => event.kind === 'approval.requested');
+      if (forcedCard?.kind !== 'approval.requested') throw new Error('no card was requested');
+      const noCalls = forced.audit().map(record => record.event.subject).filter(subject => subject['kind'] === 'full-access-call');
+      expect(noCalls).toHaveLength(0); // owner-approved, never the audited full-access-call authority.
+      expect(forcedCard.preview).toContain('the project is writable');
+      expect(forcedCard.preview).toContain('.git writable');
+      expect(forcedCard.preview).not.toContain('.git read-only');
+    }, 60_000);
+  }
+});

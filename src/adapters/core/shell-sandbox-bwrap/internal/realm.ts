@@ -2,14 +2,17 @@ import { statSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
-import { BASH_LAUNCH, fsOpsFor, gitWorktreeRepository, runShellProcess, scanGitDirectory, type FsOps, type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
+import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
+  type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
 
 /** Where a distribution installs bubblewrap; PATH is never consulted for the launcher (a PATH entry is data the command sees). */
 export const BUBBLEWRAP_KNOWN_PATHS: readonly string[] = Object.freeze(['/usr/bin/bwrap', '/usr/local/bin/bwrap', '/bin/bwrap']);
-export const BUBBLEWRAP_POSTURE = 'Runs in a bubblewrap sandbox: the project is writable (.git read-only), the scratch area is writable, system directories '
-  + 'and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
+/** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
+ * itself enforces (`describeShellWritePosture`), never a second copy of it. */
+export const bubblewrapPosture = (view: ShellSandboxWriteView): string => `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
+  + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 /** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
@@ -129,7 +132,8 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   // MODES-3: a full-access turn binds no Git metadata read-only (the project bind is writable; a worktree's common repository is bound
   // writable) — the inode floor's masks still apply.
   // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3): no writable common repository under a `--ro-bind`.
-  const repositoryWritable = layout.repositoryWritable === true && write.projectReadOnly !== true;
+  // The same fact the card's text reads (`sandboxWriteView`).
+  const { repositoryWritable } = sandboxWriteView(layout, { writeFloorReadOnly: write.floorReadOnly === true, projectReadOnly: write.projectReadOnly === true });
   const gitReadOnly = (path: string) => { if (repositoryWritable) writable.add(path); else readOnly.add(path); };
   const gitEntry = async (path: string, rel: string, isDirectory: boolean, isFile: boolean): Promise<string | null> => {
     if (isDirectory) { if (!repositoryWritable) readOnly.add(path); return walkGit(path, 0); }
@@ -239,6 +243,6 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: true });
         return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view) } : { ok: false as const, reason: view.reason };
       };
-      return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: BUBBLEWRAP_POSTURE, notice: null, containment: 'sandbox', launch };
+      return { ok: true, realm: run(binary.path), marker: 'sandbox: bubblewrap', posture: bubblewrapPosture, notice: null, containment: 'sandbox', launch };
     } });
 }

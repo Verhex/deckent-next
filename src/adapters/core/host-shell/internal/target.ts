@@ -38,7 +38,7 @@ export class HostShellTarget implements EffectTarget {
   async apply(request: EffectApplyRequest) {
     const parsed = inputSchema.safeParse(request.input);
     if (!parsed.success) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
-    const selection = this.run.realm ?? { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: HOST_SHELL_POSTURE, containment: 'host' };
+    const selection = this.run.realm ?? { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: () => HOST_SHELL_POSTURE, containment: 'host' };
     if (!selection.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     if (selection.notice) this.run.onOutput('stderr', `${selection.notice}\n`);
     const result = await selection.realm.run({ command: parsed.data.command, cwd: this.cwd, timeoutMs: this.run.timeoutMs, extraEnv: this.run.extraEnv,

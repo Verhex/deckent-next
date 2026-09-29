@@ -53,6 +53,9 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     expect(await probeShellCapabilities(env)).toMatchObject({ bubblewrap: 'unknown', userNamespace: 'unavailable',
       landlock: { status: 'unknown', abi: null } });
   });
+  /** The default view most of this file's assertions care about: an owner-approved standart call (project and its write floor writable,
+   * `.git` read-only) — what the static text used to say unconditionally before it became call-derived. */
+  const OWNER_APPROVED_STANDART = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
   it('the C11 target independently rejects a refused realm before invoking the runner', async () => {
     const onOutput = vi.fn(), onResult = vi.fn();
     const target = new HostShellTarget('/tmp', { timeoutMs: 1000, extraEnv: [], signal: new AbortController().signal,
@@ -65,15 +68,18 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('host', capabilities)).toEqual({ ok: true, realm: hostShellRealm, marker: null, notice: null, posture: expect.stringContaining('not a sandbox'),
-      containment: 'host' });
+    const host = resolveShellRealm('host', capabilities);
+    expect(host).toEqual({ ok: true, realm: hostShellRealm, marker: null, notice: null, posture: expect.any(Function), containment: 'host' });
+    // Host has no write boundary: its posture ignores the view entirely (a call from any authority reads the same fixed text).
+    expect(host.ok && host.posture(OWNER_APPROVED_STANDART)).toContain('not a sandbox');
   });
   it('S9: takes sandbox providers in preference order, names why each was unusable in the visible fallback, and host mode never picks one', async () => {
     const capabilities = await probeShellCapabilities(linux(undefined, true));
     const realm = { kind: 'bubblewrap' as const, run: vi.fn() };
     const unusable = { kind: 'landlock' as const, usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
-    const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture: 'in a bubblewrap sandbox', notice: null, containment: 'sandbox' as const })) };
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture: 'in a bubblewrap sandbox',
+    const posture = () => 'in a bubblewrap sandbox';
+    const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture, notice: null, containment: 'sandbox' as const })) };
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture,
       containment: 'sandbox' });
     expect(resolveShellRealm('require-sandbox', capabilities, [usable])).toMatchObject({ ok: true, realm });
     expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: null, notice: null });
@@ -92,8 +98,9 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
       ? { ok: true, realm: { kind: 'bubblewrap' }, marker: 'sandbox: bubblewrap', notice: null, containment: 'sandbox' }
       : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', containment: 'sandbox' });
     const noBwrap = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 7, landlockErrno: 0 }, false));
-    expect(resolveShellRealm('require-sandbox', noBwrap, providers)).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null,
-      posture: expect.stringContaining('Landlock'), containment: 'sandbox' });
+    const landlockPicked = resolveShellRealm('require-sandbox', noBwrap, providers);
+    expect(landlockPicked).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null, containment: 'sandbox' });
+    expect(landlockPicked.ok && landlockPicked.posture(OWNER_APPROVED_STANDART)).toContain('Landlock');
     expect(resolveShellRealm('prefer-sandbox', await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 3, landlockErrno: 0 }, false)), providers))
       .toMatchObject({ realm: { kind: 'landlock' }, marker: 'sandbox: degraded', notice: expect.stringContaining('DEGRADED'), containment: 'degraded' });
     const neither = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: -1, landlockErrno: 38 }, false));

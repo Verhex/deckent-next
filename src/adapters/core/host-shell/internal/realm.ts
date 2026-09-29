@@ -3,16 +3,40 @@ import type { ShellCapabilities } from './probe.js';
 import { runHostShell } from './run.js';
 
 export const hostShellRealm: ShellRealm = Object.freeze({ kind: 'host', run: runHostShell });
-/** The approval card's line for a host run: what running there means. */
+/** The approval card's line for a host run: what running there means (no write derivation applies — the host is never a boundary). */
 export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).';
+/**
+ * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/
+ * `projectReadOnly` the effect enforces (composition's `shellWritePosture(authority, tier, fullAccessTurn)`), plus whether the turn's
+ * layout writes `.git` (and a worktree's common repository) — a full-access turn's layout only, and never under a read-only project.
+ * Both sandbox realms build their actual view from this struct (`repositoryWritable` replacing each realm's own inline copy) and the
+ * approval card describes it in words (`describeShellWritePosture`), so the boundary and its text can never drift apart.
+ */
+export interface ShellSandboxWriteView { readonly projectReadOnly: boolean; readonly writeFloorReadOnly: boolean; readonly repositoryWritable: boolean }
+export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWritable'>,
+  write: { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean }): ShellSandboxWriteView {
+  return { projectReadOnly: write.projectReadOnly, writeFloorReadOnly: write.writeFloorReadOnly,
+    repositoryWritable: layout.repositoryWritable === true && write.projectReadOnly !== true };
+}
+/**
+ * The write part of a sandbox realm's approval-card posture, in words, from `ShellSandboxWriteView` alone — never a second decision a
+ * realm could compute differently from the view it actually enforces. A realm's own text wraps this with its provider-specific
+ * remainder (ABI, HOME, network, …).
+ */
+export function describeShellWritePosture(view: ShellSandboxWriteView): string {
+  if (view.projectReadOnly) return 'the project is read-only, .git included';
+  const git = `.git ${view.repositoryWritable ? 'writable' : 'read-only'}`;
+  return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}` : `the project is writable, ${git}`;
+}
 /**
  * A chosen realm. `marker` leads the result's first line (`sandbox: bubblewrap | landlock | degraded | none`; null for the explicit
  * host mode, whose bytes are unchanged), `notice` is shown on the live stream and at the end of the result when the posture falls
- * short (host fallback, degraded Landlock), `posture` tells the approval card where the command runs (the notice included when
- * there is one).
+ * short (host fallback, degraded Landlock), `posture` renders the approval card's line for where the command runs from the call's
+ * actual write view (the notice included when there is one); a realm without a write boundary (host, no sandbox usable) ignores it.
  */
 export type ShellRealmResolution = { readonly ok: true; readonly realm: ShellRealm; readonly marker: string | null; readonly notice: string | null;
-  readonly posture: string; readonly containment: ShellRealmContainment } | { readonly ok: false; readonly code: 'SHELL_SANDBOX_UNAVAILABLE' | 'SHELL_REALM_UNSUPPORTED' };
+  readonly posture: (view: ShellSandboxWriteView) => string; readonly containment: ShellRealmContainment }
+  | { readonly ok: false; readonly code: 'SHELL_SANDBOX_UNAVAILABLE' | 'SHELL_REALM_UNSUPPORTED' };
 
 /** What a sandbox realm needs to lay out its view of the machine: the project scope (real root, deny floor, ignored names) and the
  * turn's scratch area (SCR-A); nothing about the command. */
@@ -34,8 +58,9 @@ export interface ShellSandboxLayout {
  * resolver below decides what an unusable mechanism means for the configured mode. */
 export interface ShellSandbox {
   readonly kind: Exclude<ShellRealm['kind'], 'host'>;
-  usable(capabilities: ShellCapabilities): { readonly ok: true; readonly realm: ShellRealm; readonly marker: string; readonly posture: string;
-    readonly notice: string | null; readonly containment: Exclude<ShellRealmContainment, 'host'>; readonly launch?: ShellSandboxLaunch }
+  usable(capabilities: ShellCapabilities): { readonly ok: true; readonly realm: ShellRealm; readonly marker: string;
+    readonly posture: (view: ShellSandboxWriteView) => string; readonly notice: string | null; readonly containment: Exclude<ShellRealmContainment, 'host'>;
+    readonly launch?: ShellSandboxLaunch }
     | { readonly ok: false; readonly reason: string };
 }
 /** A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
@@ -53,7 +78,7 @@ export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly Shell
  */
 export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapabilities, sandboxes: readonly ShellSandbox[] = []): ShellRealmResolution {
   if (capabilities.platform !== 'linux') return { ok: false, code: 'SHELL_REALM_UNSUPPORTED' };
-  if (mode === 'host') return { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: HOST_SHELL_POSTURE, containment: 'host' };
+  if (mode === 'host') return { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: () => HOST_SHELL_POSTURE, containment: 'host' };
   const reasons: string[] = [];
   for (const sandbox of sandboxes) {
     const usable = sandbox.usable(capabilities);
@@ -63,5 +88,6 @@ export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapab
   if (mode === 'require-sandbox') return { ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' };
   const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';
   const notice = `[deckent] sandbox: none; running on host (${why}). Files, processes and network are reachable.`;
-  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: notice, containment: 'host' };
+  // No sandbox ran: the host fallback has no write boundary either, so the card's text is the same fixed notice (never the write view).
+  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host' };
 }

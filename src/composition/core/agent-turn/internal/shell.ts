@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
-  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
+  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, sandboxWriteView, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -95,11 +95,18 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
     /** SHELL-AUTONOMY: the planned realm's containment and whether the command is contained (the decision's `shell` input). */
     containment(tool: string, args: Record<string, unknown>) { const planned = plans.get(key(tool, args)); return planned?.ok ? { realm: planned.realm.containment, contained: planned.contained } : undefined; },
-    /** The approval card: the exact command, its risk and why, and what running it means. */
+    /**
+     * The approval card: the exact command, its risk and why, and what running it means. A card is requested only when the decision
+     * needed one (`createAgentCallDecisions.authorize`, `require-approval`), and `.execute` then always runs that call as
+     * `owner-approved` (mode.ts) — never `full-access` or the unattended read-only posture, whatever the turn — so the text uses the
+     * same authority the effect will use; only `.git` still depends on the turn (MODES-3).
+     */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
       const planned = plans.get(key(tool, args));
       if (!planned?.ok) return undefined;
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.posture}`);
+      const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
+      const view = sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write);
+      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.posture(view)}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
