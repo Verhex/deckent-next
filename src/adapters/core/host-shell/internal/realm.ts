@@ -25,6 +25,28 @@ export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWri
     ...(write.writeSet && !write.projectReadOnly ? { writeSet: true } : {}) };
 }
 /**
+ * The write posture of sandboxed work no card approves call by call (Astra 2170 R1): the write floor's existing paths are read-only (the
+ * floor's matcher is required — a view without it is refused, fail closed), and the whole project is read-only (the scratch area and
+ * bubblewrap's private `/tmp` stay writable) unless the work is the shell's narrow mutating set, whose literal targets passed the write
+ * check. The one derivation of that posture: composition's `shellWritePosture` takes it for an unattended shell call, and a long-lived
+ * server takes it through `longLivedWritePosture`.
+ * SHELL-OVERLAY variant (`writeSet`: a full-auto relaxation in a realm that keeps writes aside, never the narrow set): instead of the
+ * read-only project the writes go to an overlay and are applied afterwards, each decided like an edit of its path; the floor's existing
+ * paths stay read-only in that view too.
+ */
+export function unattendedWritePosture(narrowMutating: boolean, writeSet = false): { readonly writeFloorReadOnly: true; readonly projectReadOnly: boolean;
+  readonly writeSet: boolean } {
+  if (writeSet && !narrowMutating) return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true };
+  return { writeFloorReadOnly: true, projectReadOnly: !narrowMutating, writeSet: false };
+}
+/**
+ * A long-lived sandboxed process (MCP-CLIENT: a local server over stdio; C5, owner 2026-09-29 option "project read-only" until
+ * SHELL-OVERLAY): third-party code whose writes no card approves and that has no narrow mutating set, so it gets the unattended
+ * posture with the whole project read-only — no name, existing or new, floor or not, appears in the project from it. Its sandbox view
+ * and every card that describes it read this, never a copy.
+ */
+export const longLivedWritePosture = () => unattendedWritePosture(false);
+/**
  * The write part of a sandbox realm's approval-card posture, in words, from `ShellSandboxWriteView` alone — never a second decision a
  * realm could compute differently from the view it actually enforces. A realm's own text wraps this with its provider-specific
  * remainder (ABI, HOME, network, …).
@@ -76,9 +98,12 @@ export interface ShellSandbox {
     | { readonly ok: false; readonly reason: string };
 }
 /** A mechanism that can also hold a long-lived process (MCP-CLIENT: a local MCP server over stdio) gives the launcher and its arguments for
- * the view resolved now; the caller appends `--`, the command and its arguments. Absent: the mechanism only runs one command at a time. */
+ * the view resolved now (always `longLivedWritePosture`); the caller appends `--`, the command and its arguments. `view` is the write view
+ * that launch enforces and `posture` the mechanism's words for it (the cards read these, never a fixed text). Absent: the mechanism only
+ * runs one command at a time. */
 export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>) =>
-  Promise<{ readonly ok: true; readonly file: string; readonly args: readonly string[] } | { readonly ok: false; readonly reason: string }>;
+  Promise<{ readonly ok: true; readonly file: string; readonly args: readonly string[]; readonly view: ShellSandboxWriteView; readonly posture: string }
+    | { readonly ok: false; readonly reason: string }>;
 /** Composition's (code-only) port: the providers a turn may pick, in preference order, built for the turn's layout. */
 export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly ShellSandbox[];
 

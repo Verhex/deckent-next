@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AgentToolOutcome } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
-import type { McpCallOutcome, McpClientPool, McpSendRefusal } from './pool.js';
+import { MCP_HOST_REALM_HINT, type McpCallOutcome, type McpClientPool, type McpSendRefusal } from './pool.js';
 
 export const MCP_TOOL_TARGET_KIND = 'mcp-tool';
 /** Core operation of one MCP tool call (MCP-CLIENT, owner 2026-09-28): the `mcp` namespace is Core's. An external process acts on the call
@@ -70,8 +70,19 @@ function contentText(item: Record<string, unknown>): string {
   }
   return `[${String(type)} content not shown]`;
 }
-/** The model's result of one MCP call: what happened, and the answer's text cut at `maxBytes` and passed through the secret-shape filter. */
-export function describeMcpResult(outcome: McpCallOutcome, display: string, maxBytes: number): AgentToolOutcome {
+/** Added to a failed answer of a server whose sandbox shows it the project read-only (C5): why a write there fails, and the owner's way out. */
+export const MCP_PROJECT_READ_ONLY_NOTE = `[deckent] this server runs in a sandbox where the project is read-only (.git included): a write to the project fails there by design; ${MCP_HOST_REALM_HINT}, which the owner sets and its card shows — change project files with the edit tools instead.`;
+/**
+ * The model's result of one MCP call: what happened, and the answer's text cut at `maxBytes` and passed through the secret-shape filter.
+ * `server.projectReadOnly` (the typed view the server was started with, never the answer's text): a failed answer carries
+ * `MCP_PROJECT_READ_ONLY_NOTE`, as a failed unattended shell run says the project was read-only.
+ */
+export function describeMcpResult(outcome: McpCallOutcome, display: string, maxBytes: number, server?: { readonly projectReadOnly: boolean }): AgentToolOutcome {
+  const described = describeMcpAnswer(outcome, display, maxBytes);
+  const answeredError = outcome.outcome === 'answered' && ('error' in outcome ? outcome.error.kind === 'server' : outcome.result.isError === true);
+  return server?.projectReadOnly === true && answeredError ? { ...described, text: `${described.text}\n${MCP_PROJECT_READ_ONLY_NOTE}` } : described;
+}
+function describeMcpAnswer(outcome: McpCallOutcome, display: string, maxBytes: number): AgentToolOutcome {
   const tag = `[deckent] ${display}:`;
   if (outcome.outcome === 'refused') return { status: 'error', text: `${tag} error=${outcome.reason}; nothing was sent` };
   if (outcome.outcome === 'unknown') return { status: 'error', text: `${tag} error=${outcome.reason}; the call was sent and its outcome is unknown; it is not sent again` };

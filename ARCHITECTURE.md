@@ -1281,10 +1281,15 @@ read-only rule and a floored directory's subtree is read-only (869c01f; before i
 the `.deckent/**` floor of a narrow unattended call and the full-access configuration file were writable under Landlock — bubblewrap
 held). MCP server starts — in a turn and from the CLI (trust, health, restart) — build the same layout with the write floor
 (`writeFloor` is required on `ShellSandboxLayout`); both realms refuse a read-only-floor request whose layout carries no matcher (fail
-closed, the server does not start). MCP server views keep this behavior in every mode (the approval floor carried; no repository
-write); MODES-3 defined no full-access MCP posture. The host realm has no OS boundary for any posture. Open (C5, PLAN SHELL-OVERLAY): a
-long-lived MCP server can still create a floor name that does not exist yet; a full boundary needs an overlay with a post-run apply
-step (bubblewrap ≥ 0.11 or a native userns overlay) — a new effect class, an owner decision.
+closed, the server does not start). MCP server views take the unattended posture with the whole project read-only (C5, owner 2026-09-29, until
+SHELL-OVERLAY): one derivation, host-shell `unattendedWritePosture(narrowMutating)` — composition's `shellWritePosture` takes it for
+unattended shell calls, `longLivedWritePosture()` (not narrow) for a long-lived server; the bubblewrap launch binds the project
+`--ro-bind`, keeps the floor's matcher required (fail closed) and returns the write view it enforces, from which the launch and tools
+cards say "the project is read-only, .git included" and that `realm: host` lets a server write. A sandboxed server therefore creates no
+name in the project, existing or new, floor or not (Astra 2177 R1 closed for bubblewrap); only a bound scratch area, bubblewrap's
+private `/tmp` and the empty HOME tmpfs are writable. The same in every mode; MODES-3 defined no full-access MCP posture. The host realm
+has no OS boundary for any posture. SHELL-OVERLAY (overlay + post-run apply, bubblewrap ≥ 0.11) is the permanent fix that lets sandboxed
+writes through review again.
 **Full access (MODES-3).** A turn is full access only when `chatTurn.fullAccess: true` (protocol v17) — set by the terminal launched with
 `deckent --full-access` / `deckent terminal --full-access` or by the person's stored start mode `full-access` — and only while a company
 grant allows `permission-mode`/`set` on id `full-access` (`fullAccessGrant`; the decision asks it on every call, so a grant revoked
@@ -1999,8 +2004,10 @@ carried by the registry view's launch settings, not part of the launch key) and 
 not held across the RPC (a 120 s call must not make `reset` fail with `CONFIG_WRITE_LOCKED`): a trust change completed before the check is always
 seen; a later change can race the actual send (the lock is released before `pool.call` → SDK `callTool` → send options → `stdin.write`); hand edits of
 `mcp.json` and the registry half of `remove` are caught only by the re-read. A revoked or changed server's process is retired from the service
-pool (at the refused call and at every turn start, `pool.retain`), so its next trusted use starts it after the cards. Open (C5, owner): a
-long-lived sandboxed MCP server can still create a new write-floor name in the project.
+pool (at the refused call and at every turn start, `pool.retain`), so its next trusted use starts it after the cards. A sandboxed server sees the
+project read-only (C5, above); a failed answer (`isError` or a server JSON-RPC error) of such a server carries `MCP_PROJECT_READ_ONLY_NOTE`,
+decided from the typed `projectReadOnly` on `McpServerOpen`/`McpOfferedTool`, never from the answer text; the launch card carries a posture
+line (`mcpRealmPosture`). Not yet: a typed diagnosis for a server that crashes at start while writing the project.
 
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io

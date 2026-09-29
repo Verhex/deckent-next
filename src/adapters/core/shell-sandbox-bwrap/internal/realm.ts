@@ -3,7 +3,7 @@ import { realpathSync, statSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
-import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
+import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
@@ -14,6 +14,10 @@ export const BUBBLEWRAP_KNOWN_PATHS: readonly string[] = Object.freeze(['/usr/bi
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
 export const bubblewrapPosture = (view: ShellSandboxWriteView): string => `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
+/** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
+ * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
+export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean): string => `bubblewrap (${describeShellWritePosture(view)}; `
+  + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; HOME and everything else hidden, no network; it ends with the service)`;
 /** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 /** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
@@ -279,10 +283,13 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
       if (!binary.ok) return { ok: false, reason: binary.reason };
       // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
-      // third-party code no card approves call by call, so its view keeps the write floor's existing paths read-only (SHELL-AUTONOMY, lead).
+      // third-party code no card approves call by call: its view is the unattended posture with the whole project read-only (C5, owner
+      // 2026-09-29, until SHELL-OVERLAY; `longLivedWritePosture`), the write floor's matcher still required (fail closed).
       const launch = async (environment: Readonly<Record<string, string | undefined>>) => {
-        const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: true });
-        return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view) } : { ok: false as const, reason: view.reason };
+        const write = sandboxWriteView(layout, longLivedWritePosture());
+        const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: write.writeFloorReadOnly, projectReadOnly: write.projectReadOnly });
+        return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null) }
+          : { ok: false as const, reason: view.reason };
       };
       const writeSets = bubblewrapHasOverlay(binary.path);
       return { ok: true, realm: run(binary.path, writeSets), marker: 'sandbox: bubblewrap', posture: bubblewrapPosture, notice: null, containment: 'sandbox', launch,

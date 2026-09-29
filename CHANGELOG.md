@@ -33,6 +33,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   `StandardSchemaV1`/`StandardJSONSchemaV1`/`StandardTypedV1` types and `isStandardSchemaV1`/`validateStandardSchemaSync`.
 - CHANGED (ANTHROPIC-PROFILE): the Anthropic profile accepts only the thinking modes, off type, effort levels and output bound the pinned
   model documents (registry dated 2026-09-29) and gains `effort` (`output_config.effort`); adapter `anthropic-messages-http` v2.
+- SECURITY (C5-MCP-RO, owner 2026-09-29): a sandboxed (bubblewrap) MCP server now sees the whole project read-only until SHELL-OVERLAY;
+  a server that must write the project needs `realm: host` in its registry entry — the launch and tools cards say so, and a failed answer
+  of such a server carries a note.
 - SECURITY (GIT-NET, owner 2026-09-29 P1): every local Git call of the patch adapter runs with `protocol.allow=never`,
   `GIT_ALLOW_PROTOCOL=''` and no lazy fetch, so a source repository's own configuration cannot re-open a transport; the workspace
   broker's pre-clone reads gain `GIT_NO_LAZY_FETCH=1`. `#adapters` gains

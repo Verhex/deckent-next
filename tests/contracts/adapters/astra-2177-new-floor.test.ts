@@ -1,12 +1,16 @@
+// Astra 2177 reviewer test (proof/ASTRA-2177-2026-09-29/review/tests/contracts/adapters/astra-2177-new-floor.test.ts), copied for C5. Owner
+// 2026-09-29 (C5: a sandboxed server sees the whole project read-only) changes three expectations of the original, and nothing else:
+// both `plain` results 'written' → 'EROFS', and `src/package.json` is not created (existsSync true → false; the original line only held
+// while the floor name was writable). Proof: C5-MCP-RO-2026-09-29/review.md.
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
+import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
   readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
-  type McpLiveTool, type McpTrustCard } from '#adapters/index.js';
+  type McpLiveTool } from '#adapters/index.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
 // and 2026-07-28 `server/discover`), the pinned tool list, bounded redacted results, timeouts and a bounded restart. Every server here is a
@@ -365,9 +369,8 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
   }, 60_000);
 });
 
-// SHELL-AUTONOMY (lead, merge with MCP-CLIENT) + C5 (owner 2026-09-29, until SHELL-OVERLAY): a server is third-party code no card approves
-// call by call, so its long-lived bubblewrap view has the unattended shell posture — the whole project read-only (the write floor's
-// paths too, existing and new), a bound scratch area and bubblewrap's private /tmp writable; on the host the same server writes.
+// SHELL-AUTONOMY (lead, merge with MCP-CLIENT): a server is third-party code no card approves call by call, so its long-lived bubblewrap view
+// keeps the write floor's existing paths read-only, while the rest of the project stays writable; on the host the same server writes.
 const WRITER_SERVER = `import { createInterface } from 'node:readline';
 import { appendFileSync } from 'node:fs';
 const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
@@ -380,41 +383,30 @@ createInterface({ input: process.stdin }).on('line', line => {
   else if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } });
 });
 `;
-describe.skipIf(!sandboxReady)('MCP client: the project in the server\'s bubblewrap view (SHELL-AUTONOMY, C5)', () => {
-  it('a sandboxed server writes no project name, existing or new (floor or not), only the scratch area and its private /tmp; the host realm writes', async () => {
+describe.skipIf(!sandboxReady)('MCP client: the write floor in the server\'s bubblewrap view (SHELL-AUTONOMY)', () => {
+  it('a sandboxed server cannot write the write floor (read-only bind) but writes elsewhere in the project; the host realm writes both', async () => {
     const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-floor-')); roots.push(root);
-    const home = join(root, 'home'), project = join(root, 'project'), scratch = join(root, 'scratch');
-    mkdirSync(home, { recursive: true }); mkdirSync(join(project, 'tools'), { recursive: true }); mkdirSync(join(project, 'src'), { recursive: true }); mkdirSync(scratch);
+    const home = join(root, 'home'), project = join(root, 'project');
+    mkdirSync(home, { recursive: true }); mkdirSync(join(project, 'tools'), { recursive: true }); mkdirSync(join(project, 'src'), { recursive: true });
     writeFileSync(join(project, 'tools', 'writer-mcp.mjs'), WRITER_SERVER); writeFileSync(join(project, 'package.json'), '{}\n'); writeFileSync(join(project, 'src', 'notes.txt'), '');
-    // A turn's MCP launch binds no scratch area (scratchDir: null); one is bound here to show the view keeps it writable when there is one.
-    const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: scratch, writeFloor: isWriteApprovalFloored })];
+    const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
     const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const tool = { name: 'write', description: 'Append to files', inputSchema: { type: 'object', properties: {} } };
-    let launches = 0;
-    const run = async (realm: 'require-sandbox' | 'host', floor = join(project, 'package.json'), plain = join(project, 'src', 'notes.txt')) => {
-      const server = { id: `writer-${realm === 'host' ? 'host' : 'caged'}-${++launches}`, command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'), floor, plain],
-        env: {}, realm, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
+    const run = async (realm: 'require-sandbox' | 'host', floor = join(project, 'package.json')) => {
+      const server = { id: `${realm === 'host' ? 'writer-host' : 'writer-caged'}-${floor.length}`, command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'),
+        floor, join(project, 'src', 'notes.txt')], env: {}, realm, tools: [{ ...pinOf(tool), alwaysAsk: false }] };
       const p = pool(), opened = await p.open(server, settings([server], { connectTimeoutMs: 20_000 }), { cwd: project, environment, sandboxes });
-      expect(opened).toMatchObject({ ok: true, sandboxed: realm !== 'host', projectReadOnly: realm !== 'host' });
-      // The tools card's posture comes from the view the server runs in: read-only project, and how to let a server write.
-      if (realm !== 'host') expect(opened.ok && opened.posture).toMatch(/the project is read-only, \.git included.*realm: host/su);
+      expect(opened).toMatchObject({ ok: true, sandboxed: realm !== 'host' });
       const answer = await p.call(server.id, 'write', pinOf(tool).digest, {}, { timeoutMs: 10_000, signal: new AbortController().signal });
       return JSON.parse(((answer as { result: { content: { text: string }[] } }).result.content[0]!).text) as { floor: string; plain: string };
     };
     expect(await run('require-sandbox')).toEqual({ floor: 'EROFS', plain: 'EROFS' });
     expect(readFileSync(join(project, 'package.json'), 'utf8')).toBe('{}\n');
-    expect(readFileSync(join(project, 'src', 'notes.txt'), 'utf8')).toBe('');
 
-    // C5 closed (Astra 2177 R1): a floor name that does not exist yet is not created, nor is any other new name.
-    expect(await run('require-sandbox', join(project, 'src', 'package.json'), join(project, 'src', 'new.txt'))).toEqual({ floor: 'EROFS', plain: 'EROFS' });
+    // Measured residual (Astra 2170, overlay checkpoint): a long-lived server keeps the project writable, so a floor name that does not exist
+    // yet can still be created by it — only the existing floor paths are read-only in its view.
+    expect(await run('require-sandbox', join(project, 'src', 'package.json'))).toEqual({ floor: 'EROFS', plain: 'EROFS' });
     expect(existsSync(join(project, 'src', 'package.json'))).toBe(false);
-    expect(existsSync(join(project, 'src', 'new.txt'))).toBe(false);
-    // What stays writable: the bound scratch area, and bubblewrap's private /tmp (a tmpfs: nothing reaches the host's /tmp).
-    const privateTmp = join('/tmp', `deckent-mcp-private-${process.pid}-${Date.now()}`);
-    expect(await run('require-sandbox', privateTmp, join(scratch, 'out.txt'))).toEqual({ floor: 'written', plain: 'written' });
-    expect(readFileSync(join(scratch, 'out.txt'), 'utf8')).toBe('x\n');
-    expect(existsSync(privateTmp)).toBe(false);
-    // Control: the host realm (explicit, on the card) writes both.
     expect(await run('host')).toEqual({ floor: 'written', plain: 'written' });
     // Fail closed (Astra 2170 R2): a server view built without the write floor does not start at all.
     const bare = { id: 'writer-bare', command: process.execPath, args: [join(project, 'tools', 'writer-mcp.mjs'), join(project, 'package.json'), join(project, 'src', 'notes.txt')],
@@ -424,38 +416,6 @@ describe.skipIf(!sandboxReady)('MCP client: the project in the server\'s bubblew
       sandboxes: [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: null })] })).toMatchObject({ ok: false });
     expect(readFileSync(join(project, 'package.json'), 'utf8')).toBe('{}\n');
   }, 60_000);
-});
-
-// C5 (owner 2026-09-29): the cards and a failed answer say the project is read-only for a sandboxed server, and how to let one write.
-describe('MCP client: the read-only project on the cards and in a failed answer (C5)', () => {
-  it('the launch card states each realm\'s write meaning before anything starts', async () => {
-    const cards: McpTrustCard[] = [];
-    const context = { environment: {}, secret: async () => undefined, cwd: tmpdir(), sandboxes: [], principal: { issuer: 'test', subject: '1' },
-      audit: async () => undefined, directory: async () => tmpdir() };
-    for (const realm of ['prefer-sandbox', 'require-sandbox', 'host'] as const) {
-      expect(await decideMcpTrust({ name: 'fx', scope: 'project', file: 'mcp.json', definitionDigest: 'a'.repeat(64), entry: { command: 'node', realm }, trust: null },
-        context, async card => { cards.push(card); return null; })).toMatchObject({ decision: 'unanswered' });
-    }
-    const [prefer, require, host] = cards.map(describeMcpTrustCard);
-    for (const text of [prefer, require]) expect(text).toMatch(/the project is read-only, \.git included; a server that must write the project needs `realm: host`/u);
-    expect(prefer).toContain('else on the host'); expect(require).toContain('sandbox required');
-    expect(host).toContain('realm: host — host: runs on this machine as your user'); expect(host).not.toContain('read-only');
-  });
-  it('a failed answer of a read-only-project server carries the note (decided from its typed view, never from the answer); nothing else does', () => {
-    const failed = { outcome: 'answered' as const, result: { content: [{ type: 'text' as const, text: 'EROFS' }], isError: true } };
-    const serverError = { outcome: 'answered' as const, error: { code: -32000, message: 'write failed', kind: 'server' as const } };
-    const ok = { outcome: 'answered' as const, result: { content: [{ type: 'text' as const, text: 'EROFS: read-only file system' }] } };
-    const caged = { projectReadOnly: true }, host = { projectReadOnly: false };
-    for (const outcome of [failed, serverError]) {
-      expect(describeMcpResult(outcome, 'mcp:fx/w', 4_096, caged).text).toContain('[deckent] this server runs in a sandbox where the project is read-only');
-      expect(describeMcpResult(outcome, 'mcp:fx/w', 4_096, caged).text).toContain('`realm: host`');
-      expect(describeMcpResult(outcome, 'mcp:fx/w', 4_096, host).text).not.toContain('read-only');
-      expect(describeMcpResult(outcome, 'mcp:fx/w', 4_096).text).not.toContain('read-only');
-    }
-    expect(describeMcpResult(ok, 'mcp:fx/w', 4_096, caged).text).not.toContain('[deckent] this server runs in a sandbox');
-    expect(describeMcpResult({ outcome: 'refused', reason: 'pin-mismatch' }, 'mcp:fx/w', 4_096, caged).text).not.toContain('read-only');
-    expect(describeMcpResult({ outcome: 'unknown', reason: 'timed-out' }, 'mcp:fx/w', 4_096, caged).text).not.toContain('read-only');
-  });
 });
 
 // Scoped registry files (owner 2026-09-28): servers live outside configuration, trust and pins in product state.

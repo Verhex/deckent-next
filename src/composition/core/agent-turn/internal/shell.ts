@@ -6,7 +6,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { SystemTrustedClock } from '#platform/index.js';
 import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
   HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, describeSandboxWriteSet, prepareSandboxWriteSetDirectory,
-  removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
+  removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, unattendedWritePosture, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -42,15 +42,16 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' 
  * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
  *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
  *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
+ * The unattended rule itself is `unattendedWritePosture` (host-shell), which a long-lived MCP server's view also takes (C5); its `writeSet`
+ * variant is SHELL-OVERLAY's full-auto posture (the project's writes kept aside and applied like edits).
  */
 export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean,
   writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean } {
   if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false };
   if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false };
-  // SHELL-OVERLAY (design §2): only a full-auto relaxation of a command past the narrow set gets a write set, and only in a realm that can
-  // keep writes aside; everything else keeps the Astra 2170 postures (a full-access turn's unattended call stays read-only).
-  if (authority === 'full-auto' && writeSets && tier !== 'narrow-mutating' && !fullAccessTurn) return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true };
-  return { writeFloorReadOnly: true, projectReadOnly: tier !== 'narrow-mutating' || fullAccessTurn, writeSet: false };
+  // Everything else is the one unattended derivation (host-shell, shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
+  // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
+  return unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn, authority === 'full-auto' && writeSets && !fullAccessTurn);
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
