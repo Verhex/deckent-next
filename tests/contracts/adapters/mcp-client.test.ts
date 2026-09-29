@@ -143,37 +143,101 @@ describe('MCP client: calls, bounds and failures', () => {
 });
 
 // MCP-VALIDATOR (owner 2026-09-29, "fast-uri hemen düzenlensin"): the SDK's Node default validator is its bundled ajv 8.18 + fast-uri 3.1.0
-// (8 HIGH advisories, fixed in 3.1.7; overrides cannot reach a bundle). A server's `outputSchema` is untrusted: the pool lists with
-// `cacheMode: 'bypass'`, so the SDK compiles it only when a modern server answers `tools/call` with HEADER_MISMATCH (-32020) — the SDK then
-// re-lists (`refresh`) and compiles every listed outputSchema. That compile must run on the interpreter validator (@cfworker/json-schema,
-// the SDK's own `validators/cf-worker`), never on ajv. The spies patch the prototypes of the very modules the SDK loads (Node's module
-// cache; the SDK is external to vitest), and the positive control (cf-worker ≥ 1) proves the path was exercised, so ajv = 0 means something.
+// (8 HIGH advisories, fixed in 3.1.7; overrides cannot reach a bundle). A server's `outputSchema` is untrusted: every compile must run on the
+// interpreter validator (@cfworker/json-schema, the SDK's own `validators/cf-worker`), never on ajv. Since MCP-PIN-DEF the pool compiles the
+// pinned outputSchema itself before sending and passes the pinned definition to every `callTool` (the SDK compiles it again, in isolation).
+// The spies patch the prototypes of the very modules the SDK loads (Node's module cache; the SDK is external to vitest), and the positive
+// control (cf-worker ≥ 1) proves the path was exercised, so ajv = 0 means something.
+async function withValidatorSpies(body: (seen: { ajv: number; cfWorker: number }) => Promise<void>) {
+  const { DefaultJsonSchemaValidator } = await import('@modelcontextprotocol/client/_shims');
+  const { CfWorkerJsonSchemaValidator } = await import('@modelcontextprotocol/client/validators/cf-worker');
+  const seen = { ajv: 0, cfWorker: 0 };
+  const ajvCompile = DefaultJsonSchemaValidator.prototype.getValidator, cfCompile = CfWorkerJsonSchemaValidator.prototype.getValidator;
+  DefaultJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof DefaultJsonSchemaValidator>, ...args) { seen.ajv++; return ajvCompile.apply(this, args); };
+  CfWorkerJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof CfWorkerJsonSchemaValidator>, ...args) { seen.cfWorker++; return cfCompile.apply(this, args); };
+  try { await body(seen); }
+  finally { DefaultJsonSchemaValidator.prototype.getValidator = ajvCompile; CfWorkerJsonSchemaValidator.prototype.getValidator = cfCompile; }
+}
+const callsOf = (f: ReturnType<typeof fixture>) => f.events().filter(event => event.event === 'call');
+const listsOf = (f: ReturnType<typeof fixture>) => f.events().filter(event => event.event === 'list');
 describe('MCP client: a server-supplied outputSchema never reaches the bundled ajv/fast-uri', () => {
-  // A plain schema compiles on cf-worker (the server's -32020 answer comes back); a `$id` built for fast-uri's host confusion
-  // (GHSA-v39h-62p7-jpjc: `%40` becomes `@`) is refused by cf-worker's WHATWG URL resolution: the SDK reports an invalid outputSchema and
-  // does not send the call again (ajv accepted the same schema and re-sent it). The plain case is sent twice: that re-send is the SDK's own
-  // SEP-2243 recovery, outside the pool's "never sent again" rule — recorded as an open lead checkpoint (MCP-VALIDATOR review), not endorsed.
+  // A plain schema compiles on cf-worker and the call is sent once (the server's -32020 answer is the typed header-mismatch error: before
+  // MCP-PIN-DEF the SDK re-listed and re-sent it, 2 calls). A `$id` built for fast-uri's host confusion (GHSA-v39h-62p7-jpjc: `%40` becomes
+  // `@`) is refused by cf-worker's WHATWG URL resolution: the pinned definition cannot be validated, so nothing is sent (ajv accepted it).
   it.each([
-    ['a plain outputSchema', { type: 'object', properties: { id: { type: 'string', format: 'uri' } } }, { code: -32020 }, 2],
+    ['a plain outputSchema', { type: 'object', properties: { id: { type: 'string', format: 'uri' } } },
+      { outcome: 'answered', error: { code: -32020, kind: 'header-mismatch' } }, 1],
     ['a host-confusion $id', { type: 'object', $defs: { remote: { $id: 'http://trusted.example%40evil.example/s', type: 'string' } } },
-      { code: -32602, message: expect.stringContaining("Tool 'hm' has an invalid outputSchema") }, 1],
-  ] as const)('the HEADER_MISMATCH re-list compiles %s with the cf-worker validator, never ajv', async (_label, outputSchema, error, calls) => {
-    const { DefaultJsonSchemaValidator } = await import('@modelcontextprotocol/client/_shims');
-    const { CfWorkerJsonSchemaValidator } = await import('@modelcontextprotocol/client/validators/cf-worker');
-    const seen = { ajv: 0, cfWorker: 0 };
-    const ajvCompile = DefaultJsonSchemaValidator.prototype.getValidator, cfCompile = CfWorkerJsonSchemaValidator.prototype.getValidator;
-    DefaultJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof DefaultJsonSchemaValidator>, ...args) { seen.ajv++; return ajvCompile.apply(this, args); };
-    CfWorkerJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof CfWorkerJsonSchemaValidator>, ...args) { seen.cfWorker++; return cfCompile.apply(this, args); };
-    try {
-      const mismatch = tool('hm', 'header-mismatch', { outputSchema });
-      const f = fixture('dual', [echo, mismatch]), server = f.server([echo, mismatch].map(pinOf)), p = pool();
-      expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true, era: 'modern' });
-      expect(await p.call('fx', 'hm', pinOf(mismatch).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal })).toMatchObject({ outcome: 'answered', error });
-      expect(seen).toEqual({ ajv: 0, cfWorker: 1 });
-      expect(f.events().filter(event => event.event === 'call')).toHaveLength(calls);
-    } finally {
-      DefaultJsonSchemaValidator.prototype.getValidator = ajvCompile; CfWorkerJsonSchemaValidator.prototype.getValidator = cfCompile;
-    }
+      { outcome: 'refused', reason: 'invalid-output-schema' }, 0],
+  ] as const)('the pinned %s is compiled with the cf-worker validator, never ajv', async (_label, outputSchema, outcome, calls) => withValidatorSpies(async seen => {
+    const mismatch = tool('hm', 'header-mismatch', { outputSchema });
+    const f = fixture('dual', [echo, mismatch]), server = f.server([echo, mismatch].map(pinOf)), p = pool();
+    expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true, era: 'modern' });
+    expect(await p.call('fx', 'hm', pinOf(mismatch).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal })).toMatchObject(outcome);
+    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBeGreaterThanOrEqual(1);
+    expect(callsOf(f)).toHaveLength(calls);
+  }), 30_000);
+});
+
+// MCP-PIN-DEF (Jev 12e80d38, lead 2026-09-29): the pin is the single truth of a tool's shape. Every `tools/call` carries the pinned definition
+// (`toolDefinition`, SDK ≥ 2.2): the SDK neither consults its cache nor re-lists, so a HEADER_MISMATCH (-32020) is never re-sent (C11), and
+// structuredContent is validated against the pinned outputSchema (spec: clients SHOULD validate). A result that does not conform — or is
+// missing where an outputSchema is declared — was answered by the server (its effect may have happened): it is an answered -32602 error,
+// recorded once and never retried. What reached the server is read from its own log.
+describe('MCP client: every call carries the pinned tool definition', () => {
+  const signal = () => new AbortController().signal;
+  const idSchema = { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] };
+
+  it('HEADER_MISMATCH (-32020) is a typed answered error: sent exactly once, no re-list, never re-sent', async () => {
+    const hm = tool('hm', 'header-mismatch', { outputSchema: idSchema });
+    const f = fixture('dual', [echo, hm]), server = f.server([echo, hm].map(pinOf)), p = pool();
+    expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true, era: 'modern' });
+    const lists = listsOf(f).length, outcome = await p.call('fx', 'hm', pinOf(hm).digest, {}, { timeoutMs: 5_000, signal: signal() });
+    expect(outcome).toEqual({ outcome: 'answered', error: { code: -32020, message: expect.stringContaining('fixture: header mismatch'), kind: 'header-mismatch' } });
+    expect(callsOf(f)).toHaveLength(1);
+    expect(listsOf(f)).toHaveLength(lists);
+    const text = describeMcpResult(outcome, 'mcp:fx/hm', 4_096);
+    expect(text).toMatchObject({ status: 'error' });
+    expect(text.text).toContain('error=header-mismatch -32020'); expect(text.text).toContain('it is not sent again');
+  }, 30_000);
+
+  it('a structured result that conforms to the pinned outputSchema passes (validated on cf-worker, not ajv)', async () => withValidatorSpies(async seen => {
+    const ok = tool('st', 'structured', { outputSchema: idSchema, structured: { id: 'a-1' } } as Partial<McpLiveTool>);
+    const f = fixture('dual', [ok]), server = f.server([ok].map(pinOf)), p = pool();
+    await p.open(server, settings([server]), context(f.root));
+    const outcome = await p.call('fx', 'st', pinOf(ok).digest, {}, { timeoutMs: 5_000, signal: signal() });
+    expect(outcome).toMatchObject({ outcome: 'answered', result: { structuredContent: { id: 'a-1' } } });
+    expect(describeMcpResult(outcome, 'mcp:fx/st', 4_096)).toMatchObject({ status: 'ok' });
+    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBeGreaterThanOrEqual(1);
+    expect(callsOf(f)).toHaveLength(1);
+  }), 30_000);
+
+  it.each([
+    ['does not conform to', tool('st', 'structured', { outputSchema: idSchema, structured: { id: 5 } } as Partial<McpLiveTool>), 'does not match'],
+    ['is missing although the tool declares', tool('st', 'echo', { outputSchema: idSchema }), 'did not return structured content'],
+  ] as const)('a structured result that %s the pinned outputSchema is an answered -32602 error, sent once, never retried', async (_label, live, message) => {
+    const f = fixture('dual', [live]), server = f.server([live].map(pinOf)), p = pool();
+    await p.open(server, settings([server]), context(f.root));
+    const outcome = await p.call('fx', 'st', pinOf(live).digest, {}, { timeoutMs: 5_000, signal: signal() });
+    expect(outcome).toEqual({ outcome: 'answered', error: { code: -32602, message: expect.stringContaining(message), kind: 'output-schema' } });
+    expect(callsOf(f)).toHaveLength(1);
+    const text = describeMcpResult(outcome, 'mcp:fx/st', 4_096);
+    expect(text).toMatchObject({ status: 'error' });
+    expect(text.text).toContain('error=invalid-structured-result -32602'); expect(text.text).toContain('its effect may have happened');
+  }, 30_000);
+
+  it('a live list that differs from the pin never lends its definition to a call (validated against the pin; the drift is refused on the next open)', async () => {
+    const pinned = tool('st', 'structured', { outputSchema: idSchema, structured: { id: 'a-1' } } as Partial<McpLiveTool>);
+    const f = fixture('dual', [pinned]), server = f.server([pinned].map(pinOf)), p = pool(), all = settings([server]);
+    await p.open(server, all, context(f.root));
+    // The server now lists another outputSchema and returns what conforms to it (not to the pin); no open happens in between.
+    f.setTools([{ ...pinned, outputSchema: { type: 'object', properties: { count: { type: 'number' } }, required: ['count'] }, structured: { count: 1 } }]);
+    const lists = listsOf(f).length, outcome = await p.call('fx', 'st', pinOf(pinned).digest, {}, { timeoutMs: 5_000, signal: signal() });
+    expect(outcome).toMatchObject({ outcome: 'answered', error: { code: -32602, kind: 'output-schema' } });
+    expect(listsOf(f)).toHaveLength(lists);
+    expect(await p.open(server, all, context(f.root))).toMatchObject({ ok: true, tools: [{ name: 'st', status: 'drifted' }] });
+    expect(await p.call('fx', 'st', pinOf(pinned).digest, {}, { timeoutMs: 5_000, signal: signal() })).toMatchObject({ outcome: 'refused', reason: 'pin-mismatch' });
+    expect(callsOf(f)).toHaveLength(1);
   }, 30_000);
 });
 
