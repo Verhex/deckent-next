@@ -1,42 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdir, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, relative } from 'node:path';
 import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
-import { normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, SystemTrustedClock,
-  type ProductLayout } from '#platform/index.js';
+import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
 import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isWriteApprovalFloored, openSqliteAttemptStore, removeEmptyWorkspaceDirectory,
   removeSandboxWriteSetDirectory, scanSandboxWriteSet, writablePath, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
   type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-
-/**
- * Where a call's write-set directories may live (SHELL-OVERLAY design §0.1, §3): the project data root's `fileEffects`, then the global state
- * root's — the first private one whose real path neither holds nor sits inside the project (overlay layers may not nest). None → no write set.
- */
-export async function sandboxWriteSetRoot(projectRoot: string, layout: ProductLayout, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
-  const project = await realpath(projectRoot);
-  const outside = (path: string) => { const down = relative(project, path), up = relative(path, project);
-    return down !== '' && (down.startsWith('..') || isAbsolute(down)) && (up.startsWith('..') || isAbsolute(up)); };
-  const candidates: (() => Promise<string>)[] = [
-    async () => join(await prepareProductDirectory(layout, 'fileEffects'), 'sandbox-writes'),
-    async () => {
-      const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, environment), environment).stateDir;
-      return join(productResourcePath(resolveProductLayout({ projectRoot: global, root: global }), 'fileEffects'), 'sandbox-writes', sha256(project).slice(0, 16));
-    },
-  ];
-  for (const candidate of candidates) {
-    try {
-      const path = await candidate();
-      await mkdir(path, { recursive: true, mode: 0o700 });
-      const real = await realpath(path), info = await stat(real);
-      if (real === path && info.isDirectory() && (info.mode & 0o077) === 0 && info.uid === process.getuid!() && outside(real)) return real;
-    } catch { /* the next candidate */ }
-  }
-  return null;
-}
 
 /**
  * Settles one finished call's write set (design §5–§6): scan, then every entry through the edit path rules (`writablePath` → denied; the

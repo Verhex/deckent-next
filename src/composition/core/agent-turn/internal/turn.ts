@@ -12,10 +12,9 @@ import { createGlobMatcher, createWorkspaceReadTools, DEFAULT_WORKSPACE_READ_DEN
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   bubblewrapShellSandbox, isWriteApprovalFloored, landlockShellSandbox, MCP_PROJECT_REGISTRY_PATH, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
-  type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
+  sandboxWriteSetRoot, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { dropFullPreview, keepFullPreview } from './preview.js';
 import { createAgentShell } from './shell.js';
-import { sandboxWriteSetRoot } from './sandbox-writes.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';

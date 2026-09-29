@@ -1,0 +1,49 @@
+import type { Environment } from '#platform/index.js';
+
+/**
+ * SecretStore port v1 (SECRET-K1, keyring design option B). A backend keeps named secrets for one installation user; config holds only
+ * `$DECK:NAME` references and every credential read resolves through the backend the installation selected. Contract for every backend:
+ * - a value never appears in an error (message, params, cause), a log line, an audit record or a listing — only names do;
+ * - refusals are typed `SECRET_*` codes (`SecretStoreErrorCode`), thrown as platform `DeckentError`s;
+ * - `get` of an absent name is `undefined`, never a fallback to another backend;
+ * - a backend that cannot write or enumerate says so in its descriptor and refuses with `SECRET_STORE_READ_ONLY` / `SECRET_STORE_UNSUPPORTED`.
+ * The port bumps only on an incompatible change of this interface.
+ */
+export const SECRET_STORE_PORT_VERSION = 1;
+/** The `$DECK:NAME` reference grammar with a bound; `__proto__`-like names cannot match (upper case only). */
+export const SECRET_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,127}$/;
+export const SECRET_VALUE_MAX_BYTES = 65_536;
+/** `<namespace>.secret-store.<name>@<version>`; Core owns the `core` namespace. */
+export const SECRET_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/;
+export type SecretStoreErrorCode = 'SECRET_NAME_INVALID' | 'SECRET_VALUE_INVALID' | 'SECRET_STORE_UNKNOWN' | 'SECRET_STORE_UNAVAILABLE'
+  | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED';
+
+export interface SecretStoreDescriptor {
+  /** The registry id this store was opened under (the audit names the backend by it). */
+  readonly id: string;
+  readonly writable: boolean;
+  readonly enumerable: boolean;
+}
+/** A non-throwing health view for `doctor`: whether the store could be read now, and the typed reason when not. */
+export interface SecretStoreInspection {
+  readonly status: 'ready' | 'unavailable' | 'unsafe' | 'corrupt';
+  readonly code: SecretStoreErrorCode | null;
+}
+export interface SecretStore {
+  readonly descriptor: SecretStoreDescriptor;
+  get(name: string): Promise<string | undefined>;
+  set(name: string, value: string): Promise<void>;
+  /** True when a stored secret was removed, false when none existed. */
+  delete(name: string): Promise<boolean>;
+  /** Sorted names; never values. */
+  listNames(): Promise<readonly string[]>;
+  inspect(): Promise<SecretStoreInspection>;
+}
+/** What a backend is opened with: the caller's environment and platform, and the installation (global) root when one resolves. */
+export interface SecretStoreContext { readonly env: Environment; readonly platform: string; readonly root: string | null }
+/** One registered backend. `create` must not touch the store (opening is lazy); the store it returns must carry this `id`. */
+export interface SecretStoreFactory { readonly id: string; create(context: SecretStoreContext): SecretStore }
+
+export const isSecretName = (name: unknown): name is string => typeof name === 'string' && SECRET_NAME_PATTERN.test(name);
+export const isSecretValue = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+  && Buffer.byteLength(value, 'utf8') <= SECRET_VALUE_MAX_BYTES;

@@ -19,7 +19,6 @@ import nativetr from '../locales/tr/native.json' with { type: 'json' };
 import desktoptr from '../locales/tr/desktop.json' with { type: 'json' };
 import misctr from '../locales/tr/misc.json' with { type: 'json' };
 
-export type MessageKey = keyof typeof clien | keyof typeof tuien | keyof typeof runen | keyof typeof opsen | keyof typeof surfaceen | keyof typeof governanceen | keyof typeof remoteen | keyof typeof nativeen | keyof typeof desktopen | keyof typeof miscen;
 export const families = [
   { en: clien, tr: clitr },
   { en: tuien, tr: tuitr },
@@ -32,3 +31,8 @@ export const families = [
   { en: desktopen, tr: desktoptr },
   { en: miscen, tr: misctr },
 ] as const;
+
+// Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a
+// consumer's type checker would refuse without resolveJsonModule (TS2732) or, under NodeNext, without an import attribute tsc does not emit (TS1543).
+type FamilyKeys<F> = F extends { readonly en: infer E } ? keyof E : never;
+export type MessageKey = FamilyKeys<(typeof families)[number]>;

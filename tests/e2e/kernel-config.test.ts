@@ -50,12 +50,15 @@ describe('K1 real binary journeys', () => {
     const f = await fixture('project-override');
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'principal', 'schemaVersion', 'scope', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'principal', 'schemaVersion', 'scope', 'secretStore', 'status']);
+    // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
+    expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null });
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
     expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' })).stdout).toContain('Önerilen worker');
     expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Bellek:');
+    expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');

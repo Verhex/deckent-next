@@ -118,7 +118,11 @@
         "src/platform/core/config",
         "src/adapters/core/scratch-store",
         "src/adapters/core/http-fetch",
-        "src/adapters/core/mcp-client"
+        "src/adapters/core/mcp-client",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/engine/core/secret-store",
+        "src/adapters/core/secret-store"
       ],
       "plan": "PROVIDERS"
     },
@@ -241,7 +245,8 @@
         "src/composition/core/runs",
         "src/composition/core/model-invocation",
         "src/composition/core/agent-turn",
-        "src/composition/core/approvals"
+        "src/composition/core/approvals",
+        "src/composition/core/secrets"
       ],
       "plan": "SURFACES"
     },
@@ -1377,7 +1382,10 @@
     "src/adapters/core/host-shell": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/shell-classification",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
       ],
       "plan": "SURFACES"
     },
@@ -1755,6 +1763,34 @@
         "src/engine/core/provider-spend"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/engine/core/secret-store": {
+      "dependencies": [
+        "src/domain/core/adapter-registry",
+        "src/domain/core/audit",
+        "src/platform/core/errors",
+        "src/platform/core/host"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/adapters/core/secret-store": {
+      "dependencies": [
+        "src/engine/core/secret-store",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/utils",
+        "src/platform/core/host"
+      ],
+      "plan": "SECURITY"
+    },
+    "src/composition/core/secrets": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/engine/core/secret-store",
+        "src/platform/core/config",
+        "src/platform/core/identity"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {

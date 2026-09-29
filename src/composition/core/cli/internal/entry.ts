@@ -23,6 +23,7 @@ import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/pr
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredSecretStore, listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 
 /** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -48,6 +49,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
     runMcpCommand: runConfiguredMcpCommand,
+    // SECRET-K1: doctor's secret store line and `secret list` (names only).
+    inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames,
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,

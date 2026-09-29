@@ -249,6 +249,16 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
   POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
   POLICY_ADMINISTER_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_ADMINISTER_UNSUPPORTED', p, l) }) },
+  // SECRET-K1: typed refusals of the SecretStore port (engine) and its backends. No parameter or cause ever carries a secret value or store
+  // content; the texts interpolate only {backend}, {path} (the store directory) and {name}.
+  SECRET_NAME_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_NAME_INVALID', p, l) }) },
+  SECRET_VALUE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_VALUE_INVALID', p, l) }) },
+  SECRET_STORE_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.SECRET_STORE_UNKNOWN', p, l) }) },
+  SECRET_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_UNAVAILABLE', p, l) }) },
+  SECRET_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_UNSAFE', p, l) }) },
+  SECRET_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_CORRUPT', p, l) }) },
+  SECRET_STORE_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_READ_ONLY', p, l) }) },
+  SECRET_STORE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },

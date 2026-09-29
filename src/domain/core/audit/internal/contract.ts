@@ -52,6 +52,13 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('mcp-trust'), action: z.enum(['trust', 'decline', 'reset', 'revoke', 'reconnect']), scope: z.enum(MCP_REGISTRY_SCOPES),
     server: z.string().regex(/^[a-z][a-z0-9]{0,15}$/), definitionDigest: digest, toolsDigest: digest.nullable() }).strict(),
+  /**
+   * A change of one stored secret (SECRET-K1): set or delete, the secret's name (the `$DECK:NAME` grammar) and the backend that holds it
+   * (`<namespace>.secret-store.<name>@<version>`), recorded before the store is written — no event, no change. The value, its digest or
+   * length are never part of the record (a digest of a low-entropy secret would be guessable).
+   */
+  z.object({ kind: z.literal('secret-change'), action: z.enum(['set', 'delete']), name: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/),
+    backend: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/) }).strict(),
   z.object({ kind: z.literal('permission-mode-change'), requested: permissionMode, previous: permissionMode,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict(),

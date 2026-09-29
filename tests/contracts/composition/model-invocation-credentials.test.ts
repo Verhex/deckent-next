@@ -141,3 +141,23 @@ it.each(['missing', 'backend-error'] as const)('keeps %s secret resolution failu
   expect(f.metadataHeaders).toEqual([undefined]);
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
 });
+
+it('SECRET-K1: with the file backend selected, the provider credential comes from the store, reaches the provider, and stays out of the ledger', async () => {
+  const f = await fixture();
+  const { resolveGlobalConfigPaths } = await import('#platform/index.js');
+  const { createFileSecretStore } = await import('#adapters/index.js');
+  const { dirname } = await import('node:path');
+  const globalPath = resolveGlobalConfigPaths(f.env).platformPath, globalRoot = dirname(globalPath);
+  await mkdir(globalRoot, { recursive: true, mode: 0o700 });
+  await writeFile(globalPath, JSON.stringify({ secrets: { store: 'core.secret-store.file@1' } }), { mode: 0o600 });
+  await createFileSecretStore({ root: globalRoot, platform: 'linux' }).set('FIXTURE_PROVIDER_TOKEN', secret);
+  clearConfigCache();
+  // The environment holds a different value under the same name: an explicit file selection never falls back to it.
+  const env = { ...f.env, FIXTURE_PROVIDER_TOKEN: 'environment-must-not-be-sent' };
+  const result = await invokeConfiguredModel(f.project, f.command('from-file'), { env });
+  expect(result.receipt.outcome).toMatchObject({ state: 'responded' });
+  expect(f.headers).toEqual([`Bearer ${secret}`]);
+  expect(JSON.stringify(result)).not.toContain(secret);
+  expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
+  expect(await readFile(globalPath, 'utf8')).not.toContain(secret);
+});

@@ -3,11 +3,11 @@ import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type Ag
 import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
-import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
+import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createAgentFileEdits } from './edits.js';
-import type { createAgentShell, ShellCallAuthority } from './shell.js';
+import type { createAgentShell } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
 import type { createAgentMcp } from './mcp.js';

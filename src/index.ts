@@ -1,4 +1,27 @@
-export * from '#platform/index.js';
+// Platform part of the SDK: an explicit list (DEPS-TYPES, owner 2026-09-29, DEPS-SCHEMA C2-b). Live zod schema objects (CORE_SCHEMA, the storage and
+// execution settings, bootstrapJournalSchema) stay Core-internal; the data types derived from them are exported. Inventory: tests/contracts/composition/sdk-public-exports.json.
+export { PACKAGE_NAME, PACKAGE_VERSION, resolveLocale, t, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION,
+  CONFIG_CONTRACT_SINCE, OUTPUT_MODES, DECKENT_VERSION, NODE_ENGINE_RANGE, SUPPORTED_LANGUAGES, DeckentError, ErrorRegistry, ERROR_CODES,
+  createCrossVerifyContractError, createExecutionAuthorityError, createExecutionAdmissionError, createDockerLifecycleError, EXIT_CODES, exitCodeFor,
+  lintErrorRegistry, assertErrorRegistry, redactSensitive, formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal, ENVIRONMENT_KEYS,
+  envValue, isMainModule, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath,
+  resolveProductPaths, detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile,
+  detectEnvironment, readBuildIdentity, validatePath, validateExistingPath, validateTaskId, isStandardSchemaV1, validateStandardSchemaSync,
+  deepMerge, readJsonFile, writeJsonAtomic, formatDuration, estimateRemaining, registerConfigSection, createDefaultConfig, ConfigValidationError,
+  validateConfig, versionedConfig, resolveConfigSecrets, configDisplayView, loadConfig, loadGlobalConfig, clearConfigCache, saveGlobalConfig,
+  writeConfig, withConfigWriteLock, pruneConfigBackups, healCorruptProjectConfig, getConfigMetadata, getConfigValue, resolveLocalOsActorId,
+  resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance, colorTier, shouldUseColor, stripAnsi, formatValue,
+  formatTable, formatStatus, readMemoryKnowledge, emit, createEmitter, LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry,
+  getConfigFieldDefault, resolveProductLayout, productResourcePath, LayoutError, inspectProductLayout, inspectProductPaths, prepareProductFile,
+  prepareProductCompanionPath, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError,
+  SystemTrustedClock, MAX_WALL_SKEW_MS, sha256, constantTimeDigestEqual, createHmacIntegrity, GLOB_WILDCARD, globLiteralHead, hasGlobWildcard,
+  BOOTSTRAP_JOURNAL_MAX_BYTES, BootstrapStateError, assertBootstrapUnchanged, assertBootstrapUsable, encodeBootstrapJournal, hashBootstrapJournal,
+  observeBootstrapState } from '#platform/index.js';
+export type { Locale, MessageKey, OutputMode, Params, ErrorCategory, ExitCode, CrashArtifactV1, Environment, GlobalScopePlatform, GlobalScopePaths,
+  BuildIdentity, StandardTypedV1, StandardSchemaV1, StandardJSONSchemaV1, StandardSyncValidation, DeckentConfig, CoreConfig, ConfigSectionOptions,
+  ConfigWarning, ResolvedConfig, ConfigLoadOptions, PrincipalEvidence, ActorContext, OutputSink, EmitOptions, MessageFamily, MessageRegistry,
+  ProductLayout, ProductLayoutInput, ProductResource, SecretResolver, SecretResolution, ProductPathInspection, TrustedClock, ClockSample,
+  IntegrityAuthority, BootstrapJournal, BootstrapJournalPayload, BootstrapObservation, BootstrapStateErrorCode } from '#platform/index.js';
 export { prepareNativeCodingProfile } from '#composition/index.js';
 
 export { inspectConfiguredInventory as inspectInventory } from '#composition/index.js';

@@ -1192,7 +1192,7 @@ effort ceiling, `output_config.effort` levels and default, and the synchronous m
 row at load (`OPENAI_CHAT_DEFINITION_INVALID`, no call); an unlisted model admits only no thinking field and no effort. `effort` is profile
 data sent as `output_config.effort` (GA, no beta header) and forwarded to `count_tokens`. Not supported: per-message effort,
 `display: "updates"`, structured output, task budgets. The registry must be re-read from the official pages at least every 30 days or on a new
-model announcement (no refresh mechanism yet). Not yet: SSE byte/token metering in live streaming, a keyring/`secretResolver` link for the key (environment variable only),
+model announcement (no refresh mechanism yet). Not yet: SSE byte/token metering in live streaming, an OS keyring backend for the key (K2; the key resolves through the installation's configured secret store since SECRET-K1),
 the owner's first billed smoke call (Opus 5.5 `effort`, Sonnet 5.5 `between_tools`), tariff rows for legacy models, a neutral
 `reasoning: {mode, effort}` (P2).
 
@@ -1262,7 +1262,7 @@ owner did not approve at its card — a mode relaxation, a standing approval, a 
 sense of the postures below.
 **Shell write postures (Astra 2170 × MODES-3, lead merge 2026-09-29).** A sandboxed shell call's write posture is derived once, at the
 effect, from who stands behind the call (the call decision hands the effect a typed authority `owner-approved | full-access |
-unattended`, never text) and the planned tier (`shellWritePosture`, composition agent-turn):
+unattended`, never text) and the planned tier (`shellWritePosture`, host-shell, beside `unattendedWritePosture`):
 - **owner-approved** (the owner's card): the project writes, the write floor included; `.git` stays read-only except in a full-access turn.
 - **full-access** (an audited `full-access-call` of a turn launched in full access while the company grant holds; owner 2026-09-29: full
   access is comprehensive and owner-authorized by the mode): the project, the write floor (existing and new names) and `.git` (and a
@@ -1282,14 +1282,39 @@ the `.deckent/**` floor of a narrow unattended call and the full-access configur
 held). MCP server starts — in a turn and from the CLI (trust, health, restart) — build the same layout with the write floor
 (`writeFloor` is required on `ShellSandboxLayout`); both realms refuse a read-only-floor request whose layout carries no matcher (fail
 closed, the server does not start). MCP server views take the unattended posture with the whole project read-only (C5, owner 2026-09-29, until
-SHELL-OVERLAY): one derivation, host-shell `unattendedWritePosture(narrowMutating)` — composition's `shellWritePosture` takes it for
+SHELL-OVERLAY): one derivation, host-shell `unattendedWritePosture(narrowMutating)` — host-shell's `shellWritePosture` takes it for
 unattended shell calls, `longLivedWritePosture()` (not narrow) for a long-lived server; the bubblewrap launch binds the project
 `--ro-bind`, keeps the floor's matcher required (fail closed) and returns the write view it enforces, from which the launch and tools
 cards say "the project is read-only, .git included" and that `realm: host` lets a server write. A sandboxed server therefore creates no
 name in the project, existing or new, floor or not (Astra 2177 R1 closed for bubblewrap); only a bound scratch area, bubblewrap's
 private `/tmp` and the empty HOME tmpfs are writable. The same in every mode; MODES-3 defined no full-access MCP posture. The host realm
-has no OS boundary for any posture. SHELL-OVERLAY (overlay + post-run apply, bubblewrap ≥ 0.11) is the permanent fix that lets sandboxed
-writes through review again.
+has no OS boundary for any posture.
+**Sandbox write set (SHELL-OVERLAY, owner 2026-09-29: the permanent C5 fix for the shell; `f906c31` + `57bdbf1`, merged with C5-MCP-RO in
+`ee854a8`, tenth batch).** The write set is the `writeSet` variant of host-shell `unattendedWritePosture`, the one unattended derivation. A shell
+call a full-auto relaxation let run (`ShellCallAuthority 'full-auto'`: an audited `permission-mode` event of mode full-auto; tier past the
+narrow set) in a realm that can keep writes aside (`ShellRealmResolution.writeSets`: bubblewrap whose launcher reports ≥ 0.11 —
+`bubblewrapHasOverlay`, `--version` read once per file identity) runs with the project as an overlay (`--overlay-src P --overlay <upper> <work>
+P`; `.git`, the floor's existing paths and the deny masks are bound over it as before). The upper/work directories are Deckent's own (0700;
+host-shell `sandboxWriteSetRoot`: the project data root's `fileEffects/sandbox-writes`, else the global state root's; the first whose real path
+neither holds nor sits in the project — bubblewrap: overlay layers may not nest; none → the read-only posture with a result note). When the
+command exits (any code), the native lister `shell-overlay-scan` (reads the kernel's `user.overlay.opaque`; Node has no xattr API) and
+`scanSandboxWriteSet` produce the change set: `c 0:0` whiteouts and opaque directories are deletions (a rename is delete + create: `userxattr`
+forces `redirect_dir=nofollow`, `metacopy=off`), symbolic links, special files, hard links and setuid/setgid files are refused per entry,
+`redirect`/`metacopy`/whiteout-xattr metadata refuses the whole set, bounds (2 000 entries incl. subtree deletions, 64 MiB, 16 MiB per file,
+depth 32) refuse the whole set, and a lower path whose ctime is not older than the call directory's own ctime (start mark, kernel clock) — or
+a whiteout whose lower entry is gone — is a conflict: nothing is applied. Every entry is decided exactly like an edit of its path
+(`decideAgentToolCall`: `run_shell` × `workspace.file.write`, cell `edit` / `edit-floor` / `edit-authority`; a relaxation is audited per entry
+— `permission-mode` `edit-non-floor`, summary `{kind: 'edit', path}` — before its effect; the write floor and the configuration file are not
+applied and the result tells the model to use the edit tools, which card; a deny keeps it out) and applied as its own C11 effect of
+`workspace.file.write@1` on `workspace-file` (target-internal `writeSet` input: bytes read from the upper and digest-checked, mode applied;
+removal journaled with `next: absent`, a removal left `prepared` is unknown). Deletions first, then emptied directories, then writes with
+their missing parents; a changed precondition or an unknown outcome stops the rest. A stopped/timed-out run applies nothing; the directory is
+removed after every call, and a crashed service's leftovers are swept (never applied late). Landlock and host refuse a write-set request.
+Owner-approved, full-access, narrow-set and standart postures are unchanged. Cost (this machine): overlay mount +4 ms per call, native listing
+6 ms / 200 entries, **≈ 85–95 ms per applied entry** (measured split: ≈ 79 ms the entry's C11 effect — ledger intent/settle at full
+durability, journal and file fsyncs —, ≈ 16 ms its sealed audit event; 100 files ≈ 9 s; the same class as one edit per file) — open (O6/O7).
+Production: dormant until the bundled bwrap is selected (BWRAP-BUNDLE S1/S2/S7); the system bwrap here is 0.9.0. MCP servers: same mechanism,
+checkpoint = server stop at the end of a turn whose server wrote (design §10), later slice; until then C5-MCP stays open (read-only view above).
 **Full access (MODES-3).** A turn is full access only when `chatTurn.fullAccess: true` (protocol v17) — set by the terminal launched with
 `deckent --full-access` / `deckent terminal --full-access` or by the person's stored start mode `full-access` — and only while a company
 grant allows `permission-mode`/`set` on id `full-access` (`fullAccessGrant`; the decision asks it on every call, so a grant revoked
@@ -1417,6 +1442,21 @@ OSV-Scanner read it. `scripts/pack-smoke.mjs` installs the tarball offline with 
 runtime service, terminal and native addon per supported Node. Publication is gated (`summary.json publishable`) while public declarations
 name third-party packages, LICENSE is absent or a shipped component lacks license text. The Core license line under "Enterprise layering"
 (MIT) is not changed here: the Apache-2.0 decision lands with DEPS-P0.
+Declarations (DEPS-TYPES, tenth batch): `scripts/dist-types.mjs` ships the declaration closure TypeScript loads from `dist/index.d.ts` under
+NodeNext and under Bundler (a specifier resolving differently in the two, not resolving, a non-node `/// <reference types>`, or a
+`declare module '…'` in vendored types fails the build). Own declarations keep the tsc layout; third-party declarations are copied to
+`dist/vendor/types/<name>@<version>/<path>` with their package `type`, and bare specifiers are rewritten to relative paths with the
+format-preserving extension (`.d.cts`→`.cjs`, `.d.mts`→`.mjs`). Only `node:` built-ins stay external (the consumer's `@types/node`). Release
+gate: `smoke:dist --types` over TypeScript 5.9/6.0(/7.0) × NodeNext/Bundler with `skipLibCheck: false` and a consumer that uses values,
+derived types (proved non-`any` with `@ts-expect-error`) and a hand-written Standard Schema. Publication stays gated on LICENSE (DEPS-P0) and
+the missing license texts of shipped components.
+**SDK surface (DEPS-TYPES, owner 2026-09-29 DEPS-SCHEMA C2-b).** `src/index.ts` is an explicit export list; no layer barrel is re-exported
+wholesale. The reviewed inventory `tests/contracts/composition/sdk-public-exports.json` (TypeScript checker over `src/index.ts`, names with
+value/type kind) is the contract; a change needs `node scripts/sdk-exports.mjs --write` and, for a removal, a CHANGELOG BREAKING line. Live
+schema-library objects are never SDK values: callers get derived data types and Standard Schema contracts, not zod objects. Open:
+`registerConfigSection` still takes a zod object (C1) — in the zero-dependency package a consumer's own zod schema is refused both by the type
+checker (vendored zod types are nominally distinct: private `_cached`) and at runtime (`instanceof` against the bundled zod), so third-party
+config sections wait for C1.
 
 ## Testing policy
 
@@ -1447,6 +1487,8 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-29 | Tenth batch keeps `src/composition` within its 5500-line budget by moving pure host-shell responsibilities to their owning adapter unit, byte-identical: `shellWritePosture` + `ShellCallAuthority` (beside `unattendedWritePosture`), `sandboxWriteSetRoot`, `agentShellEffectCommandId` and the shell result notes/effect-refusal text into `adapters/core/host-shell`; composition keeps the EffectApplication wiring. 5510 → 5432 lines. | FASTURI-OUT, DEPS-TYPES, SECRET-K1 and SHELL-OVERLAY together passed the budget by 10 lines; the 2026-09-28 FOUNDATION rule answers pressure by moving responsibility, not by raising the budget. |
+| 2026-09-29 | SECRET-K1: `SecretStore` port + backend registry; env default, explicit installation-only file backend; one production resolver at every credential read site. | Owner keyring option B, S1/S2/S5; `secret set|delete` authority checkpoint open (PLAN). |
 | 2026-09-29 | Seventh batch keeps `surfaces/core/terminal` within the 2000-line unit budget by moving two dependency-free presentation pieces: the approval-card key mapping (`decisionKey`, `scopedDecisionKey`, `StandingScope`) to `terminal-kit` and `ArrowPicker` to `terminal-render`; `terminal` re-exports the key mapping unchanged. | MODE-UX, PERSISTENT-APPROVALS, `/mcp` and TERM-UX-1 together passed 2000 (2020, then 2041). No budget raise; the next terminal feature splits the unit by responsibility (e.g. a session unit), as TERM-UX-1 noted. |
 | 2026-09-28 | FOUNDATION: `budgets.packageLines.composition` 5000 → 5500 (owner-approved increase; earlier decision "raise to 5500 if the pressure returns"). | MCP client + policy administration wiring (seventh batch, measured 5067 lines after the SESSION-RESULT-LIMIT, POLICY-ADMIN and MCP-CLIENT merges). The next pressure is answered by moving responsibility out of composition, not by another raise. |
 | 2026-09-22 | Operator **Terminal Contract v1**: regions, motor-agnostic events, colour tiers, Ink + line adapters; every chat turn is a governed model invocation in the caller's scope; chat ≠ run ledger. | One contract across Terminal/MCP/Desktop; Ink is the Node rich-TTY adapter, not product authority. Integration removed an unmanaged HTTP chat path and a global Run-capacity cap found in review. |
@@ -1913,6 +1955,27 @@ diff of that fixture.
 
 **Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
 
+**Secret store (SECRET-K1, keyring option B, owner 2026-09-29 S1/S2/S5; tenth batch).** Config keeps only `$DECK:NAME` references; every
+credential read — config interpolation (`layers.ts`), the model invocation credential and both MCP registry secret sites — goes through one
+platform function, `configuredSecretResolver`: an explicit `secretResolver` (tests, SDK callers) wins, else the backend the installation
+selected, else the environment. The backend is `SecretStore` port v1 (`src/engine/core/secret-store`: get/set/delete/listNames/inspect, `$DECK`
+name grammar ≤128, typed `SECRET_*` refusals whose params/cause never carry a value or store content), chosen from a `SecretStoreRegistry` by
+id `<namespace>.secret-store.<name>@<n>`: Core ships `core.secret-store.env@1` (default; read-only, not enumerable — exactly the previous
+behaviour) and `core.secret-store.file@1` (`<global root>/secrets.json`, schemaVersion 1; directory owner-only, file owner-only, single-linked,
+opened with `O_NOFOLLOW`, re-checked by `lstat`; unsafe → `SECRET_STORE_UNSAFE`, nothing read or repaired; writes under the config writer lock
+of that path with atomic 0600 replace + fsync; corrupt → `SECRET_STORE_CORRUPT` without cause; POSIX only). Enterprise/custom backends
+(vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is
+reserved. Selection: config section `secrets.store`, installation (global) layer only (a project file carrying `secrets` is refused,
+`SECRETS_PROJECT_LAYER_FORBIDDEN`), absent by default so a healed/default-filled project file never carries one, never a `$DECK` reference,
+unknown id `SECRET_STORE_UNKNOWN` at load. An explicitly selected backend never falls back to the environment (owner S1: no silent
+fallback). Interpolation keeps a backend's `SECRET_STORE_*` code (other resolver failures stay the content-free `SECRET_RESOLUTION_FAILED`).
+Surfaces: `doctor` (`--json` `secretStore {schemaVersion, backend, writable, enumerable, status, code}` and a human `Secret store:` line; read
+for the selection only, no reference resolved; an unsafe/corrupt/unavailable store is reported, not thrown); `deckent secret list [--json]`
+(names only; env backend → `SECRET_STORE_UNSUPPORTED`). The `SECRET_*` catalog texts never contain "secret" followed by whitespace and a word:
+the error redactor would mask the next word as a value (observed at integration). Governed changes: `SecretStoreAdministration` (input →
+injected authorization → sealed audit `secret-change` {action set|delete, name, backend} — never value, digest or length — → write; no record,
+no change). `secret set|delete` surfaces are **not wired** (authority checkpoint, see PLAN). The approval/audit HMAC key stays in its 0600
+file (S2). Not yet: OS keyring backend (K2, `@napi-rs/keyring`, S5), per-scope namespace (S4), service-socket writer (S3).
 **MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
 local stdio servers, managed like Claude Code's scoped files (code.claude.com/docs/en/mcp, checked 2026-09-28: local/project/user,
 managed on top, `mcp add|add-json|list|get|remove`), never in configuration: project `<project>/.deckent/mcp.json` (shared;
@@ -1978,7 +2041,14 @@ A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's exis
 call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
 The pool builds the SDK `Client` with `jsonSchemaValidator: new CfWorkerJsonSchemaValidator()` (`@modelcontextprotocol/client/validators/cf-worker`,
 interpreter-based @cfworker/json-schema 4.1.1; MCP-VALIDATOR 2026-09-29): a server's `outputSchema` is untrusted input and never reaches the ajv 8.18 +
-fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the module still loads with the SDK). Every `tools/call` carries the pinned
+fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the development tree still loads it with
+the SDK). Since FASTURI-OUT (tenth batch) the published package does not contain that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one
+`ajvProvider` import turned into a stub that throws `DeckentRemovedValidatorError` (`MCP_DEFAULT_VALIDATOR_REMOVED`); the build fails when the stub
+is not applied or when ajv/ajv-formats/fast-uri/json-schema-traverse appear in the metafile, the shipped packages or the embedded components. The
+only JSON Schema validator Deckent ships is the SDK's cf-worker interpreter; every SDK `Client` and `Server` is built with `jsonSchemaValidator`
+(contract test `tests/contracts/surfaces/mcp-json-schema-validator.test.ts`). Open: a remote `outputSchema.pattern` is compiled and run
+synchronously (ReDoS: the server controls schema and instance; measured 1.4 s at 27 characters, cf-worker and ajv alike) — lane
+MCP-SCHEMA-VALIDATOR (own bounded validator) is in progress. Every `tools/call` carries the pinned
 definition (MCP-PIN-DEF, eighth batch, Jev 12e80d38, 2026-09-29): the pool keeps, per listing, the frozen digest-covered projection of each tool
 (name, title, description, input/output schema, annotations — nothing unpinned reaches the SDK) and passes a fresh copy as
 `callTool(..., { toolDefinition })` (SDK ≥ 2.2). The SDK then neither consults its response cache nor re-lists, so a HEADER_MISMATCH

@@ -10,6 +10,7 @@ import { toolchainsCommand } from './toolchains.js';
 import { mcpCommand } from './mcp.js';
 import { operationCommand } from './operation.js';
 import { policyGrantsCommand } from './policy-grants.js';
+import { secretCommand } from './secret.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -61,6 +62,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'toolchains') { await toolchainsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'secret') { await secretCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'mcp') { await mcpCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'run') {
       await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });

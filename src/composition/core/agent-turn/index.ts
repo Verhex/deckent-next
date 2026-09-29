@@ -2,7 +2,6 @@ export { AGENT_READABLE_PRODUCT_RESOURCES, agentProductStateDeny, agentWorkspace
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn, withMcpNotices } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';
-export { agentShellEffectCommandId, shellWritePosture, type ShellCallAuthority } from './internal/shell.js';
 export { agentFileEffectCommandId } from './internal/edits.js';
 export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTERS } from './internal/mode.js';
 export { sweepFullPreviews } from './internal/preview.js';

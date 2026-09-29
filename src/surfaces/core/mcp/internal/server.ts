@@ -6,6 +6,7 @@ import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocati
 import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
@@ -185,7 +186,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       return inferenceBudget.call(applications, parsed.profileId === undefined ? {} : { profileId: parsed.profileId });
     } });
   definitions.push(...operationToolDefinitions(applications, locale));
-  const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} } }); let active = 0;
+  // The SDK's Node default validator is its bundled ajv + fast-uri, which the published package replaces with a throwing stub (FASTURI-OUT);
+  // cf-worker is the only JSON Schema validator Deckent ships (no path validates with it today; form elicitation would).
+  const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() }); let active = 0;
   const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });

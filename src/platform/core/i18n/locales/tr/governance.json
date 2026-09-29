@@ -1032,5 +1032,13 @@
   "error.PERMISSION_MODE_UNSUPPORTED": "Policy'niz v1 olduğu için izin modları kapalı; edit/shell çağrıları policy'nin dediği gibi onay ister; hiçbir şey yazılmadı. /mode için bindings dosyalı bir v2 policy'ye geçin (yeni kurulumda `deckent init policy --scope <kapsam> --preview`, ardından `--apply`; mevcut policy.json'un üzerine yazmaz). auto-edit ya da full-auto için ayrıca bir allow grant ekleyin: kaynak türü `permission-mode`, eylem `set`, ids [auto-edit, full-auto].",
   "error.PERMISSION_MODE_INVALID": "İzin modu isteği geçerli değil: mod standart, full-auto ya da full-access olmalı.",
   "error.PERMISSION_MODE_DENIED": "Bu kapsamda {mode} modunu ayarlamanıza izin veren bir grant yok; hiçbir şey yazılmadı. Policy'ye bir allow grant ekleyin (kaynak `permission-mode`, eylem `set`, id {mode}).",
-  "error.PERMISSION_MODE_LOCKED": "Şu an başka bir Deckent süreci policy dosyalarını değiştiriyor (kilit {path}, pid {pid}, {ageSeconds} sn); hiçbir şey yazılmadı. Biraz bekleyip /mode'u yeniden çalıştırın; bitmiş bir süreçten kalan kilit kendiliğinden temizlenir."
+  "error.PERMISSION_MODE_LOCKED": "Şu an başka bir Deckent süreci policy dosyalarını değiştiriyor (kilit {path}, pid {pid}, {ageSeconds} sn); hiçbir şey yazılmadı. Biraz bekleyip /mode'u yeniden çalıştırın; bitmiş bir süreçten kalan kilit kendiliğinden temizlenir.",
+  "error.SECRET_NAME_INVALID": "Secret'ların adları büyük harf, rakam ve alt çizgi içerir; harf ya da alt çizgiyle başlar ve en fazla 128 karakterdir ($DECK:NAME biçimi).",
+  "error.SECRET_VALUE_INVALID": "Secret'ın değeri boş olamaz ve en fazla 64 KiB olabilir.",
+  "error.SECRET_STORE_UNKNOWN": "Yapılandırılan {backend} secret'lar deposu kurulu değil. Kurulum config'inde secrets.store'u kayıtlı bir arka uca ayarlayın (core.secret-store.env@1 ya da core.secret-store.file@1).",
+  "error.SECRET_STORE_UNAVAILABLE": "{backend} secret'lar deposu burada kullanılamıyor (kurulum dizini yok, G/Ç hatası ya da henüz desteklenmeyen platform). Hiçbir şey okunmadı ya da yazılmadı.",
+  "error.SECRET_STORE_UNSAFE": "{path} içindeki secret'lar deposu özel değil: dizin ve secrets.json size ait olmalı, grup ya da diğerlerine erişim vermemeli (0700 / 0600) ve bağlantı olmamalı. Okunmadı ve onarılmadı.",
+  "error.SECRET_STORE_CORRUPT": "{backend} secret'lar deposu schemaVersion 1 belgesi olarak okunamadı. İçeriği gösterilmiyor.",
+  "error.SECRET_STORE_READ_ONLY": "{backend} secret'lar deposu salt okunur; kurulum config'inde yazılabilir bir arka uç seçin (örneğin core.secret-store.file@1).",
+  "error.SECRET_STORE_UNSUPPORTED": "{backend} secret'lar deposu secret'larını listeleyemez (ortam değişkenleri secret'lardan oluşan bir liste değildir)."
 }

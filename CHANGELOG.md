@@ -4,6 +4,24 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- BREAKING (DEPS-TYPES, owner 2026-09-29, DEPS-SCHEMA C2-b): the SDK entry (`import … from 'deckent'`) no longer exports the live zod schema
+  objects `CORE_SCHEMA`, `SQLITE_STORAGE_OPTIONS`, `DOCKER_EXECUTION_SETTINGS`, `GIT_EXECUTION_SETTINGS`, `ARTIFACT_STORAGE_LIMITS` and
+  `bootstrapJournalSchema`; the data types derived from them (`CoreConfig`, `DeckentConfig`, `BootstrapJournal`, …) stay exported. The SDK
+  surface is now an explicit, reviewed list (`tests/contracts/composition/sdk-public-exports.json`, 266 names).
+- BUILD (DEPS-TYPES): the dependency-free package now type-checks for library consumers with `skipLibCheck` off, NodeNext and Bundler
+  resolution, TypeScript 5.9, 6.0 and 7.0: only the declarations reachable from the types entry are shipped (577 of 807), and the zod and MCP
+  SDK declarations they name are vendored into `dist/vendor/types/` (THIRD-PARTY-NOTICES lists them). `MessageKey` no longer makes the
+  published declarations import JSON. `npm run smoke:dist -- <tgz> --types <ts dir>[,<ts dir>]` checks every TypeScript × resolution.
+- SECURITY (FASTURI-OUT): the published package no longer contains the MCP SDK's bundled ajv 8.18.0 / fast-uri 3.1.0 (8 HIGH advisories);
+  build-dist stubs the SDK default validator and fails if it returns. The MCP server now validates with the SDK's cf-worker validator explicitly.
+- ADDED (SECRET-K1): `secrets.store` config (installation only) with `core.secret-store.env@1` (default) and `core.secret-store.file@1`;
+  `deckent secret list`; `doctor` shows the secret store (`--json` `secretStore` and a human line). Every credential read now resolves through
+  the configured backend. The `SECRET_*` refusals have English and Turkish texts.
+- ADDED (SHELL-OVERLAY): in full-auto, a sandboxed shell command that is not in the narrow set can change the project again when the
+  bubblewrap launcher supports overlays (≥ 0.11): its writes are kept aside, then each file is decided and applied like an edit (the write
+  floor and the configuration file are never applied this way; a stopped command applies nothing). Dormant in production until the bundled
+  bubblewrap is selected; the system bubblewrap 0.9 keeps the read-only posture.
+
 - ADDED (MCP-SANDBOX-PATHS): an MCP server the default sandbox (bubblewrap) cannot start now says why — the hidden command or argument
   path (a `${VAR}` path as written), a package runner (npx, uvx, …) that needs network and a package cache, or a container client whose
   daemon socket is outside the sandbox — as the typed `MCP_SANDBOX_COMMAND_UNREACHABLE` on `mcp add|approve` and as `diagnosis` in
