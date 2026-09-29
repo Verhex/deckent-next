@@ -6,7 +6,8 @@
 // it (code splitting, so lazy import() stays lazy and React/zod exist once) into `dist/vendor/` chunks. Type declarations: only what a consumer
 // reaches from the types entry, third-party ones vendored into `dist/vendor/types/` (scripts/dist-types.mjs, DEPS-TYPES).
 // FASTURI-OUT (owner 2026-09-29): the MCP SDK's own bundled ajv + fast-uri (default validator) is replaced by a throwing stub and the build fails
-// if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components); Deckent ships cf-worker only.
+// if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components). MCP-SCHEMA-VALIDATOR: Deckent ships its
+// own JSON Schema validator (src/platform/core/validate), so the SDK's @cfworker/json-schema provider must not reach the bundle either.
 // Reads the existing `dist` (run `npm run build` first; `--build` does it), writes `<out>/package/` (+ `<out>/meta.json`), and with `--pack`
 // the tarball. Usage: node scripts/build-dist.mjs [--out .pack] [--build] [--pack]
 import { execFileSync } from 'node:child_process';
@@ -29,17 +30,19 @@ const REQUIRE_BANNER = "import { createRequire as __deckentCreateRequire } from 
 const PUBLISHED_FIELDS = ['name', 'version', 'description', 'license', 'type', 'engines', 'bin', 'exports', 'imports', 'main'];
 
 /** FASTURI-OUT (owner 2026-09-29): the MCP SDK packages carry their own bundled ajv 8 + fast-uri 3.1.0 (8 HIGH advisories) behind the
- * `_shims` default validator and the `validators/ajv` subpath; Deckent always passes the SDK's cf-worker validator, so that code must not ship.
- * Those public subpaths load with their one `ajvProvider` import replaced by stubs that throw a typed error when built or called. */
+ * `_shims` default validator and the `validators/ajv` subpath; Deckent always passes its own validator, so that code must not ship.
+ * Those public subpaths load with their one `ajvProvider` import replaced by stubs that throw a typed error when built or called.
+ * MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's @cfworker/json-schema copy (`cfWorkerProvider-*`) is not imported by Deckent and is
+ * refused like ajv if anything bundles it. */
 export const AJV_PROVIDER_PACKAGES = ['@modelcontextprotocol/client', '@modelcontextprotocol/server'];
-export const FORBIDDEN_IN_BUNDLE = ['ajv', 'ajv-formats', 'fast-uri', 'json-schema-traverse'];
+export const FORBIDDEN_IN_BUNDLE = ['ajv', 'ajv-formats', 'fast-uri', 'json-schema-traverse', '@cfworker/json-schema'];
 const AJV_IMPORT = /^import\s*\{([^}]*)\}\s*from\s*["'](?:\.{1,2}\/)+ajvProvider-[^"']+\.mjs["'];?[ \t]*$/mu;
 /** The stubbed module text: `code` with its single ajvProvider import replaced; throws when the SDK layout no longer matches. */
 export function stubAjvImport(code, label) {
   const match = AJV_IMPORT.exec(code);
   if (!match || AJV_IMPORT.test(code.slice(match.index + match[0].length))) throw new Error(`${label}: expected exactly one ajvProvider import to stub (SDK layout changed; review FASTURI-OUT)`);
   const locals = match[1].split(',').map(part => part.trim()).filter(Boolean).map(part => part.split(/\s+as\s+/u).at(-1));
-  const stub = ['class DeckentRemovedValidatorError extends Error { constructor(name) { super(`${name} (the MCP SDK default ajv validator) is not part of this package; pass an explicit jsonSchemaValidator (CfWorkerJsonSchemaValidator)`); this.name = "DeckentRemovedValidatorError"; this.code = "MCP_DEFAULT_VALIDATOR_REMOVED"; } }',
+  const stub = ['class DeckentRemovedValidatorError extends Error { constructor(name) { super(`${name} (the MCP SDK default ajv validator) is not part of this package; pass an explicit jsonSchemaValidator (the Deckent JSON Schema validator)`); this.name = "DeckentRemovedValidatorError"; this.code = "MCP_DEFAULT_VALIDATOR_REMOVED"; } }',
     ...locals.map(local => `function ${local}() { throw new DeckentRemovedValidatorError(${JSON.stringify(local)}); }`)].join('\n');
   return code.slice(0, match.index) + stub + code.slice(match.index + match[0].length);
 }
@@ -60,13 +63,14 @@ export function ajvStubPlugin(hits = new Map()) {
       : { contents: stubAjvImport(readFileSync(args.path, 'utf8'), args.pluginData.deckentAjvStub), loader: 'js', resolveDir: dirname(args.path) });
   } };
 }
-/** Violations of the no-ajv/fast-uri rule for one build: stub hits per present SDK package, metafile inputs, shipped and embedded components. */
+/** Violations of the no-ajv/fast-uri/cfworker rule for one build: stub hits per present SDK package, metafile inputs, shipped and embedded
+ * components. */
 export function ajvGuard({ metafile, shipped, embedded, hits }) {
   const out = [], inputs = Object.keys(metafile.inputs);
   for (const name of AJV_PROVIDER_PACKAGES) {
     if (inputs.some(input => input.includes(`node_modules/${name}/`)) && !(hits.get(`${name}/_shims`) > 0)) out.push(`${name}/_shims was bundled without the ajv stub`);
   }
-  const forbidden = new RegExp(`(?:^|/)node_modules/(?:${FORBIDDEN_IN_BUNDLE.map(escape).join('|')})/|/ajvProvider-[^/]*$`, 'u');
+  const forbidden = new RegExp(`(?:^|/)node_modules/(?:${FORBIDDEN_IN_BUNDLE.map(escape).join('|')})/|/(?:ajvProvider|cfWorkerProvider)-[^/]*$`, 'u');
   for (const input of inputs.filter(input => forbidden.test(input))) out.push(`bundle input ${input}`);
   for (const item of shipped.filter(item => FORBIDDEN_IN_BUNDLE.includes(item.name))) out.push(`shipped package ${item.name}@${item.version}`);
   for (const item of embedded.filter(item => item.shipped && FORBIDDEN_IN_BUNDLE.includes(item.name))) out.push(`embedded ${item.name}@${item.version} in ${item.carrier} (${item.carrierFiles.join(', ')})`);

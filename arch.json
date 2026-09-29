@@ -869,6 +869,7 @@
     },
     "src/surfaces/core/mcp": {
       "dependencies": [
+        "src/platform/core/validate",
         "src/domain/core/attempt",
         "src/domain/core/model-activation",
         "src/domain/core/model-invocation",
@@ -1728,6 +1729,7 @@
     },
     "src/adapters/core/mcp-client": {
       "dependencies": [
+        "src/platform/core/validate",
         "src/adapters/core/host-shell",
         "src/adapters/core/native-connection",
         "src/adapters/core/shell-sandbox-bwrap",

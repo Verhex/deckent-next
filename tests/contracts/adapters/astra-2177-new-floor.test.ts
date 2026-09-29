@@ -1,13 +1,16 @@
 // Astra 2177 reviewer test (proof/ASTRA-2177-2026-09-29/review/tests/contracts/adapters/astra-2177-new-floor.test.ts), copied for C5. Owner
 // 2026-09-29 (C5: a sandboxed server sees the whole project read-only) changes three expectations of the original, and nothing else:
 // both `plain` results 'written' → 'EROFS', and `src/package.json` is not created (existsSync true → false; the original line only held
-// while the floor name was writable). Proof: C5-MCP-RO-2026-09-29/review.md.
+// while the floor name was writable). Proof: C5-MCP-RO-2026-09-29/review.md. MCP-SCHEMA-VALIDATOR (owner 2026-09-29) replaces the
+// cf-worker validator with Deckent's own: the validator spy and its two positive controls follow it (cf-worker = 0, own ≥ 1), as in
+// mcp-client.test.ts.
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
 import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
   readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
   type McpLiveTool } from '#adapters/index.js';
@@ -147,20 +150,26 @@ describe('MCP client: calls, bounds and failures', () => {
 });
 
 // MCP-VALIDATOR (owner 2026-09-29, "fast-uri hemen düzenlensin"): the SDK's Node default validator is its bundled ajv 8.18 + fast-uri 3.1.0
-// (8 HIGH advisories, fixed in 3.1.7; overrides cannot reach a bundle). A server's `outputSchema` is untrusted: every compile must run on the
-// interpreter validator (@cfworker/json-schema, the SDK's own `validators/cf-worker`), never on ajv. Since MCP-PIN-DEF the pool compiles the
-// pinned outputSchema itself before sending and passes the pinned definition to every `callTool` (the SDK compiles it again, in isolation).
-// The spies patch the prototypes of the very modules the SDK loads (Node's module cache; the SDK is external to vitest), and the positive
-// control (cf-worker ≥ 1) proves the path was exercised, so ajv = 0 means something.
-async function withValidatorSpies(body: (seen: { ajv: number; cfWorker: number }) => Promise<void>) {
+// (8 HIGH advisories, fixed in 3.1.7; overrides cannot reach a bundle). A server's `outputSchema` is untrusted. MCP-SCHEMA-VALIDATOR (owner
+// 2026-09-29): every compile runs on Deckent's own validator (`#platform/core/validate`: bounded, linear-time `pattern`, fail-closed
+// refusals), never on ajv nor on the SDK's @cfworker/json-schema provider. Since MCP-PIN-DEF the pool compiles the pinned outputSchema itself
+// before sending and passes the pinned definition to every `callTool` (the SDK compiles it again, in isolation). The spies patch the
+// prototypes of the very modules the SDK loads (Node's module cache; the SDK is external to vitest) and of Deckent's validator class (the
+// pool's instance); the positive control (own ≥ 1) proves the path was exercised, so ajv = 0 and cf-worker = 0 mean something.
+async function withValidatorSpies(body: (seen: { ajv: number; cfWorker: number; own: number }) => Promise<void>) {
   const { DefaultJsonSchemaValidator } = await import('@modelcontextprotocol/client/_shims');
   const { CfWorkerJsonSchemaValidator } = await import('@modelcontextprotocol/client/validators/cf-worker');
-  const seen = { ajv: 0, cfWorker: 0 };
+  const seen = { ajv: 0, cfWorker: 0, own: 0 };
   const ajvCompile = DefaultJsonSchemaValidator.prototype.getValidator, cfCompile = CfWorkerJsonSchemaValidator.prototype.getValidator;
+  const ownCompile = DeckentJsonSchemaValidator.prototype.getValidator;
   DefaultJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof DefaultJsonSchemaValidator>, ...args) { seen.ajv++; return ajvCompile.apply(this, args); };
   CfWorkerJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof CfWorkerJsonSchemaValidator>, ...args) { seen.cfWorker++; return cfCompile.apply(this, args); };
+  DeckentJsonSchemaValidator.prototype.getValidator = function (this: DeckentJsonSchemaValidator, ...args) { seen.own++; return ownCompile.apply(this, args); };
   try { await body(seen); }
-  finally { DefaultJsonSchemaValidator.prototype.getValidator = ajvCompile; CfWorkerJsonSchemaValidator.prototype.getValidator = cfCompile; }
+  finally {
+    DefaultJsonSchemaValidator.prototype.getValidator = ajvCompile; CfWorkerJsonSchemaValidator.prototype.getValidator = cfCompile;
+    DeckentJsonSchemaValidator.prototype.getValidator = ownCompile;
+  }
 }
 const callsOf = (f: ReturnType<typeof fixture>) => f.events().filter(event => event.event === 'call');
 const listsOf = (f: ReturnType<typeof fixture>) => f.events().filter(event => event.event === 'list');
@@ -173,12 +182,12 @@ describe('MCP client: a server-supplied outputSchema never reaches the bundled a
       { outcome: 'answered', error: { code: -32020, kind: 'header-mismatch' } }, 1],
     ['a host-confusion $id', { type: 'object', $defs: { remote: { $id: 'http://trusted.example%40evil.example/s', type: 'string' } } },
       { outcome: 'refused', reason: 'invalid-output-schema' }, 0],
-  ] as const)('the pinned %s is compiled with the cf-worker validator, never ajv', async (_label, outputSchema, outcome, calls) => withValidatorSpies(async seen => {
+  ] as const)('the pinned %s is compiled with Deckent\'s validator, never ajv or cf-worker', async (_label, outputSchema, outcome, calls) => withValidatorSpies(async seen => {
     const mismatch = tool('hm', 'header-mismatch', { outputSchema });
     const f = fixture('dual', [echo, mismatch]), server = f.server([echo, mismatch].map(pinOf)), p = pool();
     expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true, era: 'modern' });
     expect(await p.call('fx', 'hm', pinOf(mismatch).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal })).toMatchObject(outcome);
-    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBeGreaterThanOrEqual(1);
+    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBe(0); expect(seen.own).toBeGreaterThanOrEqual(1);
     expect(callsOf(f)).toHaveLength(calls);
   }), 30_000);
 });
@@ -205,14 +214,14 @@ describe('MCP client: every call carries the pinned tool definition', () => {
     expect(text.text).toContain('error=header-mismatch -32020'); expect(text.text).toContain('it is not sent again');
   }, 30_000);
 
-  it('a structured result that conforms to the pinned outputSchema passes (validated on cf-worker, not ajv)', async () => withValidatorSpies(async seen => {
+  it('a structured result that conforms to the pinned outputSchema passes (validated on Deckent\'s validator, not ajv or cf-worker)', async () => withValidatorSpies(async seen => {
     const ok = tool('st', 'structured', { outputSchema: idSchema, structured: { id: 'a-1' } } as Partial<McpLiveTool>);
     const f = fixture('dual', [ok]), server = f.server([ok].map(pinOf)), p = pool();
     await p.open(server, settings([server]), context(f.root));
     const outcome = await p.call('fx', 'st', pinOf(ok).digest, {}, { timeoutMs: 5_000, signal: signal() });
     expect(outcome).toMatchObject({ outcome: 'answered', result: { structuredContent: { id: 'a-1' } } });
     expect(describeMcpResult(outcome, 'mcp:fx/st', 4_096)).toMatchObject({ status: 'ok' });
-    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBeGreaterThanOrEqual(1);
+    expect(seen.ajv).toBe(0); expect(seen.cfWorker).toBe(0); expect(seen.own).toBeGreaterThanOrEqual(1);
     expect(callsOf(f)).toHaveLength(1);
   }), 30_000);
 

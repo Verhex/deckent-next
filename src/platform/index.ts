@@ -28,6 +28,9 @@ export { validatePath, validateExistingPath, validateTaskId } from '#platform/co
 // Library-independent schema contract (Standard Schema 1.1.0) for external boundaries: adapter module options today (DEPS-SCHEMA).
 export type { StandardTypedV1, StandardSchemaV1, StandardJSONSchemaV1, StandardSyncValidation } from '#platform/core/validate/index.js';
 export { isStandardSchemaV1, validateStandardSchemaSync } from '#platform/core/validate/index.js';
+// Deckent's own JSON Schema validator (MCP-SCHEMA-VALIDATOR): the MCP SDK's jsonSchemaValidator provider for every SDK Client and Server.
+export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON_SCHEMA_ANNOTATIONS } from '#platform/core/validate/index.js';
+export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from '#platform/core/validate/index.js';
 export { deepMerge, readJsonFile, writeJsonAtomic } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
