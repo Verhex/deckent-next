@@ -17,7 +17,7 @@ describe('local Git invocation construction (lane GIT-NET 2026-09-29)', () => {
     expect(args).toEqual(['--no-replace-objects', '-C', '/repo', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', 'rev-parse', 'HEAD']);
     expect(GIT_LOCAL_ENV).toEqual({
       PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0',
-      GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
+      GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
     });
   });
 });
@@ -28,7 +28,7 @@ describe('local Git invocation construction (lane GIT-NET 2026-09-29)', () => {
  * instead of a real network remote so the test needs no network access while still exercising the same
  * protocol-allow-list code path a real network transport would use (git-config(1) `protocol.<name>.allow`
  * documents `file` as governing "any local file-based path (including file:// URLs, or local paths)"). */
-async function promisorSource() {
+async function promisorSource(options: { hostileLocalConfig?: boolean } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-git-network-'))); roots.push(root);
   const origin = join(root, 'origin'); const source = join(root, 'source');
   const git = async (cwd: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', cwd, ...args])).stdout.trim();
@@ -41,6 +41,10 @@ async function promisorSource() {
   // --no-checkout: the working-tree checkout a plain `clone --filter` performs would itself fetch the blob
   // (under the clone's own unrestricted environment) before this test ever runs its own restricted call.
   await exec('/usr/bin/git', ['clone', '--filter=blob:none', '--no-checkout', `file://${origin}`, source, '-q']);
+  // The residual case (Astra/lead follow-up 2026-09-29): a hostile or merely misconfigured source repository
+  // sets this in its own LOCAL .git/config — not system/global, so GIT_CONFIG_NOSYSTEM/GIT_CONFIG_GLOBAL do
+  // not suppress it — to re-permit the more specific `protocol.file.allow` ahead of a bare `protocol.allow=never`.
+  if (options.hostileLocalConfig) await git(source, 'config', 'protocol.file.allow', 'always');
   const blob = await git(source, 'rev-parse', `${head}:big.txt`);
   return { root, origin, source, head, blob, git };
 }
@@ -56,6 +60,21 @@ describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot 
     // audit flagged as able to trigger a network fetch during snapshot/observe.
     await expect(listBase(lease, options, budget)).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
     // The object was never fetched: `rev-list --missing=print` still reports it missing after the attempt.
+    expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
+  });
+
+  it('stays refused when the source repository\'s own local config re-permits the file protocol', async () => {
+    const f = await promisorSource({ hostileLocalConfig: true });
+    expect(await f.git(f.source, 'config', 'protocol.file.allow')).toBe('always');
+    const lease = { baseCommit: f.head, sourceBase: { source: { repositoryRoot: f.source } } } as unknown as GitWorkspaceLease;
+    const options = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65536, sourceRoot: f.source, workspaceRoot: f.source } as unknown as GitWorkspaceOptions;
+    const budget = new SnapshotBudget(limits, Date.now() + 10_000);
+    // Measured 2026-09-29 (proof/GIT-NET-2026-09-29/protocol-matrix.log): `-c protocol.allow=never` alone is
+    // overridden by this exact repository-local setting (protocol.<name>.allow takes precedence over the
+    // generic protocol.allow regardless of source). GIT_ALLOW_PROTOCOL='' is an environment variable the
+    // repository cannot override, and is documented to override any existing configuration instead — this is
+    // the layer that must hold here.
+    await expect(listBase(lease, options, budget)).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
     expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
   });
 });

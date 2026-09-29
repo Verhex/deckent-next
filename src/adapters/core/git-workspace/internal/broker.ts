@@ -53,12 +53,17 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(path) !== resolve(path) ||
       (stat.mode & 0o022) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new WorkspaceError('WORKSPACE_UNSAFE');
   }
-  private async git(directory: string, args: string[]) {
+  /** `noLazyFetch` is set only for the pre-clone `rev-parse` calls against the caller's real `sourceRoot` in
+   * `currentSource()`/`allocate()`: unlike the later `clone --local`/`checkout`/`remote remove` calls, which
+   * run against a Deckent-owned workspace and must keep exactly today's `protocol.file.allow=always` local
+   * clone behavior, these read the caller's own repository and gain the same promisor-lazy-fetch backstop the
+   * git-patch package's shared construction uses (`GIT_NO_LAZY_FETCH=1`; proof/GIT-NET-2026-09-29/review.md). */
+  private async git(directory: string, args: string[], noLazyFetch = false) {
     const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
     const config = join(directory, format.emptyConfig); const hooks = join(directory, format.hooks);
     try {
       return (await exec(this.options.gitExecutable, ['-c', `core.hooksPath=${hooks}`, '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', '-c', 'protocol.file.allow=always', ...args],
-        { env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: config, GIT_TERMINAL_PROMPT: '0' },
+        { env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: config, GIT_TERMINAL_PROMPT: '0', ...(noLazyFetch ? { GIT_NO_LAZY_FETCH: '1' } : {}) },
           signal: AbortSignal.timeout(this.options.timeoutMs), maxBuffer: this.options.outputBytes, encoding: 'utf8' })).stdout.trim();
     } catch { throw new WorkspaceError('WORKSPACE_GIT_FAILED'); }
   }
@@ -108,12 +113,12 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       await writeFile(join(temporary, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
       await mkdir(join(temporary, format.hooks), { mode: 0o700 });
       const canonicalSource = await realpath(this.options.sourceRoot);
-      const repository = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--show-toplevel']);
+      const repository = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--show-toplevel'], true);
       const canonicalRepository = await realpath(repository);
       await this.checkedDirectory(canonicalRepository);
       const source = gitSourcePreimageSchema.parse({ schemaVersion: 1, sourceRoot: canonicalSource, repositoryRoot: canonicalRepository });
       const revision = explicitCommit === undefined ? 'HEAD^{commit}' : `${explicitCommit}^{commit}`;
-      const commit = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--verify', revision]);
+      const commit = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--verify', revision], true);
       if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
       if (explicitCommit !== undefined && commit !== explicitCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
       return gitSourceBaseSchema.parse({ schemaVersion: 1, adapter: { id: 'git', version: 1 },
@@ -143,7 +148,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       await writeFile(target.lease, JSON.stringify(record), { flag: 'wx', mode: 0o600 });
       await writeFile(join(target.directory, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
       await mkdir(join(target.directory, format.hooks), { mode: 0o700 });
-      const commit = await this.git(target.directory, ['-C', o.sourceRoot, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`]);
+      const commit = await this.git(target.directory, ['-C', o.sourceRoot, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`], true);
       if (commit !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
       await this.git(target.directory, ['clone', '--local', '--no-hardlinks', '--dissociate', '--no-checkout', `--template=${join(target.directory, format.hooks)}`, '--', o.sourceRoot, target.workspace]);
       await this.git(target.directory, ['-C', target.workspace, 'checkout', '--detach', target.request.baseCommit]);
