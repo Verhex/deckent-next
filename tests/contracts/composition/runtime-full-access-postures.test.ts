@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 // Merge boundary of Astra 2170 (three write postures of an unattended sandboxed call) and MODES-3 (full access), owner 2026-09-29: full access
 // is comprehensive — a full-access call is owner-authorized by the launched mode, so inside a sandbox realm it writes the project, the write
@@ -11,11 +12,10 @@ import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-mode
 // full-auto the three Astra 2170 postures are unchanged: a full-auto sandbox relaxation sees the whole project read-only; an owner-approved
 // call writes. Real runtime service, real policy/bindings files, real bubblewrap and the real Landlock helper (forced as the only provider).
 afterEach(closeModeRuntimes);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const landlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
-const landlockOnly: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: landlockAbi } }) }];
+const landlockOnly: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi: landlockAbi } })) }];
 const sandboxed = { schemaVersion: 1, realm: 'require-sandbox' };
 const REALMS = { bubblewrap: { shell: sandboxed }, landlock: { shell: sandboxed, sandboxes: landlockOnly } } as const;
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);

@@ -8,9 +8,10 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName, probeShellCapabilities,
+import { bubblewrapShellSandbox, createWorkspaceScope, describeMcpResult, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName,
   readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
   type McpLiveTool } from '#adapters/index.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
 // and 2026-07-28 `server/discover`), the pinned tool list, bounded redacted results, timeouts and a bounded restart. Every server here is a
@@ -296,8 +297,8 @@ createInterface({ input: process.stdin }).on('line', async line => {
   } else if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } });
 });
 `;
-const capabilities = await probeShellCapabilities();
-const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
+const capabilities = await measureTestShellHost();
+const sandboxReady = capabilities.bubblewrap.status === 'available';
 describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap realm', () => {
   const listeners: Server[] = [];
   afterEach(async () => { for (const server of listeners.splice(0)) await new Promise<void>(done => server.close(() => done())); });

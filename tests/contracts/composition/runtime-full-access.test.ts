@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { probeShellCapabilities } from '#adapters/index.js';
 import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MODES-3 (owner 2026-09-29) on the real runtime service: a turn launched in full access (`chatTurn.fullAccess`) runs everything without a
 // card — host shell, the destructive table, the write floor, `.git` — only on the company grant `permission-mode`/`set` `full-access`, with a
@@ -11,8 +11,8 @@ import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agen
 // company require-approval that is not mode-eligible still asks; the hard floor (product state, credentials, the configuration write) stays
 // closed in every mode. Real policy/bindings files, real host shell and — where available — real bubblewrap.
 afterEach(closeModeRuntimes);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const HOST = { shell: { schemaVersion: 1, realm: 'host' } };
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
 const TOOLS = [rule('read', 'agent-tool', ['read_file', 'list_dir', 'glob', 'grep'], 'allow'),

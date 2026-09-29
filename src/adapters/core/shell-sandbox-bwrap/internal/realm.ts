@@ -1,4 +1,3 @@
-import { statSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
@@ -6,9 +5,7 @@ import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
-
-/** Where a distribution installs bubblewrap; PATH is never consulted for the launcher (a PATH entry is data the command sees). */
-export const BUBBLEWRAP_KNOWN_PATHS: readonly string[] = Object.freeze(['/usr/bin/bwrap', '/usr/local/bin/bwrap', '/bin/bwrap']);
+import { verifyBubblewrapLauncher } from './launcher.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
 export const bubblewrapPosture = (view: ShellSandboxWriteView): string => `Runs in a bubblewrap sandbox: ${describeShellWritePosture(view)}, the scratch area is writable, `
@@ -28,25 +25,9 @@ const NEVER_BOUND_PREFIXES = ['/mnt', '/media', '/run', '/dev', '/proc', '/sys',
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 export interface BubblewrapOptions {
-  /** Where the launcher may be (tests point at a fixture); each must be a regular, executable file not writable by group or others. */
-  readonly binaryPaths?: readonly string[];
   readonly maxEntries?: number;
   /** The reads used per directory (default: synchronous on a local file system, asynchronous otherwise — `fsOpsFor`); tests inject one. */
   readonly fsOps?: (path: string) => FsOps;
-}
-
-/** The verified launcher: the first known path holding a regular executable that only its owner can change. */
-function findBubblewrap(paths: readonly string[]): { readonly ok: true; readonly path: string } | { readonly ok: false; readonly reason: string } {
-  for (const path of paths) {
-    try {
-      const info = statSync(path);
-      if (!info.isFile()) continue;
-      if ((info.mode & 0o111) === 0) return { ok: false, reason: `bwrap at ${path} is not executable` };
-      if ((info.mode & 0o022) !== 0) return { ok: false, reason: `bwrap at ${path} is writable by group or others` };
-      return { ok: true, path };
-    } catch { /* not here */ }
-  }
-  return { ok: false, reason: `bwrap not found at a known path (${paths.join(', ')})` };
 }
 
 /** PATH entries bound read-only are program directories only: `bin`, `.bin` or `sbin` by name (a `bin` brings its `lib*`/`libexec` siblings). */
@@ -220,8 +201,8 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
 
 /**
  * The bubblewrap realm (S9): the same process runner as the host shell (process group, cancellation, timeout, bounded output,
- * cleanup) launching `bwrap … -- bash --noprofile --norc -c <command>`. Usable only when the host measurement found the binary
- * and a working user namespace and the launcher is verified at a known path; otherwise it says why and the resolver decides.
+ * cleanup) launching `bwrap … -- bash --noprofile --norc -c <command>`. Usable only when the host measurement selected a launcher whose
+ * own sandbox run succeeded (BWRAP-SELECT) and that file is still the measured one; otherwise it says why and the resolver decides.
  */
 export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: BubblewrapOptions = {}): ShellSandbox {
   const run = (bwrap: string): ShellRealm => Object.freeze({ kind: 'bubblewrap', async run(request: ShellRealmRequest): Promise<ShellRealmResult> {
@@ -237,10 +218,12 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
   } });
   return Object.freeze({ kind: 'bubblewrap',
     usable(capabilities: ShellCapabilities): ReturnType<ShellSandbox['usable']> {
-      if (capabilities.bubblewrap !== 'available') return { ok: false, reason: `bubblewrap ${capabilities.bubblewrap}` };
-      if (capabilities.userNamespace !== 'available') return { ok: false, reason: `user namespace ${capabilities.userNamespace}` };
-      const binary = findBubblewrap(options.binaryPaths ?? BUBBLEWRAP_KNOWN_PATHS);
-      if (!binary.ok) return { ok: false, reason: binary.reason };
+      const { status, launcher, detail } = capabilities.bubblewrap;
+      if (status === 'restricted') return { ok: false, restricted: true, reason: detail ?? 'user namespace restricted' };
+      if (status !== 'available' || !launcher) return { ok: false, reason: `bubblewrap ${status}${detail ? ` (${detail})` : ''}` };
+      const verified = verifyBubblewrapLauncher(launcher);
+      if (!verified.ok) return { ok: false, reason: verified.reason };
+      const binary = launcher;
       // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
       // third-party code no card approves call by call: its view is the unattended posture with the whole project read-only (C5, owner
       // 2026-09-29, until SHELL-OVERLAY; `longLivedWritePosture`), the write floor's matcher still required (fail closed).

@@ -7,13 +7,14 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLandlockRules, createWorkspaceScope, probeShellCapabilities, resolveShellRealm, hostShellRealm, type ShellCapabilities,
+import { bubblewrapObservation, buildLandlockRules, createWorkspaceScope, resolveShellRealm, hostShellRealm, type ShellCapabilities,
   type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView, BUBBLEWRAP_KNOWN_PATHS } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // S9 at the real boundary: the installed bubblewrap, a real bash, a real project with a `.git`, a real HOME with a secret, a scratch area.
-const capabilities = await probeShellCapabilities();
-const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
+const capabilities = await measureTestShellHost();
+const sandboxReady = capabilities.bubblewrap.status === 'available';
 const roots: string[] = [], servers: Server[] = [], locked: string[] = [];
 const DEEP = Array.from({ length: 34 }, () => 'd').join('/');
 afterEach(async () => {
@@ -21,8 +22,8 @@ afterEach(async () => {
   for (const dir of locked.splice(0)) await chmod(dir, 0o700).catch(() => undefined);
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const linux = (overrides: Partial<ShellCapabilities> = {}): ShellCapabilities => ({ platform: 'linux', bubblewrap: 'available', userNamespace: 'available',
-  landlock: { status: 'available', abi: 7 }, ...overrides });
+/** This host's measurement (its bubblewrap observation: the selected launcher, BWRAP-SELECT) with a fixed Landlock ABI. */
+const linux = (overrides: Partial<ShellCapabilities> = {}): ShellCapabilities => ({ ...capabilities, landlock: { status: 'available', abi: 7 }, ...overrides });
 
 /** A project (git repository) with denied files, a HOME with a secret and a PATH toolchain, a scratch area — all under /tmp like the runtime fixtures. */
 async function fixture(options: { worktree?: boolean } = {}) {
@@ -112,16 +113,21 @@ describe('bubblewrap realm selection (S9)', () => {
     expect(host).toMatchObject({ ok: true, realm: hostShellRealm, notice: null });
     expect(host.ok && host.posture(OWNER_APPROVED_STANDART)).toContain('not a sandbox');
   });
-  it('is unusable without the binary at a known path, without the user namespace, or with an unknown measurement — visibly, never a silent fallback', async () => {
+  it('is unusable without a selected launcher, with a restricted or unknown measurement, or when the launcher is gone — visibly, never a silent fallback', async () => {
     const f = await fixture();
-    const missing = bubblewrapShellSandbox(f.layout, { binaryPaths: [join(f.root, 'no-bwrap')] });
-    expect(missing.usable(linux())).toMatchObject({ ok: false, reason: expect.stringContaining('bwrap') });
-    expect(f.sandbox.usable(linux({ bubblewrap: 'unavailable' }))).toMatchObject({ ok: false, reason: expect.stringContaining('bubblewrap') });
-    expect(f.sandbox.usable(linux({ userNamespace: 'unknown' }))).toMatchObject({ ok: false, reason: expect.stringContaining('user namespace') });
-    expect(resolveShellRealm('prefer-sandbox', linux({ userNamespace: 'unavailable' }), [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'host' },
+    const none = linux({ bubblewrap: bubblewrapObservation('unavailable', 'bwrap at /usr/bin/bwrap: version 0.9.0 is below the minimum 0.12.0') });
+    expect(f.sandbox.usable(none)).toMatchObject({ ok: false, reason: expect.stringMatching(/^bubblewrap unavailable \(.*below the minimum/u) });
+    expect(f.sandbox.usable(linux({ bubblewrap: bubblewrapObservation('unknown') }))).toMatchObject({ ok: false, reason: 'bubblewrap unknown' });
+    const restricted = linux({ bubblewrap: { ...bubblewrapObservation('restricted', 'bwrap at /x: setting up uid map: Permission denied; the kernel refuses bubblewrap the user namespace'),
+      restriction: { kind: 'user-namespace', hint: 'the kernel refuses bubblewrap the user namespace' } } });
+    expect(f.sandbox.usable(restricted)).toMatchObject({ ok: false, restricted: true, reason: expect.stringContaining('user namespace') });
+    expect(resolveShellRealm('prefer-sandbox', restricted, [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*bubblewrap: .*user namespace/u) });
-    expect(resolveShellRealm('require-sandbox', linux({ userNamespace: 'unavailable' }), [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
-    expect(resolveShellRealm('require-sandbox', linux(), [missing])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', none, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    const gone = linux({ bubblewrap: { status: 'available', rejected: [], restriction: null, detail: null,
+      launcher: { source: 'system', path: join(f.root, 'no-bwrap'), version: '0.13.0', sha256: null, overlay: true, identity: '0:0:0:0:0' } } });
+    expect(f.sandbox.usable(gone)).toMatchObject({ ok: false, reason: expect.stringMatching(/no-bwrap is gone/u) });
+    expect(resolveShellRealm('require-sandbox', gone, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
   });
   it('lays out the view from the scope: deny floor masks, every .git read-only, symlinks and ignored directories untouched', async () => {
     const f = await fixture();

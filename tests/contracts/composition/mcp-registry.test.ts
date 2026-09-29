@@ -6,19 +6,20 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, loadMcpRegistry, mcpClientSettings, McpClientPool, mcpTurnTools,
-  openMcpAgentTools, probeShellCapabilities } from '#adapters/index.js';
+  openMcpAgentTools } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { agentWorkspaceDeny, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MCP-CLIENT registry (owner 2026-09-28): servers live in scoped files outside configuration — project `.deckent/mcp.json`, personal
 // `<global root>/mcp.json` (user at the top, local under `projects.<real path>`) — trust and tool pins in product state. Real SDK server
 // processes; each fixture's own log shows which definition was started.
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
-const capabilities = await probeShellCapabilities();
-const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
+const capabilities = await measureTestShellHost();
+const sandboxReady = capabilities.bubblewrap.status === 'available';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 

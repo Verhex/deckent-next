@@ -39,6 +39,11 @@ export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Envi
   return { platform, source: override ? 'env-override' : 'platform-convention', home,
     configDir: layout.root, dataDir: layout.root, stateDir: layout.root, cacheDir };
 }
+/** The installation's global state root for this process environment; null when neither HOME nor an override names one (BWRAP-SELECT:
+ * the bundled bubblewrap's verified copy lives in its `bin/`). */
+export function globalStateRoot(env: Environment = process.env, platform: string = process.platform): string | null {
+  try { return resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env).stateDir; } catch { return null; }
+}
 export function resolveGlobalConfigPaths(env: Environment = process.env, platform: string = process.platform) {
   const scope = resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env);
   const api = pathApi(platform);

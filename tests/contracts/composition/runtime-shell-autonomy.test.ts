@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { STANDING_GRANT_KIND } from '#domain/index.js';
 import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28 live test, session ffc7277c): in full-auto, a command the classifier cannot bound (compound, variable
 // or command expansion, a path outside the project) runs without a card only inside a real sandbox realm — bubblewrap or enforced
@@ -12,11 +13,10 @@ import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agen
 // auto-edit are unchanged; the destructive table asks in every mode; the write floor and the product state never go silent.
 // Real runtime service, real policy/bindings files, real bwrap and the real Landlock helper (forced as the only provider).
 afterEach(closeModeRuntimes);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const landlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
-const landlockAt = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi } }) }];
+const landlockAt = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
 const sandboxed = { schemaVersion: 1, realm: 'require-sandbox' };
 const REALMS = {
   bubblewrap: { shell: sandboxed },

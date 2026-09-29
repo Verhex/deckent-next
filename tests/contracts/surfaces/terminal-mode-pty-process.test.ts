@@ -8,19 +8,20 @@ import { promisify, stripVTControlCharacters } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
-import { openSqliteModelActivationStore, probeShellCapabilities, readLocalOsIdentity } from '#adapters/index.js';
+import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, modelInvocationTargetId } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
 // the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
 // service (the terminal touches no file), the next turn's eligible edit runs without a card and is audited, and a narrow terminal drops the
 // mode segment from the status row. Full access opens only at launch, on the company grant, with a standing warning.
 const execute = promisify(execFile);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [], servers: Server[] = [], runtimes: ChildProcess[] = [];
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };

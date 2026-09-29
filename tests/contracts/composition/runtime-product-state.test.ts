@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -14,11 +15,10 @@ afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursi
 // Astra 2162 (owner F2): the product's own state under an ignored ancestor (`.cache/deckent`) through a real turn and a real sandbox:
 // a command naming the ledger is refused in the plan (no card — product management is not opened by any approval), and one that
 // reaches it past the classifier (a command substitution asks and is allowed) meets the sandbox's own refusal, in both realms.
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const landlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
-const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi } }) }];
+const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
 const shellGrants = [
   { id: 'shell-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
   { id: 'shell-run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } },
