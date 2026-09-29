@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createWorkspaceScope, fileContentVersion, isWriteApprovalFloored, probeShellCapabilities, scanSandboxWriteSet, WorkspaceFileTarget,
+import { applySandboxWriteSet, createWorkspaceScope, fileContentVersion, isWriteApprovalFloored, probeShellCapabilities, scanSandboxWriteSet, WorkspaceFileTarget,
   type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapArguments, bubblewrapHasOverlay, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 
@@ -139,5 +139,27 @@ describe('write-set entries at the file target (SHELL-OVERLAY)', () => {
     await writeFile(join(journal, `${crashed}.json`), JSON.stringify({ schemaVersion: 2, rel: 'src/a.ts', expected: fileContentVersion(Buffer.from('b\n')), next: 'absent',
       temporary: '.a.ts.deckent-000000000000.tmp', state: 'prepared', escapedTo: null }));
     expect(await target.lookup({ kind: 'workspace-file', id: 'src/a.ts' }, crashed)).toBeNull();
+  });
+});
+
+describe('write-set apply loop: directories are entries (Astra 2180 R1)', () => {
+  it('a directory removal is classified, decided and executed like a file; it is held back when something beneath it stayed', async () => {
+    const executed: string[] = [], decided: string[] = [];
+    const scan = { ok: true as const, refused: [], conflicts: [], emptyDirectories: [], directoryModes: new Map<string, number>(),
+      changes: [{ kind: 'delete' as const, rel: 'src/t/a', lowerVersion: 'x' }, { kind: 'delete' as const, rel: 'src/u/b', lowerVersion: 'y' },
+        { kind: 'rmdir' as const, rel: 'src/t' }, { kind: 'rmdir' as const, rel: 'src/u' }] };
+    const report = await applySandboxWriteSet({ scan, signal: new AbortController().signal, ensureParents: async () => true,
+      classify: (rel, kind) => kind === 'rmdir' && rel === 'src/u' ? 'edit-floor' : 'edit',
+      decider: { async decide(rel, cell) { decided.push(`${rel}:${cell}`); return rel === 'src/t/a' ? { ok: false, reason: 'denied-by-policy' } : cell === 'edit-floor' ? { ok: false, reason: 'write-floor' }
+        : { ok: true, gate: { async admit() {} } }; } },
+      async execute(change) { executed.push(`${change.kind}:${change.rel}`); } });
+    expect(executed).toEqual(['delete:src/u/b']);
+    expect(decided).toEqual(['src/t/a:edit', 'src/u/b:edit', 'src/u:edit-floor']);
+    expect(report.applied).toEqual(['src/u/b']);
+    expect(report.notApplied).toEqual([{ rel: 'src/t/a', reason: 'denied-by-policy' }, { rel: 'src/t/', reason: 'not-empty' }, { rel: 'src/u/', reason: 'write-floor' }]);
+    const aborted = new AbortController(); aborted.abort();
+    const stopped = await applySandboxWriteSet({ scan, signal: aborted.signal, ensureParents: async () => true, classify: () => 'edit',
+      decider: { async decide() { return { ok: true, gate: { async admit() {} } }; } }, async execute(change) { executed.push(change.rel); } });
+    expect(stopped).toMatchObject({ applied: [], stopped: true });
   });
 });

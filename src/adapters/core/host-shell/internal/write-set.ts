@@ -18,7 +18,10 @@ const HELPER_TIMEOUT_MS = 10_000;
 /** One change the sandboxed command made to the project, as the lower (the real project) must receive it. `lowerVersion`: the sha256 of the
  * lower file when scanned, or `absent` — the write's precondition. */
 export type SandboxWriteChange = { readonly kind: 'write'; readonly rel: string; readonly digest: string; readonly size: number; readonly mode: number;
-  readonly lowerVersion: string } | { readonly kind: 'delete'; readonly rel: string; readonly lowerVersion: string };
+  readonly lowerVersion: string } | { readonly kind: 'delete'; readonly rel: string; readonly lowerVersion: string }
+  /** A lower directory the command removed (Astra 2180 R1): an entry like the others — classified, decided, its own effect — applied after the
+   * removals beneath it and only when it is empty then (the file target's `empty-directory` version). */
+  | { readonly kind: 'rmdir'; readonly rel: string };
 /** Why an entry cannot be applied at all (not a policy question: the kind of file). */
 export type SandboxWriteRefusal = 'symbolic-link' | 'special-file' | 'hard-link' | 'setuid-setgid' | 'not-a-regular-file';
 export type SandboxWriteSetScan = {
@@ -27,8 +30,6 @@ export type SandboxWriteSetScan = {
   readonly refused: readonly { readonly rel: string; readonly reason: SandboxWriteRefusal }[];
   /** Lower paths that changed after the call started (their ctime is not older than the start mark): the project moved under the call. */
   readonly conflicts: readonly string[];
-  /** Lower directories a deletion empties, deepest first (removed after the deletions when empty). */
-  readonly removedDirectories: readonly string[];
   /** New directories the command left empty (not applied: directories are created only as parents of an applied file). */
   readonly emptyDirectories: readonly string[];
   /** Upper directory modes by path (a created parent gets the mode the command gave it). */
@@ -88,7 +89,7 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
   if (!listed.ok) return listed;
   const inUpper = new Map(listed.entries.map(entry => [entry.rel, entry] as const));
   const changes: SandboxWriteChange[] = [], refused: { rel: string; reason: SandboxWriteRefusal }[] = [], conflicts = new Set<string>();
-  const removedDirectories: string[] = [], emptyDirectories: string[] = [], directoryModes = new Map<string, number>();
+  const emptyDirectories: string[] = [], directoryModes = new Map<string, number>();
   let count = listed.entries.length, bytes = 0;
   const over = () => count > bounds.maxEntries ? `more than ${bounds.maxEntries} entries` : bytes > bounds.maxTotalBytes ? `more than ${bounds.maxTotalBytes} bytes` : null;
   const lowerInfo = async (rel: string) => { try { return await lstat(join(lower, rel), { bigint: true }); } catch { return null; } };
@@ -105,6 +106,13 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
     changes.push({ kind: 'delete', rel, lowerVersion: version });
     return null;
   };
+  /** A lower directory removed (Astra 2180 R1: never outside the entry path); a directory changed during the call is a conflict. */
+  const removeDirectory = async (rel: string) => {
+    const info = await lowerInfo(rel);
+    if (!info?.isDirectory()) return;
+    changed(info, rel);
+    changes.push({ kind: 'rmdir', rel });
+  };
   /** Every lower entry under a deleted or replaced directory, except the names the upper still holds (`keep`), deepest directories last. */
   const removeTree = async (rel: string, depth: number, keep: (child: string) => boolean): Promise<string | null> => {
     if (depth > bounds.maxDepth) return 'a deleted directory is deeper than the bound';
@@ -117,7 +125,7 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
       if (entry.isDirectory()) {
         const refusedTree = await removeTree(child, depth + 1, () => false);
         if (refusedTree) return refusedTree;
-        removedDirectories.push(child);
+        await removeDirectory(child);
       } else {
         const refusedFile = await removeFile(child);
         if (refusedFile) return refusedFile;
@@ -133,10 +141,9 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
       // Overlayfs writes a whiteout only over a lower entry that existed at the unlink: a lower that is gone now was removed during the call.
       if (!below) { conflicts.add(rel); continue; }
       if (below.isDirectory()) {
-        changed(below, rel);
         const refusedTree = await removeTree(rel, 0, () => false);
         if (refusedTree) return { ok: false, reason: refusedTree };
-        removedDirectories.push(rel);
+        await removeDirectory(rel);
       } else await removeFile(rel);
       continue;
     }
@@ -169,7 +176,7 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
         // A lower directory replaced by a file: its whole tree goes first.
         const refusedTree = await removeTree(rel, 0, () => false);
         if (refusedTree) return { ok: false, reason: refusedTree };
-        removedDirectories.push(rel);
+        await removeDirectory(rel);
       } else if (below.isFile()) {
         const version = await sha256File(join(lower, rel));
         if (version === null) { refused.push({ rel, reason: 'not-a-regular-file' }); continue; }
@@ -182,10 +189,11 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
   }
   const tooMuch = over();
   if (tooMuch) return { ok: false, reason: tooMuch };
-  // Deletions come first, deepest directories last: a lower directory replaced by a file is emptied before the file is written.
-  const order = (change: SandboxWriteChange) => change.kind === 'delete' ? 0 : 1;
-  return { ok: true, changes: [...changes].sort((a, b) => order(a) - order(b)), refused, conflicts: [...conflicts].sort(),
-    removedDirectories: [...new Set(removedDirectories)].sort((a, b) => b.split('/').length - a.split('/').length), emptyDirectories, directoryModes };
+  // File removals first, then directory removals deepest first, then writes: a lower directory replaced by a file is emptied and removed
+  // before the file is written.
+  const order = (change: SandboxWriteChange) => change.kind === 'delete' ? 0 : change.kind === 'rmdir' ? 1 : 2;
+  const depth = (change: SandboxWriteChange) => change.kind === 'rmdir' ? -change.rel.split('/').length : 0;
+  return { ok: true, changes: [...changes].sort((a, b) => order(a) - order(b) || depth(a) - depth(b)), refused, conflicts: [...conflicts].sort(), emptyDirectories, directoryModes };
 }
 
 /** A call's private directory: `upper` and `work` for the overlay and the start mark (the directory's own ctime, the kernel clock). */
@@ -240,7 +248,7 @@ const REASONS: Readonly<Record<string, string>> = {
   'configuration-file': 'the installation\'s configuration file: the owner approves — use edit_file/write_file', 'approval-required': 'needs the owner\'s approval — use edit_file/write_file',
   'denied-by-policy': 'denied by policy', 'audit-unavailable': 'the decision could not be recorded', denied: 'denied path', 'symbolic-link': 'symbolic link',
   'special-file': 'special file', 'hard-link': 'hard link', 'setuid-setgid': 'setuid/setgid bit', 'not-a-regular-file': 'not a regular file',
-  'parent-refused': 'its directory could not be created', rejected: 'the write was refused', conflict: 'changed during the apply (conflict)',
+  'parent-refused': 'its directory could not be created', 'not-empty': 'something beneath it was not applied, so it is not empty', rejected: 'the write was refused', conflict: 'changed during the apply (conflict)',
 };
 const list = (items: readonly string[], max = 20) => items.length <= max ? items.join(', ') : `${items.slice(0, max).join(', ')}, … (${items.length - max} more)`;
 /** The result lines (trusted metadata, bounded): what the project received from the call and what it did not, and why. */
@@ -261,9 +269,10 @@ export function describeSandboxWriteSet(report: SandboxWriteSetReport): string {
  * unknown outcome stops the rest. Nothing is applied to a path the decision did not allow.
  */
 export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteSetScan; readonly decider: SandboxWriteDecider;
-  readonly classify: (rel: string) => SandboxWriteCell | 'denied'; readonly ensureParents: (rel: string, modeOf: (directory: string) => number) => Promise<boolean>;
-  readonly removeDirectory: (rel: string) => Promise<unknown>; readonly execute: (change: SandboxWriteChange, gate: EffectApprovalGate) => Promise<void>;
-  readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
+  /** The edit path rules for one entry (a directory removal is classified as a directory: its own name and what lies beneath it). */
+  readonly classify: (rel: string, kind: SandboxWriteChange['kind']) => SandboxWriteCell | 'denied';
+  readonly ensureParents: (rel: string, modeOf: (directory: string) => number) => Promise<boolean>;
+  readonly execute: (change: SandboxWriteChange, gate: EffectApprovalGate) => Promise<void>; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
   const { scan } = input;
   const report = { refused: null, applied: [] as string[], notApplied: [] as { rel: string; reason: string }[], conflicts: [] as readonly string[], unknown: [] as string[],
     emptyDirectories: [] as readonly string[], stopped: false };
@@ -271,23 +280,27 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
   report.notApplied.push(...scan.refused);
   if (scan.conflicts.length) return { ...report, conflicts: scan.conflicts };
   report.emptyDirectories = scan.emptyDirectories;
-  for (const phase of ['delete', 'write'] as const) {
-    if (phase === 'write') for (const directory of scan.removedDirectories) await input.removeDirectory(directory);
+  const shown = (change: SandboxWriteChange) => change.kind === 'rmdir' ? `${change.rel}/` : change.rel;
+  // Astra 2180 R1: a directory removal is an entry like any other (classified, decided, its own effect, reported); it is held back when
+  // anything beneath it stayed (held back, refused or unknown), since the directory is not empty then.
+  const stayedBeneath = (rel: string) => [...report.notApplied.map(entry => entry.rel), ...report.unknown].some(other => other.startsWith(`${rel}/`));
+  for (const phase of ['delete', 'rmdir', 'write'] as const) {
     for (const change of scan.changes.filter(entry => entry.kind === phase)) {
       if (report.stopped || input.signal.aborted) { report.stopped = true; break; }
-      const cell = input.classify(change.rel);
-      if (cell === 'denied') { report.notApplied.push({ rel: change.rel, reason: 'denied' }); continue; }
+      if (change.kind === 'rmdir' && stayedBeneath(change.rel)) { report.notApplied.push({ rel: shown(change), reason: 'not-empty' }); continue; }
+      const cell = input.classify(change.rel, change.kind);
+      if (cell === 'denied') { report.notApplied.push({ rel: shown(change), reason: 'denied' }); continue; }
       const decision = await input.decider.decide(change.rel, cell);
-      if (!decision.ok) { report.notApplied.push({ rel: change.rel, reason: decision.reason }); continue; }
+      if (!decision.ok) { report.notApplied.push({ rel: shown(change), reason: decision.reason }); continue; }
       if (change.kind === 'write' && !await input.ensureParents(change.rel, directory => scan.directoryModes.get(directory) ?? 0o755)) {
         report.notApplied.push({ rel: change.rel, reason: 'parent-refused' }); continue;
       }
-      try { await input.execute(change, decision.gate); report.applied.push(change.rel); }
+      try { await input.execute(change, decision.gate); report.applied.push(shown(change)); }
       catch (error) {
         const code = (error as { code?: unknown } | null)?.code;
-        if (code === 'EFFECT_PRECONDITION_CHANGED') { report.notApplied.push({ rel: change.rel, reason: 'conflict' }); report.stopped = true; }
-        else if (code === 'EFFECT_OUTCOME_UNKNOWN') { report.unknown.push(change.rel); report.stopped = true; }
-        else report.notApplied.push({ rel: change.rel, reason: code === 'POLICY_DENIED' ? 'denied-by-policy' : code === 'EFFECT_APPROVAL_REQUIRED' ? 'approval-required' : 'rejected' });
+        if (code === 'EFFECT_PRECONDITION_CHANGED') { report.notApplied.push({ rel: shown(change), reason: 'conflict' }); report.stopped = true; }
+        else if (code === 'EFFECT_OUTCOME_UNKNOWN') { report.unknown.push(shown(change)); report.stopped = true; }
+        else report.notApplied.push({ rel: shown(change), reason: code === 'POLICY_DENIED' ? 'denied-by-policy' : code === 'EFFECT_APPROVAL_REQUIRED' ? 'approval-required' : 'rejected' });
       }
     }
   }
