@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
+import { secretDeleteCommandSchema, secretSetCommandSchema } from '#engine/core/secret-store/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 17 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
@@ -19,7 +20,7 @@ export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listAppro
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch']);
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'setSecret', 'deleteSecret']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -28,7 +29,7 @@ const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => 
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
-  || isRuntimeServiceScratchOperation(operation);
+  || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
@@ -48,6 +49,11 @@ export function isRuntimeServicePermissionModeOperation(operation: RuntimeServic
  * socket peer is the owner; single bounded answers; current version only (a v15 client can neither send nor read them). */
 export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperation): operation is 'inspectScratch' | 'clearScratch' {
   return operation === 'inspectScratch' || operation === 'clearScratch';
+}
+/** v17 (SECRET-WRITE, added to the unreleased v17 package): a change of one stored secret of the installation's store. No actor field: the
+ * socket peer is the principal; the `secret`/`set|delete` policy cell decides; single bounded answers; current version only. */
+export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' {
+  return operation === 'setSecret' || operation === 'deleteSecret';
 }
 export const runtimeOperationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
 export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
@@ -85,6 +91,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'inspectPermissionMode') parsePermissionModeQuery(value.input);
       else if (value.operation === 'setPermissionMode') parsePermissionModeCommand(value.input);
       else if (value.operation === 'inspectScratch' || value.operation === 'clearScratch') parseScratchQuery(value.input);
+      else if (value.operation === 'setSecret') secretSetCommandSchema.parse(value.input);
+      else if (value.operation === 'deleteSecret') secretDeleteCommandSchema.parse(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {

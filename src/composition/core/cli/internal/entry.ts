@@ -51,6 +51,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     runMcpCommand: runConfiguredMcpCommand,
     // SECRET-K1: doctor's secret store line and `secret list` (names only).
     inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames,
+    setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
+    deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,

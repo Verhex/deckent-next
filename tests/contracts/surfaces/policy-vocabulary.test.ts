@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 it('exposes the same versioned action/resource matrix through compiled CLI and SDK without requiring a project', async () => {
   const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: '/tmp' });
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call', 'secret']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'operation')!.actions).toEqual(['execute', 'compensate', 'inspect']);
@@ -20,6 +20,8 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'permission-mode')!.actions).toEqual(['set']);
   // PERSISTENT-APPROVALS G6: a person's standing approval of one call pattern; the resource id is the pattern key.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-tool-call')!.actions).toEqual(['invoke']);
+  // SECRET-WRITE (owner 2026-09-29 option A): a change of one stored secret; the resource id is the secret's name.
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'secret')!.actions).toEqual(['set', 'delete']);
 });
 it('catalog metadata cannot be mutated and never grants authority', () => {
   const catalog = getPolicyVocabulary(); expect(Object.isFrozen(catalog.resources)).toBe(true);

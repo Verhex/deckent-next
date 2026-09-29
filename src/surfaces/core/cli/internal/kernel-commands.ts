@@ -84,6 +84,9 @@ export interface CommandContext extends ModelCommandContext {
   // SECRET-K1 (owner S1): the active secret backend and its state; doctor-only, never a hard failure of doctor. `secret list` names only.
   inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
+  // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
+  setSecret?: import('./secret.js').SecretSetHandler;
+  deleteSecret?: import('./secret.js').SecretDeleteHandler;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };

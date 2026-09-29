@@ -20,6 +20,9 @@ export const policyResources = Object.freeze({
   permissionMode: Object.freeze({ kind: 'permission-mode' as const, actions: Object.freeze(['set'] as const) }),
   // A person's standing approval of one call pattern (PERSISTENT-APPROVALS G6): the resource id is the pattern key. It only lowers an approval.
   agentToolCall: Object.freeze({ kind: 'agent-tool-call' as const, actions: Object.freeze(['invoke'] as const) }),
+  // A change of one stored secret of the installation's secret store (SECRET-WRITE, owner 2026-09-29 option A): the resource id is the secret's
+  // name (the `$DECK:NAME` grammar). Reading a secret is not a policy action: references resolve for the configuration that names them.
+  secret: Object.freeze({ kind: 'secret' as const, actions: Object.freeze(['set', 'delete'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

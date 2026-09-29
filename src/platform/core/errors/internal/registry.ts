@@ -259,6 +259,11 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SECRET_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_CORRUPT', p, l) }) },
   SECRET_STORE_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_READ_ONLY', p, l) }) },
   SECRET_STORE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_UNSUPPORTED', p, l) }) },
+  // SECRET-WRITE: no allow grant on `secret`/`set|delete` for this name (params action, name — never a value); the text names the grant to add.
+  // The prompt of `secret set` was ended with Ctrl-C (nothing sent). Text temporary via error.unknown until the lead adds the en/tr strings
+  // (proof/SECRET-WRITE-2026-09-29/i18n-delta.json).
+  SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_CHANGE_DENIED' }, l) }) },
+  SECRET_INPUT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_INPUT_CANCELLED' }, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
