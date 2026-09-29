@@ -46,7 +46,8 @@
     "-Dman=disabled",
     "-Dselinux=disabled",
     "-Dbash_completion=disabled",
-    "-Dzsh_completion=disabled"
+    "-Dzsh_completion=disabled",
+    "-Dassume_kernel=5.15.0"
   ],
   "linked": [
     {
@@ -78,11 +79,11 @@
   "outputs": {
     "x86_64": {
       "nodeArch": "x64",
-      "sha256": "f511264896915f2ce25848f58205989254044f9766d42d68373b292c0ad7dd32"
+      "sha256": "917f8e7f834af36ba45d63bbd73466325c33f7e16e6f6c04ca7cef9c852d77c2"
     },
     "aarch64": {
       "nodeArch": "arm64",
-      "sha256": "b491887c6b4bc9b499bac3aa44d6cff3a686922e58c03fb220cab2463f2a8e63"
+      "sha256": "f9380897c4126d256e2d9580d89ccdfe1c13877c13dfd9cea212f02021460c4e"
     }
   },
   "resolvedPackages": {
@@ -196,5 +197,6 @@
       "zlib-1.3.2-r0",
       "zstd-libs-1.5.7-r2"
     ]
-  }
+  },
+  "minimumKernel": "5.15.0"
 }

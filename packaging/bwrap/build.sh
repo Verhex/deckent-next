@@ -48,10 +48,11 @@ cpu = '$arch'
 endian = 'little'
 EOF
   # No setuid support exists since 0.12.0 (the binary refuses to run setuid). SELinux labels (--exec-label/--file-label) are left
-  # out: libselinux is not linked. assume_kernel stays unset so the openat2/mount_setattr fallbacks keep older kernels working.
+  # out: libselinux is not linked. assume_kernel=5.15.0 (owner S6, 2026-09-29: minimum kernel 5.15) compiles out the pre-5.6 openat2
+  # and pre-5.12 mount_setattr fallbacks, so older kernels are not supported by this build.
   meson setup "/build/b-$arch" "$src" --cross-file "/build/cross-$arch.ini" --buildtype=release --prefer-static \
     -Ddefault_library=static -Db_pie=false -Dtests=false -Dman=disabled -Dselinux=disabled \
-    -Dbash_completion=disabled -Dzsh_completion=disabled >"/build/meson-$arch.log" 2>&1 || { cat "/build/meson-$arch.log"; exit 1; }
+    -Dbash_completion=disabled -Dzsh_completion=disabled -Dassume_kernel=5.15.0 >"/build/meson-$arch.log" 2>&1 || { cat "/build/meson-$arch.log"; exit 1; }
   ninja -C "/build/b-$arch" bwrap >"/build/ninja-$arch.log" 2>&1 || { cat "/build/ninja-$arch.log"; exit 1; }
   mkdir -p "/out/$arch"
   "$LLVM/llvm-strip" --strip-all -o "/out/$arch/bwrap" "/build/b-$arch/bwrap"
