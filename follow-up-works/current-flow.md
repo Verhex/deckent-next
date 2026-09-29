@@ -61,7 +61,7 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 ## Sıradaki
 1. Yedinci parti `ce2440f`: Astra 2171 incelemesi → PASS'te push.
 2. Sekizinci parti `61a5eac`: Astra 2172 incelemesi → PASS'te push.
-3. Dokuzuncu parti `integrate/2026-09-29-j`: tam verify (lead) → Astra → PASS'te push. Sıra her partide aynı: tam verify → Astra → push.
+3. Astra 2174/2175/2176 (06:45) üç partiye REVISE, ortak P1 (bekleyen eski MCP kartı güven kaldırıldıktan sonra gönderiyordu) → MCP-REVOKE `a5c2000` dokuzuncu partiye birleşti. Sıradaki: bu dalda tam verify → Astra'ya tek yeni sha (H+I+J) → PASS'te push; C5 owner kararı.
 4. DEPS-P0 yedinci parti push'undan sonra başlar.
 5. Owner sabah kararları: liste `proof/MORNING-REPORT-2026-09-29.md` — P1 tasarımları (anahtar zinciri / OTel / uzak MCP; önce K1 — üretimde
    `secretResolver` bağlı değil), DEPS-SCHEMA C1/C2 (= DEPS-DIST kütüphane tipleri engeli), zod 4 hata kodları (eşle / kabul et), MCP sandbox

@@ -1989,6 +1989,19 @@ tripwire: the `mcp-client.test.ts` -32602 cases). Not yet: a tool with an uncomp
 call, not marked `unmappable` at open); with `toolDefinition` the SDK also scans the pinned inputSchema for `x-mcp-header` on every
 modern-era call (headers are ignored on stdio; untested path). The MCP server side validates schemas only in
 `elicitInput`, which Deckent does not use.
+**Send authority (MCP-REVOKE, Astra 2174–2176, 2026-09-29).** A one-shot approval of a tool call never stands in for the server's trust.
+`McpToolTarget` (the one dispatch owner) requires an `admit` authority that `pool.call` asks last — after the approval wait and every local
+pre-send check, right before the request is handed to the SDK. `mcpSendAuthority` re-reads both registry files and the scope's trust record
+(user trust in the global root, project/local in the data root) under that record's config write lock (the lock `reset`/`remove`/`approve`
+take) and admits only while the server is still `trusted` as exactly the scope and definition digest the turn offered it under (`binding`,
+carried by the registry view's launch settings, not part of the launch key) and the tool's pin is that digest. Otherwise nothing is sent:
+`trust-revoked` | `definition-changed` | `pin-revoked` | `trust-unavailable` (fail closed), ledger `refused` (`EFFECT_REJECTED`). The lock is
+not held across the RPC (a 120 s call must not make `reset` fail with `CONFIG_WRITE_LOCKED`): a trust change completed before the check is always
+seen, one after it is ordered after the send; residual window = local SDK steps between the lock release and `stdin.write`; hand edits of
+`mcp.json` and the registry half of `remove` are caught only by the re-read. A revoked or changed server's process is retired from the service
+pool (at the refused call and at every turn start, `pool.retain`), so its next trusted use starts it after the cards. Open (C5, owner): a
+long-lived sandboxed MCP server can still create a new write-floor name in the project.
+
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
 changelog) makes the core stateless (`server/discover`, per-request `_meta` protocol version and client capabilities, `resultType`,
