@@ -30,6 +30,8 @@ __pycache__/
 
 # Adapter-owned native build artifacts; release binaries are copied into dist.
 src/adapters/**/native/build/
+# The bundled bubblewrap staged for development (`node scripts/build-bwrap.mjs --stage-dev <out>`); never committed (owner S5).
+src/adapters/core/shell-sandbox-bwrap/bundled/
 
 # Local refactor observations and retired watcher state are not source snapshots.
 .agents/refactor/owner-watch*

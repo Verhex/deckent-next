@@ -3,15 +3,18 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createWorkspaceScope, fileContentVersion, isWriteApprovalFloored, probeShellCapabilities, scanSandboxWriteSet, WorkspaceFileTarget,
+import { createWorkspaceScope, fileContentVersion, isWriteApprovalFloored, scanSandboxWriteSet, WorkspaceFileTarget,
   type ShellSandboxLayout } from '#adapters/index.js';
-import { bubblewrapArguments, bubblewrapHasOverlay, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
 
-// SHELL-OVERLAY at the real boundary: bubblewrap 0.13 (the reproducible build staged in the gitignored `.pack/`, sha f5112648…), a real
-// overlay in a user namespace, the native lister reading the kernel's `user.overlay.*` attributes. Skipped where that binary is absent.
-const PACK_BWRAP = join(import.meta.dirname, '../../../.pack/bwrap/x86_64/bwrap');
-const capabilities = await probeShellCapabilities();
-const ready = process.platform === 'linux' && capabilities.userNamespace === 'available' && existsSync(PACK_BWRAP);
+// SHELL-OVERLAY at the real boundary: the launcher the host measurement selects (BWRAP-SELECT: a system bwrap ≥ 0.12 or the bundled,
+// lock-verified 0.13 realized under this test process's state root), a real overlay in a user namespace, the native lister reading the
+// kernel's `user.overlay.*` attributes. Runs wherever the selected launcher has the overlay options; the real-sandbox guard
+// (bwrap-real-sandbox-guard.test.ts) fails the suite where a sandbox-capable host selected none.
+const capabilities = await measureTestShellHost();
+const launcher = capabilities.bubblewrap.launcher;
+const ready = process.platform === 'linux' && capabilities.userNamespace === 'available' && capabilities.bubblewrap.status === 'available' && launcher?.overlay === true;
 const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) {
@@ -35,7 +38,7 @@ async function fixture() {
   await new Promise(resolve => setTimeout(resolve, 30));
   await chmod(state, 0o700);
   const mark = (await lstat(state, { bigint: true })).ctimeNs;
-  const usable = bubblewrapShellSandbox(layout, { binaryPaths: [PACK_BWRAP] }).usable(capabilities);
+  const usable = bubblewrapShellSandbox(layout).usable(capabilities);
   if (!usable.ok) throw new Error(usable.reason);
   const run = (command: string) => usable.realm.run({ command, cwd: scope.root, environment: { HOME: home, PATH: '/usr/bin:/bin' }, timeoutMs: 20_000,
     writeFloorReadOnly: true, writeSet });
@@ -43,15 +46,19 @@ async function fixture() {
 }
 
 describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-OVERLAY)', () => {
-  it('the launcher version decides: 0.13 has overlay, a launcher without it does not (and refuses a write-set request)', async () => {
-    expect(bubblewrapHasOverlay(PACK_BWRAP)).toBe(true);
-    if (existsSync('/usr/bin/bwrap')) {
-      const system = await import('node:child_process').then(cp => cp.execFileSync('/usr/bin/bwrap', ['--version'], { encoding: 'utf8' }));
-      const minor = Number(/^bubblewrap 0\.(\d+)/u.exec(system)?.[1] ?? '99');
-      expect(bubblewrapHasOverlay('/usr/bin/bwrap')).toBe(minor >= 11);
-    }
+  it('the selected launcher decides: one with overlay offers write sets, one without does not (and refuses a write-set request)', async () => {
     const f = await fixture();
     expect(f.usable.ok && f.usable.writeSets).toBe(true);
+    // The same real, still-verifying launcher measured as older than 0.11: no write sets, and a write-set request runs nothing.
+    const older = bubblewrapShellSandbox(f.layout).usable(linuxShellHost({ userNamespace: capabilities.userNamespace,
+      bubblewrap: { ...capabilities.bubblewrap, launcher: { ...launcher!, overlay: false } } }));
+    expect(older.ok).toBe(true);
+    expect(older.ok && older.writeSets).toBeFalsy();
+    const refused = older.ok ? await older.realm.run({ command: 'echo ran > ran.txt', cwd: f.scope.root, environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 20_000,
+      writeFloorReadOnly: true, writeSet: f.writeSet }) : null;
+    expect(refused).toMatchObject({ status: 'spawn-failed', exitCode: null });
+    expect(refused?.output).toContain('has no overlay (bubblewrap 0.11.0 or later is needed); nothing was run.');
+    expect(existsSync(join(f.project, 'ran.txt'))).toBe(false);
     // The view mounts the project as an overlay (never a bind) and the directories must be outside it.
     const view = await resolveBubblewrapView(f.layout, { PATH: '/usr/bin' }, {}, { floorReadOnly: true, writeSet: f.writeSet });
     expect(view.ok).toBe(true);

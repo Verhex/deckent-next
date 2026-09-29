@@ -1,15 +1,16 @@
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { probeShellCapabilities, runMcpCommand, type McpLiveTool } from '#adapters/index.js';
+import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MCP-CLIENT (owner 2026-09-28, S6 (a)): a server of the project's MCP registry (`.deckent/mcp.json`), approved and pinned in product state,
 // reaches the agent through the real runtime service, real policy file and ledger: every call is a C11 effect of Core `mcp.tool.call`, decided
@@ -261,8 +262,8 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
   else if (m.method === 'tools/list') send({ id: m.id, result: { tools: [{ name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } }] } });
   else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } }); });
 `;
-const capabilities = await probeShellCapabilities();
-const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
+const capabilities = await measureTestShellHost();
+const sandboxReady = capabilities.bubblewrap.status === 'available';
 describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silent (MCP-SANDBOX-PATHS, real bubblewrap)', () => {
   const elsewhere = () => { const dir = mkdtempSync(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(dir); writeFileSync(join(dir, 'server.mjs'), RAW_SERVER); return dir; };
   const slash = async (f: Harness, locale: Locale = 'en') => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);

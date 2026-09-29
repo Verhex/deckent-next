@@ -20,7 +20,11 @@ const reviewed = { purpose: text, owners: z.array(text).min(1), criticality: z.e
   ownSolution: text, watch: z.array(text).optional(), lastReview: date, nextReview: date };
 const dependencySchema = z.object({ kind: z.enum(['runtime', 'dev']), reviewedVersion: text, features: z.array(text).min(1),
   embedded: z.array(z.object({ name: text, version: text.nullable(), license: text.optional() }).strict()).optional(), ...reviewed }).strict();
-const platformSchema = z.object({ requirement: text, ...reviewed }).strict();
+/** A native component the package ships itself (BWRAP-SELECT: bubblewrap), identified by its build lock; advisories come from the upstream
+ * repository's GitHub security advisories (OSV has no ecosystem for it). */
+const bundledSchema = z.object({ version: text, lock: text, license: text, minimumSystemVersion: text.optional(), shipArches: z.array(text).min(1),
+  advisories: z.object({ source: z.literal('github-security-advisories'), repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/u) }).strict() }).strict();
+const platformSchema = z.object({ requirement: text, bundled: bundledSchema.optional(), ...reviewed }).strict();
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 /** A known, mitigated advisory set on one package@version in named carriers (`tree` or `<registry dependency>@<version>` that embeds it).
  * `shipped: false` narrows it to the installed (dev/test) tree: deps-watch --sbom stops accepting it once the package SBOM ships the component. */
@@ -119,7 +123,15 @@ export function lintDependencies({ root, registryFile: REGISTRY_FILE, registry, 
     if (new Set(entry.owners).size !== entry.owners.length) fail('dependency-registry', REGISTRY_FILE, `${name} lists an owner twice`);
     reviewDays(entry, name);
   }
-  for (const [id, entry] of Object.entries(registry.platform)) { unitOwners(entry, `platform ${id}`); reviewDays(entry, `platform ${id}`); }
+  for (const [id, entry] of Object.entries(registry.platform)) {
+    unitOwners(entry, `platform ${id}`); reviewDays(entry, `platform ${id}`);
+    // The registry names what the lock builds and ships; a drift between them is a packaging error, not a review note.
+    if (!entry.bundled) continue;
+    const lockFile = join(root, entry.bundled.lock);
+    let lock; try { lock = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { fail('dependency-registry', REGISTRY_FILE, `platform ${id} bundled lock ${entry.bundled.lock} is not readable JSON`); continue; }
+    for (const key of ['version', 'license']) if (lock[key] !== entry.bundled[key]) fail('dependency-registry', REGISTRY_FILE, `platform ${id} bundled ${key} ${entry.bundled[key]} is not the lock's ${lock[key]}`);
+    if (JSON.stringify(lock.shipArches) !== JSON.stringify(entry.bundled.shipArches)) fail('dependency-registry', REGISTRY_FILE, `platform ${id} bundled shipArches ${entry.bundled.shipArches} are not the lock's ${lock.shipArches}`);
+  }
   const riskIds = new Set();
   for (const risk of registry.acceptedRisks) {
     const label = `accepted risk ${risk.id}`, days = (Date.parse(risk.expires) - Date.parse(risk.decided)) / DAY;

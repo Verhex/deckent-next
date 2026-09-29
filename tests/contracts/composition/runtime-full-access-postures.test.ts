@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 // Merge boundary of Astra 2170 (three write postures of an unattended sandboxed call) and MODES-3 (full access), owner 2026-09-29: full access
 // is comprehensive — a full-access call is owner-authorized by the launched mode, so inside a sandbox realm it writes the project, the write
@@ -11,11 +12,10 @@ import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-mode
 // full-auto the three Astra 2170 postures are unchanged: a full-auto sandbox relaxation sees the whole project read-only; an owner-approved
 // call writes. Real runtime service, real policy/bindings files, real bubblewrap and the real Landlock helper (forced as the only provider).
 afterEach(closeModeRuntimes);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const landlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
-const landlockOnly: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: landlockAbi } }) }];
+const landlockOnly: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi: landlockAbi } })) }];
 const sandboxed = { schemaVersion: 1, realm: 'require-sandbox' };
 const REALMS = { bubblewrap: { shell: sandboxed }, landlock: { shell: sandboxed, sandboxes: landlockOnly } } as const;
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
@@ -54,12 +54,17 @@ describe.skipIf(process.platform !== 'linux')('full access composed with the Ast
       expect(calls).toHaveLength(3);
 
       // (2) Full-auto (no launch flag) in the same setup: the sandbox relaxation runs without a card but cannot create any project file,
-      // nor commit (Astra 2170 R1 holds).
+      // nor commit (Astra 2170 R1 holds). SHELL-OVERLAY × BWRAP-SELECT: where the selected bubblewrap has overlay the writes go to a write
+      // set, each decided like an edit (no write grant here: refused, nothing applied) and `.git` stays read-only inside the overlay view.
       await writeFile(join(f.project, 'src/b.ts'), 'export const b = 2;\n');
-      for (const command of ['f=pack; echo x > src/${f}age2.json', 'n=notes; echo hi > src/${n}.txt', `${COMMIT} full-auto-commit`]) {
+      const writeSet = realm === 'bubblewrap' && measured.bubblewrap.launcher?.overlay === true;
+      for (const [command, path] of [['f=pack; echo x > src/${f}age2.json', 'src/package2.json'], ['n=notes; echo hi > src/${n}.txt', 'src/notes.txt'],
+        [`${COMMIT} full-auto-commit`, null]] as const) {
         const result = await f.call('run_shell', { command });
-        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: 'error' });
-        expect(result.text).toContain('the project was read-only for this unattended run');
+        const applied = writeSet && path !== null;
+        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: applied ? 'ok' : 'error' });
+        expect(result.text).toContain(!writeSet ? 'the project was read-only for this unattended run'
+          : path ? `[deckent] write set: not applied: ${path} (denied by policy).` : 'Read-only file system');
       }
       for (const path of ['src/package2.json', 'src/notes.txt']) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });
       expect(git(f.project, 'log', '--format=%s', '-1').trim()).toBe('full-access-floor');

@@ -1,0 +1,78 @@
+name: bwrap-bundle
+# BWRAP-SELECT (owner S5, 2026-09-29): the bundled bubblewrap is built in CI from packaging/bwrap/bwrap.lock.json in check mode (no
+# --record: any sha256 or resolved-package drift fails), never committed to Git and never downloaded at install. The x86_64 output is
+# staged where the runtime resolves it and the launcher/realm tests run against it. aarch64 is built and checked but not shipped until a
+# real arm64 host runs the realm tests (lock shipArches; the arm64 job below stays disabled until then).
+# Actions pinned by commit (release tags read 2026-09-29: checkout v7.0.1, setup-node v7.0.0, upload-artifact v7.0.1, download-artifact v8.0.1).
+on:
+  push:
+    branches: [main]
+    paths: ['packaging/bwrap/**', 'scripts/build-bwrap.mjs', 'scripts/build-dist.mjs', 'src/adapters/core/shell-sandbox-bwrap/**',
+      'src/adapters/core/host-shell/internal/probe.ts', 'tests/contracts/adapters/bwrap-launcher.test.ts', '.github/workflows/bwrap-bundle.yml']
+  pull_request:
+    paths: ['packaging/bwrap/**', 'scripts/build-bwrap.mjs', 'scripts/build-dist.mjs', 'src/adapters/core/shell-sandbox-bwrap/**',
+      'src/adapters/core/host-shell/internal/probe.ts', 'tests/contracts/adapters/bwrap-launcher.test.ts', '.github/workflows/bwrap-bundle.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-check:
+    name: reproducible build, check mode (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 24 }
+      - name: Build from the lock inside the digest-pinned Alpine image and compare with the locked sha256
+        run: node scripts/build-bwrap.mjs --arch ${{ matrix.arch }} --out "$RUNNER_TEMP/bwrap-${{ matrix.arch }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bwrap-${{ matrix.arch }}
+          path: ${{ runner.temp }}/bwrap-${{ matrix.arch }}
+          if-no-files-found: error
+  realm-x64:
+    name: launcher selection and realm tests with the built x86_64 binary
+    needs: build-check
+    runs-on: ubuntu-24.04
+    env:
+      VITEST_MAX_FORKS: '2'
+      DECKENT_GLOBAL_HOME: ${{ runner.temp }}/deckent-global
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: bwrap-x86_64, path: '${{ runner.temp }}/bwrap-x86_64' }
+      - name: Stage the verified build where the runtime resolves it (sha256 checked against the lock again)
+        run: node scripts/build-bwrap.mjs --stage-dev "$RUNNER_TEMP/bwrap-x86_64"
+      - name: Record the host's user-namespace restriction (evidence for the typed AppArmor path)
+        run: |
+          uname -r
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 'no AppArmor userns restriction sysctl'
+          /usr/bin/bwrap --version 2>/dev/null || echo 'no system bwrap'
+      - name: Launcher selection as the runner is configured (restricted → typed; otherwise a real sandbox run)
+        run: npx vitest run tests/contracts/adapters/bwrap-launcher.test.ts tests/contracts/tooling/bwrap-lock.test.ts
+      - name: Realm tests with unprivileged user namespaces allowed for this runner only
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          npx vitest run tests/contracts/adapters/bwrap-launcher.test.ts tests/contracts/adapters/shell-sandbox-bwrap.test.ts tests/contracts/adapters/shell-realm.test.ts
+  realm-arm64:
+    # Disabled until the arm64 native prebuild card lands (owner 2026-09-29): enabling it, and seeing it pass, is what allows adding
+    # aarch64 to the lock's shipArches.
+    if: ${{ false }}
+    name: realm tests with the built aarch64 binary on a real arm64 host
+    needs: build-check
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: { name: bwrap-aarch64, path: '${{ runner.temp }}/bwrap-aarch64' }
+      - run: echo 'stage with an arm64 shipArches lock, then run the realm tests' && exit 1

@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
-import { agentShellEffectCommandId, landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { agentShellEffectCommandId, landlockShellSandbox, openSqliteAgentTurnStore, openSqliteModelActivationStore, openTerminalSessionStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
@@ -21,15 +21,15 @@ import { agentFileEffectCommandId, chatTurnCompactionCommandId, chatTurnRoundCom
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 const roots: string[] = [], servers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 // S9: the real host measurement gates the bubblewrap turn; other shell tests pin the realm to `host` or inject `() => []`.
-const measured = await probeShellCapabilities();
-const sandboxReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const sandboxReady = measured.bubblewrap.status === 'available';
 const kernelLandlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
 /** S11 through the port: only the Landlock provider, judged against an injected measurement (the kernel's ABI, or one it does not have). */
-const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi } }) }];
+const landlockOnly = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
 afterEach(async () => {
   for (const service of services.splice(0)) { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }

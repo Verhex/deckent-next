@@ -9,14 +9,17 @@
 // if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components). MCP-SCHEMA-VALIDATOR: Deckent ships its
 // own JSON Schema validator (src/platform/core/validate), so the SDK's @cfworker/json-schema provider must not reach the bundle either.
 // Reads the existing `dist` (run `npm run build` first; `--build` does it), writes `<out>/package/` (+ `<out>/meta.json`), and with `--pack`
-// the tarball. Usage: node scripts/build-dist.mjs [--out .pack] [--build] [--pack]
+// the tarball. Usage: node scripts/build-dist.mjs [--out .pack] [--build] [--pack] [--bwrap <build-bwrap output>]
+// BWRAP-SELECT: the bundled bubblewrap (owner S4/S5) comes from a build-bwrap output (CI check-mode build) and must be exactly the locked
+// build for the shipped architectures with its notice, licenses and corresponding source; otherwise the package is not publishable.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, version as esbuildVersion } from 'esbuild';
-import { bundledPackages, cyclonedx, embeddedInBundle, thirdPartyNotices } from './dist-sbom.mjs';
+import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, thirdPartyNotices } from './dist-sbom.mjs';
+import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
 import { loadRegistry } from './dependencies.mjs';
 import { vendorDeclarations } from './dist-types.mjs';
 
@@ -104,7 +107,7 @@ export function publishedManifest(source, extraFiles) {
   return out;
 }
 
-export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timestamp } = {}) {
+export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timestamp, bwrap = null } = {}) {
   const dist = join(root, 'dist'), stage = join(out, 'package');
   if (!existsSync(join(dist, 'build-identity.json'))) throw new Error('dist/build-identity.json missing: run `npm run build` first (or pass --build)');
   const identity = JSON.parse(readFileSync(join(dist, 'build-identity.json'), 'utf8'));
@@ -112,6 +115,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (identity.packageVersion !== source.version) throw new Error(`dist was built for ${identity.packageVersion}, package.json is ${source.version}: rebuild`);
   // Only a previous build-dist output (or an absent directory) is replaced; never an arbitrary --out tree.
   if (existsSync(out) && readdirSync(out).length && !existsSync(join(out, 'summary.json'))) throw new Error(`refusing to replace ${out}: not a build-dist output`);
+  if (existsSync(join(out, 'bwrap'))) throw new Error(`refusing to replace ${out}: it holds bubblewrap builds (bwrap/); pass another --out`);
   rmSync(out, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 
   const files = walk(dist), stubHits = new Map();
@@ -135,6 +139,10 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (declarations.problems.length) throw new Error(`published declarations are not self-contained:\n${declarations.problems.join('\n')}`);
   for (const file of files.filter(file => !file.endsWith('.js') && !file.endsWith('.d.ts'))) { const target = join(stage, 'dist', relative(dist, file)); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
   for (const extra of ['assets', 'native', 'README.md', 'LICENSE']) if (existsSync(join(root, extra))) cpSync(join(root, extra), join(stage, extra), { recursive: true });
+  const bwrapLock = JSON.parse(readFileSync(join(root, 'packaging', 'bwrap', 'bwrap.lock.json'), 'utf8')), bundledDir = join(stage, 'dist', BUNDLED_DIR);
+  if (bwrap) stageBundle(bwrap, bundledDir, bwrapLock);
+  const bundleGaps = bundleProblems(bundledDir, bwrapLock);
+  const native = bundleGaps.length ? [] : bundledNativeComponents(bwrapLock);
   const manifest = publishedManifest(source, ['THIRD-PARTY-NOTICES.md', 'sbom.cdx.json']);
   for (const bin of Object.values(manifest.bin ?? {})) chmodSync(join(stage, bin), 0o755);
 
@@ -145,21 +153,24 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const ajvViolations = ajvGuard({ metafile: result.metafile, shipped, embedded, hits: stubHits });
   if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
-    shipped, embedded, timestamp: timestamp ?? identity.builtAt });
-  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded, declarations: declarations.vendored });
+    shipped, embedded, native, timestamp: timestamp ?? identity.builtAt });
+  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded, declarations: declarations.vendored, native: bundleGaps.length ? [] : [{ name: bwrapLock.component,
+    version: bwrapLock.version, notice: readFileSync(join(bundledDir, 'NOTICE-bubblewrap.txt'), 'utf8'), dir: relative(stage, bundledDir) }] });
   writeFileSync(join(stage, 'sbom.cdx.json'), `${JSON.stringify(bom, null, 2)}\n`);
   writeFileSync(join(stage, 'THIRD-PARTY-NOTICES.md'), `${notices.text}\n`);
   writeFileSync(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   writeFileSync(join(out, 'meta.json'), JSON.stringify(result.metafile));
   const typeLeaks = declarationImports(join(stage, 'dist'));
   const blockers = [...(Object.keys(typeLeaks).length ? [`published declarations import packages the zero-dependency package cannot resolve: ${Object.keys(typeLeaks).join(', ')}`] : []),
-    ...(existsSync(join(stage, 'LICENSE')) ? [] : ['LICENSE file missing']), ...notices.gaps.map(gap => `notice: ${gap}`)];
+    ...(existsSync(join(stage, 'LICENSE')) ? [] : ['LICENSE file missing']), ...notices.gaps.map(gap => `notice: ${gap}`),
+    ...bundleGaps.map(gap => `bubblewrap: ${gap}`)];
   const summary = { schemaVersion: 1, stage, esbuild: esbuildVersion, outputs: Object.keys(result.metafile.outputs).length, requireBanner: patched,
     ajvStub: Object.fromEntries([...stubHits].sort(([a], [b]) => a.localeCompare(b))),
     shipped: shipped.map(item => `${item.name}@${item.version}`), treeShaken: treeShaken.map(item => `${item.name}@${item.version}`),
     embedded: embedded.map(item => `${item.name}@${item.version} in ${item.carrier}: ${item.shipped ? 'shipped' : 'not shipped'}`),
     declarations: { own: declarations.own, ownDropped: files.filter(file => file.endsWith('.d.ts')).length - declarations.own, ownRewritten: declarations.rewrittenOwn,
       vendored: declarations.vendored.map(item => `${item.name}@${item.version}: ${item.files.length}`) },
+    bubblewrap: bundleGaps.length ? { shipped: false, problems: bundleGaps } : { shipped: true, version: bwrapLock.version, arches: bwrapLock.shipArches },
     typeLeaks, publishable: { ok: blockers.length === 0, blockers } };
   writeFileSync(join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return summary;
@@ -176,7 +187,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2), outAt = args.indexOf('--out');
   const out = resolve(outAt > -1 ? args[outAt + 1] : join(ROOT, '.pack'));
   if (args.includes('--build')) execFileSync(process.execPath, [join(ROOT, 'scripts/build.mjs')], { cwd: ROOT, stdio: 'inherit' });
-  const summary = await buildDist({ out });
+  const bwrapAt = args.indexOf('--bwrap');
+  const summary = await buildDist({ out, bwrap: bwrapAt > -1 ? resolve(args[bwrapAt + 1]) : null });
   const packed = args.includes('--pack') ? packDist(summary, out) : null;
   process.stdout.write(`${JSON.stringify({ ...summary, packed }, null, 2)}\n`);
 }

@@ -2,24 +2,24 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
-import { bubblewrapShellSandbox } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { globalStateRoot } from '#platform/index.js';
+import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
 
 // SHELL-OVERLAY (owner 2026-09-29: the permanent C5 answer — a sandboxed write cannot create a new floor name without a card). A full-auto
 // shell call past the narrow set writes into an overlay; at its end each change is decided like an edit of that path and applied as its
-// own `workspace.file.write` effect. Real runtime service, real policy files, real bubblewrap 0.13 (the reproducible build staged in the
-// gitignored `.pack/`), real overlay in a user namespace.
+// own `workspace.file.write` effect. Real runtime service, real policy files, the production sandbox list and the launcher the service
+// itself selects (BWRAP-SELECT: the measurement under the global state root — the test run's temporary DECKENT_GLOBAL_HOME, vitest.config),
+// real overlay in a user namespace. Nothing test-only chooses the launcher: this is the production path that makes overlay active.
 afterEach(closeModeRuntimes);
-const PACK_BWRAP = join(import.meta.dirname, '../../../.pack/bwrap/x86_64/bwrap');
-const measured = await probeShellCapabilities();
-const ready = process.platform === 'linux' && measured.bubblewrap === 'available' && measured.userNamespace === 'available' && existsSync(PACK_BWRAP);
-const bwrap013: ShellSandboxFactory = layout => [bubblewrapShellSandbox(layout, { binaryPaths: [PACK_BWRAP] })];
+const measured = await shellSandboxCapabilities(globalStateRoot());
+const ready = process.platform === 'linux' && measured.bubblewrap.status === 'available' && measured.bubblewrap.launcher?.overlay === true
+  && measured.userNamespace === 'available';
 /** The live shape plus the first-run template's write operation grant (what an edit's operation side needs). */
 const GRANTS = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
   rule('write-op', 'operation', ['workspace.file.write'], 'allow')];
 const runtime = (mode: 'full-auto' | 'auto-edit' = 'full-auto', grants = GRANTS, shell: Record<string, unknown> = {}) =>
-  modeRuntime({ grants, mode, shell: { schemaVersion: 1, realm: 'require-sandbox', ...shell }, sandboxes: bwrap013 });
+  modeRuntime({ grants, mode, shell: { schemaVersion: 1, realm: 'require-sandbox', ...shell } });
 
 describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () => {
   it('a new floor name is not written; ordinary changes, a rename and an opaque directory are applied, each audited like an edit', async () => {

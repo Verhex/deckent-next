@@ -18,7 +18,7 @@ export type { CrashArtifactV1 } from '#platform/core/crash-reporting/index.js';
 export { ENVIRONMENT_KEYS, envValue } from '#platform/core/host/index.js';
 export { isMainModule } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
-export { normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
+export { globalStateRoot, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile } from '#platform/core/host/index.js';

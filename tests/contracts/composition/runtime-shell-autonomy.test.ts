@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { landlockShellSandbox, probeShellCapabilities, type ShellSandboxFactory } from '#adapters/index.js';
+import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { STANDING_GRANT_KIND } from '#domain/index.js';
 import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
+import { measureTestShellHost, linuxShellHost } from '../../fixtures/shell-host.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28 live test, session ffc7277c): in full-auto, a command the classifier cannot bound (compound, variable
 // or command expansion, a path outside the project) runs without a card only inside a real sandbox realm — bubblewrap or enforced
@@ -12,11 +13,10 @@ import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agen
 // auto-edit are unchanged; the destructive table asks in every mode; the write floor and the product state never go silent.
 // Real runtime service, real policy/bindings files, real bwrap and the real Landlock helper (forced as the only provider).
 afterEach(closeModeRuntimes);
-const measured = await probeShellCapabilities();
-const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
+const measured = await measureTestShellHost();
+const bwrapReady = measured.bubblewrap.status === 'available';
 const landlockAbi = measured.landlock.status === 'available' ? measured.landlock.abi ?? 0 : 0;
-const landlockAt = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable({ platform: 'linux',
-  bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi } }) }];
+const landlockAt = (abi: number): ShellSandboxFactory => layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
 const sandboxed = { schemaVersion: 1, realm: 'require-sandbox' };
 const REALMS = {
   bubblewrap: { shell: sandboxed },
@@ -156,15 +156,19 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
   // Astra 2170 R1: a name the classifier cannot see (built at run time) must not create a write-floor path without a card. A full-auto sandbox
   // relaxation runs with the whole project read-only (only the scratch area and bubblewrap's private /tmp stay writable): a boundary, not a
   // list of names. The narrow set keeps writing (its literal targets pass the write check); an owner-approved call writes the floor.
+  // SHELL-OVERLAY × BWRAP-SELECT: where the selected bubblewrap has overlay, the relaxation's writes go to a write set instead and each is
+  // decided like an edit of its path — with no `workspace.file.write` grant here, every one is refused and nothing reaches the project.
   for (const realm of ['bubblewrap', 'landlock'] as const) {
     it.skipIf(realm === 'bubblewrap' ? !bwrapReady : landlockAbi < 6)(`${realm}: no new floor path (or any project file) appears from an unattended unbounded run; the narrow set still writes`, async () => {
       const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
+      const writeSet = realm === 'bubblewrap' && measured.bubblewrap.launcher?.overlay === true;
       const created = ['src/package.json', '.github/workflows/x.yml', 'Makefile', 'sub/Dockerfile', 'notes.txt'];
-      for (const command of ['f=pack; echo X > src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x > ${d}hub/workflows/x.yml', 'm=Make; echo x > ${m}file',
-        'mkdir -p sub && d=Docker; echo x > sub/${d}file', 'echo hi > notes.txt && cat notes.txt']) {
+      const commands = ['f=pack; echo X > src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x > ${d}hub/workflows/x.yml', 'm=Make; echo x > ${m}file',
+        'mkdir -p sub && d=Docker; echo x > sub/${d}file', 'echo hi > notes.txt && cat notes.txt'];
+      for (const [index, command] of commands.entries()) {
         const result = await f.call('run_shell', { command });
-        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: 'error' });
-        expect(result.text).toContain('the project was read-only for this unattended run');
+        expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: writeSet ? 'ok' : 'error' });
+        expect(result.text).toContain(writeSet ? `[deckent] write set: not applied: ${created[index]} (denied by policy).` : 'the project was read-only for this unattended run');
       }
       for (const path of created) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(access(join(f.project, 'sub'))).rejects.toMatchObject({ code: 'ENOENT' });

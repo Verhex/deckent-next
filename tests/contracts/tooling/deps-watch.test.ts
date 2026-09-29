@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // Tooling runs against source; the network is injected so the whole producer-to-report pipeline is exercised offline.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { licenseAllowed, osvSeverity, runWatch } from '../../../scripts/deps-watch.mjs';
+import { bundledAdvisoryFindings, licenseAllowed, osvSeverity, runWatch } from '../../../scripts/deps-watch.mjs';
 
 type Finding = { severity: string; kind: string; subject: string; detail: string };
 const roots: string[] = [];
@@ -162,5 +162,24 @@ describe('deps-watch', () => {
       expect(vulnerabilities(shipped.report).some(finding => finding.severity === 'MITIGATED')).toBe(false);
       expect(vulnerabilities(shipped.report)[0]!.detail).toContain('accepted risk fast-uri-accepted covers the installed tree only, but the package SBOM ships it');
     });
+  });
+
+  it('judges a bundled component by its upstream GitHub advisories: the shipped version and the minimum system version (BWRAP-SELECT)', () => {
+    // The shape `gh api repos/containers/bubblewrap/security-advisories` returned on 2026-09-29.
+    const advisories = [
+      { ghsa_id: 'GHSA-pxhw-h44j-8pfx', cve_id: 'CVE-2026-87766', severity: 'high', summary: 'symlink traversal via /oldroot', vulnerabilities: [{ vulnerable_version_range: '< 0.12.0', patched_versions: '0.12.0' }] },
+      { ghsa_id: 'GHSA-xq78-7hw4-5jvp', cve_id: 'CVE-2026-41163', severity: 'high', summary: 'setuid ptrace', vulnerabilities: [{ vulnerable_version_range: '0.11.0', patched_versions: '0.11.2' }] },
+      { ghsa_id: 'GHSA-new', cve_id: null, severity: 'critical', summary: 'no fix yet', vulnerabilities: [{ vulnerable_version_range: '<= 0.13.0', patched_versions: null }] },
+      { ghsa_id: 'GHSA-gone', severity: 'critical', withdrawn_at: '2026-09-01', vulnerabilities: [{ patched_versions: '9.0.0' }] }];
+    const found: { severity: string; subject: string; detail: string }[] = [];
+    const add = (severity: string, _kind: string, subject: string, detail: string) => { found.push({ severity, subject, detail }); };
+    bundledAdvisoryFindings('bubblewrap', { version: '0.13.0', minimumSystemVersion: '0.12.0' }, advisories.slice(0, 2), add);
+    expect(found).toEqual([]);
+    bundledAdvisoryFindings('bubblewrap', { version: '0.13.0', minimumSystemVersion: '0.11.0' }, advisories, add);
+    expect(found.map(item => [item.severity, item.subject, item.detail.split(':')[0]])).toEqual([
+      ['HIGH', 'bubblewrap@0.11.0 (minimum system)', 'GHSA-pxhw-h44j-8pfx / CVE-2026-87766 fixed in 0.12.0'],
+      ['HIGH', 'bubblewrap@0.11.0 (minimum system)', 'GHSA-xq78-7hw4-5jvp / CVE-2026-41163 fixed in 0.11.2'],
+      ['CRITICAL', 'bubblewrap@0.13.0 (bundled)', 'GHSA-new has no patched release'],
+      ['CRITICAL', 'bubblewrap@0.11.0 (minimum system)', 'GHSA-new has no patched release']]);
   });
 });

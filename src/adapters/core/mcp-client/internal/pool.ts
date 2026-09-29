@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { DeckentJsonSchemaValidator, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { DeckentJsonSchemaValidator, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import { describeShellWritePosture, longLivedWritePosture, sandboxWriteView, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
@@ -19,7 +20,7 @@ export interface McpLaunchContext {
   readonly cwd: string;
   readonly environment: Readonly<Record<string, string | undefined>>;
   readonly sandboxes: readonly ShellSandbox[];
-  /** Measured host capabilities (defaults to the process-wide probe). */
+  /** Measured host capabilities (defaults to the process-wide probe, the bubblewrap launcher under the global state root). */
   readonly capabilities?: ShellCapabilities;
 }
 /** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view.
@@ -45,7 +46,7 @@ export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
   const env = { ...server.env };
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
-  const capabilities = context.capabilities ?? await shellSandboxCapabilities(), reasons: string[] = [];
+  const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), reasons: string[] = [];
   if (capabilities.platform !== 'linux') reasons.push(`platform ${capabilities.platform}`);
   else for (const sandbox of context.sandboxes) {
     const usable = sandbox.usable(capabilities);

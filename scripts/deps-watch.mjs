@@ -4,7 +4,9 @@
 // --sbom, the CycloneDX SBOM of a bundled package (scripts/build-dist.mjs): every shipped component, nested embedded ones included, is queried
 // too — a component only the SBOM names (packaging drift) is itself reported.
 // Sources: OSV querybatch + /v1/vulns/{id} (installed tree AND embedded components), npm registry (latest, deprecated, provenance =
-// dist.attestations, publish dates for direct dependencies and registry alternatives), `npm audit signatures --json`, lockfile licenses.
+// dist.attestations, publish dates for direct dependencies and registry alternatives), `npm audit signatures --json`, lockfile licenses, and
+// for a platform component the package ships itself (dependencies.json `platform.<id>.bundled`, BWRAP-SELECT: bubblewrap) the upstream
+// repository's GitHub security advisories against the bundled version and the minimum system version it accepts.
 // Writes <outDir>/deps-watch-<date>.json and .md; exit 1 when a finding's severity is in policy.failSeverities (default HIGH/CRITICAL).
 // dependencies.json `acceptedRisks` turn a vulnerability into MITIGATED (reported, not failing) only while the entry is unexpired and the
 // component's observed advisory set, version, carrier and severities match it exactly; any change fails again. An entry with `shipped: false`
@@ -17,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { defaultHosts, scanEmbedded } from './check-embedded-deps.mjs';
 import { loadRegistry } from './dependencies.mjs';
 
-const OSV = 'https://api.osv.dev/v1', NPM = 'https://registry.npmjs.org', ABBREVIATED = 'application/vnd.npm.install-v1+json';
+const OSV = 'https://api.osv.dev/v1', NPM = 'https://registry.npmjs.org', ABBREVIATED = 'application/vnd.npm.install-v1+json', GITHUB = 'https://api.github.com';
 const RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0, MITIGATED: -1 };
 
 /** OSV record → severity. MAL- (malicious package) is CRITICAL; an unrated record counts as HIGH (fail-closed). */
@@ -62,6 +64,27 @@ export function applyAcceptedRisks(vulnerable, risks, today, add, shippedKeys = 
     }
   }
   for (const risk of risks) if (!used.has(risk.id)) add('LOW', 'accepted-risk-unused', risk.id, `${risk.package}@${risk.version} in ${risk.carriers.join(', ')} is no longer observed; remove the entry`);
+}
+
+const versionBelow = (version, other) => {
+  const [a, b] = [version, other].map(text => text.split(/[.-]/u).slice(0, 3).map(part => Number.parseInt(part, 10) || 0));
+  for (let index = 0; index < 3; index++) if (a[index] !== b[index]) return a[index] < b[index];
+  return false;
+};
+/** GitHub security advisories of a bundled component, judged for the shipped version and the minimum system version it accepts: a version
+ * below every patched release of an advisory is affected (an advisory without a patched release is reported for review). */
+export function bundledAdvisoryFindings(id, bundled, advisories, add) {
+  for (const advisory of advisories) {
+    if (advisory.withdrawn_at) continue;
+    const patched = (advisory.vulnerabilities ?? []).flatMap(item => String(item.patched_versions ?? '').split(',').map(part => part.trim()).filter(Boolean));
+    const severity = RANK[String(advisory.severity ?? '').toUpperCase()] > 0 ? String(advisory.severity).toUpperCase() : 'HIGH';
+    for (const [label, version] of [['bundled', bundled.version], ['minimum system', bundled.minimumSystemVersion]]) {
+      if (!version) continue;
+      const subject = `${id}@${version} (${label})`, name = `${advisory.ghsa_id}${advisory.cve_id ? ` / ${advisory.cve_id}` : ''}`;
+      if (!patched.length) add(severity, 'vulnerability', subject, `${name} has no patched release: ${advisory.summary ?? ''}`.trim());
+      else if (patched.every(fixed => versionBelow(version, fixed))) add(severity, 'vulnerability', subject, `${name} fixed in ${patched.join(', ')}: ${advisory.summary ?? ''}`.trim());
+    }
+  }
 }
 
 const pool = async (items, size, work) => {
@@ -157,6 +180,14 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
     });
     applyAcceptedRisks(vulnerable, registry.acceptedRisks, today, add, shippedKeys);
   } catch (error) { add('HIGH', 'watch-incomplete', 'OSV', error.message); }
+
+  // Components the package ships itself: their upstream advisories (GitHub; OSV has no ecosystem for them).
+  for (const [id, entry] of Object.entries(registry.platform)) {
+    if (!entry.bundled) continue;
+    const repository = entry.bundled.advisories.repository;
+    try { bundledAdvisoryFindings(id, entry.bundled, await fetchJson(`${GITHUB}/repos/${repository}/security-advisories?per_page=100`, { headers: { accept: 'application/vnd.github+json' } }) ?? [], add); }
+    catch (error) { add('HIGH', 'watch-incomplete', `GitHub advisories ${repository}`, error.message); }
+  }
 
   // npm registry: abbreviated packuments for the installed tree; full packuments (publish times) for direct deps and alternatives.
   const direct = [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.devDependencies ?? {})];

@@ -72,8 +72,30 @@ export function embeddedInBundle(root, shipped, licenses = new Map()) {
 const contentUuid = text => { const hex = createHash('sha256').update(text).digest('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((parseInt(hex[16], 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`; };
 
+/** Native executables the package ships itself (BWRAP-SELECT: bubblewrap, from its build lock): one application component per shipped
+ * architecture's binary (generic purl with the corresponding source's download URL and checksum), the statically linked Alpine packages
+ * nested under it. `path` is where the binary sits in the package. */
+export function bundledNativeComponents(lock, path = arch => `dist/adapters/core/shell-sandbox-bwrap/bundled/linux-${arch}/bwrap`) {
+  const distro = `alpine-${lock.buildImage.alpineRelease}`;
+  return lock.shipArches.map(arch => {
+    const nodeArch = lock.outputs[arch].nodeArch;
+    const purl = `pkg:generic/${lock.component}@${lock.version}?download_url=${encodeURIComponent(lock.source.url)}&checksum=sha256:${lock.source.sha256}`;
+    return { type: 'application', 'bom-ref': `${purl}#linux-${nodeArch}`, name: lock.component, version: lock.version, purl, licenses: licenseChoice(lock.license),
+      hashes: [{ alg: 'SHA-256', content: lock.outputs[arch].sha256 }],
+      externalReferences: [{ type: 'source-distribution', url: lock.source.url, hashes: [{ alg: 'SHA-256', content: lock.source.sha256 }] },
+        { type: 'vcs', url: `https://github.com/containers/${lock.component}` }],
+      properties: [{ name: 'deckent:bundle:path', value: path(nodeArch) }, { name: 'deckent:bundle:arch', value: `linux-${nodeArch}` },
+        { name: 'deckent:bundle:minimumKernel', value: lock.minimumKernel }, { name: 'deckent:bundle:correspondingSource', value: `source/${lock.component}-${lock.version}.tar.xz` }],
+      components: lock.linked.filter(part => part.apk).map(part => {
+        const ref = `pkg:apk/alpine/${part.apk}@${part.version}?arch=${arch}&distro=${distro}`;
+        return { type: 'library', 'bom-ref': `${ref}#${lock.component}-linux-${nodeArch}`, name: part.apk, version: part.version, purl: ref, licenses: licenseChoice(part.spdx),
+          properties: [{ name: 'deckent:bundle:linkedInto', value: `${lock.component}@${lock.version}` }] };
+      }) };
+  });
+}
+
 /** CycloneDX 1.6 JSON. `pkg` is the staged package.json; `identity` the build identity; `tools` [{name, version}]. */
-export function cyclonedx({ pkg, identity, tools, shipped, embedded, timestamp }) {
+export function cyclonedx({ pkg, identity, tools, shipped, embedded, timestamp, native = [] }) {
   const rootRef = npmPurl(pkg.name, pkg.version);
   const component = (item, extra = []) => {
     const [group, name] = item.name.startsWith('@') ? item.name.split('/') : [undefined, item.name];
@@ -95,14 +117,14 @@ export function cyclonedx({ pkg, identity, tools, shipped, embedded, timestamp }
   const body = { metadata: { timestamp, tools: { components: tools.map(tool => ({ type: 'application', name: tool.name, version: tool.version })) },
     component: { type: 'application', 'bom-ref': rootRef, name: pkg.name, version: pkg.version, purl: rootRef, licenses: licenseChoice(pkg.license),
       properties: [{ name: 'deckent:build:sourceTreeSha256', value: identity.sourceTreeSha256 }, ...(identity.sourceCommit ? [{ name: 'deckent:build:sourceCommit', value: identity.sourceCommit }] : [])] } },
-  components, dependencies: [{ ref: rootRef, dependsOn: components.map(item => item['bom-ref']) }] };
+  components: [...components, ...native], dependencies: [{ ref: rootRef, dependsOn: [...components, ...native].map(item => item['bom-ref']) }] };
   const serialNumber = `urn:uuid:${contentUuid(JSON.stringify({ ...body, metadata: { ...body.metadata, timestamp: null } }))}`;
   return { bomFormat: 'CycloneDX', specVersion: '1.6', serialNumber, version: 1, ...body };
 }
 
 /** THIRD-PARTY-NOTICES.md: every shipped package with its own license file text; embedded components with the license their carrier did not
  * ship as text. Returns { text, gaps } — a gap is a shipped component whose license text is not available offline. */
-export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations = [] }) {
+export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations = [], native = [] }) {
   const gaps = [], sections = [`# Third-party notices for ${pkg.name} ${pkg.version}`, '',
     `This package bundles the third-party code listed below into its own files (no install-time dependencies). The machine-readable list is sbom.cdx.json.`, ''];
   for (const item of shipped) {
@@ -135,5 +157,9 @@ export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations =
       for (const file of item.licenseFiles) sections.push('```text', readFileSync(join(root, item.dir, file), 'utf8').trimEnd(), '```', '');
     }
   }
+  // Separate programs shipped next to the code (BWRAP-SELECT): their notice (license, where the corresponding source is in the package,
+  // linked components) as the build wrote it; the license texts ship beside them.
+  for (const item of native) sections.push(`## ${item.name} ${item.version} (separate executable)`, '', '```text', item.notice.trimEnd(), '```', '',
+    `Files: ${item.dir}/ (licenses/, source/).`, '');
   return { text: sections.join('\n'), gaps };
 }
