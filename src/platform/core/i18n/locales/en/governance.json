@@ -725,6 +725,7 @@
   "error.LEDGER_RESET_REQUIRED": "This development ledger lacks required custody or criterion evidence. Reset the development database before continuing.",
   "error.ATTEMPT_STORE_BUSY": "The ledger is busy. Retry the read after the current operation finishes.",
   "error.ATTEMPT_STORE_OPTIONS": "The configured storage options are invalid.",
+  "error.ATTEMPT_STORE_SQLITE_UNSUPPORTED": "This Node.js build's SQLite engine is older than 3.51.3 (fixes the WAL-reset corruption bug). Upgrade Node.js to {floor} or newer, which bundles it.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite cannot read the ledger in this environment. WAL inspection may require shared-memory sidecar access.",
   "error.ATTEMPT_STORE_CORRUPT": "Stored execution data failed validation.",
   "error.DISPATCH_CORRUPT": "Stored dispatch data is inconsistent or invalid.",
@@ -1040,5 +1041,7 @@
   "error.SECRET_STORE_UNSAFE": "The secret-store in {path} is not private: the directory and secrets.json must belong to you, allow no group or other access (0700 / 0600), and must not be links. It was not read or repaired.",
   "error.SECRET_STORE_CORRUPT": "The secret-store {backend} could not be read as a schemaVersion 1 document. Its content is not shown.",
   "error.SECRET_STORE_READ_ONLY": "The secret-store {backend} is read-only; select a writable backend (for example core.secret-store.file@1) in the installation config.",
-  "error.SECRET_STORE_UNSUPPORTED": "The secret-store {backend} cannot list its secrets (environment variables are not a list of secrets)."
+  "error.SECRET_STORE_UNSUPPORTED": "The secret-store {backend} cannot list its secrets (environment variables are not a list of secrets).",
+  "error.SECRET_CHANGE_DENIED": "No policy grant allows `{action}` on the secret-store entry [{name}]; nothing was written. Add an allow grant to policy.json: resource kind `secret`, actions [\"{action}\"], ids [\"{name}\"] or \"all\", your principal and this scope (a first-run template v2 installation has it).",
+  "error.SECRET_INPUT_CANCELLED": "Cancelled; nothing was sent or stored."
 }

@@ -2,7 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
-import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, resolveLocale, t, LOCALES,
+import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, redactSensitive, resolveLocale, t, LOCALES,
   type Locale, type MessageKey, type MessageFamily } from '../../../src/platform/index.js';
 
 const unit = new URL('../../../src/platform/core/i18n/', import.meta.url);
@@ -86,5 +86,19 @@ describe('K2 catalog registry contract', () => {
       }
       visit(source);
     }
+  });
+  it('renders every error.* template with sample parameters unaltered by the error redactor (a hint must stay readable)', () => {
+    // A sensitive word followed by `=`/`:`/whitespace masks the next word: human error output passes redactSensitive, so a catalog text
+    // must never trigger it with its own words. A secret's {name} is a real secret name (ending in KEY/TOKEN), so the text must never put
+    // whitespace after it (SECRET-WRITE rule); other {name}s (MCP servers and tools) are ordinary names.
+    const sample = (key: string, param: string) => param === 'name' && key.startsWith('error.SECRET_') ? 'OPENAI_API_KEY' : param === 'action' ? 'set' : `sample-${param}`;
+    const altered: string[] = [];
+    for (const key of MESSAGE_KEYS.filter(key => key.startsWith('error.'))) {
+      for (const locale of LOCALES) {
+        const text = t(key, Object.fromEntries(params(MESSAGE_REGISTRY.catalogs[locale][key]!).map(param => [param, sample(key, param)])), locale);
+        if (redactSensitive(text) !== text) altered.push(`${locale}:${key}`);
+      }
+    }
+    expect(altered).toEqual([]);
   });
 });

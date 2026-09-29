@@ -241,8 +241,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   POLICY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_UNAVAILABLE', p, l) }) },
   POLICY_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DENIED', p, l) }) },
   SCOPE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SCOPE_UNKNOWN', p, l) }) },
-  // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED;
-  // text is temporary via error.unknown until the lead adds the real en/tr strings (see i18n-delta.json).
+  // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
   POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
@@ -260,10 +259,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SECRET_STORE_READ_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_READ_ONLY', p, l) }) },
   SECRET_STORE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_UNSUPPORTED', p, l) }) },
   // SECRET-WRITE: no allow grant on `secret`/`set|delete` for this name (params action, name — never a value); the text names the grant to add.
-  // The prompt of `secret set` was ended with Ctrl-C (nothing sent). Text temporary via error.unknown until the lead adds the en/tr strings
-  // (proof/SECRET-WRITE-2026-09-29/i18n-delta.json).
-  SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_CHANGE_DENIED' }, l) }) },
-  SECRET_INPUT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'SECRET_INPUT_CANCELLED' }, l) }) },
+  // The prompt of `secret set` was ended with Ctrl-C (nothing sent).
+  SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_CHANGE_DENIED', p, l) }) },
+  SECRET_INPUT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_INPUT_CANCELLED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
@@ -282,9 +280,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   LEDGER_MIGRATION_EVIDENCE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.LEDGER_MIGRATION_EVIDENCE_REQUIRED', p, l) }) },
   ATTEMPT_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_BUSY', p, l) }) },
   ATTEMPT_STORE_OPTIONS: { category: 'config', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_OPTIONS', p, l) }) },
-  // DEPS-P0: text temporary via error.unknown (code kept through interpolation) until the lead adds the en/tr
-  // strings (proof/DEPS-P0-2026-09-29/i18n-delta.json), matching the SECRET-K1 precedent for a deferred catalog key.
-  ATTEMPT_STORE_SQLITE_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ATTEMPT_STORE_SQLITE_UNSUPPORTED' }, l) }) },
+  // DEPS-P0: node:sqlite predates the 3.51.3 floor; the text names the floor literally and {floor} is the Node engine range (default param).
+  ATTEMPT_STORE_SQLITE_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_SQLITE_UNSUPPORTED', p, l) }) },
   ATTEMPT_STORE_READ_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_READ_UNAVAILABLE', p, l) }) },
   ATTEMPT_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_CORRUPT', p, l) }) },
   DISPATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CORRUPT', p, l) }) },

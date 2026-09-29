@@ -725,6 +725,7 @@
   "error.LEDGER_RESET_REQUIRED": "Bu geliştirme ledger kaydında gerekli custody veya kriter kanıtı yok. Devam etmeden önce geliştirme veritabanını sıfırlayın.",
   "error.ATTEMPT_STORE_BUSY": "Ledger meşgul. Mevcut işlem tamamlandıktan sonra okumayı tekrar deneyin.",
   "error.ATTEMPT_STORE_OPTIONS": "Yapılandırılmış depolama seçenekleri geçersiz.",
+  "error.ATTEMPT_STORE_SQLITE_UNSUPPORTED": "Bu Node.js kurulumunun SQLite motoru 3.51.3'ten eski (WAL sıfırlama bozulması düzeltmesini içerir). Bu sürümü taşıyan {floor} veya üstü bir Node.js sürümüne yükseltin.",
   "error.ATTEMPT_STORE_READ_UNAVAILABLE": "SQLite bu ortamda ledger kaydını okuyamıyor. WAL incelemesi paylaşımlı bellek yan dosyasına erişim gerektirebilir.",
   "error.ATTEMPT_STORE_CORRUPT": "Saklanan yürütme verisi doğrulanamadı.",
   "error.DISPATCH_CORRUPT": "Saklanan yürütme ataması tutarsız veya geçersiz.",
@@ -1040,5 +1041,7 @@
   "error.SECRET_STORE_UNSAFE": "{path} içindeki secret'lar deposu özel değil: dizin ve secrets.json size ait olmalı, grup ya da diğerlerine erişim vermemeli (0700 / 0600) ve bağlantı olmamalı. Okunmadı ve onarılmadı.",
   "error.SECRET_STORE_CORRUPT": "{backend} secret'lar deposu schemaVersion 1 belgesi olarak okunamadı. İçeriği gösterilmiyor.",
   "error.SECRET_STORE_READ_ONLY": "{backend} secret'lar deposu salt okunur; kurulum config'inde yazılabilir bir arka uç seçin (örneğin core.secret-store.file@1).",
-  "error.SECRET_STORE_UNSUPPORTED": "{backend} secret'lar deposu secret'larını listeleyemez (ortam değişkenleri secret'lardan oluşan bir liste değildir)."
+  "error.SECRET_STORE_UNSUPPORTED": "{backend} secret'lar deposu secret'larını listeleyemez (ortam değişkenleri secret'lardan oluşan bir liste değildir).",
+  "error.SECRET_CHANGE_DENIED": "Hiçbir policy grant'i secret-store kaydında `{action}` işlemine izin vermiyor [{name}]; hiçbir şey yazılmadı. policy.json'a bir allow grant ekleyin: kaynak türü `secret`, eylemler [\"{action}\"], kimlikler [\"{name}\"] ya da \"all\", kendi principal'ınız ve bu kapsam (ilk kurulum şablonu v2 kurulumunda vardır).",
+  "error.SECRET_INPUT_CANCELLED": "İptal edildi; hiçbir şey gönderilmedi ya da saklanmadı."
 }
