@@ -181,6 +181,9 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
   ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
     ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
-      admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : [])].join('\n'));
-  // modelInvocationDelivery and secretStore are JSON-only for now, like policyTemplate: no human-text rendering yet (i18n-delta.json).
+      admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : []),
+  // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
+  ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
+    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : [])].join('\n'));
+  // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

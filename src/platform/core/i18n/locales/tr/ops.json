@@ -144,6 +144,7 @@
   "doctor.tmux_not_required_docker": "gerekli değil (docker backend)",
   "doctor.tmux_not_required_subprocess": "gerekli değil (subprocess backend)",
   "doctor.tmux_not_required_win32": "gerekli değil (Windows — tmux yerel olarak desteklenmiyor)",
+  "doctor.secretStore": "Secret deposu: {backend} ({status}{codeSuffix})",
   "health.auth": "kimlik doğrulama",
   "health.logged_in": "oturum açık",
   "health.logged_out": "oturum kapalı",

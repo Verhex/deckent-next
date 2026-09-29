@@ -579,6 +579,7 @@
   "config.field.toolchains": "Worker toolchain güncellik kontrolü: mod, registry uç noktası ve sorgu sınırları (salt okunur, güncelleme yapmaz)",
   "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",
   "config.field.mcp": "Yerel MCP girdi, yanıt ve eşzamanlılık sınırları",
+  "config.field.secrets": "$DECK:NAME referanslarının çözüldüğü yer: secrets.store kayıtlı bir arka ucu adlandırır (varsayılan core.secret-store.env@1; core.secret-store.file@1 onları <global kök>/secrets.json içinde, 0600 tutar). Yalnız kurulum config'i; proje dosyası ayarlayamaz.",
   "config.field.cli": "Sınırlı Task grafı JSON girdisi dahil komut satırı girdi sınırları",
   "cli.run.reserve.heading": "Run {run} için {count} Attempt ayrıldı (komut {command})",
   "cli.run.reserve.identity": "Sonraki adım: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}",

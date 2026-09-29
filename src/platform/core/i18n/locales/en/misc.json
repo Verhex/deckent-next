@@ -579,6 +579,7 @@
   "config.field.toolchains": "Worker toolchain currency check: mode, registry endpoint and probe limits (read-only, no updates)",
   "config.field.admission": "Run admission pool, capacity and scheduling order",
   "config.field.mcp": "Local MCP input, response and concurrency limits",
+  "config.field.secrets": "Where $DECK:NAME references are resolved: secrets.store names a registered backend (default core.secret-store.env@1; core.secret-store.file@1 keeps them in <global root>/secrets.json, 0600). Installation config only; a project file may not set it.",
   "config.field.cli": "Command-line input limits, including bounded Task graph JSON",
   "cli.run.reserve.heading": "Attempts reserved: {count} for Run {run} (command {command})",
   "cli.run.reserve.identity": "Next step: deckent task execute --scope {scopeId} --run {runId} --task {taskId} --attempt {attemptId} --generation {generation} --layout-revision {layoutRevision}",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ConfigValidationError, ErrorRegistry, installSecretResolverFactory, normalizeGlobalScopePlatform, registerConfigSection,
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, ErrorRegistry, installSecretResolverFactory, normalizeGlobalScopePlatform, registerConfigSection,
   resolveGlobalScopePaths, type Environment } from '#platform/index.js';
 import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretStore, type SecretStoreFactory } from '#engine/index.js';
 import { ENV_SECRET_STORE_ID, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
@@ -47,8 +47,7 @@ export function registerSecretStoreConfig(): void {
       const store = readSecretsConfig(config).store;
       if (!registry.has(store)) throw ErrorRegistry.createError('SECRET_STORE_UNKNOWN', { params: { backend: store } });
     },
-    // No `metadata` yet: its description key `config.field.secrets` is proposed in i18n-delta.json (locale files are the lead's); until then
-    // the generic `config.section` description is shown.
+    metadata: { descriptionKey: 'config.field.secrets', tier: 'core', since: CONFIG_CONTRACT_SINCE },
   });
   // The one production resolver: each call opens the selected backend and reads per reference (no value cache).
   installSecretResolverFactory(context => {
