@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema } from '#domain/index.js';
 import { parseProviderSpendCheckpoint, validateProviderSpendIntegrityPageSize, verifyModelInvocationReceipt, ProviderSpendError,
   type ProviderSpendIntegrityReader, type ProviderSpendIntegrityPageQuery } from '#engine/index.js';
-import { PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+import { PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { readSpendCheckpoint, decodeSpendReservation } from './spend-checkpoint.js';
 
 class SqliteProviderSpendIntegrityReader implements ProviderSpendIntegrityReader {
@@ -51,13 +51,15 @@ export function openSqliteProviderSpendIntegrityReader(path: string, options: { 
     || options.busyTimeoutMs < 0 || options.busyTimeoutMs > 2_147_483_647) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   let db: DatabaseSync | undefined;
   try {
+    assertSqliteEngineSupported(process.versions.sqlite);
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
     requireLedgerVersion(db, PROVIDER_SPEND_LEDGER_VERSION);
     return new SqliteProviderSpendIntegrityReader(db);
   } catch (error) {
     try { db?.close(); } catch { /* The reader never wrote state. */ }
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ATTEMPT_STORE_VERSION') throw error;
+    if (error && typeof error === 'object' && 'code' in error
+      && (error.code === 'ATTEMPT_STORE_VERSION' || error.code === 'ATTEMPT_STORE_SQLITE_UNSUPPORTED')) throw error;
     throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
   }
 }

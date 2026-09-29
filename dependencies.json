@@ -79,13 +79,13 @@
     },
     "react": {
       "kind": "runtime",
-      "reviewedVersion": "19.3.0",
+      "reviewedVersion": "19.2.8",
       "owners": ["src/surfaces/core/terminal", "src/surfaces/core/terminal-composer", "src/surfaces/core/terminal-kit", "src/surfaces/core/terminal-render"],
       "purpose": "Component model for the ink TUI.",
       "features": ["useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext, createElement", "ReactElement, ReactNode types"],
       "criticality": "P1",
       "alternatives": [
-        { "name": "react 19.2.x", "package": "react", "version": "19.2.8", "date": "2026-07-21", "note": "Owner decision 2026-09-29: pin 19.2.x (latest 19.2.8) to match ink's react-reconciler 0.33 (reconcilerVersion 19.2.0); DEPS-P0 applies it." },
+        { "name": "react 19.3.x (latest)", "package": "react", "version": "19.3.0", "date": "2026-09-09", "note": "Not taken: react-reconciler@0.33.0 (ink 7.1.1's pinned ^0.33.0) ships internal reconcilerVersion \"19.2.0\" and peers on ^19.2.0; 19.3.0 satisfies the semver range but is not the release-train match React ships. DEPS-P0 (owner 2026-09-29) pins react to 19.2.8 instead; verified via `npm ls react react-reconciler` (deduped, no mismatch). Revisit when ink moves to react-reconciler 0.34 (peers ^19.3.0)." },
         { "name": "preact", "package": "preact", "version": "10.29.8", "date": "2026-08-01", "note": "Not supported by ink; only relevant with an own renderer." }
       ],
       "ownSolution": "None while ink is the renderer; react goes with ink.",
@@ -233,13 +233,13 @@
     },
     "@types/node": {
       "kind": "dev",
-      "reviewedVersion": "25.9.7",
+      "reviewedVersion": "24.19.0",
       "owners": ["tsconfig.json"],
       "purpose": "Node API types (tsconfig types: [node]).",
       "features": ["node:* module declarations for src, scripts and tests"],
       "criticality": "P1",
       "alternatives": [
-        { "name": "@types/node 24.x", "package": "@types/node", "version": "24.19.0", "date": "2026-09-25", "note": "Major must match the engines floor: DEPS-P0 moves to ^24; 25 is an EOL Node line (npm latest is 26.6.3)." }
+        { "name": "@types/node 25.x/26.x", "package": "@types/node", "version": "26.6.3", "date": "2026-09-29", "note": "Not taken: major must match the engines floor (DEPS-P0: engines.node >=24.15.0); 25.x is an EOL Node line's types. Typecheck stayed green after the 25.9.7 -> 24.19.0 downgrade; no API typechecked only under @types/node 25 was found in src/scripts/tests. Move to the 26.x line's types when Node 26 becomes the primary target (LTS 2026-10-28, owner 2026-09-29 decision)." }
       ],
       "ownSolution": "None.",
       "lastReview": "2026-09-29",
@@ -247,20 +247,22 @@
     },
     "@types/react": {
       "kind": "dev",
-      "reviewedVersion": "19.3.0",
+      "reviewedVersion": "19.2.18",
       "owners": ["tsconfig.json"],
       "purpose": "React types for the terminal units (jsx react-jsx).",
       "features": ["ReactElement, ReactNode and hook types"],
       "criticality": "P2",
-      "alternatives": [],
-      "ownSolution": "Goes with react; align to 19.2.x with the react pin.",
+      "alternatives": [
+        { "name": "@types/react 19.3.x (latest)", "package": "@types/react", "version": "19.3.0", "date": "2026-09-29", "note": "Not taken: kept on the 19.2.x line to match the react 19.2.8 pin (DEPS-P0); `npm ls react react-reconciler` shows @types/react deduped against runtime react with no mismatch." }
+      ],
+      "ownSolution": "Goes with react; aligned to 19.2.x with the react pin (DEPS-P0 applied 2026-09-29).",
       "lastReview": "2026-09-29",
       "nextReview": "2026-12-28"
     }
   },
   "platform": {
     "node": {
-      "requirement": "engines >=24.0.0 today; owner 2026-09-29: >=24.15.0 (SQLite 3.51.3 WAL-reset fix) with 24 and 26 supported, 26 primary after its LTS on 2026-10-28",
+      "requirement": "engines >=24.15.0 (SQLite 3.51.3 WAL-reset fix; DEPS-P0 applied 2026-09-29) with 24 and 26 supported, 26 primary after its LTS on 2026-10-28",
       "owners": ["src/platform", "src/adapters", "src/composition"],
       "purpose": "JavaScript runtime and the built-in modules every package uses (node: prefix enforced by lint-arch).",
       "criticality": "P0",
@@ -273,7 +275,7 @@
       "nextReview": "2026-10-29"
     },
     "sqlite": {
-      "requirement": "node:sqlite with process.versions.sqlite >= 3.51.3 (startup check lands with DEPS-P0)",
+      "requirement": "node:sqlite with process.versions.sqlite >= 3.51.3 (assertSqliteEngineSupported before every node:sqlite open: 10 sites: the ledger connection, seven read-only readers, the scope-registry reader and the VACUUM INTO backup; ATTEMPT_STORE_SQLITE_UNSUPPORTED; DEPS-P0 applied 2026-09-29)",
       "owners": ["src/adapters/core/sqlite-ledger", "src/adapters/core/sqlite-agent-turn", "src/adapters/core/sqlite-model-activation", "src/adapters/core/sqlite-model-invocation", "src/adapters/core/attempt-store", "src/adapters/core/approval-store", "src/adapters/core/audit-store"],
       "purpose": "Ledger and stores via synchronous DatabaseSync (WAL, synchronous FULL/EXTRA, user_version migrations).",
       "criticality": "P0",

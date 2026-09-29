@@ -1,7 +1,7 @@
 import { readIntegration } from './integration.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
-  type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+  assertSqliteEngineSupported, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteRunJournal } from './runs.js';
 import { identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,6 +17,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   constructor(path: string, options: SqliteInventoryOptions) {
     const parsed = sqliteLedgerOptionsSchema.unwrap().pick({ busyTimeoutMs: true }).strict().safeParse(options);
     if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+    assertSqliteEngineSupported(process.versions.sqlite);
     try { this.db = new DatabaseSync(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs }); }
     catch (error) { throw readFailure(error); }
     try {

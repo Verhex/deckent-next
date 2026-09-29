@@ -277,6 +277,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   LEDGER_MIGRATION_EVIDENCE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.LEDGER_MIGRATION_EVIDENCE_REQUIRED', p, l) }) },
   ATTEMPT_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_BUSY', p, l) }) },
   ATTEMPT_STORE_OPTIONS: { category: 'config', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_OPTIONS', p, l) }) },
+  // DEPS-P0: text temporary via error.unknown (code kept through interpolation) until the lead adds the en/tr
+  // strings (proof/DEPS-P0-2026-09-29/i18n-delta.json), matching the SECRET-K1 precedent for a deferred catalog key.
+  ATTEMPT_STORE_SQLITE_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.unknown', { ...p, code: 'ATTEMPT_STORE_SQLITE_UNSUPPORTED' }, l) }) },
   ATTEMPT_STORE_READ_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_READ_UNAVAILABLE', p, l) }) },
   ATTEMPT_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_CORRUPT', p, l) }) },
   DISPATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CORRUPT', p, l) }) },

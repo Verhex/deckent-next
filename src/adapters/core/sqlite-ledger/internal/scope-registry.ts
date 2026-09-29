@@ -4,7 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError } from '#engine/index.js';
 import { openSqliteLedger } from './connection.js';
 import { CURRENT_LEDGER_VERSION } from './schema.js';
-import { sqliteFailure, type SqliteLedgerOptions } from './options.js';
+import { sqliteFailure, assertSqliteEngineSupported, type SqliteLedgerOptions } from './options.js';
 
 const COMPANY = /^[a-z0-9][a-z0-9-]{0,62}$/;
 export interface ScopeRegistration {
@@ -19,6 +19,7 @@ export interface ScopeRegistration {
  */
 export function readScopeCompanies(path: string, busyTimeoutMs: number, scopeIds: readonly string[]): ReadonlyMap<string, string> {
   try { if (!lstatSync(path).isFile()) return new Map(); } catch { return new Map(); }
+  assertSqliteEngineSupported(process.versions.sqlite);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let db: DatabaseSync;
   try { db = new NativeDatabase(path, { timeout: busyTimeoutMs, readOnly: true }); } catch (error) { throw sqliteFailure(error); }

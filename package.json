@@ -2,10 +2,10 @@
   "name": "deckent",
   "version": "1.0.0-alpha.2",
   "description": "Provider-neutral, local-first AI agent orchestration runtime (Terminal · MCP · API)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.15.0"
   },
   "bin": {
     "deckent": "./dist/composition/core/cli/internal/entry.js",
@@ -55,14 +55,14 @@
     "@modelcontextprotocol/client": "2.2.0",
     "@modelcontextprotocol/server": "2.2.0",
     "ink": "7.1.1",
-    "react": "19.3.0",
+    "react": "19.2.8",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.5.0",
-    "@types/react": "^19.2.7",
+    "@types/node": "^24.19.0",
+    "@types/react": "19.2.18",
     "esbuild": "0.28.2",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",

@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { identitySchema, type ModelInvocationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError, parseModelAllocationCheckpoint, validateModelAllocationPageSize, verifyModelInvocationReceipt,
   type ModelAllocationIntegrityReader, type ModelAllocationIntegrityQuery } from '#engine/index.js';
-import { MODEL_ALLOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+import { MODEL_ALLOCATION_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { readModelAllocationCheckpoint } from './allocation.js';
 
 function invalid(): never { throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT'); }
@@ -53,13 +53,15 @@ export function openSqliteModelAllocationIntegrityReader(path: string, options: 
     || options.busyTimeoutMs < 0 || options.busyTimeoutMs > 2_147_483_647) invalid();
   let db: DatabaseSync | undefined;
   try {
+    assertSqliteEngineSupported(process.versions.sqlite);
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_ALLOCATION_LEDGER_VERSION);
     return new SqliteModelAllocationIntegrityReader(db);
   } catch (error) {
     try { db?.close(); } catch { /* Read-only connection owns no persistent effects. */ }
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ATTEMPT_STORE_VERSION') throw error;
+    if (error && typeof error === 'object' && 'code' in error
+      && (error.code === 'ATTEMPT_STORE_VERSION' || error.code === 'ATTEMPT_STORE_SQLITE_UNSUPPORTED')) throw error;
     throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
 }
