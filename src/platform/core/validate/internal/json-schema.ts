@@ -179,6 +179,8 @@ class Compiler {
     if (!isObject(node)) return;
     if (++this.nodes > this.limits.schemaNodes) throw new JsonSchemaRefusal('limit', at, `more than ${this.limits.schemaNodes} schema objects`);
     if (depth > this.limits.schemaDepth) throw new JsonSchemaRefusal('limit', at, `schema nested deeper than ${this.limits.schemaDepth}`);
+    for (const key of ['$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$vocabulary'])
+      if (key in node) throw new JsonSchemaRefusal('unsupported-keyword', `${at}/${key}`, `${key} is not supported`);
     const siblingsIgnored = this.dialect === 'draft-07' && '$ref' in node;
     const id = node['$id'], anchor = this.dialect === '2020-12' ? node['$anchor'] : undefined;
     if (depth > 0 && id !== undefined && !siblingsIgnored) {
@@ -252,6 +254,11 @@ class Compiler {
     };
     return this.memo.get(node)!;
   }
+  /** Steps into a member of the instance; every applicator that descends goes through here, so instanceDepth holds on every path. */
+  private enter(ctx: Ctx, part: string | number): void {
+    ctx.path.push(part);
+    if (ctx.path.length > this.limits.instanceDepth) throw new ValidationLimit(`instance nested deeper than ${this.limits.instanceDepth}`);
+  }
   private refuse(at: string, key: string, detail: string): never { throw new JsonSchemaRefusal('unsupported-keyword', `${at}/${key}`, detail); }
   private invalid(at: string, key: string, detail: string): never { throw new JsonSchemaRefusal('invalid-schema', `${at}/${key}`, detail); }
   private count(at: string, amount: number): void {
@@ -284,6 +291,14 @@ class Compiler {
       this.refuse(at, key, other.has(key) ? `${key} is not a ${this.dialect} keyword` : `unknown keyword ${key}`);
     }
     if (this.dialect === '2020-12' && Array.isArray(node['items'])) this.refuse(at, 'items', 'the array form of items is not a 2020-12 keyword (use prefixItems)');
+    // Also for objects only a `$ref` pointer reaches (under an `x-` or unknown container the scan does not walk): an embedded resource or
+    // dialect would change how its references resolve, so it is refused, never read as an annotation.
+    if (at !== '' && keys.includes('$id')) {
+      const id = node['$id'];
+      if (!(this.dialect === 'draft-07' && typeof id === 'string' && id.startsWith('#') && ANCHOR.test(id.slice(1)))) this.refuse(at, '$id', 'embedded $id resources are not supported');
+    }
+    if (at !== '' && keys.includes('$schema') && (typeof node['$schema'] !== 'string' || DIALECTS.get(node['$schema'].replace(/#$/u, '')) !== this.dialect))
+      throw new JsonSchemaRefusal('unsupported-dialect', `${at}/$schema`, 'a subschema declares another dialect');
     const has = (key: string) => keys.includes(key) && node[key] !== undefined;
     const nonNegative = (key: string) => { const v = node[key]; if (!Number.isSafeInteger(v) || (v as number) < 0) this.invalid(at, key, 'a non-negative integer'); return v as number; };
     const number = (key: string) => { const v = node[key]; if (typeof v !== 'number' || !Number.isFinite(v)) this.invalid(at, key, 'a number'); return v; };
@@ -372,8 +387,7 @@ class Compiler {
       for (let k = 0; k < instance.length; k++) {
         const validate = k < tuple.length ? tuple[k]! : rest;
         if (!validate) break;
-        ctx.path.push(k);
-        if (ctx.path.length > this.limits.instanceDepth) throw new ValidationLimit(`instance nested deeper than ${this.limits.instanceDepth}`);
+        this.enter(ctx, k);
         const ok = validate(instance[k], ctx, this.track ? newEv() : null);
         ctx.path.pop();
         if (!ok) return false;
@@ -390,7 +404,7 @@ class Compiler {
         let matched = 0;
         const message = ctx.message;
         for (let k = 0; k < instance.length; k++) {
-          ctx.path.push(k);
+          this.enter(ctx, k);
           const ok = contains(instance[k], ctx, this.track ? newEv() : null);
           ctx.path.pop();
           if (ok) { matched++; ev?.items.add(k); if (!ev && matched >= min && max === Infinity) break; }
@@ -407,7 +421,7 @@ class Compiler {
       if (!Array.isArray(instance) || ev?.all) return true;
       for (let k = 0; k < instance.length; k++) {
         if (ev?.items.has(k)) continue;
-        ctx.path.push(k);
+        this.enter(ctx, k);
         const ok = unevaluated(instance[k], ctx, newEv());
         ctx.path.pop();
         if (!ok) return false;
@@ -422,7 +436,7 @@ class Compiler {
       if (!isObject(instance)) return true;
       for (const key of Object.keys(instance)) {
         if (ev?.props.has(key)) continue;
-        ctx.path.push(key);
+        this.enter(ctx, key);
         const ok = unevaluated(instance[key], ctx, newEv());
         ctx.path.pop();
         if (!ok) return false;
@@ -459,8 +473,7 @@ class Compiler {
         for (const [pattern, validate] of patterns) if (pattern.test(key, ctx.budget)) applied.push(validate);
         if (applied.length === 0 && additional) applied.push(additional);
         if (applied.length === 0) continue;
-        ctx.path.push(key);
-        if (ctx.path.length > this.limits.instanceDepth) throw new ValidationLimit(`instance nested deeper than ${this.limits.instanceDepth}`);
+        this.enter(ctx, key);
         const ok = applied.every(validate => validate(instance[key], ctx, this.track ? newEv() : null));
         ctx.path.pop();
         if (!ok) return false;
