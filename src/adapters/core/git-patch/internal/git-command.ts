@@ -4,6 +4,7 @@ import type { GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js'
 import { WorkspacePatchError } from '#engine/index.js';
 import format from './delivery-format.json' with { type: 'json' };
 import { gitFailure } from './snapshot.js';
+import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 /** Bounded Git process for reference writers: no hooks, fsmonitor, replace objects, network or user/system config.
  * The fixed author/committer identity also names reflog entries. */
 export class GitCommand {
@@ -11,9 +12,8 @@ export class GitCommand {
   run(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs) {
     if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time');
     return new Promise<string>((resolve, reject) => {
-      const child = execFile(this.options.gitExecutable, ['--no-replace-objects', '-C', this.options.sourceRoot,
-        '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', ...args], {
-        env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0',
+      const child = execFile(this.options.gitExecutable, localGitArgs(this.options.sourceRoot, args), {
+        env: { ...GIT_LOCAL_ENV,
           ...(index ? { GIT_INDEX_FILE: index } : {}), GIT_AUTHOR_NAME: format.authorName, GIT_AUTHOR_EMAIL: format.authorEmail,
           GIT_COMMITTER_NAME: format.authorName, GIT_COMMITTER_EMAIL: format.authorEmail, GIT_AUTHOR_DATE: format.date, GIT_COMMITTER_DATE: format.date },
         timeout: Math.max(1, deadline - Date.now()), maxBuffer: this.options.outputBytes, encoding: 'utf8',
