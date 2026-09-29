@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CONFIG_FIELDS, getConfigFieldDefault } from '#platform/core/config-fields/index.js';
 import { CORE_SCHEMA, configSections, createDefaultConfig, getConfigMetadata } from '#platform/core/config/index.js';
@@ -80,7 +81,9 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     for (const key of ['execution', 'cancellation', 'cancellationRuntime', 'reconciliationRuntime', 'admission'] as const) expect(d[key], key).toBeNull();
   });
 
-  // One row per object-valued `.default(...)` parent: a partial authored object must receive the same inner defaults as an absent one.
+  // One row per object-valued `.default(...)` parent: a partial authored object must receive the committed golden subtree (compared to the
+  // fixture, not to a live parse({}), so a short-circuit at one nested site cannot hide on both sides).
+  const committed = JSON.parse(readFileSync(new URL('../../fixtures/config-golden/defaults.json', import.meta.url), 'utf8')) as Record<string, unknown>;
   const partials: readonly (readonly [string, Record<string, unknown>])[] = [
     ['layout', { layout: {} }], ['storage', { storage: {} }], ['storage', { storage: { driver: 'sqlite' } }],
     ['artifacts', { artifacts: { maxBytes: 16_777_216 } }], ['artifacts', { artifacts: { maxBytes: 16_777_216, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } } }],
@@ -90,8 +93,8 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     ['toolchains', { toolchains: {} }], ['toolchains', { toolchains: { currency: {} } }], ['toolchains', { toolchains: { update: {} } }],
     ['company', { company: {} }], ['live_trace', { live_trace: {} }], ['providers', { providers: {} }],
   ];
-  it.each(partials)('partial %s %j defaults to the same subtree as an absent field', (key, input) => {
-    expect((CORE_SCHEMA.parse(input) as Record<string, unknown>)[key]).toEqual((CORE_SCHEMA.parse({}) as Record<string, unknown>)[key]);
+  it.each(partials)('partial %s %j defaults to the committed golden subtree', (key, input) => {
+    expect(sorted((CORE_SCHEMA.parse(input) as Record<string, unknown>)[key])).toEqual(committed[key]);
   });
 
   it('nullable-with-inner-defaults fields apply their inner defaults once authored', () => {
