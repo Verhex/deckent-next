@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { probeShellCapabilities, runMcpCommand, type McpLiveTool } from '#adapters/index.js';
-import { resolveProductLayout } from '#platform/index.js';
-import { runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
+import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -41,7 +41,7 @@ const approve = (project: string, env: Record<string, string>, name = 'fx', alwa
 /** Approval through the adapter with the harness's sandbox list (the composition command always uses the shipped providers). */
 const approveWithout = (f: { project: string; data: string; env: Record<string, string> }) => runMcpCommand({ verb: 'approve', name: 'fx', alwaysAsk: [] },
   { projectRoot: f.project, layout: resolveProductLayout({ projectRoot: f.project, root: f.data }), environment: f.env, secret: async () => undefined, sandboxes: [],
-    principal: { issuer: 'test', subject: '1' }, ask: async () => true, audit: async () => undefined });
+    principal: { issuer: 'test', subject: '1' }, ask: async () => true, audit: async () => undefined, describeNotice: notice => renderMcpStartNotice(notice, 'en') });
 type Effect = 'allow' | 'require-approval' | 'deny';
 const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
   { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo', 'mcp__fx__slow'] } },
@@ -265,7 +265,7 @@ const capabilities = await probeShellCapabilities();
 const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
 describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silent (MCP-SANDBOX-PATHS, real bubblewrap)', () => {
   const elsewhere = () => { const dir = mkdtempSync(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(dir); writeFileSync(join(dir, 'server.mjs'), RAW_SERVER); return dir; };
-  const slash = async (f: Harness) => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'en');
+  const slash = async (f: Harness, locale: Locale = 'en') => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, locale);
   it('first use: the yes cannot start it → one note naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
     const dir = elsewhere(), script = join(dir, 'server.mjs');
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
@@ -275,19 +275,27 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     expect(requested(first.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch']);
     expect(first.result.note).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
     expect(first.result.note).toContain('/mcp approve fx');
+    // The note is the catalog's sentence pair (`mcp.start.failed.pathHidden` + `mcp.start.next.launch`) in the service's locale (en here).
+    expect(first.result.note).toContain(`${t('mcp.start.failed.pathHidden', { name: 'fx', role: t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, 'en'), path: script,
+      targetSuffix: '' }, 'en')} ${t('mcp.start.next.launch', { name: 'fx' }, 'en')}`);
     f.state.script = [{ content: 'Second.' }];
     const second = await answered(f, 'turn-hidden-2', 'allow');
     expect(requested(second.events)).toEqual([]);
     expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
     expect(await slash(f)).toContainEqual(expect.stringContaining(`! fx: MCP server fx did not start: the argument ${script}`));
+    // `/mcp` renders the same record in the terminal's own locale.
+    expect(await slash(f, 'tr')).toContainEqual(`  ! fx: MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
+      + '(yalnız proje, sistem dizinleri ve PATH araç dizinleri görünür); projeye ya da bir PATH araç dizinine taşıyın veya sunucuyu --realm host ile yeniden ekleyin '
+      + '(o zaman sandbox dışında çalışır). İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
     await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
     expect((await slash(f)).some(line => line.includes('did not start'))).toBe(false);
     f.state.script = [{ content: 'Third.' }];
     expect(requested((await answered(f, 'turn-hidden-3', 'deny')).events)).toHaveLength(1);
   }, 90_000);
-  it('a trusted server that no longer starts: every turn says so (no tools, no card); /mcp shows the reason; a `${VAR}` path is never expanded', async () => {
+  it('a trusted server that no longer starts: every turn says so in the service\'s locale (tr); /mcp in its own; a `${VAR}` path is never expanded', async () => {
     const dir = elsewhere(), f = await runtime({ extraGrants: mcpGrants() });
     (f.env as Record<string, string>)['MCP_TOOLS_DIR'] = join(f.project, 'tools');
+    (f.env as Record<string, string>)['DECKENT_LANGUAGE'] = 'tr';
     mkdirSync(join(f.project, 'tools')); writeFileSync(join(f.project, 'tools', 'inside.mjs'), RAW_SERVER);
     symlinkSync(join(f.project, 'tools', 'inside.mjs'), join(f.project, 'tools', 'server.mjs'));
     await f.start();
@@ -297,14 +305,15 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
       f.state.script = [{ content: 'No tools.' }];
       const { result, events } = await answered(f, turnId, 'allow');
       expect(requested(events)).toEqual([]);
-      expect(result.note).toContain('MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs exists on this machine');
-      expect(result.note).toContain('/mcp reconnect fx');
+      expect(result.note).toContain('MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs bu makinede var ama bubblewrap sandbox görünümünde yok');
+      expect(result.note).toContain('Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
       expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
     }
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     const lines = await slash(f);
     expect(lines).toContainEqual(expect.stringContaining('! fx: MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs'));
     expect(lines.join('\n')).not.toContain(dir);
+    expect(await slash(f, 'tr')).toContainEqual(expect.stringContaining('! fx: MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs'));
   }, 90_000);
 });
 
@@ -315,5 +324,38 @@ describe('the MCP notices in the turn note (pure)', () => {
     expect(withMcpNotices(['a.'], 'engine')).toBe('a. engine');
     const long = withMcpNotices(['x'.repeat(5_000)], 'engine note');
     expect(long!.length).toBe(4_096); expect(long!.endsWith('… engine note')).toBe(true);
+  });
+});
+
+describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {
+  const hidden = { kind: 'path-hidden' as const, role: 'command' as const, index: -1, path: '/home/o/bin/srv', target: '/opt/srv' };
+  it('renders every notice kind with its next step by phase', () => {
+    const notice = (diagnosis: unknown, phase: 'launch' | 'trusted', extra: Record<string, unknown> = {}) =>
+      ({ kind: 'start-failed' as const, name: 'fx', failure: { code: 'sandbox-unreachable', phase, ...(diagnosis ? { diagnosis } : {}), ...extra } }) as Parameters<typeof renderMcpStartNotice>[0];
+    expect(renderMcpStartNotice(notice(hidden, 'launch'), 'en')).toBe('MCP server fx did not start: the command /home/o/bin/srv -> /opt/srv exists on this machine but not '
+      + 'in its bubblewrap sandbox view (only the project, system directories and PATH toolchain directories are visible); move it into the project or a PATH toolchain '
+      + 'directory, or re-add the server with --realm host (it then runs unsandboxed). Its first-use card is not asked again until you run /mcp approve fx.');
+    expect(renderMcpStartNotice(notice(hidden, 'trusted'), 'tr')).toBe('MCP sunucusu fx başlamadı: komut /home/o/bin/srv -> /opt/srv bu makinede var ama bubblewrap sandbox '
+      + 'görünümünde yok (yalnız proje, sistem dizinleri ve PATH araç dizinleri görünür); projeye ya da bir PATH araç dizinine taşıyın veya sunucuyu --realm host ile '
+      + 'yeniden ekleyin (o zaman sandbox dışında çalışır). Araçları sunulmuyor; /mcp reconnect fx yeniden dener.');
+    expect(renderMcpStartNotice(notice({ kind: 'package-runner', runner: 'npx' }, 'trusted'), 'tr')).toMatch(/^MCP sunucusu fx başlamadı: npx sunucuyu başlarken indirir/u);
+    expect(renderMcpStartNotice(notice({ kind: 'container-daemon', runner: 'docker' }, 'launch'), 'en'))
+      .toBe('MCP server fx did not start: docker needs its daemon socket, which is outside its sandbox; re-add the server with --realm host (it then runs unsandboxed). '
+        + 'Its first-use card is not asked again until you run /mcp approve fx.');
+    expect(renderMcpStartNotice(notice(null, 'trusted', { code: 'start-failed', detail: 'spawn ENOENT' }), 'en'))
+      .toBe('MCP server fx did not start: start-failed: spawn ENOENT. Its tools are not offered; /mcp reconnect fx tries it again.');
+    expect(renderMcpStartNotice(notice(null, 'launch', { code: 'start-failed' }), 'tr')).toBe('MCP sunucusu fx başlamadı: start-failed. İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
+    expect(renderMcpStartNotice({ kind: 'not-recorded', name: 'fx' }, 'tr')).toBe('MCP sunucusu fx: bu hata kaydedilemedi; kartı yeniden sorulabilir.');
+    expect(renderMcpStartNotice({ kind: 'not-decided', name: 'fx', code: 'MCP_TRUST_STORE_UNAVAILABLE' }, 'en')).toBe('MCP server fx was not decided: MCP_TRUST_STORE_UNAVAILABLE.');
+  });
+  it('MCP_SANDBOX_COMMAND_UNREACHABLE picks its sentence by diagnosis kind (role label and link target included)', () => {
+    const message = (params: Record<string, string>, locale: Locale) => ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', locale, { name: 'fx', ...params })!.message;
+    expect(message({ kind: 'path-hidden', role: 'argument', path: '/home/o/s.mjs', target: '' }, 'en'))
+      .toMatch(/^fx cannot start in the bubblewrap sandbox: the argument \/home\/o\/s\.mjs exists on this machine but not in the sandbox view \(/u);
+    expect(message({ kind: 'path-hidden', role: 'command', path: '/home/o/srv', target: '/opt/srv' }, 'tr'))
+      .toMatch(/^fx bubblewrap sandbox içinde başlatılamadı: komut \/home\/o\/srv -> \/opt\/srv bu makinede var ama sandbox görünümünde yok .* Hiçbir şey onaylanmadı\.$/u);
+    expect(message({ kind: 'package-runner', runner: 'uvx' }, 'en')).toMatch(/^fx cannot start in the bubblewrap sandbox: uvx downloads the server at start, .*Nothing was approved\.$/u);
+    expect(message({ kind: 'container-daemon', runner: 'podman' }, 'tr')).toBe('fx bubblewrap sandbox içinde başlatılamadı: podman daemon soketine ihtiyaç duyar ve soket sandbox '
+      + 'dışındadır. Sunucuyu --realm host ile yeniden ekleyin (o zaman sandbox dışında çalışır). Hiçbir şey onaylanmadı.');
   });
 });

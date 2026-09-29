@@ -10,8 +10,10 @@ export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boole
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
   | { readonly verb: 'reset' | 'reconnect'; readonly name: string };
-/** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision. */
-export type McpCommandHandler = (root: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>) => Promise<unknown>;
+/** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
+ * surface's (the host renders `lastStart.text` in it). */
+export type McpCommandHandler = (root: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>,
+  locale?: Locale) => Promise<unknown>;
 
 const usage = () => ErrorRegistry.createError('CLI_USAGE');
 const SCOPES: readonly string[] = ['local', 'project', 'user'];
@@ -71,7 +73,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     try { return await new Promise<boolean>(resolve => rl.question(question, answer => resolve(/^y(es)?$/iu.test(answer.trim())))); }
     finally { rl.close(); }
   };
-  const result = await context.runMcpCommand(context.root ?? process.cwd(), request, { env: environment }, ask);
+  const result = await context.runMcpCommand(context.root ?? process.cwd(), request, { env: environment }, ask, locale);
   emit(result, { ...sinks, json, render: formatValue });
 }
 
@@ -82,7 +84,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
  */
 export async function mcpSlash(root: string, args: string, context: CommandContext, options: ConfigLoadOptions, locale: Locale): Promise<readonly string[]> {
   const [verb = 'list', name, ...extra] = args.split(/\s+/u).filter(Boolean);
-  const run = (request: McpCommandRequest) => context.runMcpCommand!(root, request, options, async () => null);
+  const run = (request: McpCommandRequest) => context.runMcpCommand!(root, request, options, async () => null, locale);
   if (extra.length || (verb !== 'list' && !name) || (verb === 'list' && name)) return [t('terminal.mcp.usage', {}, locale)];
   if (verb === 'list') {
     const listed = await run({ verb: 'list', health: false }) as { servers: { name: string; scope: string; status: string; command: string; args: string[]; pinnedTools: number;
@@ -91,7 +93,7 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
     if (!listed.servers.length && !listed.problems.length) return [t('terminal.mcp.none', {}, locale)];
     return [t('terminal.mcp.count', { count: listed.servers.length }, locale), ...listed.servers.map(server => `  ${server.name}  ${server.scope}  ${server.status}${server.pinnedTools ? ` (${server.pinnedTools} tools pinned)` : ''}  ${
       [server.command, ...server.args].join(' ')}`), ...listed.problems.map(problem => `  ! ${problem.scope} ${problem.name ?? '(file)'}: ${problem.reason}`),
-    // MCP-SANDBOX-PATHS: the last start failure a turn recorded (the adapter's display-safe text, like a problem's reason).
+    // MCP-SANDBOX-PATHS: the last start failure a turn recorded (display-safe, rendered by the host in this locale, like a problem's reason).
     ...listed.servers.flatMap(server => server.lastStart ? [`  ! ${server.name}: ${server.lastStart.text}`] : []),
     ...(listed.servers.some(server => server.status === 'pending-approval' || server.status === 'changed') ? [`  ${t('terminal.mcp.pendingHint', {}, locale)}`] : [])];
   }

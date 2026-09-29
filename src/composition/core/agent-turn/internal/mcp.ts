@@ -1,11 +1,30 @@
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
-import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { loadConfig, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
   McpToolTarget, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, registerProviderConfig, runMcpCommand, type LocalPeerIdentity,
-  type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext } from '#adapters/index.js';
+  type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { agentWorkspaceDeny } from './turn.js';
+
+/**
+ * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
+ * the catalog (`mcp.start.*`), for the turn's note (the service's locale) and `lastStart.text` of `mcp list|get` and `/mcp` (the caller's).
+ */
+export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): string {
+  const { name } = notice;
+  if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
+  if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
+  const { failure } = notice, diagnosis = failure.diagnosis;
+  const why = diagnosis?.kind === 'path-hidden'
+    ? t('mcp.start.failed.pathHidden', { name, path: diagnosis.path, targetSuffix: diagnosis.target ? ` -> ${diagnosis.target}` : '',
+      role: diagnosis.role === 'command' ? t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.command', {}, locale) : t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.role.argument', {}, locale) }, locale)
+    : diagnosis?.kind === 'package-runner' ? t('mcp.start.failed.packageRunner', { name, runner: diagnosis.runner }, locale)
+    : diagnosis ? t('mcp.start.failed.containerDaemon', { name, runner: diagnosis.runner }, locale)
+    : t('mcp.start.failed.other', { name, code: failure.code, detailSuffix: failure.detail ? `: ${failure.detail}` : '' }, locale);
+  const next = failure.phase === 'launch' ? t('mcp.start.next.launch', { name }, locale) : t('mcp.start.next.trusted', { name }, locale);
+  return `${why} ${next}`;
+}
 
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
@@ -14,10 +33,12 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   /** MCP-SANDBOX-PATHS: what could not be decided or started this turn (display-safe), for the turn's result note — never silent. */
   readonly onNotices?: (notices: readonly string[]) => void }) {
   const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
+  // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
+  const locale = resolveLocale(undefined, environment, config.language);
   const opened = await openTurnMcp({ registry: { projectRoot: input.projectRoot, layout: context.layout, environment, secret: async name => input.options.secretResolver
     ? input.options.secretResolver(name) : environment[name] }, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
-  signal: input.signal, emit: input.emit, ledgerPath: () => context.path(), policyRevision: async () => String((await context.policy.load().catch(() => null) as { revision?: unknown } | null)?.revision ?? 'unknown') });
+  signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), policyRevision: async () => String((await context.policy.load().catch(() => null) as { revision?: unknown } | null)?.revision ?? 'unknown') });
   if (opened.notices.length) input.onNotices?.(opened.notices);
   if (!opened.settings) return null;
   const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered);
@@ -42,13 +63,16 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
 }
 
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
- * server started in its realm. `ask` shows a trust card and answers the owner's decision. */
-export async function runConfiguredMcpCommand(projectRoot: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask']) {
+ * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
+ * process's environment, then the configured language). */
+export async function runConfiguredMcpCommand(projectRoot: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
+  const shown = locale ?? resolveLocale(undefined, environment, config.language);
   return runMcpCommand(request, { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+    describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: async name => options.secretResolver ? options.secretResolver(name) : environment[name], limits: { inputMaxBytes: config.mcp.inputMaxBytes },
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) });
 }

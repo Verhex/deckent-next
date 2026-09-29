@@ -10,7 +10,7 @@ import { buildLandlockRules, createShellPathContext, createWorkspaceReadTools, c
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { agentWorkspaceDeny, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
-import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
 
 // MCP-CLIENT registry (owner 2026-09-28): servers live in scoped files outside configuration — project `.deckent/mcp.json`, personal
@@ -160,6 +160,12 @@ createInterface({ input: process.stdin }).on('line', line => { const m = JSON.pa
     const refused = await w.cli('add', '--yes', 'hidden', '--', process.execPath, script).catch((error: unknown) => error as { code: string; message: string });
     expect(refused).toMatchObject({ code: 'MCP_SANDBOX_COMMAND_UNREACHABLE' });
     expect((refused as { message: string }).message).toContain(script);
+    // The catalog sentence of the path-hidden kind, in either locale (params are the typed contract; the message is rendered from them).
+    const refusedParams = (refused as unknown as { params: Record<string, string> }).params;
+    expect(ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', 'en', refusedParams)?.message)
+      .toContain(`hidden cannot start in the bubblewrap sandbox: the argument ${script} exists on this machine but not in the sandbox view`);
+    expect(ErrorRegistry.get('MCP_SANDBOX_COMMAND_UNREACHABLE', 'tr', refusedParams)?.message)
+      .toContain(`hidden bubblewrap sandbox içinde başlatılamadı: argüman ${script} bu makinede var ama sandbox görünümünde yok`);
     // A path written with a `${VAR}` is named as written (the cards' rule: never an expanded value).
     (w.env as Record<string, string>)['MCP_ELSEWHERE'] = elsewhere;
     const templated = await w.cli('add', '--yes', 'templated', '--', process.execPath, '${MCP_ELSEWHERE}/server.mjs').catch((error: unknown) => error as { code: string; message: string });

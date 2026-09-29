@@ -1144,7 +1144,8 @@
         "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/mcp-client",
         "src/adapters/core/local-principal",
-        "src/adapters/core/provider-anthropic-messages"
+        "src/adapters/core/provider-anthropic-messages",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },

@@ -3,7 +3,6 @@ import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { withConfigWriteLock } from '#platform/index.js';
-import type { McpSandboxDiagnosis } from './diagnose.js';
 import { MCP_SCOPES } from './registry.js';
 
 /**
@@ -67,20 +66,17 @@ export function mcpStartFailureOf(error: unknown): Pick<McpStartFailure, 'code' 
 }
 
 /**
- * The owner-facing sentence of a start failure (the turn's notice and `/mcp`). CLEANUP-MARK: neutral English like the engine's closure
- * notes, until the catalog carries it (i18n-delta.json).
+ * What a turn or `/mcp` says about one server that could not be decided or started (MCP-SANDBOX-PATHS follow-up): structured and
+ * display-safe, never rendered here — the host renders it from the catalog (`mcp.start.*`) in the locale of its surface.
+ * `start-failed`: the failure (and its diagnosis) of a start; `not-recorded`: that failure could not be written (its card may be asked
+ * again); `not-decided`: the trust decision itself failed (`code`).
  */
-export function describeMcpStartFailure(name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): string {
-  const diagnosis = failure.diagnosis as McpSandboxDiagnosis | undefined;
-  const why = diagnosis?.kind === 'path-hidden'
-    ? `the ${diagnosis.role} ${diagnosis.path}${diagnosis.target ? ` -> ${diagnosis.target}` : ''} exists on this machine but not in its bubblewrap sandbox view `
-      + '(only the project, system directories and PATH toolchain directories are visible); move it into the project or a PATH toolchain directory, '
-      + 'or re-add the server with --realm host (it then runs unsandboxed)'
-    : diagnosis ? `${diagnosis.runner} ${diagnosis.kind === 'package-runner' ? 'fetches the server at start, but its sandbox has no network and an empty HOME'
-      : 'needs its daemon socket, which is outside its sandbox'}; re-add the server with --realm host (it then runs unsandboxed)`
-      + (diagnosis.kind === 'package-runner' ? ' or install it into the project or a PATH toolchain directory' : '')
-    : `${failure.code}${failure.detail ? `: ${failure.detail}` : ''}`;
-  const next = failure.phase === 'launch' ? `its first-use card is not asked again until you run /mcp approve ${name}`
-    : `its tools are not offered; /mcp reconnect ${name} tries it again`;
-  return `MCP server ${name} did not start: ${why}. ${next[0]!.toUpperCase()}${next.slice(1)}.`;
-}
+export type McpStartNotice =
+  | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
+  | { readonly kind: 'not-recorded'; readonly name: string }
+  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string };
+/** Renders one notice as owner-facing text (the host's catalog, in its locale). */
+export type McpStartNoticeRenderer = (notice: McpStartNotice) => string;
+export const mcpStartFailedNotice = (name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): McpStartNotice =>
+  ({ kind: 'start-failed', name, failure: { code: failure.code, phase: failure.phase, ...(failure.detail ? { detail: failure.detail } : {}),
+    ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}) } });

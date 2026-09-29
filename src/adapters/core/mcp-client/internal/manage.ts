@@ -4,7 +4,8 @@ import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type ProductLayout } from '#platform/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
-import { describeMcpStartFailure, findMcpStartFailure, mcpStartFailureOf, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure } from './failures.js';
+import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
+  type McpStartNoticeRenderer } from './failures.js';
 import { McpClientPool, type McpLaunchContext, type McpServerOpen } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
@@ -90,6 +91,8 @@ export interface McpCommandContext extends McpRegistryContext {
   readonly audit: McpTrustAudit;
   readonly limits?: { readonly resultMaxBytes?: number; readonly inputMaxBytes?: number };
   readonly now?: () => number;
+  /** Renders a recorded start failure (`lastStart.text`) in the locale of the calling surface. */
+  readonly describeNotice: McpStartNoticeRenderer;
 }
 /** The trust context of a registry context (both trust places prepared for writing on demand). */
 export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
@@ -138,7 +141,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const failures = await readMcpStartFailures(productResourcePath(context.layout, 'integrations'));
   const lastStartOf = (server: McpServerView) => { const failure = findMcpStartFailure(failures, server);
     return failure ? { lastStart: { phase: failure.phase, atMs: failure.atMs, code: failure.code, ...(failure.detail ? { detail: failure.detail } : {}),
-      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: describeMcpStartFailure(server.name, failure) } } : {}; };
+      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(mcpStartFailedNotice(server.name, failure)) } } : {}; };
   const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
     shadows: server.shadows, realm: server.entry.realm ?? 'prefer-sandbox', command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(server.entry.env ?? {}),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.tools.length ?? 0, ...lastStartOf(server) });
@@ -232,15 +235,17 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;
-  readonly policyRevision: () => Promise<string>; readonly now?: () => number }): Promise<{ readonly settings: McpClientSettings | null; readonly offered: ReadonlyMap<string, McpOfferedTool>;
+  readonly policyRevision: () => Promise<string>; readonly now?: () => number;
+  /** Renders a notice in the service's locale (the adapter never renders owner text itself). */
+  readonly describeNotice: McpStartNoticeRenderer }): Promise<{ readonly settings: McpClientSettings | null; readonly offered: ReadonlyMap<string, McpOfferedTool>;
   readonly notices: readonly string[] }> {
   const { registry, pool, principal, scopeId } = input, now = input.now ?? Date.now;
-  const notices: string[] = [], failuresDirectory = productResourcePath(registry.layout, 'integrations');
+  const notices: McpStartNotice[] = [], failuresDirectory = productResourcePath(registry.layout, 'integrations');
   const failures = await readMcpStartFailures(failuresDirectory);
   /** Records (or clears) one server's start failure; a record that cannot be written is said, never hidden. */
   const remember = async (server: McpServerView, failure: McpStartFailure | null) => {
     try { await updateMcpStartFailure(await prepareProductDirectory(registry.layout, 'integrations'), server, failure); }
-    catch { if (failure) notices.push(`MCP server ${server.name}: this failure could not be recorded; its card may be asked again.`); }
+    catch { if (failure) notices.push({ kind: 'not-recorded', name: server.name }); }
   };
   let view = await loadMcpRegistry(registry);
   const undecided = view.servers.filter(server => server.status === 'pending-approval' || server.status === 'changed');
@@ -253,16 +258,16 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
       ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit });
     for (const server of undecided) {
       const known = findMcpStartFailure(failures, server);
-      if (known) { notices.push(describeMcpStartFailure(server.name, known)); continue; }
+      if (known) { notices.push(mcpStartFailedNotice(server.name, known)); continue; }
       try {
         const decided = await decideMcpTrust(server, trust, ask, { pool });
         if (decided.decision === 'trusted' && failures.some(failure => failure.scope === server.scope && failure.name === server.name)) await remember(server, null);
       } catch (error) {
         const failure = mcpStartFailureOf(error);
-        if (!failure) { notices.push(`MCP server ${server.name} was not decided: ${String((error as { code?: unknown })?.code ?? 'failed')}.`); continue; }
+        if (!failure) { notices.push({ kind: 'not-decided', name: server.name, code: String((error as { code?: unknown })?.code ?? 'failed') }); continue; }
         const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'launch',
           atMs: now(), ...failure };
-        notices.push(describeMcpStartFailure(server.name, record));
+        notices.push(mcpStartFailedNotice(server.name, record));
         await remember(server, record);
       }
     }
@@ -276,12 +281,12 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     const known = findMcpStartFailure(failures, server);
     if (state.ok) { if (known) await remember(server, null); continue; }
     // A server over its restart bound keeps the diagnosis of its last real start failure.
-    if (state.reason === 'restart-limit' && known) { notices.push(describeMcpStartFailure(server.name, { ...known, phase: 'trusted' })); continue; }
+    if (state.reason === 'restart-limit' && known) { notices.push(mcpStartFailedNotice(server.name, { ...known, phase: 'trusted' })); continue; }
     const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'trusted', atMs: now(),
       code: state.reason, ...(state.detail ? { detail: state.detail.slice(0, 200) } : {}),
       ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) };
-    notices.push(describeMcpStartFailure(server.name, record));
+    notices.push(mcpStartFailedNotice(server.name, record));
     await remember(server, record);
   }
-  return { settings: offered.size ? settings : null, offered, notices };
+  return { settings: offered.size ? settings : null, offered, notices: notices.map(input.describeNotice) };
 }
