@@ -78,6 +78,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   izin modu/ürün durumu/scratch 22/22; metin değişikliği sonrası i18n + secret 10 dosya 80/80. Derlenmiş CLI (geçici HOME): env `secret list`
   → `SECRET_STORE_UNSUPPORTED` temiz metin en/tr; file arka ucu 0644 → `doctor` "Secret store: core.secret-store.file@1 (unsafe,
   SECRET_STORE_UNSAFE)" ve `secret list` tipli ret en/tr; 0600 → ad listesi ve "(ready)".
+  - Gerçek ikili e2e `kernel-config` SECRET-K1 birleşmesinden beri kırmızıydı (`doctor --json` anahtar listesinde `secretStore` yok) →
+    beklenti güncellendi (anahtar, varsayılan env deposu raporu, tr insan satırı); e2e 4 dosya + SDK envanteri 22/22.
 
 ## Sıradaki
 1. Push adayı `9a3ef2c` (dokuzuncu parti, H+I+J): Astra 2179 incelemesi → PASS'te push.
