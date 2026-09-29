@@ -100,10 +100,6 @@ async function main() {
   copyFileSync(texts.musl, join(out, 'out', 'licenses', 'musl-COPYRIGHT'));
   copyFileSync(texts.libcap, join(out, 'out', 'licenses', 'libcap-License'));
   writeFileSync(join(out, 'out', 'NOTICE-bubblewrap.txt'), bwrapNotice(lock));
-  mkdirSync(join(out, 'out', 'source'));
-  for (const [from, name] of [[join(out, 'in', tarball), tarball], [join(PACKAGING, 'build.sh'), 'build.sh'], [LOCK, 'bwrap.lock.json']]) {
-    copyFileSync(from, join(out, 'out', 'source', name));
-  }
 
   // The whole resolved package set (dependencies included) must equal the lock's: a silently upgraded toolchain is a different build.
   const lines = path => readFileSync(path, 'utf8').split('\n').filter(Boolean);
@@ -125,6 +121,11 @@ async function main() {
     lock.outputs = { ...lock.outputs };
     for (const name of arches) lock.outputs[name] = { nodeArch: NODE_ARCH[name], sha256: results[name].sha256 };
     writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n');
+  }
+  // The corresponding source travels with the output, after a `--record` wrote the lock, so the shipped lock names these outputs.
+  mkdirSync(join(out, 'out', 'source'));
+  for (const [from, name] of [[join(out, 'in', tarball), tarball], [join(PACKAGING, 'build.sh'), 'build.sh'], [LOCK, 'bwrap.lock.json']]) {
+    copyFileSync(from, join(out, 'out', 'source', name));
   }
   writeFileSync(join(out, 'summary.json'), JSON.stringify({ version: lock.version, image: lock.buildImage.reference, results, drift, recorded: record }, null, 2) + '\n');
   process.stdout.write(`${JSON.stringify({ out, results, drift, recorded: record })}\n`);
