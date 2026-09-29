@@ -22,8 +22,9 @@ const dependencySchema = z.object({ kind: z.enum(['runtime', 'dev']), reviewedVe
   embedded: z.array(z.object({ name: text, version: text.nullable(), license: text.optional() }).strict()).optional(), ...reviewed }).strict();
 const platformSchema = z.object({ requirement: text, ...reviewed }).strict();
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-/** A known, mitigated advisory set on one package@version in named carriers (`tree` or `<registry dependency>@<version>` that embeds it). */
-const riskSchema = z.object({ id: text, package: text, version: text, carriers: z.array(text).min(1), advisories: z.array(text).min(1),
+/** A known, mitigated advisory set on one package@version in named carriers (`tree` or `<registry dependency>@<version>` that embeds it).
+ * `shipped: false` narrows it to the installed (dev/test) tree: deps-watch --sbom stops accepting it once the package SBOM ships the component. */
+const riskSchema = z.object({ id: text, package: text, version: text, carriers: z.array(text).min(1), shipped: z.literal(false).optional(), advisories: z.array(text).min(1),
   severity: z.enum(SEVERITIES), mitigation: text, evidence: z.array(text).min(1, 'an accepted risk needs at least one evidence reference'),
   decidedBy: text, decided: date, expires: date }).strict();
 /** Longest acceptance window by the accepted severity (owner/lead 2026-09-29: HIGH/CRITICAL at most 30 days). */

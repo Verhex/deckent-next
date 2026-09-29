@@ -145,5 +145,22 @@ describe('deps-watch', () => {
       expect(vulnerabilities(report).some(finding => finding.severity === 'MITIGATED')).toBe(false);
       expect(report.findings).toContainEqual(expect.objectContaining({ severity: 'LOW', kind: 'accepted-risk-unused', subject: 'fast-uri-accepted' }));
     });
+
+    // FASTURI-OUT: `shipped: false` accepts the component only in the installed (dev/test) tree. A bundled-package SBOM that still names it
+    // under the same carrier is not covered: the finding fails again (the build-dist guard should have stopped that package first).
+    it('an installed-tree-only risk stays MITIGATED while the SBOM omits the component and fails once the SBOM ships it', async () => {
+      const root = await project({ host: 'MIT', tool: 'MIT' }, [accepted({ shipped: false })]);
+      const run = (components: unknown[], dir: string) => runWatch({ root, outDir: join(root, dir), today: '2026-10-01', fetchJson: network(true, undefined, false).fetchJson,
+        signatures: async () => ({ invalid: [], missing: [] }), sbom: { bomFormat: 'CycloneDX', components } });
+      const absent = await run([{ purl: 'pkg:npm/host@1.0.0' }], 'absent');
+      expect(absent.exitCode).toBe(0);
+      expect(vulnerabilities(absent.report).map(finding => [finding.severity, finding.subject])).toEqual([
+        ['MITIGATED', 'fast-uri@3.1.0 (embedded in host@1.0.0) [not shipped]'], ['MITIGATED', 'fast-uri@3.1.0 (embedded in host@1.0.0) [not shipped]']]);
+      const shipped = await run([{ purl: 'pkg:npm/host@1.0.0', components: [{ purl: 'pkg:npm/fast-uri@3.1.0',
+        properties: [{ name: 'deckent:embedded:carrier', value: 'host@1.0.0' }] }] }], 'shipped');
+      expect(shipped.exitCode).toBe(1);
+      expect(vulnerabilities(shipped.report).some(finding => finding.severity === 'MITIGATED')).toBe(false);
+      expect(vulnerabilities(shipped.report)[0]!.detail).toContain('accepted risk fast-uri-accepted covers the installed tree only, but the package SBOM ships it');
+    });
   });
 });

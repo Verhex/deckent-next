@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { bundledPackages, cyclonedx, embeddedInBundle, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { declarationImports, publishedManifest } from '../../../scripts/build-dist.mjs';
+import { ajvGuard, declarationImports, publishedManifest, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
 
@@ -80,6 +80,42 @@ describe('dist SBOM', () => {
     expect(notices.text).toContain('- fast-uri@3.1.0 (in @scope/carrier@2.2.0): BSD-3-Clause');
     expect(notices.gaps).toEqual(['unlicensed@1.0.0: no license file in the installed package',
       'fast-uri@3.1.0 (in @scope/carrier@2.2.0): license text not shipped by the carrier']);
+  });
+});
+
+// FASTURI-OUT (owner 2026-09-29): the published package carries no ajv/fast-uri. The SDK's default-validator modules are loaded with their one
+// ajvProvider import replaced by a throwing stub, and the guard fails the build on any of three independent signals.
+describe('MCP SDK ajv provider stub and guard', () => {
+  const shims = 'import { n as AjvJsonSchemaValidator } from "./ajvProvider-97rDpkRx.mjs";\nimport process from "node:process";\n\nexport { AjvJsonSchemaValidator as DefaultJsonSchemaValidator, process };\n';
+  it('replaces exactly the ajvProvider import, keeps every other line and throws a typed error when the default is built', async () => {
+    const code = stubAjvImport(shims, 'server/_shims');
+    expect(code).not.toContain('ajvProvider');
+    expect(code).toContain('import process from "node:process";');
+    expect(code).toContain('export { AjvJsonSchemaValidator as DefaultJsonSchemaValidator, process };');
+    const subpath = stubAjvImport('import { n as AjvJsonSchemaValidator, r as addFormats, t as Ajv } from "../ajvProvider-97rDpkRx.mjs";\nexport { Ajv, AjvJsonSchemaValidator, addFormats };', 'client/validators/ajv');
+    const root = await tree({ 'shims.mjs': code, 'ajv.mjs': subpath });
+    const { DefaultJsonSchemaValidator } = await import(join(root, 'shims.mjs')) as { DefaultJsonSchemaValidator: new () => unknown };
+    expect(() => new DefaultJsonSchemaValidator()).toThrow(expect.objectContaining({ name: 'DeckentRemovedValidatorError', code: 'MCP_DEFAULT_VALIDATOR_REMOVED' }));
+    const ajv = await import(join(root, 'ajv.mjs')) as Record<string, (...args: unknown[]) => unknown>;
+    for (const name of ['Ajv', 'AjvJsonSchemaValidator', 'addFormats']) expect(() => ajv[name]!()).toThrow(`${name} (the MCP SDK default ajv validator) is not part of this package`);
+    // A layout the stub does not recognise fails the build instead of silently shipping the real provider.
+    expect(() => stubAjvImport('export const CORS_IS_POSSIBLE = false;', 'client/_shims')).toThrow('client/_shims: expected exactly one ajvProvider import');
+    expect(() => stubAjvImport(`${shims}import { t as Ajv } from "./ajvProvider-x.mjs";\n`, 'server/_shims')).toThrow('expected exactly one ajvProvider import');
+  });
+
+  it('reports every signal: unstubbed _shims, forbidden inputs, shipped packages and shipped embedded components', () => {
+    const clean = { metafile: { inputs: { 'node_modules/@modelcontextprotocol/client/dist/shimsNode.mjs': {}, 'node_modules/@modelcontextprotocol/client/dist/cfWorkerProvider-B.mjs': {} } },
+      shipped: [{ name: '@modelcontextprotocol/client', version: '2.2.0' }], embedded: [{ name: 'fast-uri', version: '3.1.0', carrier: '@modelcontextprotocol/client@2.2.0', shipped: false, carrierFiles: [] }],
+      hits: new Map([['@modelcontextprotocol/client/_shims', 1]]) };
+    expect(ajvGuard(clean)).toEqual([]);
+    expect(ajvGuard({ ...clean, hits: new Map(),
+      metafile: { inputs: { ...clean.metafile.inputs, 'node_modules/@modelcontextprotocol/client/dist/ajvProvider-97rDpkRx.mjs': {}, 'node_modules/@modelcontextprotocol/server/dist/index.mjs': {},
+        'node_modules/fast-uri/index.js': {} } },
+      shipped: [...clean.shipped, { name: 'fast-uri', version: '3.1.8' }],
+      embedded: [{ ...clean.embedded[0], shipped: true, carrierFiles: ['dist/ajvProvider-97rDpkRx.mjs'] }] })).toEqual([
+      '@modelcontextprotocol/client/_shims was bundled without the ajv stub', '@modelcontextprotocol/server/_shims was bundled without the ajv stub',
+      'bundle input node_modules/@modelcontextprotocol/client/dist/ajvProvider-97rDpkRx.mjs', 'bundle input node_modules/fast-uri/index.js',
+      'shipped package fast-uri@3.1.8', 'embedded fast-uri@3.1.0 in @modelcontextprotocol/client@2.2.0 (dist/ajvProvider-97rDpkRx.mjs)']);
   });
 });
 
