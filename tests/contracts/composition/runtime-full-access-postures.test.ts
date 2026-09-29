@@ -106,6 +106,15 @@ describe.skipIf(process.platform !== 'linux')('the approval card describes the w
       expect(forcedCard.preview).toContain('the project is writable');
       expect(forcedCard.preview).toContain('.git writable');
       expect(forcedCard.preview).not.toContain('.git read-only');
+
+      // The card's "write floor included" is not just wording: an owner-approved call in this same full-access turn actually opens the
+      // installation's own configuration file for writing — `>>` with zero bytes only succeeds under O_WRONLY, content unchanged either
+      // way — the exact fact the standart card above does not have to say (its write floor is never approved open).
+      const configPath = join(forced.project, '.deckent/config.json');
+      const before = await readFile(configPath, 'utf8');
+      const probe = await forced.call('run_shell', { command: 'printf "" >> .deckent/config.json && echo CONFIG_OPEN_RW' }, 'allow', { fullAccess: true });
+      expect({ card: probe.card, status: probe.status, open: probe.text.includes('CONFIG_OPEN_RW') }).toEqual({ card: true, status: 'ok', open: true });
+      expect(await readFile(configPath, 'utf8')).toBe(before);
     }, 60_000);
   }
 });

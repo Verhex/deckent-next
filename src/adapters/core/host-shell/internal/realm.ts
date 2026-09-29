@@ -26,7 +26,10 @@ export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWri
 export function describeShellWritePosture(view: ShellSandboxWriteView): string {
   if (view.projectReadOnly) return 'the project is read-only, .git included';
   const git = `.git ${view.repositoryWritable ? 'writable' : 'read-only'}`;
-  return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}` : `the project is writable, ${git}`;
+  // Named, not just implied: an owner-approved call also writes what the write floor would otherwise protect (SHELL-AUTONOMY, "the
+  // floor means the owner approves, not never") — the one case that unlocks it is the one the card should say so about out loud.
+  return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}`
+    : `the project is writable, its write floor included, ${git}`;
 }
 /**
  * A chosen realm. `marker` leads the result's first line (`sandbox: bubblewrap | landlock | degraded | none`; null for the explicit
