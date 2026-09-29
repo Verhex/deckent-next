@@ -4,7 +4,7 @@ import { ErrorRegistry } from '#platform/index.js';
 import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
 
 /**
- * Runtime service wire shapes of a secret change (SECRET-WRITE, protocol v17 `setSecret` / `deleteSecret`). No actor field: the socket peer
+ * Runtime service wire shapes of a secret change (SECRET-WRITE, protocol v18 `setSecret` / `deleteSecret`). No actor field: the socket peer
  * is the principal. The value is bounded by length only here (a UTF-8 value of at most 64 KiB has at most that many UTF-16 units); the byte
  * bound and emptiness are the application's typed `SECRET_VALUE_INVALID`. A schema failure never echoes the value (the protocol collapses it).
  */

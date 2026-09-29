@@ -5,7 +5,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 ## Unreleased
 
 - ADDED (SECRET-WRITE): `deckent secret set <NAME> [--scope <id>] [--json]` and `deckent secret delete <NAME>` change the installation's
-  secret store through the runtime service (protocol v17 `setSecret`/`deleteSecret`) under the new policy resource `secret` (actions
+  secret store through the runtime service (runtime protocol v18 `setSecret`/`deleteSecret`; lifecycle window [18,17]) under the new policy resource `secret` (actions
   `set`/`delete`, id = the name or `all`). The value comes from piped stdin (one trailing newline dropped, at most 64 KiB) or a hidden
   prompt (Ctrl-C cancels, `SECRET_INPUT_CANCELLED`); a value on the command line is refused. Every decision is a sealed `secret-change`
   audit event with its `decision`; without a grant the change is `SECRET_CHANGE_DENIED` and the text names the grant to add. New

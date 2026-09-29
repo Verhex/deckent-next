@@ -2,9 +2,10 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'n
 import { DatabaseSync } from 'node:sqlite';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
+import { createConnection } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { clearConfigCache, formatHumanError, productResourcePath, resolveGlobalConfigPaths, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
-import { createFileSecretStore, registerProviderConfig } from '#adapters/index.js';
+import { createFileSecretStore, encodeServiceFrame, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
@@ -77,11 +78,29 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
     if (output.join('\n').includes(CANARY)) hits.push('service-output');
     return hits;
   };
-  return { project, home, env, globalRoot, client, file, audit, replacePolicy, scanForCanary, output };
+  return { project, home, env, globalRoot, client, file, audit, replacePolicy, scanForCanary, output, endpoint: service.endpoint };
 }
 const changes = (events: readonly { subject: Record<string, unknown> }[]) => events.filter(event => event.subject['kind'] === 'secret-change').map(event => event.subject);
 
 describe.skipIf(process.platform !== 'linux')('secret set/delete through the runtime service (SECRET-WRITE)', () => {
+  it('protocol v18 only: a v17 setSecret envelope is closed unanswered on the real service; nothing stored, nothing audited', async () => {
+    const f = await fixture();
+    const raw = createConnection(f.endpoint); raw.on('error', () => undefined);
+    await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
+    const received: Buffer[] = [];
+    raw.on('data', chunk => { received.push(chunk as Buffer); });
+    const closed = new Promise<void>(resolve => raw.once('close', () => resolve()));
+    raw.end(encodeServiceFrame({ schemaVersion: 17, requestId: 'v17-secret', operation: 'setSecret', delivery: { maxResultBytes: 4096 },
+      input: { schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY } }, 262144));
+    await closed;
+    expect(Buffer.concat(received).length).toBe(0);
+    expect(await f.file.listNames()).toEqual([]);
+    expect(changes(f.audit())).toEqual([]);
+    expect(await f.scanForCanary()).toEqual([]);
+    // The same change at v18 (the current client) is admitted.
+    expect(await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY })).toMatchObject({ action: 'set' });
+  });
+
   it('fresh install (template v2): the owner sets and deletes a secret over the socket; audited before each write; the value is only in the store', async () => {
     const f = await fixture();
     const set = await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY });

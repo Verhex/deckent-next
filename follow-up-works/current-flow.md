@@ -100,7 +100,7 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 
 ## On ikinci parti (`integrate/2026-09-29-m`, worktree `/home/alperen/deckent-next-integrate-m`, taban `6bb6f5f` = onuncu + on birinci parti adayı)
 - Birleşenler (`--no-ff`): DEPS-P0 `c871a4a6` (LICENSE Apache-2.0, Node `>=24.15.0`, 10 yerde SQLite tabanı, react 19.2.8, CI Node [24, 26]; kilit dosyası
-  yeniden üretildi = aynı, `npm ci`), SECRET-WRITE `dd323c0b` (`secret set|delete` servis üzerinden, `secret` policy hücresi, şablon v2, v17 yerinde).
+  yeniden üretildi = aynı, `npm ci`), SECRET-WRITE `dd323c0b` (`secret set|delete` servis üzerinden, `secret` policy hücresi, şablon v2; protokol v18).
   Entegrasyon: `f9650fd1` composition 5501 → 5455 (bütçe yükseltilmedi; `@file` indeks önbelleği → workspace-read, dosya etki kimliği → workspace-write;
   arch kenarları), `f73b3f25` i18n en/tr + katalog redaktör testi, belge commit'i. Ayrıntı ve açık maddeler PLAN "On ikinci parti".
 - Doğrulama (tam verify değil): typecheck 0; `eslint .` 0 hata (5 uzunluk uyarısı, önceden var + şeritten `service-protocol.test.ts`); lint-arch 0 ihlal;
@@ -108,7 +108,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   i18n, dist, MCP, shell overlay; VITEST_MAX_FORKS=2, FORCE_COLOR yok, Docker imajı değişkeni) **151 dosya 972/972, 0 atlanan**; `~/.deckent` değişmedi;
   derlenmiş dist'ten üç yeni metin en/tr redaktörde değişmiyor; build-dist `--bwrap` + pack-smoke Node 24.15.0 (SQLite tam 3.51.3, taban kabul), 24.21.0 ve
   26.10.0 ✓. Kanıt `proof/INTEGRATE-M-2026-09-29/`.
-- Bilinen sınırlar: v17 origin/main'de iken yerinde ek (owner kararı: v18 ya da kural değişikliği); mevcut kurulumlarda secret grant'ı elle (§5); Node 26 PTY
+- v18 (lead kararı: v17 push edildi → sürüm artışı): secret işlemleri yalnız v18'de, pencere [18,17] yaşam döngüsüyle sınırlı; commit aşağıda.
+- Bilinen sınırlar: canlı v16 servisi [18,17] dışında (owner durdurur ya da tek geçişlik [18,17,16]); mevcut kurulumlarda secret grant'ı elle (§5); Node 26 PTY
   kanıtı yalnız şeritte; eski SQLite'lı gerçek Node ile ret yalnız birim testinde (enjekte sürüm); `ci.yml` lead incelemesi bekliyor.
 
 ## Sıradaki
@@ -117,11 +118,11 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 2a. On birinci parti (`integrate/2026-09-29-l`): lead lane/shell-overlay Astra 2180 R1 düzeltmesini birleştirir → tam verify (gömülü bwrap aşamalı) →
    Astra → PASS'te push.
 2b. On ikinci parti (`integrate/2026-09-29-m`, DEPS-P0 + SECRET-WRITE): tam verify → Astra → PASS'te push; canlı geçişte owner secret grant'ını ekler
-   (`proof/SECRET-WRITE-2026-09-29/review.md` §5) ve v17 kararı (v18 / kural) verilir.
+   (`proof/SECRET-WRITE-2026-09-29/review.md` §5) ve v16 servisinin durdurulma yolu seçilir (elle ya da [18,17,16]).
 4. Owner kararları: PLAN "Onuncu parti" açık kararları (secret set|delete yetkisi — A + S3 kararı verildi, on ikinci partide uygulandı; SHELL-OVERLAY O1/O3/O5/O6/O7;
    JSON Schema doğrulayıcısı + ReDoS — on birinci partide kapandı, yerine `format` / şema korpusu ölçümü / AppArmor / CI maddeleri; DEPS-SCHEMA C1 kanıtı) ve sabah listesi
    `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları; MCP sandbox seçenekleri B/C/D/E
-   + tur başı `notice` olayı (v18); DEPS-DIST yayın engelleri (gömülü lisans metinleri, `path` tip sızıntısı; LICENSE kapandı) ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman
+   + tur başı `notice` olayı (sonraki protokol sürümü); DEPS-DIST yayın engelleri (gömülü lisans metinleri, `path` tip sızıntısı; LICENSE kapandı) ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman
    çağrısı ve legacy tarifeler; fast-uri kabul edilmiş riski (2026-10-29); canlı geçiş).
 
 ## Açık kalanlar

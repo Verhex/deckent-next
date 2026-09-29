@@ -327,13 +327,17 @@ refresh, usage and dogfood closure remain open.
   (≤ 200, bounded to the delivery), limits; `clearScratch` empties the area and keeps its directory (a shell's TMPDIR stays valid).
   v17 was introduced 2026-09-29 (MODES-3) as the single v17 package: permission-mode names `standart | full-auto | full-access`, view
   `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
-  (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. SECRET-WRITE adds
-  `setSecret` / `deleteSecret` to v17 (owner 2026-09-29). v17 is on origin/main since `7fbe476c` (2026-09-29) but runs in no installed
-  service; per the lead's integration instruction (2026-09-29) its release point is the next live switch — an open reconciliation with
-  "once pushed … needs a version bump" above (owner: bump to v18, or amend the rule to "pushed and run by an installed service").
-  With it: bindings v3;
+  (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
   audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, summary `fetch`; old mode names stay readable); ledger
-  unchanged.
+  unchanged. v17 was pushed with `7fbe476c` (released; further changes bump).
+  v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
+  `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
+  further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
+  describe and stop a v18 service, nothing else; a mismatched envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT` —
+  there is no dedicated version-refusal code), and a v18 terminal's describe of a v17 service retries at v17 and shows the build skew. The
+  live service runs v16: at the next live switch it moves to v18 in one step with the terminal and CLI of the same build; v16 is outside
+  [18,17], so the old service is stopped by the owner (the terminal's restart and `deckent runtime shutdown` cannot reach it) — or the window is widened to [18,17,16] for that
+  one switch (open lead/owner choice).
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -1534,7 +1538,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 | 2026-09-29 | `ShellCapabilities` v1 → v2 (BWRAP-SELECT, owner S7): `bubblewrap` is the selected launcher's observation (`{ status, launcher, rejected, restriction, detail }`) instead of a PATH-scan status; `schemaVersion: 2`. In-process type, pushed at S5, so versioned (not amended in place); every caller moved in the same change. SHELL-OVERLAY reads `launcher.overlay`. | Launcher selection (system ≥ 0.12 → bundled 0.13) makes the observation richer than a status; overlay becomes active in production. |
 | 2026-09-29 | MCP tool schemas are validated by Deckent's own bounded JSON Schema validator (`src/platform/core/validate`); the SDK's @cfworker/json-schema and ajv are neither used nor shipped (MCP-SCHEMA-VALIDATOR). | Owner "problematic dependencies are not accepted": cf-worker maintenance stagnation, ReDoS in `pattern`, fail-open `$dynamicRef` (Astra 2180 R2). |
 | 2026-09-29 | Twelfth batch keeps `src/composition` within its 5500-line budget by moving two pure pieces to their owning adapter units: the `@file` index cache (`RuntimeWorkspaceFileHost`, `createRuntimeWorkspaceFileHost`, byte-identical) beside `indexWorkspaceFiles` in `adapters/core/workspace-read`, and `agentFileEffectCommandId` into `adapters/core/workspace-write` (as `agentShellEffectCommandId` in host-shell). 5501 → 5455 lines. | The SECRET-WRITE merge passed the budget by 1 line; FOUNDATION: pressure is answered by moving responsibility, not by raising the budget. |
-| 2026-09-29 | SECRET-WRITE: `secret set|delete` through the runtime service (protocol v17 in place) under the policy resource `secret` (`set`/`delete`, id = name); every decision sealed as `secret-change` with `decision`; first-run template v2 grants the installer; CLI value from stdin or a no-echo prompt, never argv. | Owner 2026-09-29 SECRET-K1 §5 option A + S3 (service socket). |
+| 2026-09-29 | SECRET-WRITE: `secret set|delete` through the runtime service (protocol v18; v17 was already pushed) under the policy resource `secret` (`set`/`delete`, id = name); every decision sealed as `secret-change` with `decision`; first-run template v2 grants the installer; CLI value from stdin or a no-echo prompt, never argv. | Owner 2026-09-29 SECRET-K1 §5 option A + S3 (service socket). |
 | 2026-09-29 | DEPS-P0: Core license Apache-2.0; `engines.node >=24.15.0` with `@types/node` 24.x; `node:sqlite` below 3.51.3 refused at every open (`ATTEMPT_STORE_SQLITE_UNSUPPORTED`); react 19.2.8 + `@types/react` 19.2.18 (ink's react-reconciler 0.33 release train); CI Node [24, 26]; platform order Linux + WSL2, then macOS, then native Windows. | Owner decisions 1, 4, 9, 10 of the 2026-09-29 dependency audit (SQLite WAL-reset corruption fix in 3.51.3). |
 | 2026-09-29 | Tenth batch keeps `src/composition` within its 5500-line budget by moving pure host-shell responsibilities to their owning adapter unit, byte-identical: `shellWritePosture` + `ShellCallAuthority` (beside `unattendedWritePosture`), `sandboxWriteSetRoot`, `agentShellEffectCommandId` and the shell result notes/effect-refusal text into `adapters/core/host-shell`; composition keeps the EffectApplication wiring. 5510 → 5432 lines. | FASTURI-OUT, DEPS-TYPES, SECRET-K1 and SHELL-OVERLAY together passed the budget by 10 lines; the 2026-09-28 FOUNDATION rule answers pressure by moving responsibility, not by raising the budget. |
 | 2026-09-29 | SECRET-K1: `SecretStore` port + backend registry; env default, explicit installation-only file backend; one production resolver at every credential read site. | Owner keyring option B, S1/S2/S5; `secret set|delete` authority checkpoint open (PLAN). |
@@ -2024,7 +2028,7 @@ for the selection only, no reference resolved; an unsafe/corrupt/unavailable sto
 the error redactor would mask the next word as a value (observed at integration). Governed changes (SECRET-WRITE, owner 2026-09-29 SECRET-K1
 §5 option A + S3 = service socket, twelfth batch): the policy vocabulary (schema 1, additive) has resource kind `secret` with actions
 `set`/`delete`; the resource id is the secret's name (`$DECK:NAME` grammar, `ids: 'all'` for every name). The runtime service owns the
-change: protocol v17 (added in place, see the versioning rule) `setSecret {schemaVersion 1, scopeId, name, value}` and `deleteSecret
+change: protocol v18 (introduced for these two operations, see the versioning rule) `setSecret {schemaVersion 1, scopeId, name, value}` and `deleteSecret
 {schemaVersion 1, scopeId, name}` (delivery required, current version only, no actor field — the socket peer is the principal; scope
 admission `write`) → `{schemaVersion 1, scopeId, name, action, backend, removed}`. `SecretStoreAdministration`: input (name grammar, value 1
 B–64 KiB, a writable backend — the env backend is `SECRET_STORE_READ_ONLY` before any decision) → `policySecretChangeAuthorization` (engine;
@@ -2079,7 +2083,7 @@ approval or start; `mcp list` carries `lastStart` and `/mcp` prints it. The adap
 start-failed, not-recorded, not-decided) and never renders owner text; composition's one renderer (`renderMcpStartNotice`, catalog
 `mcp.start.*`) writes the turn note in the service's locale (its environment, then `language`) and `lastStart.text` in the calling
 surface's locale (`/mcp`, `mcp list|get --lang`). Open: the notice arrives at the turn's end (a start-of-turn notice needs a new stream
-event kind, v18); the view's toolchain comes from the service environment's PATH while the server's PATH comes from the service process
+event kind, a later protocol version); the view's toolchain comes from the service environment's PATH while the server's PATH comes from the service process
 or the entry's `env.PATH` (an entry that sets PATH can search a directory the view did not bind). Pin digest = sha256 over name, title, description,
 input/output schema, annotations; only pinned tools whose live definition matches are offered (`mcp__<server>__<tool>`; display and audit
 `mcp:<server>/<tool>`); a changed definition is withdrawn until re-approved. A call is a C11 effect of `mcp.tool.call@1` on `mcp-tool` (input:

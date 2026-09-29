@@ -6,7 +6,7 @@ import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#plat
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 
-/** v17 secret changes (SECRET-WRITE, option A, S3): the socket peer's change is decided on the `secret` cell of this installation's policy and
+/** v18 secret changes (SECRET-WRITE, option A, S3): the socket peer's change is decided on the `secret` cell of this installation's policy and
  * sealed as `secret-change` in the same installation's ledger before the store is written (MCP user-trust precedent). The value goes from the
  * request to the store only; no answer, error or record carries it. */
 export async function executeConfiguredRuntimeSecretOperation(projectRoot: string, request: RuntimeServiceRequest, peer: LocalPeerIdentity,

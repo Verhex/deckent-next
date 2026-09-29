@@ -58,7 +58,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   /** v16 (SCR-A `/scratch`): the caller's own scratch area of one conversation — its files, or emptied (the directory stays). */
   inspectScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchView>;
   clearScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchClearance>;
-  /** v17 (SECRET-WRITE): one secret of the installation's store, set or deleted by the socket peer under the `secret` policy cell. */
+  /** v18 (SECRET-WRITE): one secret of the installation's store, set or deleted by the socket peer under the `secret` policy cell. */
   setSecret(command: SecretSetCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
   deleteSecret(command: SecretDeleteCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
 }>;
@@ -159,7 +159,7 @@ function scratchMethods(call: RuntimeCall) {
     clearScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchClearance>('clearScratch', scratchClearanceSchema, input, signal) };
 }
 
-/** v17 secret methods: name and value are checked before anything is sent (typed, never echoed); an answer for another change is not trusted. */
+/** v18 secret methods: name and value are checked before anything is sent (typed, never echoed); an answer for another change is not trusted. */
 function secretMethods(call: RuntimeCall) {
   const change = async (operation: 'setSecret' | 'deleteSecret', input: SecretSetCommand | SecretDeleteCommand, signal?: AbortSignal) => {
     try {
