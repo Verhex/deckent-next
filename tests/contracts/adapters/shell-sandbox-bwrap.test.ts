@@ -103,9 +103,14 @@ describe('bubblewrap realm selection (S9)', () => {
     const f = await fixture();
     const usable = f.sandbox.usable(linux());
     if (!sandboxReady) { expect(usable.ok).toBe(false); return; }
-    expect(resolveShellRealm('prefer-sandbox', linux(), [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'bubblewrap' }, notice: null, posture: expect.stringContaining('bubblewrap') });
+    const OWNER_APPROVED_STANDART = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
+    const prefer = resolveShellRealm('prefer-sandbox', linux(), [f.sandbox]);
+    expect(prefer).toMatchObject({ ok: true, realm: { kind: 'bubblewrap' }, notice: null });
+    expect(prefer.ok && prefer.posture(OWNER_APPROVED_STANDART)).toContain('bubblewrap');
     expect(resolveShellRealm('require-sandbox', linux(), [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'bubblewrap' }, notice: null });
-    expect(resolveShellRealm('host', linux(), [f.sandbox])).toMatchObject({ ok: true, realm: hostShellRealm, notice: null, posture: expect.stringContaining('not a sandbox') });
+    const host = resolveShellRealm('host', linux(), [f.sandbox]);
+    expect(host).toMatchObject({ ok: true, realm: hostShellRealm, notice: null });
+    expect(host.ok && host.posture(OWNER_APPROVED_STANDART)).toContain('not a sandbox');
   });
   it('is unusable without the binary at a known path, without the user namespace, or with an unknown measurement — visibly, never a silent fallback', async () => {
     const f = await fixture();

@@ -4,7 +4,8 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import type { ShellCapabilities } from './probe.js';
-import type { ShellSandbox, ShellSandboxLayout } from './realm.js';
+import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
+import { describeShellWritePosture, sandboxWriteView } from './realm.js';
 import { BASH_LAUNCH, runShellProcess } from './run.js';
 import { scanGitDirectory } from './git-objects.js';
 import { fsOpsFor, type FsOps } from './fs-ops.js';
@@ -57,8 +58,8 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
   // Astra 2170 R1: an unbounded unattended call sees the whole project read-only (only the scratch area stays writable).
   const projectClass: 'w' | 'r' = write.projectReadOnly ? 'r' : 'w';
   // MODES-3: a full-access turn writes Git metadata (commit, branch): its clean entries take `w` rules; the inode floor is unchanged.
-  // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3).
-  const git = input.repositoryWritable && !write.projectReadOnly ? 'w' as const : 'r' as const;
+  // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3); the card's text reads the same fact.
+  const git = sandboxWriteView(input, { writeFloorReadOnly: write.floorReadOnly === true, projectReadOnly: write.projectReadOnly === true }).repositoryWritable ? 'w' as const : 'r' as const;
   let seen = 0;
   let gitSeen = 0;
   /**
@@ -188,14 +189,18 @@ export function landlockShellRealm(input: ShellSandboxLayout, abi: number): Shel
 }
 
 /** Landlock ABI 6 scopes signals and abstract unix sockets; below it the realm is typed DEGRADED and says what is left open. */
-function landlockPosture(abi: number): { readonly marker: string; readonly posture: string; readonly notice: string | null; readonly containment: 'sandbox' | 'degraded' } {
+function landlockPosture(abi: number): { readonly marker: string; readonly posture: (view: ShellSandboxWriteView) => string; readonly notice: string | null;
+  readonly containment: 'sandbox' | 'degraded' } {
   const gaps = [...(abi < 6 ? ['signals to other processes of your user are not blocked'] : []),
     ...(abi < 3 ? ['read-only files can be truncated'] : []), ...(abi < 4 ? ['TCP is refused by the socket filter, not by Landlock'] : [])];
   const notice = gaps.length ? `[deckent] sandbox: landlock DEGRADED (kernel Landlock ABI ${abi} < 6): ${gaps.join('; ')}.` : null;
-  const posture = `Runs in the Landlock sandbox (ABI ${abi}): read-write only in the project and the conversation scratch area (the project root and `
-    + 'folders holding protected files cannot gain or lose entries); .git read-only; protected files, your home directory and other paths '
-    + 'unreachable; system paths read-only; no network (sockets refused).';
-  return { marker: notice ? 'sandbox: degraded' : 'sandbox: landlock', notice, posture: notice ? `${posture}\n${notice}` : posture, containment: notice ? 'degraded' : 'sandbox' };
+  const posture = (view: ShellSandboxWriteView) => {
+    const base = `Runs in the Landlock sandbox (ABI ${abi}): ${describeShellWritePosture(view)}, the conversation scratch area is writable (the project `
+      + 'root and folders holding protected files cannot gain or lose entries); protected files, your home directory and other paths '
+      + 'unreachable; system paths read-only; no network (sockets refused).';
+    return notice ? `${base}\n${notice}` : base;
+  };
+  return { marker: notice ? 'sandbox: degraded' : 'sandbox: landlock', notice, posture, containment: notice ? 'degraded' : 'sandbox' };
 }
 
 /** Landlock as a sandbox provider (S11) for the realm list: usable when the host measurement found a Landlock ABI ≥ 1. */
