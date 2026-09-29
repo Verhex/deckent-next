@@ -127,3 +127,103 @@ it('env backend: the previous behaviour (own properties only), read-only and not
   await expect(store.listNames()).rejects.toMatchObject({ code: 'SECRET_STORE_UNSUPPORTED' });
   expect(await store.inspect()).toEqual({ status: 'ready', code: null });
 });
+
+// SECRET-BOUNDS (Astra 2185 R5): the writer admits the exact document it will write against the reader's bound, so no sequence of accepted
+// changes can leave a store the backend itself refuses to read. The oracle below is independent of the product: the pretty JSON (2-space
+// indent, sorted names, trailing newline) the store writes, measured in UTF-8 bytes.
+const LIMIT = 1_048_576;
+const documentBytes = (secrets: Readonly<Record<string, string>>) => Buffer.byteLength(`${JSON.stringify({ schemaVersion: 1,
+  secrets: Object.fromEntries(Object.keys(secrets).sort().map(name => [name, secrets[name]])) }, null, 2)}\n`, 'utf8');
+/** A value of exactly `bytes` UTF-8 bytes built from 4-byte characters (JS length about half its bytes), padded with ASCII. */
+const multibyte = (bytes: number) => '\u{1F600}'.repeat(Math.floor(bytes / 4)) + 'x'.repeat(bytes % 4);
+async function filled(f: Awaited<ReturnType<typeof root>>, value: (index: number) => string, count = 15) {
+  const store = createFileSecretStore({ root: f.global, platform: 'linux' }), secrets: Record<string, string> = {};
+  for (let index = 0; index < count; index++) {
+    const name = `FILL_${String(index).padStart(2, '0')}`; secrets[name] = value(index); await store.set(name, secrets[name]);
+  }
+  return { store, secrets };
+}
+const full = { code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1', maxBytes: String(LIMIT) } };
+
+it('file backend: a change is admitted only when its whole document fits the reader bound — exact limit accepted, one byte over refused', async () => {
+  const f = await root(), { store, secrets } = await filled(f, () => 'x'.repeat(65_536));
+  // `LAST` sorts after every FILL_ name: an empty value is the document with the entry, the room is what its value may add.
+  const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
+  expect(room).toBeGreaterThan(0); expect(room + 1).toBeLessThanOrEqual(65_536);
+  const before = await readFile(f.path);
+  const refused = await store.set('LAST', `${CANARY}${'x'.repeat(room + 1 - CANARY.length)}`).then(() => null, (error: unknown) => error);
+  expect(refused).toMatchObject(full);
+  expect(leaks(refused)).toBe(false);
+  expect((refused as { cause?: unknown }).cause).toBeUndefined();
+  // Nothing was written: the same bytes, no temporary file, every earlier secret readable.
+  expect((await readFile(f.path)).equals(before)).toBe(true);
+  expect((await readdir(f.global)).sort()).toEqual(['secrets.json']);
+  expect(await store.get('LAST')).toBeUndefined();
+  expect(await store.get('FILL_00')).toBe(secrets['FILL_00']);
+  await store.set('LAST', 'x'.repeat(room));
+  expect((await stat(f.path)).size).toBe(LIMIT);
+  expect((await store.get('LAST'))?.length).toBe(room);
+  expect(await store.inspect()).toEqual({ status: 'ready', code: null });
+  // A full store still deletes (a delete only shrinks) and then admits a change that fits again.
+  expect(await store.delete('FILL_00')).toBe(true);
+  await store.set('AFTER', 'synthetic-after');
+  expect(await store.listNames()).toContain('AFTER');
+  expect((await stat(f.path)).size).toBeLessThanOrEqual(LIMIT);
+}, 30_000);
+
+it('file backend: bytes are counted after JSON escaping and in UTF-8 (4-byte characters, control characters, quotes)', async () => {
+  const f = await root(), { store, secrets } = await filled(f, () => multibyte(65_536));
+  // A 4-byte character is 2 JS units: counting characters instead of bytes would admit this document at twice the bound.
+  const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
+  await expect(store.set('LAST', multibyte(room + 1))).rejects.toMatchObject(full);
+  await store.set('LAST', multibyte(room));
+  expect((await stat(f.path)).size).toBe(LIMIT);
+  expect(await store.get('LAST')).toBe(multibyte(room));
+  // Escaping growth: a 64 KiB value of U+0001 is 6 bytes per character once serialized (\u0001), a quote or backslash 2.
+  const g = await root(), escaped = createFileSecretStore({ root: g.global, platform: 'linux' });
+  const control = '\u0001'.repeat(65_536), quoted = '"\\'.repeat(32_768);
+  expect(Buffer.byteLength(control, 'utf8')).toBe(65_536);
+  await escaped.set('CONTROL_A', control); await escaped.set('CONTROL_B', control);
+  await escaped.set('QUOTED_A', quoted);
+  const before = await readFile(g.path);
+  expect(documentBytes({ CONTROL_A: control, CONTROL_B: control, QUOTED_A: quoted, QUOTED_B: quoted })).toBeGreaterThan(LIMIT);
+  await expect(escaped.set('QUOTED_B', quoted)).rejects.toMatchObject(full);
+  await expect(escaped.set('CONTROL_C', control)).rejects.toMatchObject(full);
+  expect((await readFile(g.path)).equals(before)).toBe(true);
+  expect(await escaped.get('CONTROL_A')).toBe(control);
+  expect(await escaped.listNames()).toEqual(['CONTROL_A', 'CONTROL_B', 'QUOTED_A']);
+}, 30_000);
+
+it('file backend: overwriting an existing name is admitted on the net document (growth refused, same or smaller size accepted)', async () => {
+  const f = await root(), { store, secrets } = await filled(f, () => 'x'.repeat(65_536));
+  const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
+  await store.set('LAST', 'a'.repeat(room));
+  expect((await stat(f.path)).size).toBe(LIMIT);
+  const before = await readFile(f.path);
+  await expect(store.set('LAST', 'b'.repeat(room + 1))).rejects.toMatchObject(full);
+  await expect(store.set('FILL_03', 'b'.repeat(65_536 - 1).concat('"'))).rejects.toMatchObject(full);
+  expect((await readFile(f.path)).equals(before)).toBe(true);
+  expect(await store.get('LAST')).toBe('a'.repeat(room));
+  await store.set('LAST', 'c'.repeat(room));
+  expect(await store.get('LAST')).toBe('c'.repeat(room));
+  await store.set('FILL_03', 'synthetic-small');
+  expect((await stat(f.path)).size).toBe(LIMIT - 65_536 + 'synthetic-small'.length);
+}, 30_000);
+
+it('file backend: two writers that each fit but not together — the lock orders them, the second is refused and the store stays readable', async () => {
+  const f = await root(), { secrets } = await filled(f, () => 'x'.repeat(65_536));
+  const room = LIMIT - documentBytes({ ...secrets });
+  const value = 'y'.repeat(Math.floor(room * 0.6));
+  expect(documentBytes({ ...secrets, RACE_A: value })).toBeLessThanOrEqual(LIMIT);
+  expect(documentBytes({ ...secrets, RACE_A: value, RACE_B: value })).toBeGreaterThan(LIMIT);
+  const outcomes = await Promise.allSettled(['RACE_A', 'RACE_B'].map(name =>
+    createFileSecretStore({ root: f.global, platform: 'linux', lockTimeoutMs: 10_000 }).set(name, value)));
+  expect(outcomes.filter(outcome => outcome.status === 'fulfilled')).toHaveLength(1);
+  const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+  expect(rejected).toHaveLength(1); expect(rejected[0]!.reason).toMatchObject(full);
+  const store = createFileSecretStore({ root: f.global, platform: 'linux' });
+  expect((await store.listNames()).filter(name => name.startsWith('RACE_'))).toHaveLength(1);
+  expect(await store.get('FILL_14')).toBe(secrets['FILL_14']);
+  expect((await stat(f.path)).size).toBeLessThanOrEqual(LIMIT);
+  expect((await readdir(f.global)).sort()).toEqual(['secrets.json']);
+}, 30_000);

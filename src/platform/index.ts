@@ -31,7 +31,7 @@ export { isStandardSchemaV1, validateStandardSchemaSync } from '#platform/core/v
 // Deckent's own JSON Schema validator (MCP-SCHEMA-VALIDATOR): the MCP SDK's jsonSchemaValidator provider for every SDK Client and Server.
 export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON_SCHEMA_ANNOTATIONS } from '#platform/core/validate/index.js';
 export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from '#platform/core/validate/index.js';
-export { deepMerge, readJsonFile, writeJsonAtomic } from '#platform/core/utils/index.js';
+export { deepMerge, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
 export type { DeckentConfig, CoreConfig, ConfigSectionOptions } from '#platform/core/config/index.js';
