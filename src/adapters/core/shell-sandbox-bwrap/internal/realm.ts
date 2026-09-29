@@ -221,6 +221,10 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       const { status, launcher, detail } = capabilities.bubblewrap;
       if (status === 'restricted') return { ok: false, restricted: true, reason: detail ?? 'user namespace restricted' };
       if (status !== 'available' || !launcher) return { ok: false, reason: `bubblewrap ${status}${detail ? ` (${detail})` : ''}` };
+      // A launcher a sandboxed command could replace (a state root set inside the project or scratch area) is never run outside it.
+      if ([layout.project.root, ...(layout.scratchDir ? [layout.scratchDir] : [])].some(root => under(launcher.path, root))) {
+        return { ok: false, reason: `bwrap at ${launcher.path} is inside the project or scratch area, where a sandboxed command could replace it` };
+      }
       const verified = verifyBubblewrapLauncher(launcher);
       if (!verified.ok) return { ok: false, reason: verified.reason };
       const binary = launcher;

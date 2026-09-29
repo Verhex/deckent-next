@@ -129,6 +129,20 @@ describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
     expect(sandbox.usable(linux(system))).toMatchObject({ ok: false, reason: expect.stringMatching(/changed since the service measured it/u) });
   });
 
+  it('refuses a launcher a sandboxed command could replace: a state root inside the project or the scratch area', async () => {
+    const f = await fixture();
+    const project = join(f.root, 'project'); await mkdir(project, { recursive: true });
+    const inside = await selectBubblewrapLauncher(f.options({ stateDir: join(project, '.state') }));
+    expect(inside.status).toBe('available');
+    const sandbox = bubblewrapShellSandbox({ project: await createWorkspaceScope(project), scratchDir: null, writeFloor: null });
+    expect(sandbox.usable(linux(inside))).toMatchObject({ ok: false, reason: expect.stringMatching(/inside the project or scratch area/u) });
+    const scratch = join(f.root, 'scratch'); await mkdir(scratch);
+    const inScratch = await selectBubblewrapLauncher(f.options({ stateDir: join(scratch, 'state') }));
+    const withScratch = bubblewrapShellSandbox({ project: await createWorkspaceScope(project), scratchDir: scratch, writeFloor: null });
+    expect(withScratch.usable(linux(inScratch))).toMatchObject({ ok: false, reason: expect.stringMatching(/inside the project or scratch area/u) });
+    expect(withScratch.usable(linux(await selectBubblewrapLauncher(f.options())))).toMatchObject({ ok: true });
+  });
+
   it('AppArmor: a restricted user namespace is typed, and the resolver falls back to Landlock visibly with the fix', async () => {
     const f = await fixture();
     const script = launcher(f.log, '0.13.0', { code: 1, stderr: 'bwrap: setting up uid map: Permission denied' });
