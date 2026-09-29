@@ -58,16 +58,36 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   render, gerçek bwrap tur testi (en servis + tr servis notu, `/mcp` tr/en), kayıt testi reddi en/tr. İki mutasyon (servis locale'i yok sayılır; yüzey
   locale'i geçirilmez) testleri kırdı, geri alındı. Belge deltası (ARCHITECTURE/PLAN/CHANGELOG/current-flow) ayrı commit'te.
 
+## Onuncu parti (`integrate/2026-09-29-k`, worktree `/home/alperen/deckent-next-integrate-k`, taban `9a3ef2c`)
+- Birleşenler (her biri `--no-ff`): FASTURI-OUT `178ab19d` (yayın paketinde MCP SDK'nın gömülü ajv/fast-uri'si yok; stub + build kapısı; MCP server
+  cf-worker doğrulayıcısıyla), DEPS-TYPES `c8f86a23` (SDK girişi açık liste + envanter testi, 6 canlı zod değeri çıktı — BREAKING; d.ts kapanışı +
+  vendored tipler, TS 5.9/6.0/7.0 × NodeNext/Bundler 0 hata), SECRET-K1 `6892a9c0` (`SecretStore` portu, env/file arka uçları, tek üretim çözücüsü,
+  `doctor`, `secret list`; arch kenarları `c58ba8a9`), SHELL-OVERLAY `ee854a85` (full-auto kabuk yazım kümesi, bwrap ≥ 0.11; üretimde uykuda).
+  Kanıtlar `proof/<KART>-2026-09-29/`.
+- Entegrasyon düzeltmeleri:
+  - `508fe854` composition bütçesi: 5510 > 5500 → bütçe yükseltilmeden saf host-shell sorumlulukları (`shellWritePosture` + `ShellCallAuthority`,
+    `sandboxWriteSetRoot`, `agentShellEffectCommandId`, kabuk sonuç notları + etki reddi metni) `adapters/core/host-shell`'e bayt bayt taşındı →
+    5432 satır (68 pay); host-shell birimine `engine/core/shell-classification`, `platform/core/host`, `platform/core/managed-files` kenarları eklendi.
+  - `8cb7cbcd` SECRET-K1 i18n deltası: 8 hata metni en/tr (render'lar `error.unknown` yerine kendi anahtarı), `config.field.secrets` metadata,
+    `doctor.secretStore` insan satırı, `secret list` yardım satırı (fixture güncellendi). **Sapma:** önerilen metinlerdeki "secret <kelime>" hata
+    redaktörüne takılıyordu — derlenmiş CLI'da "The secret [REDACTED] …" (en/tr); metinler "secret-store" / "secret'lar deposu" biçimine çevrildi,
+    16 metnin hiçbiri redaktöre takılmıyor; redaktör değişmedi. Diğer üç şeridin i18n deltası yok (SHELL-OVERLAY metinleri modele giden İngilizce).
+- Doğrulama (tam verify değil): typecheck 0; eslint değişenlerde 0 hata (önceden var olan 2 uzunluk uyarısı); lint-arch 0 ihlal; `npm run build` ✓;
+  hedefli vitest: i18n/yardım/secret/MCP/kabuk/dist 24 dosya 208 geçti + 3 atlandı (yerel `.pack/bwrap` yokken) → `.pack/bwrap/x86_64/bwrap`
+  (lock sha `f5112648…` eşleşti, shell-overlay şeridinden kopya) ile overlay testleri 3 dosya 21/21; `runtime-chat-turn` + landlock 76/76;
+  izin modu/ürün durumu/scratch 22/22; metin değişikliği sonrası i18n + secret 10 dosya 80/80. Derlenmiş CLI (geçici HOME): env `secret list`
+  → `SECRET_STORE_UNSUPPORTED` temiz metin en/tr; file arka ucu 0644 → `doctor` "Secret store: core.secret-store.file@1 (unsafe,
+  SECRET_STORE_UNSAFE)" ve `secret list` tipli ret en/tr; 0600 → ad listesi ve "(ready)".
+
 ## Sıradaki
-1. Yedinci parti `ce2440f`: Astra 2171 incelemesi → PASS'te push.
-2. Sekizinci parti `61a5eac`: Astra 2172 incelemesi → PASS'te push.
-3. Astra 2174/2175/2176 (06:45) üç partiye REVISE, ortak P1 (bekleyen eski MCP kartı güven kaldırıldıktan sonra gönderiyordu) → MCP-REVOKE `a5c2000` dokuzuncu partiye birleşti. Sıradaki: bu dalda tam verify → Astra'ya tek yeni sha (H+I+J) → PASS'te push; C5 owner kararı.
-4. DEPS-P0 yedinci parti push'undan sonra başlar.
-5. Owner sabah kararları: liste `proof/MORNING-REPORT-2026-09-29.md` — P1 tasarımları (anahtar zinciri / OTel / uzak MCP; önce K1 — üretimde
-   `secretResolver` bağlı değil), DEPS-SCHEMA C1/C2 (= DEPS-DIST kütüphane tipleri engeli), zod 4 hata kodları (eşle / kabul et), MCP sandbox
-   seçenekleri B/C/D/E + tur başı `notice` olayı (v18), DEPS-DIST yayın engelleri (tipler, LICENSE, gömülü lisans metinleri) ve DEPS-DIST-B1 kartı
-   (271→133 ms), ANTHROPIC ilk faturalı duman çağrısı ve legacy tarifeler, fast-uri kabul edilmiş riski (2026-10-29), canlı geçiş (bindings v3 +
-   MODES-3 canlı göçü, Node 24.21 varsayılan geçişi dahil).
+1. Push adayı `9a3ef2c` (dokuzuncu parti, H+I+J): Astra 2179 incelemesi → PASS'te push.
+2. Onuncu parti (bu dal): tam verify → Astra → PASS'te push.
+3. DEPS-P0 ilk push'tan sonra başlar.
+4. Owner kararları: PLAN "Onuncu parti" açık kararları (secret set|delete yetkisi A/B/C — lead önerisi A; SHELL-OVERLAY O1/O3/O5/O6/O7;
+   JSON Schema doğrulayıcısı + ReDoS — MCP-SCHEMA-VALIDATOR şeridi sürüyor; DEPS-SCHEMA C1 kanıtı) ve sabah listesi
+   `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları; MCP sandbox seçenekleri B/C/D/E
+   + tur başı `notice` olayı (v18); DEPS-DIST yayın engelleri (LICENSE, gömülü lisans metinleri) ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman
+   çağrısı ve legacy tarifeler; fast-uri kabul edilmiş riski (2026-10-29); canlı geçiş).
 
 ## Açık kalanlar
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).
