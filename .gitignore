@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# publishable package staging and tarballs (scripts/build-dist.mjs)
+.pack/
 coverage/
 apps/*/dist/
 apps/*/node_modules/

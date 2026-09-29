@@ -1,6 +1,8 @@
 // deps-watch (DEPS-GOV): networked dependency watch — NOT part of verify. Weekly and before every batch push (docs-delta).
-// Usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD]
-// Inputs: package-lock.json (installed tree), dependencies.json (registry + policy), embedded components (check-embedded-deps).
+// Usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD] [--sbom <package>/sbom.cdx.json]
+// Inputs: package-lock.json (installed tree), dependencies.json (registry + policy), embedded components (check-embedded-deps) and, with
+// --sbom, the CycloneDX SBOM of a bundled package (scripts/build-dist.mjs): every shipped component, nested embedded ones included, is queried
+// too — a component only the SBOM names (packaging drift) is itself reported.
 // Sources: OSV querybatch + /v1/vulns/{id} (installed tree AND embedded components), npm registry (latest, deprecated, provenance =
 // dist.attestations, publish dates for direct dependencies and registry alternatives), `npm audit signatures --json`, lockfile licenses.
 // Writes <outDir>/deps-watch-<date>.json and .md; exit 1 when a finding's severity is in policy.failSeverities (default HIGH/CRITICAL).
@@ -78,8 +80,23 @@ const defaultSignatures = root => new Promise(done => execFile('npm', ['audit', 
   (error, stdout) => { try { done(JSON.parse(stdout)); } catch { done({ error: error?.message ?? 'unparsable npm audit signatures output' }); } }));
 const registryUrl = name => `${NPM}/${name.replace('/', '%2f')}`;
 
+/** npm components of a CycloneDX SBOM (top-level and nested), as OSV targets. A nested component's carrier is its
+ * `deckent:embedded:carrier` property (the same carrier string acceptedRisks use); a top-level shipped component is the installed `tree`. */
+export function sbomComponents(bom) {
+  const out = [], visit = (components, parent) => { for (const component of components ?? []) {
+    const purl = /^pkg:npm\/(.+)@([^@?#]+)(?:[?#].*)?$/u.exec(component.purl ?? '');
+    const carrier = component.properties?.find(item => item.name === 'deckent:embedded:carrier')?.value ?? (parent ? `${parent.name}@${parent.version}` : null);
+    const item = purl ? { name: decodeURIComponent(purl[1]), version: purl[2], via: carrier } : null;
+    if (item) out.push(item);
+    visit(component.components, item ?? parent);
+  } };
+  if (bom?.bomFormat !== 'CycloneDX' || !Array.isArray(bom.components)) throw new Error('not a CycloneDX JSON SBOM');
+  visit(bom.components, null);
+  return out;
+}
+
 /** Runs the watch; `fetchJson` and `signatures` are injectable so the pipeline is testable offline. Returns { report, exitCode, files }. */
-export async function runWatch({ root, outDir, today = new Date().toISOString().slice(0, 10), fetchJson = defaultFetchJson, signatures = defaultSignatures }) {
+export async function runWatch({ root, outDir, today = new Date().toISOString().slice(0, 10), fetchJson = defaultFetchJson, signatures = defaultSignatures, sbom = null }) {
   const arch = JSON.parse(readFileSync(join(root, 'arch.json'), 'utf8'));
   const { registry, errors } = loadRegistry(root, arch.dependencies?.registry);
   if (!registry) throw new Error(`dependency registry invalid: ${errors.join('; ')}`);
@@ -97,10 +114,17 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
   const embedded = scanEmbedded(root, defaultHosts(root)).flatMap(host => host.embedded.map(component => ({ name: component.name, version: component.version, via: `${host.package}@${host.installed}` })));
   for (const component of embedded) if (!component.version) add('MEDIUM', 'embedded-unversioned', `${component.name} (in ${component.via})`, 'sourcemap carries no version; OSV cannot be queried');
   const installed = name => lock.packages?.[`node_modules/${name}`]?.version ?? null;
+  // Shipped components of a bundled package: the same name@version already scanned (tree or embedded carrier) is not queried twice.
+  const shipped = sbom ? sbomComponents(sbom) : [], known = new Set([...[...tree.values()].map(entry => `${entry.name}@${entry.version}|tree`),
+    ...embedded.map(component => `${component.name}@${component.version}|${component.via}`)]);
+  const sbomOnly = shipped.filter(component => !known.has(`${component.name}@${component.version}|${component.via ?? 'tree'}`));
+  for (const component of sbomOnly) add('MEDIUM', 'sbom-drift', `${component.name}@${component.version}${component.via ? ` (embedded in ${component.via})` : ''}`,
+    'named by the bundled package SBOM but not by the installed tree or embedded scan; rebuild the package or the lockfile');
 
   // OSV: one querybatch for the tree and the versioned embedded components; paginated per query; details for severity.
   const targets = [...[...tree.values()].map(entry => ({ name: entry.name, version: entry.version, via: null, runtime: entry.runtime })),
-    ...embedded.filter(component => component.version).map(component => ({ ...component, runtime: true }))];
+    ...embedded.filter(component => component.version).map(component => ({ ...component, runtime: true })),
+    ...sbomOnly.map(component => ({ ...component, runtime: true }))];
   const vulnerable = [];
   try {
     const ids = targets.map(() => []);
@@ -177,6 +201,7 @@ export async function runWatch({ root, outDir, today = new Date().toISOString().
   const exitCode = findings.some(item => registry.policy.failSeverities.includes(item.severity)) ? 1 : 0;
   const report = { schemaVersion: 1, date: today, generatedAt: new Date().toISOString(), node: process.version, failSeverities: registry.policy.failSeverities, exitCode, counts,
     tree: { packages: tree.size, runtime: [...tree.values()].filter(entry => entry.runtime).length, embedded: embedded.length },
+    sbom: sbom ? { components: shipped.length, nested: shipped.filter(component => component.via).length, sbomOnly: sbomOnly.length } : null,
     signatures: { invalid: signed.invalid?.length ?? null, missing: signed.missing?.length ?? null }, unprovenancedRuntime: unprovenanced.sort(),
     direct: directRows, alternatives: alternativeRows, vulnerabilities: vulnerable, findings };
   mkdirSync(outDir, { recursive: true });
@@ -191,6 +216,7 @@ export function renderMarkdown(report) {
   const table = (head, rows) => [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map(row => `| ${row.map(cell).join(' | ')} |`)].join('\n');
   return [`# deps-watch ${report.date}`, '',
     `Exit ${report.exitCode} (fails on ${report.failSeverities.join('/')}). Node ${report.node}. Tree: ${report.tree.packages} packages (${report.tree.runtime} runtime), ${report.tree.embedded} embedded components.`,
+    ...(report.sbom ? [`Bundled package SBOM: ${report.sbom.components} components (${report.sbom.nested} nested embedded), ${report.sbom.sbomOnly} named only by the SBOM.`] : []),
     `Findings: ${Object.entries(report.counts).map(([level, count]) => `${level} ${count}`).join(', ')}. Signatures: invalid ${report.signatures.invalid ?? '?'}, missing ${report.signatures.missing ?? '?'}.`, '',
     '## Findings', '', report.findings.length ? table(['Severity', 'Kind', 'Subject', 'Detail'], report.findings.map(item => [item.severity, item.kind, item.subject, item.detail])) : 'None.', '',
     `MITIGATED findings come from dependencies.json acceptedRisks; they fail again on expiry or on any advisory/version/carrier change.`, '',
@@ -204,8 +230,10 @@ export function renderMarkdown(report) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), dateAt = args.indexOf('--date');
   const date = dateAt > -1 ? args.splice(dateAt, 2)[1] : undefined;
+  const sbomAt = args.indexOf('--sbom'), sbomFile = sbomAt > -1 ? args.splice(sbomAt, 2)[1] : undefined;
   if (args.length !== 1 || (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(date))) { process.stderr.write('usage: node scripts/deps-watch.mjs <outDir> [--date YYYY-MM-DD]\n'); process.exit(2); }
-  const { report, exitCode, files } = await runWatch({ root: dirname(dirname(fileURLToPath(import.meta.url))), outDir: resolve(args[0]), ...(date ? { today: date } : {}) });
+  const { report, exitCode, files } = await runWatch({ root: dirname(dirname(fileURLToPath(import.meta.url))), outDir: resolve(args[0]), ...(date ? { today: date } : {}),
+    ...(sbomFile ? { sbom: JSON.parse(readFileSync(resolve(sbomFile), 'utf8')) } : {}) });
   process.stdout.write(`deps-watch ${report.date}: ${Object.entries(report.counts).map(([level, count]) => `${level} ${count}`).join(', ')}; exit ${exitCode}\n${files.join('\n')}\n`);
   process.exitCode = exitCode;
 }
