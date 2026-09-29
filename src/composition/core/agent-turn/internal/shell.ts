@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
-  describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, shellWritePosture,
+  describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -85,7 +85,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       if (!planned?.ok) return undefined;
       const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
       const view = sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write);
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${planned.realm.posture(view)}`);
+      // OPEN-SANDBOX: the card names the realm the call will actually run in (an open posture on a realm that cannot open moves or says so).
+      const realm = write.open ? openShellRealm(planned.realm, input.config.realm) : planned.realm;
+      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${realm.posture(view)}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
@@ -125,7 +127,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
       const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
       const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
-      const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
+      // OPEN-SANDBOX: a full-access call runs in the open view where the realm builds it; otherwise `openShellRealm` moves it to the host
+      // (prefer-sandbox) or keeps it closed (require-sandbox), visibly. The realm the result names is the one that ran.
+      const realm = posture.open ? openShellRealm(planned.realm, input.config.realm) : planned.realm, open = posture.open && realm.opens === true;
+      const target = new HostShellTarget(scope.root, { realm, ...(open ? { open: true } : {}), timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
@@ -140,12 +145,12 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        const note = projectReadOnly && ran.exitCode !== 0 && planned.realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
+        const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false),
           context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${note}${unavailable}${settled ? `\n${settled}` : ''}`,
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm)}${note}${unavailable}${settled ? `\n${settled}` : ''}`,
           cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
@@ -156,7 +161,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';
         if (ran && ran.status !== 'exited') {
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? ''
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, realm)}${ran.status === 'spawn-failed' ? ''
             : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}`, cleanup: ran.cleanup };
         }
         return { status: 'error', text: describeShellEffectRefusal(code) };

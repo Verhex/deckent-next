@@ -37,6 +37,10 @@ export interface ShellRealmRequest {
    * Deckent's own private directories outside the project; the caller reads and applies the change set after the call. Only a realm that
    * reported `writeSets` accepts it (any other refuses the call, nothing runs); it replaces `projectReadOnly`. */
   readonly writeSet?: { readonly upper: string; readonly work: string };
+  /** OPEN-SANDBOX (owner MODES-3 checkpoint 4, 2026-09-29): a full-access call's open view — host network, HOME visible and writable, the
+   * project and `.git` writable, the hard floor (the product's state roots, credential-pattern files in HOME) sealed structurally. Only a
+   * realm that reported `opens` builds it; the caller never sends it to any other (it moves the call to the host or keeps it closed). */
+  readonly open?: boolean;
 }
 export interface ShellRealmResult {
   /** `exited` with its code (or the signal that ended it), `timed-out` / `cancelled` after the group was killed, `spawn-failed`. */

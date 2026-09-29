@@ -27,6 +27,14 @@ export interface BubblewrapView {
   /** Denied files inside the project: `/dev/null` bound read-only in their place. A plain (non-device) bind carries `nodev`, so the
    * file opens with EACCES either way: no bytes are readable, no write lands; it is protected, not absent. */
   readonly maskedFiles: readonly string[];
+  /**
+   * OPEN-SANDBOX (a full-access call): the host's root is bound read-write as the user sees it and the network namespace is kept (no system
+   * allowlist, no toolchain binds, no private `/tmp` or HOME tmpfs); the PID namespace, `--die-with-parent`, `--new-session`, a fresh
+   * `/proc` and a minimal `/dev` stay. The hard floor is sealed structurally: `sealed` state roots inside the project are bound read-only
+   * over the project (their product state masked by the deny walk, so no name, existing or new, is created there), `hidden` ones outside it
+   * become an empty tmpfs remounted read-only after every other mount (the scratch area's mount point inside one is made first).
+   */
+  readonly open?: { readonly sealed: readonly string[]; readonly hidden: readonly string[] };
 }
 
 /** Size of each tmpfs (`/tmp`, HOME): a runaway write fills the sandbox, never the host. */
@@ -42,18 +50,24 @@ export const BUBBLEWRAP_SYSTEM_PATHS: readonly string[] = Object.freeze(['/usr',
  * included), a new session (no TIOCSTI injection into the owner's terminal), fresh /proc and a minimal /dev.
  */
 export function bubblewrapArguments(view: BubblewrapView): string[] {
-  const args = ['--unshare-all', '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev',
-    '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
-  if (view.home) args.push('--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home);
+  // Order is load-bearing (the man page: applied in argument order): `--share-net` after `--unshare-all` keeps the host network; the root
+  // bind before `/proc` and `/dev`, which cover the host's.
+  const args = view.open ? ['--unshare-all', '--share-net', '--die-with-parent', '--new-session', '--bind', '/', '/', '--proc', '/proc', '--dev', '/dev']
+    : ['--unshare-all', '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev', '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
+  if (view.home && !view.open) args.push('--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home);
   for (const path of view.systemPaths) args.push('--ro-bind-try', path, path);
   for (const path of view.toolchainPaths) args.push('--ro-bind-try', path, path);
   if (view.overlay) args.push('--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot);
   else args.push(view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot);
+  for (const path of view.open?.sealed ?? []) args.push('--ro-bind', path, path);
   for (const path of view.writablePaths ?? []) args.push('--bind', path, path);
   for (const path of view.readOnlyPaths) args.push('--ro-bind', path, path);
   for (const path of view.maskedDirectories) args.push('--tmpfs', path);
   for (const path of view.maskedFiles) args.push('--ro-bind', '/dev/null', path);
+  for (const path of view.open?.hidden ?? []) args.push('--perms', '0700', '--tmpfs', path);
   if (view.scratchDir) args.push('--bind', view.scratchDir, view.scratchDir);
+  // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
+  for (const path of view.open?.hidden ?? []) args.push('--remount-ro', path);
   args.push('--chdir', view.projectRoot);
   return args;
 }

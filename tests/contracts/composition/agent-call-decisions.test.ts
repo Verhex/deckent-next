@@ -268,8 +268,10 @@ describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
               : authority === 'full-access' ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false }
                 : writeSet ? { writeFloorReadOnly: true, projectReadOnly: false, writeSet: true }
                   : { writeFloorReadOnly: true, projectReadOnly: fullAccessTurn || tier !== 'narrow-mutating', writeSet: false };
+            // OPEN-SANDBOX: the launched full-access mode, and the owner's card inside a full-access turn, run in the open view.
+            const open = authority === 'full-access' || authority === 'owner-approved' && fullAccessTurn;
             expect({ authority, tier, fullAccessTurn, writeSets, ...shellWritePosture(authority, tier, fullAccessTurn, writeSets) })
-              .toEqual({ authority, tier, fullAccessTurn, writeSets, ...expected });
+              .toEqual({ authority, tier, fullAccessTurn, writeSets, ...expected, open });
           }
         }
       }
