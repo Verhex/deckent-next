@@ -8,6 +8,7 @@
     "apps",
     "tiers",
     "imports",
+    "dependencies",
     "units",
     "composition",
     "vocabulary",
@@ -54,6 +55,20 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "required": [
+        "registry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "registry": {
+          "type": "string",
+          "minLength": 1,
+          "description": "External-dependency registry (owners, review, alternatives); single source of truth for which unit may import which npm package (DEPS-GOV)."
         }
       }
     },
