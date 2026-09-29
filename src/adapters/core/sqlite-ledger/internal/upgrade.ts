@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { SupervisorProfileValidator } from '#engine/index.js';
 import { openSqliteLedger } from './connection.js';
 import { CURRENT_LEDGER_VERSION, requireLedgerVersion } from './schema.js';
-import { sqliteFailure, type SqliteLedgerOptions } from './options.js';
+import { sqliteFailure, assertSqliteEngineSupported, type SqliteLedgerOptions } from './options.js';
 
 export interface LedgerUpgrade { readonly from: number; readonly to: number; readonly backupPath: string }
 
@@ -18,6 +18,7 @@ export interface LedgerUpgrade { readonly from: number; readonly to: number; rea
 export function upgradeExistingLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
   profiles?: SupervisorProfileValidator, companyId?: string): LedgerUpgrade | null {
   try { if (!lstatSync(path).isFile()) return null; } catch { return null; }
+  assertSqliteEngineSupported(process.versions.sqlite);
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   let from: number, backupPath: string;
   const db = new DatabaseSync(path, { timeout: options.busyTimeoutMs, readOnly: false });

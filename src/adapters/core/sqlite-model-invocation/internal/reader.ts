@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { ProviderSpendError, ModelInvocationStoreError, type ModelInvocationStore, type ModelInvocationInspectionReader } from '#engine/index.js';
-import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+import { MODEL_INVOCATION_LEDGER_VERSION, PROVIDER_SPEND_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationIdentity, invocationRow, loadInvocationRecord } from './read.js';
 import { decodeInvocationControl } from './control.js';
 
@@ -52,13 +52,15 @@ export function openSqliteModelInvocationReader(path: string, options: { readonl
   if (typeof path !== 'string' || !path || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   let db: DatabaseSync | undefined;
   try {
+    assertSqliteEngineSupported(process.versions.sqlite);
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     db = new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION);
     return new SqliteModelInvocationReader(db);
   } catch (error) {
     try { db?.close(); } catch { /* No read-only outcome can have committed. */ }
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ATTEMPT_STORE_VERSION') throw error;
+    if (error && typeof error === 'object' && 'code' in error
+      && (error.code === 'ATTEMPT_STORE_VERSION' || error.code === 'ATTEMPT_STORE_SQLITE_UNSUPPORTED')) throw error;
     throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
 }

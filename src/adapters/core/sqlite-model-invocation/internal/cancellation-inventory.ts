@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { modelInvocationCancellationInventoryQuerySchema, ModelInvocationStoreError, verifyModelInvocationReceipt,
   type ModelInvocationCancellationInventory, type ModelInvocationCancellationInventoryEntry,
   type ModelInvocationCancellationInventoryPage } from '#engine/index.js';
-import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+import { MODEL_INVOCATION_LEDGER_VERSION, requireLedgerVersion, assertSqliteEngineSupported } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationControl, invocationControlSelect } from './control.js';
 
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647) }).strict();
@@ -57,13 +57,15 @@ export function openSqliteModelInvocationCancellationInventory(path: string,
   if (typeof path !== 'string' || !path || !parsed.success) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   let db: DatabaseSync | undefined;
   try {
+    assertSqliteEngineSupported(process.versions.sqlite);
     const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     db = new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
     requireLedgerVersion(db, MODEL_INVOCATION_LEDGER_VERSION);
     return new SqliteModelInvocationCancellationInventory(db);
   } catch (error) {
     try { db?.close(); } catch { /* Read-only open cannot leave a durable outcome. */ }
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ATTEMPT_STORE_VERSION') throw error;
+    if (error && typeof error === 'object' && 'code' in error
+      && (error.code === 'ATTEMPT_STORE_VERSION' || error.code === 'ATTEMPT_STORE_SQLITE_UNSUPPORTED')) throw error;
     throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
   }
 }

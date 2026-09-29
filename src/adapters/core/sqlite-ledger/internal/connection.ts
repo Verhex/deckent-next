@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createRequire } from 'node:module';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { migrateLedger } from './schema.js';
-import { sqliteLedgerOptionsSchema, sqliteFailure, type SqliteLedgerOptions } from './options.js';
+import { sqliteLedgerOptionsSchema, sqliteFailure, assertSqliteEngineSupported, type SqliteLedgerOptions } from './options.js';
 
 /** Open the existing product ledger for normal writes. The caller owns close and path custody.
  * Installer and read-only readers retain their distinct precheck/transaction protocols.
@@ -10,6 +10,7 @@ import { sqliteLedgerOptionsSchema, sqliteFailure, type SqliteLedgerOptions } fr
  */
 export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
   migration: 'allow' | 'forbid' = 'allow', profiles?: SupervisorProfileValidator, companyId?: string): DatabaseSync {
+  assertSqliteEngineSupported(process.versions.sqlite);
   if (migration !== 'allow' && migration !== 'forbid') throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
   const parsed = sqliteLedgerOptionsSchema.safeParse(options);
   if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
