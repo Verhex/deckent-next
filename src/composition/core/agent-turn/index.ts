@@ -1,6 +1,6 @@
 export { AGENT_READABLE_PRODUCT_RESOURCES, agentProductStateDeny, agentWorkspaceDeny, cancelPeerConfiguredChatTurn, chatTurnCompactionCommandId,
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
-  runPeerConfiguredChatTurn } from './internal/turn.js';
+  runPeerConfiguredChatTurn, withMcpNotices } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';
 export { agentShellEffectCommandId, shellWritePosture, type ShellCallAuthority } from './internal/shell.js';
 export { agentFileEffectCommandId } from './internal/edits.js';

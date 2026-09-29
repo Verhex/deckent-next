@@ -85,11 +85,14 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
   const run = (request: McpCommandRequest) => context.runMcpCommand!(root, request, options, async () => null);
   if (extra.length || (verb !== 'list' && !name) || (verb === 'list' && name)) return [t('terminal.mcp.usage', {}, locale)];
   if (verb === 'list') {
-    const listed = await run({ verb: 'list', health: false }) as { servers: { name: string; scope: string; status: string; command: string; args: string[]; pinnedTools: number }[];
+    const listed = await run({ verb: 'list', health: false }) as { servers: { name: string; scope: string; status: string; command: string; args: string[]; pinnedTools: number;
+      lastStart?: { text: string } }[];
       problems: { name: string | null; scope: string; reason: string }[] };
     if (!listed.servers.length && !listed.problems.length) return [t('terminal.mcp.none', {}, locale)];
     return [t('terminal.mcp.count', { count: listed.servers.length }, locale), ...listed.servers.map(server => `  ${server.name}  ${server.scope}  ${server.status}${server.pinnedTools ? ` (${server.pinnedTools} tools pinned)` : ''}  ${
       [server.command, ...server.args].join(' ')}`), ...listed.problems.map(problem => `  ! ${problem.scope} ${problem.name ?? '(file)'}: ${problem.reason}`),
+    // MCP-SANDBOX-PATHS: the last start failure a turn recorded (the adapter's display-safe text, like a problem's reason).
+    ...listed.servers.flatMap(server => server.lastStart ? [`  ! ${server.name}: ${server.lastStart.text}`] : []),
     ...(listed.servers.some(server => server.status === 'pending-approval' || server.status === 'changed') ? [`  ${t('terminal.mcp.pendingHint', {}, locale)}`] : [])];
   }
   if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }

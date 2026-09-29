@@ -101,6 +101,16 @@ export function agentProductStateDeny(projectRoot: string, layout: ProductLayout
   }));
 }
 
+/** The result note's bound (`chatTurnResultSchema`). */
+const TURN_NOTE_MAX_CHARS = 4_096;
+/** The turn's note with the MCP notices first (MCP-SANDBOX-PATHS): the engine's own note is kept whole; only the MCP part is shortened to fit. */
+export function withMcpNotices(notices: readonly string[], note: string | null): string | null {
+  if (!notices.length) return note;
+  const room = TURN_NOTE_MAX_CHARS - (note ? note.length + 1 : 0), joined = notices.join(' ');
+  if (room < 2) return note;
+  const mcp = joined.length <= room ? joined : `${joined.slice(0, room - 1)}…`;
+  return note ? `${mcp} ${note}` : mcp;
+}
 /** MODES-3: a turn launched in full access is admitted only on the company grant, and recorded before anything runs (no record, no turn; a
  * refusal is recorded when it can be). */
 async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvocationContext>>, command: { readonly scopeId: string; readonly turnId: string;
@@ -169,7 +179,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
-    const mcp = workspace ? await createAgentMcp({ pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
+    // MCP-SANDBOX-PATHS: a server that could not be decided or started is named in the turn's note (protocol v17 unchanged: `note` exists).
+    let mcpNotices: readonly string[] = [];
+    const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
       turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
@@ -334,7 +346,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
     // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery.
     const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024)) ? answer : null;
-    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: result.note, rounds: result.rounds,
+    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(mcpNotices, result.note), rounds: result.rounds,
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
     if (registered) host.running.delete(key);

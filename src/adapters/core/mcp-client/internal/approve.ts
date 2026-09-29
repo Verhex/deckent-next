@@ -95,7 +95,7 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     if (!state.ok && state.reason === 'sandbox-unreachable') {
       // MCP-SANDBOX-PATHS: what the sandbox view hides (or needs from outside it), in the registry's own words for a `${VAR}` path.
       const shown = displayMcpDiagnosis(state.diagnosis, server.entry);
-      throw ErrorRegistry.createError('MCP_SANDBOX_COMMAND_UNREACHABLE', { params: { name: server.name, kind: shown.kind,
+      throw ErrorRegistry.createError('MCP_SANDBOX_COMMAND_UNREACHABLE', { cause: shown, params: { name: server.name, kind: shown.kind,
         ...(shown.kind === 'path-hidden' ? { role: shown.role, path: shown.path, target: shown.target ?? '' } : { runner: shown.runner }) } });
     }
     if (!state.ok) throw fail(state.reason === 'sandbox-unavailable' ? 'MCP_SANDBOX_UNAVAILABLE' : 'MCP_SERVER_START_FAILED', state.detail ?? state.reason);
