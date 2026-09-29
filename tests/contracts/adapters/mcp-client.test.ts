@@ -334,7 +334,8 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
     writeFileSync(join(project, 'package.json'), '{}\n');
     for (const at of [join(project, 'tools', 'raw-mcp.mjs'), join(elsewhere, 'raw-mcp.mjs')]) writeFileSync(at, RAW_SERVER);
     writeFileSync(join(elsewhere, 'raw-bin'), `#!/usr/bin/env node\n${RAW_SERVER}`, { mode: 0o755 });
-    // A package runner inside a bound PATH toolchain directory that fails the way `npx -y` does offline (no server, exit 1).
+    // A package runner inside a bound PATH toolchain directory that fails the way `npx -y` does offline (no server, exit 1). Relies on the
+    // toolchain rule binding a canonical `bin` under /tmp: if that rule tightens, this case becomes path-hidden (command) instead.
     writeFileSync(join(runners, 'npx'), '#!/bin/sh\necho "npm error code ENOTCACHED" >&2\nexit 1\n', { mode: 0o755 });
     return { home, project, elsewhere, runners };
   };
