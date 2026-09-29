@@ -102,7 +102,7 @@ export function cyclonedx({ pkg, identity, tools, shipped, embedded, timestamp }
 
 /** THIRD-PARTY-NOTICES.md: every shipped package with its own license file text; embedded components with the license their carrier did not
  * ship as text. Returns { text, gaps } — a gap is a shipped component whose license text is not available offline. */
-export function thirdPartyNotices(root, { pkg, shipped, embedded }) {
+export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations = [] }) {
   const gaps = [], sections = [`# Third-party notices for ${pkg.name} ${pkg.version}`, '',
     `This package bundles the third-party code listed below into its own files (no install-time dependencies). The machine-readable list is sbom.cdx.json.`, ''];
   for (const item of shipped) {
@@ -118,6 +118,22 @@ export function thirdPartyNotices(root, { pkg, shipped, embedded }) {
       gaps.push(`${entry.name}@${entry.version} (in ${entry.carrier}): license text not shipped by the carrier${entry.license ? '' : '; SPDX id not recorded in dependencies.json'}`);
     }
     sections.push('');
+  }
+  // DEPS-TYPES: third-party type declarations copied into dist/vendor/types. A package whose code is also bundled has its license text above;
+  // a declarations-only package gets its own section.
+  if (declarations.length) {
+    sections.push('## Type declarations vendored into dist/vendor/types', '',
+      'The published type declarations include these packages\' declaration files (specifiers rewritten to relative paths, content unchanged otherwise).', '');
+    for (const item of declarations) {
+      const code = shipped.some(entry => entry.name === item.name && entry.version === item.version);
+      sections.push(`- ${item.name}@${item.version}: ${item.license ?? 'not declared'}, ${item.files.length} declaration file(s)${code ? ' (license text above)' : ''}`);
+    }
+    sections.push('');
+    for (const item of declarations.filter(entry => !shipped.some(code => code.name === entry.name && code.version === entry.version))) {
+      sections.push(`## ${item.name}@${item.version} (type declarations only)`, '', `License: ${item.license ?? 'not declared'}`, '');
+      if (!item.licenseFiles.length) { gaps.push(`${item.name}@${item.version} (declarations): no license file in the installed package`); sections.push('(No license file ships with this package.)', ''); }
+      for (const file of item.licenseFiles) sections.push('```text', readFileSync(join(root, item.dir, file), 'utf8').trimEnd(), '```', '');
+    }
   }
   return { text: sections.join('\n'), gaps };
 }

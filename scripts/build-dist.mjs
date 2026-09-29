@@ -3,7 +3,8 @@
 // Shape (measured choice, see proof DEPS-DIST-2026-09-29): Deckent's own compiled files keep the tsc `dist` layout byte-for-byte in module
 // structure — every file is its own entry and its relative/#imports stay external — so import.meta.url-relative paths (native addon, sandbox
 // helpers, spawned entries, build identity, package root) resolve exactly as in the tested dist. Only third-party code moves: esbuild inlines
-// it (code splitting, so lazy import() stays lazy and React/zod exist once) into `dist/vendor/` chunks.
+// it (code splitting, so lazy import() stays lazy and React/zod exist once) into `dist/vendor/` chunks. Type declarations: only what a consumer
+// reaches from the types entry, third-party ones vendored into `dist/vendor/types/` (scripts/dist-types.mjs, DEPS-TYPES).
 // FASTURI-OUT (owner 2026-09-29): the MCP SDK's own bundled ajv + fast-uri (default validator) is replaced by a throwing stub and the build fails
 // if ajv/fast-uri still reach the bundle (metafile inputs, shipped packages, sourcemap-embedded components); Deckent ships cf-worker only.
 // Reads the existing `dist` (run `npm run build` first; `--build` does it), writes `<out>/package/` (+ `<out>/meta.json`), and with `--pack`
@@ -16,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { build, version as esbuildVersion } from 'esbuild';
 import { bundledPackages, cyclonedx, embeddedInBundle, thirdPartyNotices } from './dist-sbom.mjs';
 import { loadRegistry } from './dependencies.mjs';
+import { vendorDeclarations } from './dist-types.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 /** Optional peers that stay external: loaded only on paths that already tolerate their absence (ink DEV devtools, ws native accelerators). */
@@ -123,8 +125,11 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
     const lines = code.split('\n'); lines.splice(lines[0].startsWith('#!') ? 1 : 0, 0, REQUIRE_BANNER);
     writeFileSync(path, lines.join('\n')); patched.push(relative(stage, path));
   }
-  // Everything that is not a compiled module ships unchanged: declarations, JSON assets, native addon and helper binaries, build identity.
-  for (const file of files.filter(file => !file.endsWith('.js'))) { const target = join(stage, 'dist', relative(dist, file)); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
+  // Everything that is not a compiled module or a declaration ships unchanged: JSON assets, native addon and helper binaries, build identity.
+  // Declarations: only the closure a consumer's type checker reaches from the types entry, third-party ones vendored (scripts/dist-types.mjs).
+  const declarations = vendorDeclarations({ root, stage });
+  if (declarations.problems.length) throw new Error(`published declarations are not self-contained:\n${declarations.problems.join('\n')}`);
+  for (const file of files.filter(file => !file.endsWith('.js') && !file.endsWith('.d.ts'))) { const target = join(stage, 'dist', relative(dist, file)); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
   for (const extra of ['assets', 'native', 'README.md', 'LICENSE']) if (existsSync(join(root, extra))) cpSync(join(root, extra), join(stage, extra), { recursive: true });
   const manifest = publishedManifest(source, ['THIRD-PARTY-NOTICES.md', 'sbom.cdx.json']);
   for (const bin of Object.values(manifest.bin ?? {})) chmodSync(join(stage, bin), 0o755);
@@ -137,7 +142,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
     shipped, embedded, timestamp: timestamp ?? identity.builtAt });
-  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded });
+  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded, declarations: declarations.vendored });
   writeFileSync(join(stage, 'sbom.cdx.json'), `${JSON.stringify(bom, null, 2)}\n`);
   writeFileSync(join(stage, 'THIRD-PARTY-NOTICES.md'), `${notices.text}\n`);
   writeFileSync(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -149,6 +154,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
     ajvStub: Object.fromEntries([...stubHits].sort(([a], [b]) => a.localeCompare(b))),
     shipped: shipped.map(item => `${item.name}@${item.version}`), treeShaken: treeShaken.map(item => `${item.name}@${item.version}`),
     embedded: embedded.map(item => `${item.name}@${item.version} in ${item.carrier}: ${item.shipped ? 'shipped' : 'not shipped'}`),
+    declarations: { own: declarations.own, ownDropped: files.filter(file => file.endsWith('.d.ts')).length - declarations.own, ownRewritten: declarations.rewrittenOwn,
+      vendored: declarations.vendored.map(item => `${item.name}@${item.version}: ${item.files.length}`) },
     typeLeaks, publishable: { ok: blockers.length === 0, blockers } };
   writeFileSync(join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return summary;

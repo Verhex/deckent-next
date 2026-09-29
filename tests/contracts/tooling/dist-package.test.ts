@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,8 @@ import { bundledPackages, cyclonedx, embeddedInBundle, npmPurl, packageDirOf, th
 import { ajvGuard, declarationImports, publishedManifest, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
+// @ts-expect-error JavaScript build tooling has no declaration file.
+import { vendorDeclarations } from '../../../scripts/dist-types.mjs';
 
 type Component = { name: string; group?: string; purl: string; 'bom-ref': string; licenses: unknown[]; hashes?: { alg: string; content: string }[];
   properties: { name: string; value: string }[]; components?: Component[] };
@@ -132,5 +134,68 @@ describe('published manifest', () => {
     const root = await tree({ 'a.d.ts': "import { z } from 'zod';\nexport type A = import('react').ReactNode;\nimport type { X } from '#platform/index.js';",
       'sub/b.d.ts': "import { DatabaseSync } from 'node:sqlite';\nexport * from './a.js';\nimport { Server } from '@modelcontextprotocol/server/stdio';", 'c.js': "import 'zod';" });
     expect(declarationImports(root)).toEqual({ '@modelcontextprotocol/server': 1, react: 1, zod: 1 });
+  });
+});
+
+describe('published declarations (DEPS-TYPES)', () => {
+  const pkg = (name: string, version: string, extra: Record<string, unknown> = {}) => JSON.stringify({ name, version, type: 'module', license: 'MIT', ...extra });
+  const files = (root: string, dir = ''): Promise<string[]> => readdir(join(root, dir), { withFileTypes: true }).then(entries => Promise.all(entries.map(entry =>
+    entry.isDirectory() ? files(root, join(dir, entry.name)) : [join(dir, entry.name)]))).then(list => list.flat().sort());
+
+  it('ships the consumer-reachable closure with third-party declarations vendored per name@version and bare specifiers rewritten', async () => {
+    const root = await tree({
+      'package.json': pkg('app', '1.0.0'),
+      'dist/index.d.ts': "import { z } from 'zod';\nexport * from './own.js';\nexport type A = import('lib').B;\nexport declare const schema: typeof z;\n",
+      'dist/own.d.ts': 'export type Own = 1;\n',
+      'dist/unreachable.d.ts': "import type { ReactNode } from 'react';\nexport type R = ReactNode;\n",
+      // zod-like: CJS-flavoured types first in its exports; the file keeps its .d.cts format in the vendored copy.
+      'node_modules/zod/package.json': pkg('zod', '3.0.0', { exports: { '.': { types: './index.d.cts', import: './index.js' } } }),
+      'node_modules/zod/index.d.cts': "export * from './inner.cjs';\n", 'node_modules/zod/inner.d.cts': 'export declare const z: { readonly kind: 3 };\n',
+      'node_modules/zod/LICENSE': 'zod license',
+      // lib depends on its own nested dep@2 while the top level has dep@1: resolution, not the package name, decides.
+      'node_modules/lib/package.json': pkg('lib', '1.0.0', { exports: { '.': { import: { types: './dist/index.d.mts', default: './dist/index.mjs' } } } }),
+      'node_modules/lib/dist/index.d.mts': "import type { Y } from 'dep';\nexport type B = Y | import('dep').Y;\n",
+      'node_modules/lib/node_modules/dep/package.json': pkg('dep', '2.0.0', { types: './index.d.ts' }),
+      'node_modules/lib/node_modules/dep/index.d.ts': 'export type Y = 2;\n',
+      'node_modules/dep/package.json': pkg('dep', '1.0.0', { types: './index.d.ts' }), 'node_modules/dep/index.d.ts': 'export type Y = 1;\n',
+    });
+    const stage = join(root, 'stage');
+    const result = vendorDeclarations({ root, stage });
+    expect(result.problems).toEqual([]);
+    expect(await files(stage)).toEqual(['dist/index.d.ts', 'dist/own.d.ts', 'dist/vendor/types/dep@2.0.0/index.d.ts', 'dist/vendor/types/dep@2.0.0/package.json',
+      'dist/vendor/types/lib@1.0.0/dist/index.d.mts', 'dist/vendor/types/lib@1.0.0/package.json', 'dist/vendor/types/zod@3.0.0/index.d.cts',
+      'dist/vendor/types/zod@3.0.0/inner.d.cts', 'dist/vendor/types/zod@3.0.0/package.json']);
+    expect(await readFile(join(stage, 'dist/index.d.ts'), 'utf8')).toBe("import { z } from './vendor/types/zod@3.0.0/index.cjs';\nexport * from './own.js';\n" +
+      "export type A = import('./vendor/types/lib@1.0.0/dist/index.mjs').B;\nexport declare const schema: typeof z;\n");
+    expect(await readFile(join(stage, 'dist/vendor/types/lib@1.0.0/dist/index.d.mts'), 'utf8'))
+      .toBe("import type { Y } from '../../dep@2.0.0/index.js';\nexport type B = Y | import('../../dep@2.0.0/index.js').Y;\n");
+    expect(await readFile(join(stage, 'dist/vendor/types/zod@3.0.0/index.d.cts'), 'utf8')).toBe("export * from './inner.cjs';\n");
+    expect(JSON.parse(await readFile(join(stage, 'dist/vendor/types/zod@3.0.0/package.json'), 'utf8'))).toEqual({ type: 'module' });
+    expect(result.vendored.map((item: { name: string; version: string; files: string[]; licenseFiles: string[] }) => [`${item.name}@${item.version}`, item.files, item.licenseFiles]))
+      .toEqual([['lib@1.0.0', ['dist/index.d.mts'], []], ['dep@2.0.0', ['index.d.ts'], []], ['zod@3.0.0', ['index.d.cts', 'inner.d.cts'], ['LICENSE']]]);
+    expect(result).toMatchObject({ own: 2, rewrittenOwn: 1 });
+    // Declarations-only packages get their own license section; a missing license text is a gap.
+    const notices = thirdPartyNotices(root, { pkg: { name: 'app', version: '1.0.0' }, shipped: [], embedded: [], declarations: result.vendored });
+    expect(notices.text).toContain('## zod@3.0.0 (type declarations only)');
+    expect(notices.text).toContain('zod license');
+    expect(notices.gaps).toEqual(['lib@1.0.0 (declarations): no license file in the installed package', 'dep@2.0.0 (declarations): no license file in the installed package']);
+  });
+
+  it('refuses declarations a consumer could not resolve the same way in NodeNext and Bundler, or that a copy cannot relocate', async () => {
+    const root = await tree({
+      'package.json': pkg('app', '1.0.0'),
+      // Extensionless relative import: Bundler finds it, NodeNext does not.
+      'dist/index.d.ts': "export * from './own';\nexport type { X } from 'aug';\nexport type { M } from 'missing';\n", 'dist/own.d.ts': 'export type Own = 1;\n',
+      'node_modules/aug/package.json': pkg('aug', '1.0.0', { types: './index.d.ts' }),
+      'node_modules/aug/index.d.ts': "export type X = 1;\ndeclare module 'other' { interface Extra { x: 1 } }\n",
+    });
+    const { problems } = vendorDeclarations({ root, stage: join(root, 'stage') });
+    expect(problems).toEqual([
+      "dist/index.d.ts: './own' does not resolve (nodenext)",
+      "dist/index.d.ts: './own' resolves to null (nodenext) and " + join(root, 'dist/own.d.ts') + ' (bundler)',
+      "dist/index.d.ts: 'missing' does not resolve (bundler)",
+      "dist/index.d.ts: 'missing' does not resolve (nodenext)",
+      "node_modules/aug/index.d.ts: declare module 'other' cannot be relocated",
+    ]);
   });
 });
