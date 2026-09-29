@@ -31,7 +31,8 @@ const tariff = { kind: 'operator-static', version: 1, currency: 'USD', inputMino
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 export const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
 export const me = [{ issuer: principal.issuer, subject: principal.subject }];
-export type Mode = 'ask' | 'auto-edit' | 'full-auto';
+/** A bindings v2 mode name (read through the v3 mapping since MODES-3), or a v3 entry. */
+export type Mode = 'ask' | 'auto-edit' | 'full-auto' | { readonly mode: 'standart' | 'full-auto' | 'full-access'; readonly askEdits?: true };
 type Effect = 'allow' | 'deny' | 'require-approval';
 
 /** One company rule; `eligible` sets the policy v2 `modeEligible` flag (only meaningful on require-approval). */
@@ -94,7 +95,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 2, revision: `p-${revision}`, roles: [], separationOfDuties: [],
       restrictions: [], grants: [...baseGrants, ...grants] }), { mode: 0o600 });
     await writeFile(join(data, 'bindings.json'), JSON.stringify(mode === null ? { schemaVersion: 1, revision: `b-${revision}`, bindings: [] }
-      : { schemaVersion: 2, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode }] }), { mode: 0o600 });
+      : typeof mode === 'string' ? { schemaVersion: 2, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode }] }
+        : { schemaVersion: 3, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], ...mode }] }), { mode: 0o600 });
   };
   await writeAuthority(input.grants, input.mode);
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
@@ -104,11 +106,12 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const exec = (sql: string) => { const db = new DatabaseSync(ledger); try { db.exec(sql); } finally { db.close(); } };
   const client = createConfiguredRuntimeClient(project, { env });
   let turns = 0;
-  /** One turn with one tool call; an approval card is answered with `decision` (default deny) so a card never runs anything. */
-  const call = async (name: string, args: Record<string, unknown>, decision: 'allow' | 'deny' = 'deny') => {
+  /** One turn with one tool call; an approval card is answered with `decision` (default deny) so a card never runs anything. `fullAccess`:
+   * the turn is launched in full access (MODES-3, v17 `chatTurn.fullAccess`). */
+  const call = async (name: string, args: Record<string, unknown>, decision: 'allow' | 'deny' = 'deny', options: { readonly fullAccess?: boolean } = {}) => {
     state.script.push({ name, arguments: JSON.stringify(args) });
     const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [], turnId = `turn-${++turns}`;
-    await client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }] }, event => {
+    await client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, event => {
       events.push(event);
       if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
         commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed' }));

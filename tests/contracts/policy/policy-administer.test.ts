@@ -164,8 +164,14 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
   it('routes /mode through the same authority writer: the mode write is archived and keeps its own audit event and view', async () => {
     const f = await fixture(me => [{ id: 'set-mode', effect: 'allow', actions: ['set'], scopes: ['s'], principals: [me], resource: { kind: 'permission-mode', ids: 'all' } }], ownerRoot);
     const modes = new PermissionModeApplication(f.source, () => undefined, () => 5);
-    expect(await modes.set(f.principal, { schemaVersion: 1, scopeId: 's', mode: 'auto-edit', expectedRevision: 'p1+b1' })).toMatchObject({ mode: 'auto-edit', changed: true });
+    expect(await modes.set(f.principal, { schemaVersion: 1, scopeId: 's', mode: 'full-auto', expectedRevision: 'p1+b1' })).toMatchObject({ mode: 'full-auto', changed: true });
     expect((await f.files()).bindings.revision).toMatch(/^m-[0-9a-f]{40}$/);
-    expect((await readdir(f.archive)).filter(name => name.startsWith('r-'))).toHaveLength(1);
+    // MODES-3: the first write is bindings v3, and the archive keeps the document before it (the migration's backup).
+    expect((await f.files()).bindings).toMatchObject({ schemaVersion: 3 });
+    const archived = (await readdir(f.archive)).filter(name => name.startsWith('r-'));
+    expect(archived).toHaveLength(1);
+    const record = JSON.parse(await readFile(join(f.archive, archived[0]!), 'utf8')) as { before: { bindings: { revision: string } }; after: { bindings: { schemaVersion: number } } };
+    expect(record.before.bindings).toMatchObject({ revision: 'b1' });
+    expect(record.after.bindings).toMatchObject({ schemaVersion: 3 });
   });
 });

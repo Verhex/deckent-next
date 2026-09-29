@@ -14,10 +14,10 @@ import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js'
 import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
-// T-L4 slice 4c at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process (protocol v15), the
-// company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode auto-edit` changes it through the
-// service (the terminal touches no file), the next turn's eligible edit runs without a card and is audited, and a narrow terminal
-// drops the mode segment from the status row.
+// T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
+// the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
+// service (the terminal touches no file), the next turn's eligible edit runs without a card and is audited, and a narrow terminal drops the
+// mode segment from the status row. Full access opens only at launch, on the company grant, with a standing warning.
 const execute = promisify(execFile);
 const measured = await probeShellCapabilities();
 const bwrapReady = measured.bubblewrap === 'available' && measured.userNamespace === 'available';
@@ -101,6 +101,7 @@ async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promis
 /** A local model that asks for one `edit_file` call, then answers `Mode turn done.`; a v2 company policy with a mode-eligible edit rule. */
 async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
   options: { readonly call?: { readonly name: string; readonly arguments: Record<string, unknown> }; readonly shell?: boolean; readonly mode?: string } = {}) {
+  const v3 = options.mode === 'standart' || options.mode === 'full-access';
   const call = options.call ?? { name: 'edit_file', arguments: { path: 'src/a.ts', old_string: 'a = 1', new_string: 'a = 2' } };
   await access(cli).catch(() => { throw new Error('BUILD_REQUIRED'); });
   const root = await mkdtemp(join(tmpdir(), 'deckent-mode-pty-')); roots.push(root);
@@ -139,7 +140,7 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
     allocation: { id: 'allocation', maxCalls: null, maxInFlight: 2 }, limits: { requestMaxBytes: 262144, responseMaxBytes: 65536, timeoutMs: 5000 } };
   await writeFile(join(projectRoot, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget(),
-    terminal: { autostartService: false, chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
+    terminal: { autostartService: false, scopeId: 'scope', chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 } },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
@@ -158,12 +159,12 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
     grant('file-write', 'allow', ['execute'], 'operation', ['workspace.file.write']),
     ...(options.shell ? [grant('shell-tool', 'require-approval', ['invoke'], 'agent-tool', ['run_shell'], eligible),
       grant('shell-run', 'allow', ['execute'], 'operation', ['host.shell.run'])] : []),
-    ...policy === 'v2' ? [grant('mode-set', 'allow', ['set'], 'permission-mode', ['ask', 'auto-edit', 'full-auto'])] : []];
+    ...policy === 'v2' ? [grant('mode-set', 'allow', ['set'], 'permission-mode', ['full-auto', 'full-access'])] : []];
   await writeFile(join(data, 'policy.json'), JSON.stringify(policy === 'v1' ? { schemaVersion: 1, revision: 'p1', restrictions: [], grants }
     : { schemaVersion: 2, revision: 'p1', roles: [], separationOfDuties: [], restrictions: [], grants }), { mode: 0o600 });
   const theirs = { id: 'their-mode', principal: { issuer: 'another-host', subject: '4242' }, scopes: ['scope'], mode: 'full-auto' };
   const mine = options.mode ? [{ id: 'my-mode', principal: me, scopes: ['scope'], mode: options.mode }] : [];
-  if (policy !== 'v1') await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes: [theirs, ...mine] }), { mode: 0o600 });
+  if (policy !== 'v1') await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: v3 ? 3 : 2, revision: 'b1', bindings: [], modes: [theirs, ...mine] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   const audit = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT kind, record FROM audit_events ORDER BY sequence').all(); } finally { db.close(); } };
@@ -177,29 +178,30 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     const before = await stat(join(f.data, 'bindings.json'), { bigint: true });
     const wide = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', '/mode\r'],
-      ['Permission mode: ask', '/mode auto-edit\r'],
-      ['Permission mode: ask → auto-edit', 'go\r'],
+      ['Permission mode: standart', '/mode full-auto\r'],
+      ['Permission mode: standart → full-auto', 'go\r'],
       ['Mode turn done.', '/exit\r'],
     ]);
     expect(wide.timeout, wide.output).toBeUndefined();
     expect(wide.status, wide.output).toBe(0);
     expect(wide.output).not.toContain('Unknown command');
-    // No approval card for the eligible edit in auto-edit; the file changed and the mode's decision was audited.
+    // No approval card for the eligible edit in full-auto; the file changed and the mode's decision was audited.
     expect(wide.output).not.toContain('Approval requested');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
-    const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { revision: string; modes: Array<{ principal: unknown; mode: string }> };
+    const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { schemaVersion: number; revision: string; modes: Array<{ principal: unknown; mode: string }> };
     expect((await stat(join(f.data, 'bindings.json'), { bigint: true })).ino).not.toBe(before.ino);
     expect(file.revision).toMatch(/^m-[0-9a-f]{40}$/u);
-    expect(file.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, scopes: ['scope'], mode: 'auto-edit' })]);
+    expect(file.schemaVersion).toBe(3);
+    expect(file.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, scopes: ['scope'], mode: 'full-auto' })]);
     expect(f.audit().map(row => (row as { kind: string }).kind)).toEqual(['permission-mode-change', 'permission-mode']);
     // After the change the status row carries the mode on a wide terminal: more occurrences than the one notice line.
-    const after = wide.output.slice(wide.output.indexOf('Permission mode: ask → auto-edit'));
-    expect(after.split('auto-edit').length - 1).toBeGreaterThan(1);
+    const after = wide.output.slice(wide.output.indexOf('Permission mode: standart → full-auto'));
+    expect(after.split('full-auto').length - 1).toBeGreaterThan(1);
     // Narrow: the mode is shown once by `/mode` (the notice) and never in the status row.
-    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['auto-edit', '/exit\r']], 30);
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['full-auto', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
-    expect(narrow.output.split('auto-edit').length - 1).toBe(1);
+    expect(narrow.output.split('full-auto').length - 1).toBe(1);
   }, 180_000);
   // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
   // realm is the default `prefer-sandbox` (bubblewrap here): no approval card, the command ran in the sandbox, one audit event.
@@ -230,16 +232,17 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['Switch:', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     const text = modeLines(run.output);
-    expect(text).toContain('Permission mode: ask — every edit and shell call asks for approval');
-    expect(text).toContain('/mode auto-edit (edits the company marked mode-eligible run without an approval card)');
-    expect(text).toContain('/mode full-auto (');
-    expect(text).not.toContain('/mode ask (');
+    expect(text).toContain('Permission mode: standart — reads, scratch and the in-project edits the company marked mode-eligible run without a card');
+    expect(text).toContain('/mode full-auto (standart plus narrow mutating shell commands');
+    expect(text).toContain('Full access starts only at launch');
+    expect(text).not.toContain('/mode standart (');
+    expect(text).not.toContain('/mode full-access (');
   }, 180_000);
 
-  it('a v1 policy: /mode auto-edit says modes are off and asks the service for nothing (no file, no audit row)', async () => {
+  it('a v1 policy: /mode full-auto says modes are off and asks the service for nothing (no file, no audit row)', async () => {
     const f = await modeProject('v1');
     await startRuntime(f.projectRoot, f.env);
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode auto-edit\r'], ['Permission modes are off', '/exit\r']]);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['Permission modes are off', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(modeLines(run.output)).toContain('this policy is v1');
     await expect(access(join(f.data, 'bindings.json'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -250,9 +253,9 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode auto-edit\r'], ['No grant lets you set auto-edit', '/exit\r']]);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['No grant lets you set full-auto', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
-    expect(modeLines(run.output)).toContain('Add an allow grant (resource `permission-mode`, action `set`, id auto-edit)');
+    expect(modeLines(run.output)).toContain('Add an allow grant (resource `permission-mode`, action `set`, id full-auto)');
     expect(modeLines(run.output)).not.toContain('Policy does not permit');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(changes(f).map(row => JSON.parse((row as { record: string }).record) as { event?: { subject?: { decision?: unknown } } })
@@ -264,11 +267,66 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     await startRuntime(f.projectRoot, f.env);
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
     const run = await withConfigWriteLock(join(f.data, 'policy.json'), () => inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
-      [['Deckent workline', '/mode auto-edit\r'], ['Another Deckent process is changing the policy files', '/exit\r']]), 2_000);
+      [['Deckent workline', '/mode full-auto\r'], ['Another Deckent process is changing the policy files', '/exit\r']]), 2_000);
     expect(run.timeout, run.output).toBeUndefined();
     expect(modeLines(run.output)).toContain('run /mode again');
     expect(modeLines(run.output)).not.toContain('Configuration lock');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(changes(f)).toEqual([]);
+  }, 180_000);
+});
+
+// MODES-3 (owner 2026-09-29): full access opens only at launch (`deckent --full-access`, `deckent terminal --full-access`, or the person's stored
+// start mode), only on the company grant; the status row keeps a `full-access` segment at any width and the first message warns; `/mode
+// full-access` inside a session is refused without asking the service; every call is audited.
+describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-terminal (MODES-3)', () => {
+  const plain = (output: string) => stripVTControlCharacters(output).replace(/\s+/gu, ' ');
+  const kinds = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().map(row => (row as { kind: string }).kind);
+
+  it('`deckent terminal --full-access` warns, keeps the segment, refuses an in-session switch and audits the turn and its call', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
+    const run = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/mode full-access\r'],
+      ['Full access starts only at launch', 'go\r'], ['Mode turn done.', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    const text = plain(run.output);
+    expect(text).toContain('FULL ACCESS is on');
+    expect(text).toContain('full-access');
+    expect(text).not.toContain('Approval requested');
+    expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
+    expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(kinds(f)).toEqual(['full-access-turn', 'full-access-call']);
+    // On a 30-column terminal the full-access segment is not dropped (the other modes are).
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['full-access', '/exit\r']], 30);
+    expect(narrow.timeout, narrow.output).toBeUndefined();
+    expect(narrow.status, narrow.output).toBe(0);
+  }, 180_000);
+
+  it('`deckent --full-access` without the company grant does not open: the refusal names the missing grant; nothing ran', async () => {
+    const f = await modeProject('no-set-grant');
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['--full-access'], []);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).not.toBe(0);
+    expect(plain(run.output)).toContain('No grant lets you set full-access');
+    expect(plain(run.output)).not.toContain('Deckent workline');
+    expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
+    expect(kinds(f)).toEqual([]);
+  }, 180_000);
+
+  it('a stored full-access start mode opens in full access on the grant, and as standart with a notice without it', async () => {
+    const f = await modeProject('v2', { mode: 'full-access' });
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(plain(run.output)).toContain('FULL ACCESS is on');
+    const g = await modeProject('no-set-grant', { mode: 'full-access' });
+    await startRuntime(g.projectRoot, g.env);
+    const denied = await inPty(g.projectRoot, g.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(denied.timeout, denied.output).toBeUndefined();
+    expect(plain(denied.output)).toContain('this session runs as standart');
+    expect(plain(denied.output)).not.toContain('FULL ACCESS is on');
   }, 180_000);
 });

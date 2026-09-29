@@ -53,12 +53,20 @@ export type PolicyBinding = z.infer<typeof binding>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),
   separationOfDuties: z.array(duty).readonly() };
 /**
- * A person's terminal permission mode (bindings v2, owner 2026-09-27 q3): one principal, explicit scopes, one mode. It creates no
- * authority: it only lets a mode-eligible company `require-approval` be lowered on a relaxable cell. `ask` equals no entry.
+ * A person's terminal permission mode (MODES-3, owner 2026-09-29): `standart` (the default — the absence of an entry), `full-auto` and
+ * `full-access`. A mode creates no authority: it only lets a mode-eligible company `require-approval` (and, in a launched full-access turn,
+ * the floor raise) be lowered on a relaxable cell. `full-access` in bindings is only the person's start mode; a turn is full access only when it
+ * says so explicitly (`chatTurn.fullAccess`).
  */
-export const PERMISSION_MODES = ['ask', 'auto-edit', 'full-auto'] as const;
+export const PERMISSION_MODES = ['standart', 'full-auto', 'full-access'] as const;
 export type PermissionMode = typeof PERMISSION_MODES[number];
-const modeEntry = z.object({ id: localId, principal: principalRef, scopes: z.array(identitySchema).min(1).readonly(), mode: z.enum(PERMISSION_MODES) }).strict().readonly();
+/** The mode names bindings v2 carried (T-L4 slice 4a); read only, mapped on read (`upgradeBindingsDocument`). */
+const LEGACY_V2_MODES = ['ask', 'auto-edit', 'full-auto'] as const;
+const entryShape = { id: localId, principal: principalRef, scopes: z.array(identitySchema).min(1).readonly() };
+/** bindings v3 entry: one principal, explicit scopes, one mode, and the person's own "ask for edits too" preference (`askEdits`, not a mode). */
+const modeEntry = z.object({ ...entryShape, mode: z.enum(PERMISSION_MODES), askEdits: z.literal(true).optional() }).strict().readonly();
+const legacyModeEntry = z.object({ ...entryShape, mode: z.enum(LEGACY_V2_MODES) }).strict().readonly();
+export type PermissionModeEntry = z.infer<typeof modeEntry>;
 type V2Body = { readonly roles: readonly z.infer<typeof role>[]; readonly grants: readonly z.infer<typeof markedGrant>[]; readonly restrictions: readonly PolicyRule[];
   readonly separationOfDuties: readonly z.infer<typeof duty>[] };
 function checkV2(policy: V2Body, context: z.RefinementCtx) {
@@ -66,7 +74,7 @@ function checkV2(policy: V2Body, context: z.RefinementCtx) {
   unique(context, policy.roles.map(value => value.id), 'POLICY_DUPLICATE_ROLE');
   for (const value of policy.roles) unique(context, value.permissions.map(item => item.id), 'POLICY_DUPLICATE_RULE');
 }
-function checkBindings(entries: readonly z.infer<typeof binding>[], context: z.RefinementCtx, modes: readonly z.infer<typeof modeEntry>[] = []) {
+function checkBindings(entries: readonly z.infer<typeof binding>[], context: z.RefinementCtx, modes: readonly { readonly id: string; readonly scopes: readonly string[] }[] = []) {
   unique(context, entries.map(value => value.id), 'POLICY_DUPLICATE_BINDING');
   for (const value of entries) unique(context, value.roles, 'POLICY_DUPLICATE_BINDING');
   unique(context, modes.map(value => value.id), 'POLICY_DUPLICATE_BINDING');
@@ -75,12 +83,31 @@ function checkBindings(entries: readonly z.infer<typeof binding>[], context: z.R
 /** policy.json v2: roles are data; bindings never live here (separate `bindings` resource). */
 const rolePolicyFileSchema = z.object({ schemaVersion: z.literal(2), revision, ...v2Shape }).strict().superRefine(checkV2).readonly();
 /** bindings.json: principals → roles at scopes. A binding only references a policy role; it creates no authority of its own.
- * v2 (T-L4 slice 4a) adds the persons' terminal permission `modes`; v1 stays readable (everyone `ask`); an older reader refuses v2. */
+ * v2 (T-L4 slice 4a) added the persons' terminal permission `modes`; v3 (MODES-3) renames them (`standart | full-auto | full-access`) and adds
+ * `askEdits`. v1 and v2 stay readable (v2 mapped on read); every write is v3; an older reader refuses v3 as a whole (strict schemas). */
 const roleBindingsSchema = z.object({ schemaVersion: z.literal(1), revision, bindings: z.array(binding).readonly() }).strict()
   .superRefine((value, context) => checkBindings(value.bindings, context)).readonly();
-const modeBindingsSchema = z.object({ schemaVersion: z.literal(2), revision, bindings: z.array(binding).readonly(), modes: z.array(modeEntry).readonly() }).strict()
+const legacyModeBindingsSchema = z.object({ schemaVersion: z.literal(2), revision, bindings: z.array(binding).readonly(), modes: z.array(legacyModeEntry).readonly() }).strict()
   .superRefine((value, context) => checkBindings(value.bindings, context, value.modes)).readonly();
-export const bindingsFileSchema = z.union([roleBindingsSchema, modeBindingsSchema]);
+const modeBindingsSchema = z.object({ schemaVersion: z.literal(3), revision, bindings: z.array(binding).readonly(), modes: z.array(modeEntry).readonly() }).strict()
+  .superRefine((value, context) => checkBindings(value.bindings, context, value.modes)).readonly();
+export const bindingsFileSchema = z.union([roleBindingsSchema, legacyModeBindingsSchema, modeBindingsSchema]);
+export type BindingsFile = z.infer<typeof bindingsFileSchema>;
+export type BindingsV3 = z.infer<typeof modeBindingsSchema>;
+/**
+ * A bindings document as v3 (MODES-3 migration, pure): v1 has no modes; v2 `ask` becomes `standart` with `askEdits` (the person chose to be
+ * asked for every edit — kept, never silently relaxed), `auto-edit` becomes `standart`, `full-auto` stays. The revision is the input's: a
+ * writer chains a new one for the document it writes. Throws `PolicyError` on anything that is not a bindings document.
+ */
+export function upgradeBindingsDocument(input: unknown): BindingsV3 {
+  const parsed = bindingsFileSchema.safeParse(input);
+  if (!parsed.success) throw new PolicyError();
+  const value = parsed.data;
+  if (value.schemaVersion === 3) return value;
+  const modes = value.schemaVersion === 1 ? [] : value.modes.map(entry => Object.freeze({ id: entry.id, principal: entry.principal, scopes: entry.scopes,
+    ...(entry.mode === 'full-auto' ? { mode: 'full-auto' as const } : { mode: 'standart' as const, ...(entry.mode === 'ask' ? { askEdits: true as const } : {}) }) }));
+  return modeBindingsSchema.parse({ schemaVersion: 3, revision: value.revision, bindings: value.bindings, modes });
+}
 /** The evaluator's v2 input: one trusted snapshot of policy + bindings, produced only by `resolvePolicyBindings`. */
 const resolvedRolePolicySchema = z.object({ schemaVersion: z.literal(2), revision: identitySchema, policyRevision: revision, ...v2Shape,
   bindings: z.object({ revision, entries: z.array(binding).readonly(), modes: z.array(modeEntry).readonly().optional() }).strict().readonly() }).strict().superRefine((policy, context) => {
@@ -110,8 +137,9 @@ export function resolvePolicyBindings(policyInput: unknown, bindingsInput: unkno
   const roles = new Set(file.data.roles.map(value => value.id));
   if (bound.data.bindings.some(value => value.roles.some(id => !roles.has(id)))) throw new PolicyError('POLICY_ROLE_UNKNOWN');
   const { schemaVersion, revision: policyRevision, ...body } = file.data;
+  const upgraded = bound.data.schemaVersion === 1 ? null : upgradeBindingsDocument(bound.data);
   const resolved = resolvedRolePolicySchema.safeParse({ schemaVersion, revision: `${policyRevision}+${bound.data.revision}`, policyRevision, ...body,
-    bindings: { revision: bound.data.revision, entries: bound.data.bindings, ...(bound.data.schemaVersion === 2 ? { modes: bound.data.modes } : {}) } });
+    bindings: { revision: bound.data.revision, entries: bound.data.bindings, ...(upgraded ? { modes: upgraded.modes } : {}) } });
   if (!resolved.success) throw new PolicyError();
   return resolved.data;
 }
@@ -151,15 +179,22 @@ export function separationOfDutiesViolation(input: unknown, decision: { readonly
   return policy.separationOfDuties.find(rule => rule.rule === 'requester-cannot-approve' && includes(rule.scopes, decision.scopeId))?.id ?? null;
 }
 
+/** A person's effective mode entry in one scope: the mode, the "ask for edits too" preference and the entry that says so (null: none). */
+export interface PrincipalPermissionMode { readonly mode: PermissionMode; readonly askEdits: boolean; readonly id: string | null }
+const DEFAULT_MODE: PrincipalPermissionMode = Object.freeze({ mode: 'standart', askEdits: false, id: null });
+/** Two entries for one person and scope are ambiguous: the most restrictive reading (standart, every edit asks), never a relaxed one. */
+const AMBIGUOUS_MODE: PrincipalPermissionMode = Object.freeze({ mode: 'standart', askEdits: true, id: null });
 /**
- * The person's terminal permission mode in one scope (T-L4 slice 4a): exactly one v2 bindings entry for this exact issuer + subject
- * naming the scope, or null (= `ask`). Two entries for the same person and scope are ambiguous and fail closed as null; a v1 policy
- * reads no bindings, so it has no modes.
+ * The person's terminal permission mode in one scope (T-L4 slice 4a, MODES-3): exactly one bindings entry for this exact issuer + subject
+ * naming the scope, else the default `standart` (no entry) — or, for two entries, the ambiguous reading that asks for every edit (fail closed).
+ * A v1 policy reads no bindings: the default, and nothing is mode-eligible there.
  */
-export function principalPermissionMode(input: unknown, actor: Actor, scopeId: string): { readonly mode: PermissionMode; readonly id: string } | null {
+export function principalPermissionMode(input: unknown, actor: Actor, scopeId: string): PrincipalPermissionMode {
   const policy = policySchema.parse(input);
-  if (policy.schemaVersion === 1) return null;
+  if (policy.schemaVersion === 1) return DEFAULT_MODE;
   const matches = (policy.bindings.modes ?? []).filter(entry => entry.principal.issuer === actor.issuer && entry.principal.subject === actor.subject
     && entry.scopes.includes(scopeId));
-  return matches.length === 1 && matches[0]!.mode !== 'ask' ? Object.freeze({ mode: matches[0]!.mode, id: matches[0]!.id }) : null;
+  if (matches.length > 1) return AMBIGUOUS_MODE;
+  const entry = matches[0];
+  return entry ? Object.freeze({ mode: entry.mode, askEdits: entry.askEdits === true, id: entry.id }) : DEFAULT_MODE;
 }

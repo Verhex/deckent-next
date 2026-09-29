@@ -3,7 +3,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 16 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 17 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -39,7 +39,8 @@ export function isRuntimeServiceEffectOperation(operation: RuntimeServiceOperati
   return operation === 'executeOperation' || operation === 'compensateOperation' || operation === 'inspectOperation';
 }
 /** v15 (T-L4 slice 4c): the caller's own terminal permission mode — read, and set conditionally on the revision read. No actor field:
- * the socket peer is the principal; single bounded answers; current version only. */
+ * the socket peer is the principal; single bounded answers; current version only. v17 (MODES-3): the modes are `standart | full-auto |
+ * full-access`, the view carries `askEdits` and `fullAccess`, the command an optional `askEdits`; `chatTurn` gains `fullAccess?: true`. */
 export function isRuntimeServicePermissionModeOperation(operation: RuntimeServiceOperation): operation is 'inspectPermissionMode' | 'setPermissionMode' {
   return operation === 'inspectPermissionMode' || operation === 'setPermissionMode';
 }
@@ -137,9 +138,9 @@ export class RuntimeServiceProtocolError extends Error {
  * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 15] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 16] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(15)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(16)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

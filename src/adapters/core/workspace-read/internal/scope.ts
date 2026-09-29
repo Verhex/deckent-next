@@ -18,6 +18,8 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '.brain/memory.db*',
   // The repository directory itself, not only its content: listing `.git` is refused too.
   '.git', '**/.git']);
+/** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */
+export const REPOSITORY_INTERNALS_DENY: readonly string[] = Object.freeze(['.git/**', '**/.git/**', '.git', '**/.git']);
 
 type GlobToken = { kind: 'literal'; char: string } | { kind: 'one' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'dirs' };
 // The glob grammar (wildcards, literal head) is the platform's one definition (`#platform/core/common`): the matcher, the anchor derivation

@@ -89,6 +89,8 @@ export interface WorklineProps {
   readonly sessions?: ConversationSessionPort;
   /** The person's permission mode through the runtime service (status row segment and `/mode`, T-L4 slice 4c). */
   readonly permissionMode?: WorklinePermissionModePort;
+  /** MODES-3: the session was launched in full access (the launch checked the company grant); every turn says so until `/mode` tightens it. */
+  readonly fullAccess?: boolean;
   /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
   readonly scratch?: WorklineScratchPort;
   /** `/mcp` (MCP-CLIENT): the project's MCP servers and their trust — list, approve (ask again), reconnect, remove — as notice lines. */
@@ -138,7 +140,7 @@ export function WorklineApp(props: WorklineProps) {
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
   const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
-  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode);
+  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
@@ -229,7 +231,8 @@ export function WorklineApp(props: WorklineProps) {
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         // One `/reasoning` state: off hides the preview and asks the service for a turn without model thinking (v16).
         // The conversation's id travels with every turn (v16): its scratch area lives across the conversation.
-        for await (const delta of props.streamTurn(messages, controller.signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: session.id() })) {
+        for await (const delta of props.streamTurn(messages, controller.signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: session.id(),
+          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);
@@ -266,7 +269,7 @@ export function WorklineApp(props: WorklineProps) {
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
   const perform = useCallback(async (line: string, mentioned: readonly string[] = []): Promise<boolean> => {

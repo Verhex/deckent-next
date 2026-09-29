@@ -18,19 +18,26 @@ export const auditSummarySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('shell'), head: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
   /** An MCP tool call (MCP-CLIENT): the tool as the owner names it (`mcp:<server>/<tool>`) and the argument digest, never the arguments. */
   z.object({ kind: z.literal('mcp'), tool: z.string().min(1).max(AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: digest }).strict(),
+  /** A `fetch_url` call (MODES-3, full access): the host it names and the argument digest, never the URL (a query may carry secrets). */
+  z.object({ kind: z.literal('fetch'), host: z.string().min(1).max(253), argsDigest: digest }).strict(),
 ]);
-/** The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). */
-const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto']);
+/**
+ * The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). Sealed
+ * records keep the names they were written with: `ask`/`auto-edit` (bindings v2) stay readable next to `standart`/`full-access` (MODES-3).
+ */
+const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto', 'standart', 'full-access']);
+/** An agent tool call's position in its turn (the same identity every call event carries). */
+const callRef = z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
+const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict();
 /**
  * A silent decision produced by the terminal permission mode (slice 4): the mode relaxed a cell the company policy marked
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 export const auditSubjectSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
-    tool: z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict(),
-    call: z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict(),
-    grants: z.object({ company: identitySchema, person: identitySchema }).strict(),
+  /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
+  z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
+    tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),
     decision: z.object({ previous: z.literal('require-approval'), next: z.literal('allow') }).strict(),
     summary: auditSummarySchema }).strict(),
   /**
@@ -47,7 +54,23 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
     server: z.string().regex(/^[a-z][a-z0-9]{0,15}$/), definitionDigest: digest, toolsDigest: digest.nullable() }).strict(),
   z.object({ kind: z.literal('permission-mode-change'), requested: permissionMode, previous: permissionMode,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
-    bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict() }).strict(),
+    bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict(),
+    /** MODES-3: the person's "ask for edits too" preference requested and before (absent on records written before it existed). */
+    askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional() }).strict(),
+  /**
+   * A turn launched in full access (MODES-3, owner 2026-09-29): the decision on the person's `permission-mode`/`set` `full-access` grant at the
+   * turn's admission. An allowed turn is recorded before its first round (no record, no turn); a refusal is recorded when possible.
+   */
+  z.object({ kind: z.literal('full-access-turn'), turnId: identitySchema, sessionId: identitySchema.nullable(),
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
+  /**
+   * One effect call of a full-access turn (edit, shell, fetch, MCP), recorded before the effect whether or not anything was lowered: the cell,
+   * the policy decision before the floor raise, whether the floor raised it, the company rule ids a mode lowered (null: none) and the grant
+   * rule that allowed full access. The effect gate admits only this decision again.
+   */
+  z.object({ kind: z.literal('full-access-call'), cell: z.enum(['edit', 'edit-floor', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive',
+    'shell-always-ask', 'shell-other-modify', 'fetch-listed', 'fetch-unlisted', 'mcp-call']), policy: z.enum(['allow', 'require-approval']), raised: z.boolean(),
+  company: identitySchema.nullable(), grant: identitySchema, tool: toolRef, call: callRef, summary: auditSummarySchema }).strict(),
   /**
    * An applied governed authority change (POLICY-ADMIN P3, `policy.administer@1`): the command and the approval it consumed, who decided
    * it (the delegation bound is that person's authority, I3), the effective revision before and after, the change's size and the digest
@@ -73,8 +96,7 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('standing-approval'), phase: z.enum(['remembered', 'used']), source: z.enum(['session', 'grant']), grantId: identitySchema.nullable(),
     cell: z.enum(['edit', 'shell-read-low', 'shell-narrow-mutating']), keyDigest: digest, approvalId: identitySchema.nullable(),
-    tool: z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict(),
-    call: z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict(),
+    tool: toolRef, call: callRef,
     summary: auditSummarySchema }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,

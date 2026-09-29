@@ -27,7 +27,7 @@ export type TerminalChatTurnHandler = (
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;

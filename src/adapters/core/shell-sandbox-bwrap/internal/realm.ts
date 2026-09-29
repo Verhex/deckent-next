@@ -99,7 +99,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   if (write.floorReadOnly && !layout.writeFloor) return { ok: false, reason: 'the write floor is not known to this sandbox view' };
   const floored = write.floorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
   const root = layout.project.root;
-  const readOnly = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
+  const readOnly = new Set<string>(), writable = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
   let entries = 0, gitEntries = 0;
   const overMasks = () => maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX ? `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})` : null;
   /**
@@ -126,15 +126,20 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   };
   /** A `.git` entry: the inode floor first (a multi-linked `.git` file is another name of something and is masked, never a grant), then the
    * read-only grant: a directory anywhere; the root file (a worktree) itself and, in the verified worktree shape, its common repository. */
+  // MODES-3: a full-access turn binds no Git metadata read-only (the project bind is writable; a worktree's common repository is bound
+  // writable) — the inode floor's masks still apply.
+  // A read-only project keeps its repository read-only too (merge Astra 2170 x MODES-3): no writable common repository under a `--ro-bind`.
+  const repositoryWritable = layout.repositoryWritable === true && write.projectReadOnly !== true;
+  const gitReadOnly = (path: string) => { if (repositoryWritable) writable.add(path); else readOnly.add(path); };
   const gitEntry = async (path: string, rel: string, isDirectory: boolean, isFile: boolean): Promise<string | null> => {
-    if (isDirectory) { readOnly.add(path); return walkGit(path, 0); }
+    if (isDirectory) { if (!repositoryWritable) readOnly.add(path); return walkGit(path, 0); }
     if (!isFile) return null;
     if (await fsOps(path).nlink(path) > 1) { maskedFiles.push(path); return null; }
     if (rel !== '') return null;
-    readOnly.add(path);
+    if (!repositoryWritable) readOnly.add(path);
     const common = await gitWorktreeRepository(root);
     if (!common) return null;
-    readOnly.add(common);
+    gitReadOnly(common);
     return walkGit(common, 0);
   };
   // Astra 2162: the product's own state and its ancestors stay protected under an ignored tree. An ignored directory that holds a
@@ -202,7 +207,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const homeDir = home && isAbsolute(home) ? home : null;
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
   return { ok: true, view: Object.freeze({ projectRoot: root, ...(write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
-    toolchainPaths, readOnlyPaths: [...readOnly], maskedDirectories, maskedFiles }) };
+    toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
 }
 
 /**

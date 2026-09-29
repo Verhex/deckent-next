@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
-import { AuditApplication, PolicyAuthorizationError, agentToolArgumentsDigest, decideAgentToolCall, type AgentToolCallCell, type AgentToolCallDecision, type AgentToolCallRequest,
-  type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
+import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
+import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
+  type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import type { createAgentFileEdits } from './edits.js';
-import type { createAgentShell } from './shell.js';
+import type { createAgentShell, ShellCallAuthority } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
 import type { createAgentMcp } from './mcp.js';
@@ -19,21 +19,21 @@ const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell>> = { 
   'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify' };
 /** Summary counters of decisions that were silent without any mode (owner q5): counted, not recorded. */
 export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' });
-/** Audit event identity of a mode relaxation: one per call position of a turn (the effect gate may be asked several times). */
-export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string) =>
-  sha256(`permission-mode:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
+/** Audit event identity of a mode relaxation (or, tag `full-access-call`, a full-access call): one per call position of a turn (the effect
+ * gate may be asked several times). */
+export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
+  sha256(`${tag}:1\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
 
 type Shell = AgentToolCallRequest['shell'];
 type Stored = { readonly cell: AgentToolCallCell; readonly shell: Shell; readonly decision: AgentToolCallDecision } | { readonly planError: string };
-type Relaxed = AgentToolCallDecision & { readonly relaxation: NonNullable<AgentToolCallDecision['relaxation']> };
-/**
- * Whether a decision taken at an effect admission is the one the audit event recorded (Astra 2133): allow, on the same effective policy
- * revision, lowered by the same mode for the same cell through the same company rules and person entry. Anything else — another mode,
- * a revision changed by any edit, or a plain allow — is not what was audited, so the effect is not admitted (nothing is re-audited).
- */
-const isAuditedDecision = (audited: Relaxed, again: AgentToolCallDecision) => again.decision === 'allow' && again.revision === audited.revision
-  && again.relaxation !== null && again.relaxation.mode === audited.relaxation.mode && again.relaxation.cell === audited.relaxation.cell
-  && again.relaxation.company === audited.relaxation.company && again.relaxation.person === audited.relaxation.person;
+const hostOf = (args: Record<string, unknown>) => { try { return new URL(String(args['url'])).hostname || 'unknown'; } catch { return 'unknown'; } };
+
+/** One use of the Core audit port for a turn (the integrity key is created on first use, like an approval's). */
+export async function withAgentAudit<T>(context: Context, work: (audit: AuditApplication) => T): Promise<T> {
+  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
+  try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true))); }
+  finally { store.close(); }
+}
 
 /**
  * The permission decision of one turn's tool calls (T-L4 slice 4a): the one pure `decideAgentToolCall` over a fresh policy + bindings
@@ -49,7 +49,9 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null;
   readonly mcp?: Awaited<ReturnType<typeof createAgentMcp>>;
   /** This conversation's "this session" memory (a service-process map). */
-  readonly standing?: { readonly memory: SessionStanding; readonly session: string } }) {
+  readonly standing?: { readonly memory: SessionStanding; readonly session: string };
+  /** MODES-3: the turn was launched in full access (admitted and audited by the turn); every decision asks the company grant again. */
+  readonly fullAccess?: boolean }) {
   const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input, mcp = input.mcp ?? null;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name;
   const mcps = (tool: AgentToolSpec) => tool.toolClass === 'mcp';
@@ -68,23 +70,23 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>, shellInput?: Shell): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
     try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation: operationOf(tool), cell, standing: standingOf(tool, cell, args),
-      ...(shellInput ? { shell: shellInput } : {}) }); }
+      ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}) }); }
     catch { return null; }
   };
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
-    if (tool.toolClass === 'edit') { const area = edits(tool.name); return !area || area.target(tool.name, args) === null ? null : area.floored(tool.name, args) ? 'edit-floor' : 'edit'; }
+    if (tool.toolClass === 'edit') {
+      const area = edits(tool.name);
+      return !area || area.target(tool.name, args) === null ? null : area.authority(tool.name, args) ? 'edit-authority' : area.floored(tool.name, args) ? 'edit-floor' : 'edit';
+    }
     if (tool.toolClass === 'shell') { const tier = shell?.tier(tool.name, args) ?? null; return tier === null ? null : SHELL_CELLS[tier]; }
     if (fetches(tool)) return fetch?.cell(args) ?? null;
     if (mcps(tool)) return mcp?.cell(tool.name) ?? null;
     return 'read';
   };
-  const withAudit = async <T>(work: (audit: AuditApplication) => T): Promise<T> => {
-    const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-    try { return work(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true))); }
-    finally { store.close(); }
-  };
+  const withAudit = <T>(work: (audit: AuditApplication) => T) => withAgentAudit(context, work);
   const callSummary = (tool: AgentToolSpec, args: Record<string, unknown>) => tool.toolClass === 'edit' ? { kind: 'edit' as const, path: edits(tool.name)?.target(tool.name, args) ?? '' }
     : mcps(tool) ? { kind: 'mcp' as const, tool: (mcp?.display(tool.name) ?? tool.name).slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) }
+    : fetches(tool) ? { kind: 'fetch' as const, host: hostOf(args).slice(0, 253), argsDigest: agentToolArgumentsDigest(tool.name, args) }
     : { kind: 'shell' as const, head: String(args['command'] ?? '').slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) };
   const standingEvent = (phase: 'remembered' | 'used', tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cell: Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
     revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
@@ -134,26 +136,25 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      * nothing runs), a mode relaxation is audited first, and a silent decision is counted.
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
-      run: (gate: EffectApprovalGate, approved: boolean) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      run: (gate: EffectApprovalGate, authority: ShellCallAuthority) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
-        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, true);
+        if (!kept || 'planError' in kept || kept.decision.decision !== 'allow') return await run(inner, 'owner-approved');
         const fresh = await decide(tool, kept.cell, undefined, args, kept.shell);
         if (!fresh || fresh.decision === 'deny') return { status: 'error', text: `[deckent] ${tool.name}: error=denied-by-policy (the policy changed; nothing ran)` };
         if (fresh.decision !== 'allow') return { status: 'error', text: `[deckent] ${tool.name}: error=approval-required (the policy changed; nothing ran)` };
-        const { relaxation, standing } = fresh;
-        if (!relaxation && !standing) {
+        const { relaxation, standing, fullAccess } = fresh;
+        if (!relaxation && !standing && !fullAccess) {
           // A summary, not evidence: a counter that cannot be written does not stop a decision that needed no mode. A fetch is not counted
           // (no counter name of its own; each fetch is already its C11 record).
           if (!fetches(tool) && !mcps(tool)) await withAudit(audit => audit.count(scopeId, SILENT_DECISION_COUNTERS[tool.toolClass === 'edit' ? 'edit' : 'shell'], 1, clock.sample().wallMs)).catch(() => undefined);
-          return await run(inner, false);
+          return await run(inner, 'unattended');
         }
-        const event: AuditEvent = relaxation ? { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject },
-          policyRevision: fresh.revision, atMs: clock.sample().wallMs, eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args)),
-          subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool: { name: tool.name, version: tool.version },
-            call: { turnId, round: execution.round, index: execution.index, callId }, grants: { company: relaxation.company, person: relaxation.person },
-            decision: { previous: 'require-approval', next: 'allow' }, summary: callSummary(tool, args) } }
+        // A mode relaxation or a full-access call (MODES-3: every effect call of a full-access turn, lowered or not) is its own event.
+        const event: AuditEvent = relaxation || fullAccess ? agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: callSummary(tool, args),
+          eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args), fullAccess ? 'full-access-call' : undefined),
+          call: { turnId, round: execution.round, index: execution.index, callId } }, fresh)
           : standingEvent('used', tool, args, execution, callId, standingOf(tool, kept.cell, args)!.cell, fresh.revision, standing!, null);
         // No audit, no relaxation: the event is durable before anything is written or spawned.
         try { await withAudit(audit => audit.record(event)); }
@@ -167,12 +168,13 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
               // another mode or revision, a plain allow) asks, and nothing runs here.
               const again = await decide(tool, kept.cell, undefined, args, kept.shell);
               if (!again || again.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
-              if (!(relaxation ? isAuditedDecision({ ...fresh, relaxation }, again) : isAuditedStanding(standing!, fresh.revision, again))) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+              if (!(relaxation || fullAccess ? isAuditedDecision(fresh, again) : isAuditedStanding(standing!, fresh.revision, again))) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
               return inner.admit(descriptor, 'allow', command, principal, context);
             }
             return inner.admit(descriptor, decision, command, principal, context);
           },
-        }, false);
+        // MODES-3 x Astra 2170 (owner 2026-09-29): a full-access call is owner-authorized by the launched mode (its own write posture).
+        }, fullAccess ? 'full-access' : 'unattended');
       } finally { await close(); }
     },
   };

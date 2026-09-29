@@ -77,7 +77,8 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
     ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
-    ...(mode ? [segment('mode', mode, mode === 'ask' ? 'muted' : 'warning', 55)] : []),
+    // Full access (MODES-3) is a standing warning: never dropped, whatever the width (the other modes are droppable).
+    ...(mode ? [mode === 'full-access' ? segment('mode', mode, 'error', 95, false) : segment('mode', mode, mode === 'standart' ? 'muted' : 'warning', 55)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),
     ...(input.queued ? [segment('queue', fillTemplate(input.labels.queued, { count: input.queued }), 'warning', 70)] : []),
     ...(input.notice ? [segment('notice', input.notice, 'warning', 40)] : []),

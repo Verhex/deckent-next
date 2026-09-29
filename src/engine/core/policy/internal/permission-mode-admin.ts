@@ -29,14 +29,16 @@ export type PermissionModeAudit = (event: AuditEvent) => void;
 export function inspectPermissionMode(policy: unknown, principal: VerifiedPrincipal, input: unknown): PermissionModeView {
   let query;
   try { query = parsePermissionModeQuery(input); } catch { throw new PermissionModeError('PERMISSION_MODE_INVALID'); }
-  return permissionModeView(policySchema.parse(policy), { issuer: principal.issuer, subject: principal.subject }, query.scopeId);
+  return permissionModeView(policySchema.parse(policy), principal, query.scopeId);
 }
 /**
- * A person sets their own terminal permission mode in one scope (T-L4 slice 4c, owner q7). The principal is the verified caller —
+ * A person sets their own terminal permission mode in one scope (T-L4 slice 4c, owner q7; MODES-3). The principal is the verified caller —
  * never an input — and only that exact issuer + subject's `modes` entries change. The change is conditional on the effective revision
- * (`policy+bindings`) the caller read, needs a company `permission-mode`/`set` grant for a relaxed target mode (require-approval has no
- * broker here: `POLICY_APPROVAL_UNSUPPORTED`; tightening to `ask` needs none, owner R4), and every decision is audited; an allowed change is recorded before the file is replaced
- * (no record, no change). The mode itself grants nothing: lowering stays the decision function's, on company-eligible rules only.
+ * (`policy+bindings`) the caller read, needs a company `permission-mode`/`set` grant for `full-auto` or `full-access` (the latter stored only
+ * as the person's start mode; require-approval has no broker here: `POLICY_APPROVAL_UNSUPPORTED`); `standart` — the default — and the
+ * "ask for edits too" preference need none (owner R4), and every decision is audited; an allowed change is recorded before the file is
+ * replaced (no record, no change). Every write is bindings v3 (a v1/v2 file is upgraded on its first write; the authority writer archives
+ * the document before and after). The mode itself grants nothing: lowering stays the decision function's, on company-eligible rules only.
  */
 export class PermissionModeApplication {
   /** The store is the installation's one authority writer (POLICY-ADMIN P3: the same `updateAuthority` path `policy.administer` uses). */
@@ -56,23 +58,25 @@ export class PermissionModeApplication {
       if (policy.revision !== command.expectedRevision) throw new PermissionModeError('PERMISSION_MODE_CONFLICT');
       if (policy.schemaVersion === 1) throw new PermissionModeError('PERMISSION_MODE_UNSUPPORTED');
       const bindings = bindingsFileSchema.parse(snapshot.bindings);
-      const before = permissionModeView(policy, actor, command.scopeId);
+      const before = permissionModeView(policy, principal, command.scopeId);
+      const askEdits = command.askEdits ?? before.askEdits;
       const evaluated = evaluatePolicy(policy, { principal, scopeId: command.scopeId, action: policyResources.permissionMode.actions[0],
         resource: { kind: policyResources.permissionMode.kind, id: command.mode } });
-      // Owner R4 (2026-09-27): tightening to `ask` — the most restrictive mode, the absence of an entry — needs no set grant, and a
-      // company deny cannot keep a person in a relaxed mode. The scope boundary still holds. Audited as `allow` with no rule id: a
+      // Owner R4 (2026-09-27), MODES-3: `standart` — the most restrictive mode, the absence of an entry — and the edits preference need no set
+      // grant, and a company deny cannot keep a person in a relaxed mode. The scope boundary still holds. Audited as `allow` with no rule id: a
       // grant always names its rule, so a null rule records that no grant was required.
-      const decision: Pick<PolicyDecision, 'decision' | 'ruleId'> = command.mode === 'ask' && evaluated.reason !== 'SCOPE' ? { decision: 'allow' } : evaluated;
+      const decision: Pick<PolicyDecision, 'decision' | 'ruleId'> = command.mode === 'standart' && evaluated.reason !== 'SCOPE' ? { decision: 'allow' } : evaluated;
       const record = (after: string | null) => this.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
         principal: actor, policyRevision: policy.revision, atMs: this.now(), subject: { kind: 'permission-mode-change', requested: command.mode, previous: before.mode,
-          decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: { before: bindings.revision, after } } });
+          decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: { before: bindings.revision, after },
+          askEdits: { requested: askEdits, previous: before.askEdits } } });
       if (decision.decision !== 'allow') {
         // A refusal is recorded when possible; an unrecordable refusal is still a refusal.
         try { record(null); } catch { /* refused either way */ }
         // A refused mode is its own typed answer (which mode, which grant is missing), not the generic denial.
         throw decision.decision === 'require-approval' ? new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED') : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
       }
-      const modes = withPrincipalPermissionMode(bindings, actor, command.scopeId, command.mode,
+      const modes = withPrincipalPermissionMode(bindings, actor, command.scopeId, command.mode, askEdits,
         `m-${createHash('sha256').update(`permission-mode-entry:1\0${actor.issuer}\0${actor.subject}\0${command.mode}`).digest('hex').slice(0, 16)}`);
       if (modes === null) {
         record(null);
@@ -80,8 +84,8 @@ export class PermissionModeApplication {
       }
       // The new revision chains the previous one, so returning to earlier content never reuses a revision (no ABA for a stale writer).
       const body = { bindings: bindings.bindings, modes };
-      const next = bindingsFileSchema.parse({ schemaVersion: 2, revision: chainAuthorityRevision('permission-mode-bindings:1', 'm', bindings.revision, body), ...body });
-      const after = permissionModeView(resolvePolicyBindings(snapshot.policy, next), actor, command.scopeId);
+      const next = bindingsFileSchema.parse({ schemaVersion: 3, revision: chainAuthorityRevision('permission-mode-bindings:1', 'm', bindings.revision, body), ...body });
+      const after = permissionModeView(resolvePolicyBindings(snapshot.policy, next), principal, command.scopeId);
       // No record, no change: the audit event is durable before the file is replaced.
       record(next.revision);
       return { write: { policy: null, bindings: next, order: 'policy-first' as const }, result: Object.freeze({ ...after, previous: before.mode, changed: true }) };

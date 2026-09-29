@@ -33,8 +33,10 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     for (const tool of READ_TOOLS) expect(decide(policy, tool, 'read', null)).toMatchObject({ decision: 'allow', relaxation: null });
     expect(decide(policy, 'scratch_write', 'edit', 'workspace.scratch.write')).toMatchObject({ decision: 'allow', relaxation: null });
     for (const tool of ['scratch_read', 'scratch_list']) expect(decide(policy, tool, 'read', null)).toMatchObject({ decision: 'allow', relaxation: null });
-    expect(decide(policy, 'edit_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'require-approval', relaxation: null });
-    expect(decide(policy, 'write_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'require-approval', relaxation: null });
+    // MODES-3: nobody has an entry yet, so everyone is standart — an ordinary in-project edit runs without a card (the edit rule is
+    // mode-eligible), audited as a standart relaxation with no person entry; the write floor and the shell still ask.
+    expect(decide(policy, 'edit_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'allow', relaxation: { mode: 'standart', person: null } });
+    expect(decide(policy, 'write_file', 'edit-floor', 'workspace.file.write')).toMatchObject({ decision: 'require-approval', relaxation: null });
     expect(decide(policy, 'run_shell', 'shell-narrow-mutating', 'host.shell.run')).toMatchObject({ decision: 'require-approval', relaxation: null });
     expect(evaluatePolicy(policy, { principal, scopeId: 'installation', action: 'use', resource: { kind: 'pool', id: 'default' } }).reason).toBe('NO_GRANT');
     expect(evaluatePolicy(policy, { principal, scopeId: 'installation', action: 'shutdown', resource: { kind: 'service', id: 'svc' } }).reason).toBe('NO_GRANT');

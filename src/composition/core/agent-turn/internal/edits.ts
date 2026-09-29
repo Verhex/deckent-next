@@ -24,7 +24,9 @@ export const agentFileEffectCommandId = (scopeId: string, turnId: string, execut
  * nothing here admits a write by itself.
  */
 export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; readonly peer: LocalPeerIdentity;
-  readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string }) {
+  readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
+  /** MODES-3: the area's paths that decide authority (the installation's configuration file): a write there asks in every mode. */
+  readonly authority?: (rel: string) => boolean }) {
   const { area, context, scopeId, turnId } = input, descriptor = area.operation;
   const plans = new Map<string, WorkspaceEditPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
@@ -41,6 +43,8 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
       const planned = plans.get(key(tool, args));
       return planned?.ok === true && area.floored(planned.rel);
     },
+    /** True when the planned call writes an authority path (`edit-authority`: never lowered, full access included). */
+    authority(tool: string, args: Record<string, unknown>): boolean { const planned = plans.get(key(tool, args)); return planned?.ok === true && input.authority?.(planned.rel) === true; },
     /** The planned call's resolved workspace-relative path (what an audit event names), or null when it was not planned. */
     target(tool: string, args: Record<string, unknown>): string | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.rel : null; },
     plan,
