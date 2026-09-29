@@ -25,6 +25,9 @@ export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggest
 export { detectEnvironment } from '#platform/core/host/index.js';
 export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
+// Library-independent schema contract (Standard Schema 1.1.0) for external boundaries: adapter module options today (DEPS-SCHEMA).
+export type { StandardTypedV1, StandardSchemaV1, StandardJSONSchemaV1, StandardSyncValidation } from '#platform/core/validate/index.js';
+export { isStandardSchemaV1, validateStandardSchemaSync } from '#platform/core/validate/index.js';
 export { deepMerge, readJsonFile, writeJsonAtomic } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';

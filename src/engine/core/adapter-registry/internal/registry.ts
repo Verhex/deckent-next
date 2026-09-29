@@ -1,13 +1,20 @@
-import type { z } from 'zod';
 import { admitModuleManifest, unifyOperationCatalog, RegistryError, type AdapterModuleManifest, type CatalogOperation, type OperationDescriptor, type OperationRef } from '#domain/index.js';
+import { isStandardSchemaV1, validateStandardSchemaSync, type StandardSchemaV1, type StandardSyncValidation } from '#platform/index.js';
 import type { EffectTarget, EffectTargets, OperationCatalog } from '#engine/core/effect/index.js';
 
-/** Code side of one provided target adapter: a strict options schema whose output names the target `kind` (so configuration can
- * check kind uniqueness without constructing targets) and a factory that builds the target from validated options. */
+/** Output every target options schema must produce: the target `kind`, so configuration can check kind uniqueness without
+ * constructing targets. The registry checks it at runtime too — a foreign schema's declared output type is a claim, not a proof. */
+export interface TargetAdapterOptions { readonly kind: string }
+/** Code side of one provided target adapter: a strict options schema and a factory that builds the target from the registry-validated
+ * options. The schema is any Standard Schema v1 implementation (spec 1.1.0, https://standardschema.dev) — zod 3.25+, Valibot,
+ * ArkType or hand-written — so an Enterprise/ERP module is not bound to Deckent's schema library. Validation must be synchronous:
+ * a Promise result is refused (`REGISTRY_OPTIONS_ASYNC`), because configuration validation is synchronous. */
 export interface TargetAdapterFactory {
-  readonly optionsSchema: z.ZodType<{ readonly kind: string }>;
+  readonly optionsSchema: StandardSchemaV1<unknown, TargetAdapterOptions>;
   create(options: unknown): EffectTarget;
 }
+/** Result of validating one configured target's options through its adapter's registered schema. */
+export type TargetOptionsValidation = StandardSyncValidation<TargetAdapterOptions> | { readonly status: 'unknown' };
 export interface AdapterModuleRegistration { readonly manifest: AdapterModuleManifest; readonly factories: Readonly<Record<string, TargetAdapterFactory>> }
 /** The one operation catalog every producer resolves from (A04-2): Core code operations, registered module operations and the
  * installation's config catalog, unified without conflict. `entries()` carries provenance for inspection; it grants nothing. */
@@ -15,10 +22,18 @@ export interface UnifiedOperationCatalog extends OperationCatalog { entries(): r
 export interface ResolvedTargetAdapter { readonly manifest: AdapterModuleManifest; readonly adapterId: string; readonly version: number; readonly factory: TargetAdapterFactory }
 export interface ConfiguredTarget { readonly adapter: string; readonly options?: unknown }
 
+/** Admission-time snapshot of a factory: the `create` function and the schema's `~standard` props (version, vendor, validate) are read
+ * once, so reassigning the registrant's factory fields or its schema's `validate` after admission changes nothing (Astra 2126 R2). */
 const snapshot = (factory: TargetAdapterFactory): TargetAdapterFactory => {
   const { optionsSchema, create } = factory;
-  return Object.freeze({ optionsSchema, create: (options: unknown) => create.call(factory, options) });
+  const standard = optionsSchema['~standard'];
+  const { vendor, validate } = standard;
+  const schema: StandardSchemaV1<unknown, TargetAdapterOptions> = Object.freeze({ '~standard': Object.freeze({ version: 1 as const, vendor,
+    validate: (value: unknown) => validate.call(standard, value) }) });
+  return Object.freeze({ optionsSchema: schema, create: (options: unknown) => create.call(factory, options) });
 };
+const hasKind = (value: unknown): value is TargetAdapterOptions => typeof value === 'object' && value !== null
+  && typeof (value as { kind?: unknown }).kind === 'string' && (value as { kind: string }).kind.length > 0;
 /** Versioned registry of target adapter modules. Modules passed to `create` are Core entries (root namespace); everything
  * registered afterwards is an overlay admitted by the manifest rules. `seal()` closes registration once a configuration was
  * validated against it, so a validated config never changes meaning afterwards. Registration never grants authority: policy
@@ -59,13 +74,25 @@ export class AdapterRegistry {
     return Object.freeze({ entries: () => entries, async resolve(operation: OperationRef) { return unified.get(`${operation.id}@${operation.version}`)?.descriptor ?? null; } });
   }
   adapter(adapterId: string): ResolvedTargetAdapter | null { return this.adapters.get(adapterId) ?? null; }
+  /** The one place target options are validated (config validation, catalog resolution and `targets` all come here): the adapter's
+   * registered Standard Schema, synchronously, then the `kind` output check. */
+  targetOptions(adapterId: string, options: unknown): TargetOptionsValidation {
+    const adapter = this.adapters.get(adapterId);
+    if (!adapter) return { status: 'unknown' };
+    const result = validateStandardSchemaSync(adapter.factory.optionsSchema, options);
+    if (result.status === 'valid' && !hasKind(result.value)) return { status: 'invalid', issues: [{ message: 'OPTIONS_KIND_REQUIRED', path: ['kind'] }] };
+    return result;
+  }
   /** Builds the installation's targets from validated configuration; unknown adapters were already refused by config validation. */
   targets(configured: readonly ConfiguredTarget[]): EffectTargets {
     const targets = new Map<string, EffectTarget>();
     for (const entry of configured) {
       const adapter = this.adapters.get(entry.adapter);
       if (!adapter) throw new RegistryError('REGISTRY_ADAPTER_UNKNOWN');
-      const target = adapter.factory.create(adapter.factory.optionsSchema.parse(entry.options));
+      const options = this.targetOptions(entry.adapter, entry.options);
+      if (options.status === 'async') throw new RegistryError('REGISTRY_OPTIONS_ASYNC');
+      if (options.status !== 'valid') throw new RegistryError('REGISTRY_OPTIONS_INVALID', { cause: options });
+      const target = adapter.factory.create(options.value);
       targets.set(target.kind, target);
     }
     return { resolve: kind => targets.get(kind) ?? null };
@@ -77,7 +104,7 @@ export class AdapterRegistry {
     const manifest = admitModuleManifest(this.modules.map(module => module.manifest), registration.manifest, root);
     const declared = manifest.provides.targetAdapters.map(adapter => adapter.adapterId);
     const provided = Object.keys(registration.factories);
-    if (declared.length !== provided.length || declared.some(id => typeof registration.factories[id]?.create !== 'function' || !registration.factories[id]?.optionsSchema)) {
+    if (declared.length !== provided.length || declared.some(id => typeof registration.factories[id]?.create !== 'function' || !isStandardSchemaV1(registration.factories[id]?.optionsSchema))) {
       throw new RegistryError('REGISTRY_FACTORY_MISMATCH');
     }
     const factories = Object.freeze(Object.fromEntries(declared.map(id => [id, snapshot(registration.factories[id]!)])));

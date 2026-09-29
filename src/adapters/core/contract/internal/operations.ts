@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, operationDescriptorSchema, OperationCatalogError } from '#domain/index.js';
+import { identitySchema, operationDescriptorSchema, OperationCatalogError, RegistryError } from '#domain/index.js';
 import { AdapterRegistry, type AdapterModuleRegistration, type EffectTargets, type UnifiedOperationCatalog } from '#engine/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
 import { httpConditionalAdapterModule } from '#adapters/core/http-conditional-effect/index.js';
@@ -21,12 +21,14 @@ const operationsSectionSchema = z.object({
 export const operationsConfigSchema = operationsSectionSchema.superRefine((value, context) => {
   const operations = new Set<string>(), kinds = new Set<string>();
   for (const target of value.targets) {
-    const adapter = registry.adapter(target.adapter);
-    if (!adapter) { context.addIssue({ code: 'custom', message: 'OPERATION_ADAPTER_UNKNOWN' }); continue; }
-    const options = adapter.factory.optionsSchema.safeParse(target.options);
-    if (!options.success) { context.addIssue({ code: 'custom', message: 'OPERATION_TARGET_OPTIONS_INVALID' }); continue; }
-    if (kinds.has(options.data.kind)) context.addIssue({ code: 'custom', message: 'OPERATION_TARGET_DUPLICATE' });
-    kinds.add(options.data.kind);
+    // Options go through the adapter's registered Standard Schema in the registry (one validation owner); a Promise-returning
+    // schema cannot be honoured by this synchronous validation and gets its own typed issue.
+    const options = registry.targetOptions(target.adapter, target.options);
+    if (options.status === 'unknown') { context.addIssue({ code: 'custom', message: 'OPERATION_ADAPTER_UNKNOWN' }); continue; }
+    if (options.status === 'async') { context.addIssue({ code: 'custom', message: 'OPERATION_TARGET_OPTIONS_ASYNC' }); continue; }
+    if (options.status === 'invalid') { context.addIssue({ code: 'custom', message: 'OPERATION_TARGET_OPTIONS_INVALID' }); continue; }
+    if (kinds.has(options.value.kind)) context.addIssue({ code: 'custom', message: 'OPERATION_TARGET_DUPLICATE' });
+    kinds.add(options.value.kind);
   }
   for (const entry of value.catalog) {
     const key = `${entry.operation.id}@${entry.operation.version}`;
@@ -48,7 +50,11 @@ export function readOperationsConfig(config: Record<string, unknown>): Operation
 /** The one operation resolver of every producer (CLI, SDK, ...): Core code operations, registered module operations and the validated
  * config catalog, unified through the registry. Validation already refused conflicts, so this cannot fail on a loaded configuration. */
 export function resolveOperationCatalog(config: OperationsConfig): UnifiedOperationCatalog {
-  return registry.catalog(config.catalog, config.targets.map(target => registry.adapter(target.adapter)!.factory.optionsSchema.parse(target.options).kind));
+  return registry.catalog(config.catalog, config.targets.map(target => {
+    const options = registry.targetOptions(target.adapter, target.options);
+    if (options.status !== 'valid') throw new RegistryError(options.status === 'async' ? 'REGISTRY_OPTIONS_ASYNC' : options.status === 'unknown' ? 'REGISTRY_ADAPTER_UNKNOWN' : 'REGISTRY_OPTIONS_INVALID');
+    return options.value.kind;
+  }));
 }
 /** Builds the installation's effect targets from validated configuration through the registry. */
 export function resolveOperationTargets(config: OperationsConfig): EffectTargets { return registry.targets(config.targets); }
