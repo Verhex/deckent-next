@@ -92,9 +92,10 @@ describe('shell realm selection with Landlock (S11)', () => {
   it('without Landlock: prefer falls back visibly to the host, require refuses (a fake probe)', () => {
     expect(resolveShellRealm('prefer-sandbox', caps(null), sandbox)).toMatchObject({ ok: true, realm: { kind: 'host' }, marker: 'sandbox: none',
       notice: expect.stringContaining('sandbox: none') });
-    expect(resolveShellRealm('require-sandbox', caps(null), sandbox)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', caps(null), sandbox)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
+      rejected: [{ kind: 'landlock', reason: 'landlock unavailable' }] });
     // No provider (a caller that cannot describe the project) never gets a Landlock realm.
-    expect(resolveShellRealm('require-sandbox', caps(7))).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', caps(7))).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [] });
   });
   it('the result names the realm in its first line; only trusted metadata carries the degraded posture to the finished line', () => {
     const ran = { status: 'exited' as const, exitCode: 0, signal: null, output: 'hi\n', totalBytes: 3, omittedBytes: 0, durationMs: 100, cleanup: 'clean' as const };

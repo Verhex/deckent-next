@@ -1,0 +1,53 @@
+import type { ShellRealmMode } from '#domain/index.js';
+import { boundSandboxReason, landlockShellSandbox, nativeShellKernelProbe, probeShellCapabilities, resolveShellRealm, type ShellCapabilities, type ShellRealmResolution,
+  type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
+import { selectBubblewrapLauncher } from './launcher.js';
+import { bubblewrapShellSandbox } from './realm.js';
+
+/** The shipped sandbox providers in preference order (S9, S11): bubblewrap, then Landlock. The service's default port, the MCP `inspect`
+ * starts and doctor all take this one list. */
+export const shippedShellSandboxes = (layout: ShellSandboxLayout): readonly ShellSandbox[] => [bubblewrapShellSandbox(layout), landlockShellSandbox(layout)];
+
+/** One resolution as doctor reports it: the realm that runs (`null` = refused, `code` says why) and every provider passed over, and why. */
+export interface ShellRealmSelectionView {
+  readonly selected: 'bubblewrap' | 'landlock' | 'host' | null;
+  readonly marker: string | null;
+  readonly notice: string | null;
+  readonly code: string | null;
+  readonly rejected: readonly { readonly kind: string; readonly reason: string; readonly restricted: boolean }[];
+}
+/**
+ * REALM-NOTICE (doctor): what a shell call in this project gets under the configured realm mode, from the same stateDir, providers and
+ * resolver the service uses — so a probe that says `available` while the provider refuses (a launcher inside the project) is visible.
+ * `preferSandbox` (host mode only): what a `prefer-sandbox` MCP server (the registry default) gets here. `bubblewrap`/`landlock`: the
+ * host measurement. The measurement is read-only (`place: false`: a bundled copy the service has not placed yet is reported, not written)
+ * and taken now in this process — a service that measured earlier keeps its own until it restarts.
+ */
+export interface ShellRealmReport extends ShellRealmSelectionView {
+  readonly schemaVersion: 1;
+  readonly mode: ShellRealmMode;
+  readonly stateDir: string | null;
+  readonly preferSandbox: ShellRealmSelectionView | null;
+  readonly bubblewrap: { readonly status: string; readonly launcher: { readonly source: string; readonly path: string; readonly version: string; readonly overlay: boolean } | null;
+    readonly rejected: readonly { readonly path: string; readonly reason: string }[]; readonly detail: string | null };
+  readonly landlock: ShellCapabilities['landlock'];
+}
+
+const viewOf = (resolution: ShellRealmResolution): ShellRealmSelectionView => ({
+  selected: resolution.ok ? resolution.realm.kind : null, marker: resolution.ok ? resolution.marker : null, notice: resolution.ok ? resolution.notice : null,
+  code: resolution.ok ? null : resolution.code,
+  rejected: (resolution.rejected ?? []).map(item => ({ kind: item.kind, reason: boundSandboxReason(item.reason), restricted: item.restricted === true })) });
+
+export async function inspectShellRealmSelection(input: { readonly mode: ShellRealmMode; readonly stateDir: string | null; readonly project: ShellSandboxLayout['project'];
+  readonly capabilities?: ShellCapabilities; readonly sandboxes?: readonly ShellSandbox[] }): Promise<ShellRealmReport> {
+  const capabilities = input.capabilities ?? await probeShellCapabilities({ platform: process.platform, kernel: nativeShellKernelProbe,
+    bubblewrap: signal => selectBubblewrapLauncher({ stateDir: input.stateDir, place: false }, signal) });
+  // The layout a turn gives its shell (no conversation scratch area yet: a doctor run has none) with the fail-closed write floor.
+  const sandboxes = input.sandboxes ?? shippedShellSandboxes({ project: input.project, scratchDir: null, writeFloor: () => true });
+  const { status, launcher, rejected, detail } = capabilities.bubblewrap;
+  return { schemaVersion: 1, mode: input.mode, stateDir: input.stateDir, ...viewOf(resolveShellRealm(input.mode, capabilities, sandboxes)),
+    preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('prefer-sandbox', capabilities, sandboxes)) : null,
+    bubblewrap: { status, launcher: launcher && { source: launcher.source, path: launcher.path, version: launcher.version, overlay: launcher.overlay },
+      rejected: rejected.map(item => ({ path: item.path, reason: boundSandboxReason(item.reason) })), detail: detail && boundSandboxReason(detail) },
+    landlock: capabilities.landlock };
+}

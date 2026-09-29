@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createWorkspaceScope, probeShellCapabilities, resolveShellRealm, SHELL_CAPABILITIES_VERSION, type ShellCapabilities, type ShellSandbox } from '#adapters/index.js';
-import { BUBBLEWRAP_BUNDLED, BUBBLEWRAP_MINIMUM_SYSTEM_VERSION, bubblewrapShellSandbox, selectBubblewrapLauncher,
+import { createWorkspaceScope, describeHostShellResult, HostShellTarget, probeShellCapabilities, resolveShellRealm, SHELL_CAPABILITIES_VERSION, type HostShellResult, type ShellCapabilities,
+  type ShellSandbox } from '#adapters/index.js';
+import { BUBBLEWRAP_BUNDLED, BUBBLEWRAP_MINIMUM_SYSTEM_VERSION, bubblewrapShellSandbox, inspectShellRealmSelection, selectBubblewrapLauncher,
   type BubblewrapSelectOptions } from '#adapters/core/shell-sandbox-bwrap/index.js';
 
 // BWRAP-SELECT (owner S1–S7, 2026-09-29): the launcher is the system bwrap when it is root-owned in root-owned directories and at least
@@ -38,6 +39,10 @@ async function fixture() {
 }
 const linux = (bubblewrap: ShellCapabilities['bubblewrap']): ShellCapabilities => ({ schemaVersion: SHELL_CAPABILITIES_VERSION, platform: 'linux', bubblewrap,
   userNamespace: 'available', landlock: { status: 'available', abi: 7 } });
+/** A stand-in Landlock provider (never run): what the resolver picks after a rejected bubblewrap. */
+const landlockStub: ShellSandbox = { kind: 'landlock', usable: () => ({ ok: true, realm: { kind: 'landlock', run: async () => { throw new Error('not run'); } },
+  marker: 'sandbox: landlock', posture: () => 'landlock', notice: null, containment: 'sandbox' }) };
+const cardView = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
 async function sandboxFor(root: string) {
   const project = join(root, 'project'); await mkdir(project, { recursive: true });
   return bubblewrapShellSandbox({ project: await createWorkspaceScope(project), scratchDir: null, writeFloor: null });
@@ -154,16 +159,17 @@ describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
 
     const sandbox = await sandboxFor(f.root);
     expect(sandbox.usable(linux(observed))).toMatchObject({ ok: false, restricted: true, reason: expect.stringMatching(/AppArmor/u) });
-    const landlock: ShellSandbox = { kind: 'landlock', usable: () => ({ ok: true, realm: { kind: 'landlock', run: async () => { throw new Error('not run'); } },
-      marker: 'sandbox: landlock', posture: () => 'landlock', notice: null, containment: 'sandbox' }) };
+    const landlock = landlockStub;
     const resolved = resolveShellRealm('prefer-sandbox', linux(observed), [sandbox, landlock]);
     expect(resolved).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock',
       notice: expect.stringMatching(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: .*AppArmor/u) });
     // The approval card reads the posture: it carries the same line (the live stream and the model result carry the notice).
-    const view = { projectReadOnly: false, writeFloorReadOnly: false, repositoryWritable: false };
-    expect(resolved.ok && resolved.posture(view)).toBe(`landlock\n${resolved.ok ? resolved.notice : ''}`);
-    // An ordinary unusable bubblewrap (not a restriction) keeps today's behaviour: Landlock without a notice.
-    expect(resolveShellRealm('prefer-sandbox', linux({ ...observed, status: 'unavailable', restriction: null }), [sandbox, landlock])).toMatchObject({ notice: null });
+    expect(resolved.ok && resolved.posture(cardView)).toBe(`landlock\n${resolved.ok ? resolved.notice : ''}`);
+    // The fix text survives the reason bound.
+    expect(resolved.ok && resolved.notice).toContain('/usr/local/bin/bwrap');
+    // REALM-NOTICE (supersedes the earlier "no notice" rule): an ordinary unusable bubblewrap (not a restriction) is a visible fallback too.
+    expect(resolveShellRealm('prefer-sandbox', linux({ ...observed, status: 'unavailable', restriction: null }), [sandbox, landlock]))
+      .toMatchObject({ notice: expect.stringMatching(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: bubblewrap unavailable/u) });
   });
 
   it('the probe carries the launcher observation (contract v2) and bounds it', async () => {
@@ -173,6 +179,94 @@ describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
       kernel: async () => ({ userNamespace: true, landlockAbi: 7, landlockErrno: 0 }) });
     expect(capabilities).toEqual({ schemaVersion: 2, platform: 'linux', bubblewrap: observed, userNamespace: 'available', landlock: { status: 'available', abi: 7 } });
   });
+});
+
+// REALM-NOTICE (live 2026-09-29): a preferred provider passed over for any reason — not only a host restriction — is a visible fallback
+// (stream, model result, approval card), and doctor shows the realm chosen and every provider passed over, measured read-only.
+describe('a visible fallback after a preferred provider is passed over (REALM-NOTICE)', () => {
+  it('REALM-NOTICE (live 2026-09-29): a launcher inside the project falls back to Landlock visibly — stream/result notice and card posture name it', async () => {
+    const f = await fixture();
+    const project = join(f.root, 'project'); await mkdir(project, { recursive: true });
+    // The live shape: the state root (and so the realized bundled copy) inside the project; the probe says available, the provider refuses.
+    const inside = await selectBubblewrapLauncher(f.options({ stateDir: join(project, '.deckent', 'host', 'global') }));
+    expect(inside.status).toBe('available');
+    const sandbox = bubblewrapShellSandbox({ project: await createWorkspaceScope(project), scratchDir: null, writeFloor: null });
+    for (const mode of ['prefer-sandbox', 'require-sandbox'] as const) {
+      const resolved = resolveShellRealm(mode, linux(inside), [sandbox, landlockStub]);
+      expect(resolved).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock',
+        notice: `[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: bwrap at ${inside.launcher!.path} is inside the project or scratch area, where a sandboxed command could replace it).`,
+        rejected: [{ kind: 'bubblewrap', reason: expect.stringMatching(/inside the project or scratch area/u) }] });
+      // The approval card carries the same line after the winning provider's posture.
+      expect(resolved.ok && resolved.posture(cardView)).toBe(`landlock\n${resolved.ok ? resolved.notice : ''}`);
+    }
+    // Producer to surface: the effect target streams the notice before the command's output, and the model result ends with it.
+    const ran: HostShellResult = { status: 'exited', exitCode: 0, signal: null, output: 'ok\n', totalBytes: 3, omittedBytes: 0, durationMs: 10, cleanup: 'clean' };
+    const running: ShellSandbox = { kind: 'landlock', usable: () => ({ ok: true, realm: { kind: 'landlock', run: async () => ran }, marker: 'sandbox: landlock',
+      posture: () => 'landlock', notice: null, containment: 'sandbox' }) };
+    const resolution = resolveShellRealm('prefer-sandbox', linux(inside), [sandbox, running]);
+    const notice = resolution.ok ? resolution.notice! : '', streamed: string[] = [], results: HostShellResult[] = [];
+    await new HostShellTarget(project, { timeoutMs: 1_000, extraEnv: [], signal: new AbortController().signal, realm: resolution,
+      onOutput: (_stream, text) => streamed.push(text), onResult: result => results.push(result) }).apply({ input: { command: 'ls' } } as never);
+    expect(streamed).toEqual([`${notice}\n`]);
+    expect(describeHostShellResult('ls', results[0]!, resolution.ok ? resolution : null)).toBe(`[deckent] run_shell: sandbox: landlock; exit 0 after 0.0s (ls)\nok\n\n${notice}`);
+    // No rejection → no notice: the same bubblewrap with its state root outside the project is chosen as is.
+    const outside = await selectBubblewrapLauncher(f.options());
+    expect(resolveShellRealm('prefer-sandbox', linux(outside), [sandbox, landlockStub])).toMatchObject({ ok: true, realm: { kind: 'bubblewrap' }, notice: null, rejected: [] });
+    // A preferred provider that fails without winning anything leaves the host fallback text unchanged in shape (every reason named).
+    const none = resolveShellRealm('prefer-sandbox', linux(inside), [sandbox]);
+    expect(none).toMatchObject({ ok: true, marker: 'sandbox: none', notice: expect.stringMatching(/^\[deckent\] sandbox: none; running on host \(bubblewrap: bwrap at .* inside the project/u) });
+  });
+
+  it('REALM-NOTICE: a rejection reason is bounded and single-line in the notice', () => {
+    const noisy: ShellSandbox = { kind: 'bubblewrap', usable: () => ({ ok: false, reason: `line one\nline\u0007two ${'x'.repeat(2_000)}` }) };
+    const resolved = resolveShellRealm('prefer-sandbox', linux({ status: 'unavailable', launcher: null, rejected: [], restriction: null, detail: null }), [noisy, landlockStub]);
+    if (!resolved.ok || !resolved.notice) throw new Error('expected a notice');
+    expect(resolved.notice).toMatch(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: line one line two x+…\)\.$/u);
+    expect([...resolved.notice].some(char => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)).toBe(false);
+    expect(resolved.notice.length).toBeLessThan(600);
+  });
+
+  it('REALM-NOTICE doctor: the probe says available, the provider refuses — the report shows both, with the realm chosen and why', async () => {
+    const f = await fixture();
+    const project = join(f.root, 'project'); await mkdir(project, { recursive: true });
+    const stateDir = join(project, '.deckent', 'host', 'global');
+    const capabilities = linux(await selectBubblewrapLauncher(f.options({ stateDir })));
+    const scope = await createWorkspaceScope(project);
+    // The shipped provider list (bubblewrap, then the real Landlock provider), the service's resolver.
+    const report = await inspectShellRealmSelection({ mode: 'prefer-sandbox', stateDir, project: scope, capabilities });
+    expect(report).toMatchObject({ schemaVersion: 1, mode: 'prefer-sandbox', stateDir, selected: 'landlock', marker: 'sandbox: landlock', code: null, preferSandbox: null,
+      notice: expect.stringMatching(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: bwrap at .* is inside the project or scratch area/u),
+      rejected: [{ kind: 'bubblewrap', restricted: false, reason: expect.stringMatching(/inside the project or scratch area/u) }],
+      bubblewrap: { status: 'available', launcher: { source: 'bundled', path: join(stateDir, 'bin', `bwrap-${sha256(f.bundledScript)}`), version: '0.13.0', overlay: true } },
+      landlock: { status: 'available', abi: 7 } });
+    // Host mode: the shell runs on the host; the prefer-sandbox view (the MCP default) still names the fallback.
+    expect(await inspectShellRealmSelection({ mode: 'host', stateDir, project: scope, capabilities })).toMatchObject({ selected: 'host', marker: null, notice: null, rejected: [],
+      preferSandbox: { selected: 'landlock', notice: expect.stringMatching(/instead of bubblewrap/u) } });
+    // require-sandbox with nothing usable: refused, typed, every reason named.
+    const bare = { ...capabilities, landlock: { status: 'unavailable' as const, abi: null } };
+    expect(await inspectShellRealmSelection({ mode: 'require-sandbox', stateDir, project: scope, capabilities: bare })).toMatchObject({ selected: null,
+      code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [{ kind: 'bubblewrap' }, { kind: 'landlock', reason: 'landlock unavailable' }] });
+    // State root outside the project: bubblewrap, no notice, nothing passed over.
+    expect(await inspectShellRealmSelection({ mode: 'prefer-sandbox', stateDir: f.state, project: scope, capabilities: linux(await selectBubblewrapLauncher(f.options())) }))
+      .toMatchObject({ selected: 'bubblewrap', marker: 'sandbox: bubblewrap', notice: null, rejected: [] });
+  });
+
+  it('REALM-NOTICE doctor: a read-only measurement (place: false) never creates, writes or re-modes the state root; a placed copy is used', async () => {
+    const f = await fixture();
+    const unplaced = await selectBubblewrapLauncher(f.options({ place: false }));
+    expect(unplaced).toMatchObject({ status: 'unavailable', launcher: null,
+      rejected: [{ reason: expect.stringMatching(/^the bundled bwrap is not placed at .* yet \(the runtime service places it when it measures the host\)$/u) }] });
+    expect(existsSync(f.state)).toBe(false);
+    expect(await f.executed()).toEqual([]);
+    const placed = await selectBubblewrapLauncher(f.options());
+    const before = await lstat(placed.launcher!.path, { bigint: true });
+    await chmod(join(f.state, 'bin'), 0o750);
+    expect(await selectBubblewrapLauncher(f.options({ place: false }))).toMatchObject({ status: 'available', launcher: { source: 'bundled', path: placed.launcher!.path } });
+    const after = await lstat(placed.launcher!.path, { bigint: true });
+    expect([after.ino, after.mtimeNs, after.ctimeNs]).toEqual([before.ino, before.mtimeNs, before.ctimeNs]);
+    expect((await stat(join(f.state, 'bin'))).mode & 0o777).toBe(0o750);
+  });
+
 });
 
 // The real bundled 0.13.0 (staged into the source tree by `node scripts/build-bwrap.mjs --stage-dev <out>`; gitignored). This machine's

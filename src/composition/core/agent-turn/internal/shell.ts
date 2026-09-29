@@ -2,15 +2,20 @@ import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
-import { globalStateRoot, SystemTrustedClock } from '#platform/index.js';
+import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
-  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
+  type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
+/** REALM-NOTICE (doctor): the realm a shell call here gets — the configured mode, the service's state root and providers, measured read-only. */
+export async function inspectConfiguredShellRealm(projectRoot: string, options: ConfigLoadOptions) {
+  const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
+  return inspectShellRealmSelection({ mode: readTerminalShellConfig(config).realm, stateDir: globalStateRoot(options.env ?? process.env), project: await createWorkspaceScope(projectRoot) });
+}
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { DeckentJsonSchemaValidator, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { describeShellWritePosture, longLivedWritePosture, sandboxWriteView, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
@@ -42,23 +42,26 @@ export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string
 }
 
 /** The realm of one server (the shell's modes): `host` as is; a sandbox provider that can hold a long-lived process wraps the command;
- * none usable → `require-sandbox` refuses, `prefer-sandbox` runs on the host and says so (never silently). */
+ * none usable → `require-sandbox` refuses, `prefer-sandbox` runs on the host and says so (never silently). A provider that wins after a
+ * preferred one was passed over names that fallback on the cards (REALM-NOTICE, the shell's own line). */
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
   const env = { ...server.env };
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
-  const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), reasons: string[] = [];
-  if (capabilities.platform !== 'linux') reasons.push(`platform ${capabilities.platform}`);
+  const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), rejected: { kind: string; reason: string }[] = [];
+  if (capabilities.platform !== 'linux') rejected.push({ kind: 'platform', reason: capabilities.platform });
   else for (const sandbox of context.sandboxes) {
     const usable = sandbox.usable(capabilities);
-    if (!usable.ok) { reasons.push(`${sandbox.kind}: ${usable.reason}`); continue; }
-    if (!usable.launch) { reasons.push(`${sandbox.kind}: runs one command at a time`); continue; }
+    if (!usable.ok) { rejected.push({ kind: sandbox.kind, reason: usable.reason }); continue; }
+    if (!usable.launch) { rejected.push({ kind: sandbox.kind, reason: 'runs one command at a time' }); continue; }
     const launch = await usable.launch(context.environment);
-    if (!launch.ok) { reasons.push(`${sandbox.kind}: ${launch.reason}`); continue; }
+    if (!launch.ok) { rejected.push({ kind: sandbox.kind, reason: launch.reason }); continue; }
     // The card's words come from the view this launch enforces (C5: the project read-only), with how to let a server write.
+    const fallback = describeSandboxFallback(sandbox.kind, rejected);
     return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, projectReadOnly: launch.view.projectReadOnly,
-      posture: `sandbox: ${launch.posture}${launch.view.projectReadOnly ? `; ${MCP_HOST_REALM_HINT}` : ''}`, sandbox: { prefix: launch.args, command: server.command, args: server.args } };
+      posture: `sandbox: ${launch.posture}${launch.view.projectReadOnly ? `; ${MCP_HOST_REALM_HINT}` : ''}${fallback ? `\n${fallback}` : ''}`,
+      sandbox: { prefix: launch.args, command: server.command, args: server.args } };
   }
-  const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';
+  const why = rejected.length ? describeSandboxRejections(rejected) : 'no sandbox mechanism is available';
   if (server.realm === 'require-sandbox') return { ok: false, reason: 'sandbox-unavailable', detail: why };
   return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false,
     posture: `sandbox: none; runs on host (${why}). Files, processes and network are reachable.` };

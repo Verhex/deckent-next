@@ -123,11 +123,13 @@ describe('bubblewrap realm selection (S9)', () => {
     expect(f.sandbox.usable(restricted)).toMatchObject({ ok: false, restricted: true, reason: expect.stringContaining('user namespace') });
     expect(resolveShellRealm('prefer-sandbox', restricted, [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*bubblewrap: .*user namespace/u) });
-    expect(resolveShellRealm('require-sandbox', none, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', none, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
+      rejected: [{ kind: 'bubblewrap', reason: expect.stringMatching(/^bubblewrap unavailable \(.*below the minimum/u) }] });
     const gone = linux({ bubblewrap: { status: 'available', rejected: [], restriction: null, detail: null,
       launcher: { source: 'system', path: join(f.root, 'no-bwrap'), version: '0.13.0', sha256: null, overlay: true, identity: '0:0:0:0:0' } } });
     expect(f.sandbox.usable(gone)).toMatchObject({ ok: false, reason: expect.stringMatching(/no-bwrap is gone/u) });
-    expect(resolveShellRealm('require-sandbox', gone, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', gone, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
+      rejected: [{ kind: 'bubblewrap', reason: expect.stringMatching(/no-bwrap is gone/u) }] });
   });
   it('lays out the view from the scope: deny floor masks, every .git read-only, symlinks and ignored directories untouched', async () => {
     const f = await fixture();

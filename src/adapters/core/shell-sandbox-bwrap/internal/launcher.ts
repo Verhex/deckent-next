@@ -41,6 +41,8 @@ export interface BubblewrapSelectOptions {
   readonly minimumVersion?: string;
   /** Whether the kernel's AppArmor user-namespace restriction is on (default: the sysctl reads 1). */
   readonly apparmorRestricted?: () => boolean;
+  /** `false`: a read-only measurement (doctor) — an already placed, verifying copy is used; nothing is created, written or re-moded. */
+  readonly place?: boolean;
 }
 
 const versionOf = (text: string) => /^bubblewrap (\d+)\.(\d+)\.(\d+)$/u.exec(text.trim())?.slice(1, 4).map(Number) ?? null;
@@ -147,6 +149,10 @@ function bundledCandidate(options: BubblewrapSelectOptions): Candidate | { reado
   const version = options.bundledVersion ?? BUBBLEWRAP_BUNDLED.version;
   const launcher = (identity: string): Candidate => ({ ok: true, launcher: Object.freeze({ source: 'bundled', path: target, version, sha256: expected,
     overlay: atLeast(version, BUBBLEWRAP_OVERLAY_VERSION), identity }) });
+  if (options.place === false) {
+    const placed = verifiedCopy(target, expected);
+    return placed ? launcher(placed) : { ok: false, reason: `the bundled bwrap is not placed at ${target} yet (the runtime service places it when it measures the host)` };
+  }
   try {
     mkdirSync(bin, { recursive: true, mode: 0o700 });
     const dir = lstatSync(bin);

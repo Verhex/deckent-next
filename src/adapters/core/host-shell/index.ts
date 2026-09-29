@@ -3,7 +3,7 @@ export { BASH_LAUNCH, HOST_SHELL_CHUNK_MAX_BYTES, HOST_SHELL_DEFAULT_TIMEOUT_MS,
 export { agentShellEffectCommandId, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, RUN_SHELL_TOOL_SPEC } from './internal/target.js';
 export { bubblewrapObservation, nativeShellKernelProbe, probeShellCapabilities, SHELL_CAPABILITIES_VERSION, type BubblewrapCapability, type BubblewrapLauncher, type BubblewrapRestriction,
   type ShellCapabilities, type ShellCapabilityStatus, type ShellProbeEnvironment } from './internal/probe.js';
-export { describeShellWritePosture, HOST_SHELL_POSTURE, hostShellRealm, longLivedWritePosture, resolveShellRealm, sandboxWriteView, shellWritePosture, unattendedWritePosture, type ShellCallAuthority, type ShellRealmResolution, type ShellSandbox,
+export { boundSandboxReason, describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, HOST_SHELL_POSTURE, SANDBOX_REASON_MAX_CHARS, hostShellRealm, longLivedWritePosture, resolveShellRealm, sandboxWriteView, shellWritePosture, unattendedWritePosture, type ShellCallAuthority, type ShellRealmResolution, type ShellSandbox, type ShellSandboxRejection,
   type ShellSandboxFactory, type ShellSandboxLaunch, type ShellSandboxLayout, type ShellSandboxWriteView } from './internal/realm.js';
 export { describeHostShellResult, describeShellEffectRefusal, HOST_SHELL_NOTES, hostShellCleanupNote } from './internal/result.js';
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
