@@ -105,7 +105,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       const again = () => decide(tool, cell, undefined, undefined, undefined, writeOperation);
       const fresh = await again();
       if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
-      if (fresh.decision !== 'allow') return { ok: false, reason: cell === 'edit' ? 'approval-required' : 'write-floor' };
+      if (fresh.decision !== 'allow') return { ok: false, reason: cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor' };
       const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined;
       if (audited) {
         const event = agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },

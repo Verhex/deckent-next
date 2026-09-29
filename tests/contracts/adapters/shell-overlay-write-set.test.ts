@@ -69,10 +69,12 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
     const result = await f.run([
       'echo new > src/x.ts', 'echo mod >> src/a.ts', 'rm sub/k', 'mkdir -p fresh/empty', 'mv sub/deep sub/old && mkdir sub/deep && echo z > sub/deep/z',
       'ln -s a.ts src/link', 'echo h > src/h && ln src/h src/h2', 'mkfifo src/fifo', 'echo n > src/package.json', 'chmod +x src/x.ts', 'cat .env; echo env=$?',
-      'echo x >> package.json; echo floor=$?',
+      'echo x >> package.json; echo floor=$?', `[ -e ${f.writeSet.upper} ]; echo upper=$?`, 'rm sub/k2/x',
     ].join('; '));
     expect(result).toMatchObject({ status: 'exited', exitCode: 0 });
     expect(result.output).toContain('env=1'); expect(result.output).toContain('floor=1');
+    // The overlay's own directories are not in the view (the kernel's `user.overlay.*` names stay the kernel's).
+    expect(result.output).toContain('upper=1');
     // Nothing reached the project.
     expect(await readFile(join(f.project, 'src', 'a.ts'), 'utf8')).toBe('a\n');
     expect(existsSync(join(f.project, 'src', 'x.ts'))).toBe(false);
@@ -82,7 +84,7 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
     const byRel = Object.fromEntries(scan.changes.map(change => [change.rel, change]));
     expect(byRel['src/x.ts']).toMatchObject({ kind: 'write', lowerVersion: 'absent', mode: 0o755, digest: fileContentVersion(Buffer.from('new\n')) });
     expect(byRel['src/a.ts']).toMatchObject({ kind: 'write', lowerVersion: fileContentVersion(Buffer.from('a\n')) });
-    expect(byRel['sub/k']).toMatchObject({ kind: 'delete' });
+    expect(byRel['sub/k']).toMatchObject({ kind: 'delete' }); expect(byRel['sub/k2/x']).toMatchObject({ kind: 'delete' });
     // The opaque directory: the lower f and g are gone although no whiteout names them; the rename is a copy plus the deletion.
     expect(byRel['sub/deep/f']).toMatchObject({ kind: 'delete' }); expect(byRel['sub/deep/g']).toMatchObject({ kind: 'delete' });
     expect(byRel['sub/deep/z']).toMatchObject({ kind: 'write' });
@@ -99,12 +101,14 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
 
   it('a lower file changed during the call is a conflict; bounds refuse the whole set', async () => {
     const f = await fixture();
-    const running = f.run('sleep 1; echo mine >> src/a.ts');
+    const running = f.run('rm sub/k; sleep 1; echo mine >> src/a.ts');
     await new Promise(resolve => setTimeout(resolve, 300));
     await writeFile(join(f.project, 'src', 'a.ts'), 'theirs\n');
+    // A whiteout over a lower entry that someone else removed meanwhile: a conflict too (no ctime left to read).
+    await rm(join(f.project, 'sub', 'k'));
     expect(await running).toMatchObject({ status: 'exited' });
     const scan = await scanSandboxWriteSet(f.writeSet.upper, f.project, f.mark);
-    expect(scan.ok && scan.conflicts).toEqual(['src/a.ts']);
+    expect(scan.ok && scan.conflicts).toEqual(['src/a.ts', 'sub/k']);
     const bounded = await scanSandboxWriteSet(f.writeSet.upper, f.project, f.mark, { maxEntries: 1, maxTotalBytes: 1, maxFileBytes: 1, maxDepth: 32 });
     expect(bounded.ok).toBe(false);
   }, 60_000);

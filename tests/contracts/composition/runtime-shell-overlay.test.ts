@@ -27,12 +27,15 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     await mkdir(join(f.project, 'sub', 'deep'), { recursive: true });
     await writeFile(join(f.project, 'sub', 'deep', 'f'), 'f\n'); await writeFile(join(f.project, 'src', 'gone.ts'), 'gone\n');
     const result = await f.call('run_shell', { command: 'f=pack; echo \'{"name":"x"}\' > src/${f}age.json; echo new > src/x.ts; chmod +x src/x.ts; '
-      + 'mv src/gone.ts src/moved.ts; d=deep; mv sub/$d sub/old && mkdir sub/$d && echo z > sub/$d/z; echo done' });
+      + 'mv src/gone.ts src/moved.ts; d=deep; mv sub/$d sub/old && mkdir sub/$d && echo z > sub/$d/z; g=.en; echo SECRET=1 > ${g}v; echo done' });
     expect(result).toMatchObject({ card: false, status: 'ok' });
     expect(result.text).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0/u);
     // C5: the floor name the classifier could not see never reaches the project, and the model is told how it can.
     expect(existsSync(join(f.project, 'src', 'package.json'))).toBe(false);
-    expect(result.text).toContain('not applied: src/package.json (write floor: the owner approves — use edit_file/write_file)');
+    expect(result.text).toContain('src/package.json (write floor: the owner approves — use edit_file/write_file)');
+    // A new name on the deny floor (the read floor: `.env`) is not applied either.
+    expect(result.text).toContain('.env (denied path)');
+    expect(existsSync(join(f.project, '.env'))).toBe(false);
     expect(await readFile(join(f.project, 'src', 'x.ts'), 'utf8')).toBe('new\n');
     expect(existsSync(join(f.project, 'src', 'gone.ts'))).toBe(false);
     expect(await readFile(join(f.project, 'src', 'moved.ts'), 'utf8')).toBe('gone\n');

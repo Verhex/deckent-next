@@ -129,7 +129,8 @@ export async function scanSandboxWriteSet(upper: string, lower: string, startMar
     if (/[rmw]/.test(entry.flags)) return { ok: false, reason: `unsupported overlay metadata (${rel})` };
     const below = await lowerInfo(rel);
     if (entry.type === 'c' && entry.rdev[0] === 0 && entry.rdev[1] === 0) {
-      if (!below) continue;
+      // Overlayfs writes a whiteout only over a lower entry that existed at the unlink: a lower that is gone now was removed during the call.
+      if (!below) { conflicts.add(rel); continue; }
       if (below.isDirectory()) {
         changed(below, rel);
         const refusedTree = await removeTree(rel, 0, () => false);
@@ -217,7 +218,7 @@ export async function prepareSandboxWriteSetDirectory(root: string, callKey: str
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
 export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority';
 export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
-  | { readonly ok: false; readonly reason: 'write-floor' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
+  | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
 /** Decides one entry exactly like an edit of that path (design §6); the decision's owner audits a relaxation before handing out the gate. */
 export interface SandboxWriteDecider { decide(rel: string, cell: SandboxWriteCell): Promise<SandboxWriteDecision> }
 export interface SandboxWriteSetReport {
@@ -234,7 +235,8 @@ export interface SandboxWriteSetReport {
   readonly stopped: boolean;
 }
 const REASONS: Readonly<Record<string, string>> = {
-  'write-floor': 'write floor: the owner approves — use edit_file/write_file', 'approval-required': 'needs the owner\'s approval — use edit_file/write_file',
+  'write-floor': 'write floor: the owner approves — use edit_file/write_file',
+  'configuration-file': 'the installation\'s configuration file: the owner approves — use edit_file/write_file', 'approval-required': 'needs the owner\'s approval — use edit_file/write_file',
   'denied-by-policy': 'denied by policy', 'audit-unavailable': 'the decision could not be recorded', denied: 'denied path', 'symbolic-link': 'symbolic link',
   'special-file': 'special file', 'hard-link': 'hard link', 'setuid-setgid': 'setuid/setgid bit', 'not-a-regular-file': 'not a regular file',
   'parent-refused': 'its directory could not be created', rejected: 'the write was refused', conflict: 'changed during the apply (conflict)',
