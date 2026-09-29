@@ -1,58 +1,16 @@
-import { createHash } from 'node:crypto';
 import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
-import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
-  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, describeSandboxWriteSet, prepareSandboxWriteSetDirectory,
-  removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, unattendedWritePosture, type ShellRealmResolution, openSqliteAttemptStore,
-  type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
+import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
+  describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
+  describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, shellWritePosture,
+  type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
-const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-/**
- * Effect identity of one shell call (Astra 2113): the turn, the call's position in it (model round, index in the response) and the
- * exact arguments. A replay of the same call is the same C11 effect (never run twice); another call is another effect even with the
- * same command and a provider call id reused across responses.
- */
-export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
-  sha256(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`);
-/** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */
-/** SHELL-OVERLAY: a full-auto call whose writes could not be kept aside (no private directory outside the project) ran read-only. */
-const WRITE_SET_UNAVAILABLE_NOTE = '[deckent] write set: unavailable here (no private directory outside the project); the project was read-only for this run.';
-/** SHELL-OVERLAY: a run that was stopped kept its writes aside; none of them reached the project. */
-const WRITE_SET_DISCARDED_NOTE = '[deckent] the command was stopped; what it changed was kept aside and not applied (the project is unchanged by it).';
-const PROJECT_READ_ONLY_NOTE = '[deckent] the project was read-only for this unattended run: change project files with the edit tools, or with a command the owner approves.';
-/** Who stands behind one shell call at its effect, as the call decision decided it (`createAgentCallDecisions.execute`, typed, never read from
- * text): the owner's card, the launched full-access mode (an audited `full-access-call`, MODES-3), a full-auto mode relaxation (an audited
- * `permission-mode` event of mode full-auto: nobody approved the call, the person's mode did — SHELL-OVERLAY), or nobody (a silent or
- * standing-approved call). */
-export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' | 'unattended';
-/**
- * The one derivation of a sandboxed call's write posture (SHELL-AUTONOMY, Astra 2170 R1, MODES-3; owner 2026-09-29: full access is
- * comprehensive). The realm reads it with the turn's layout: its write floor (the approval floor; in a full-access turn only the
- * configuration file) and `.git` (writable only in a full-access turn, never under a read-only project).
- * - owner-approved: the project writes, the write floor included;
- * - full-access: the project, the write floor and `.git` write; the configuration file stays read-only (the layout's floor in that turn);
- * - unattended, the narrow mutating set: the project writes, the write floor's existing paths read-only (its literal targets passed the
- *   write check);
- * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
- *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
- *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
- * The unattended rule itself is `unattendedWritePosture` (host-shell), which a long-lived MCP server's view also takes (C5); its `writeSet`
- * variant is SHELL-OVERLAY's full-auto posture (the project's writes kept aside and applied like edits).
- */
-export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean,
-  writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean } {
-  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false };
-  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false };
-  // Everything else is the one unattended derivation (host-shell, shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
-  // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
-  return unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn, authority === 'full-auto' && writeSets && !fullAccessTurn);
-}
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
@@ -161,7 +119,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const root = posture.writeSet ? await input.writeSetRoot?.() ?? null : null;
       const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
       const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
-      const unavailable = posture.writeSet && !directory ? `\n${WRITE_SET_UNAVAILABLE_NOTE}` : '';
+      const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
       const target = new HostShellTarget(scope.root, { realm: planned.realm, timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
@@ -177,7 +135,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
-        const note = projectReadOnly && ran.exitCode !== 0 && planned.realm.containment !== 'host' ? `\n${PROJECT_READ_ONLY_NOTE}` : '';
+        const note = projectReadOnly && ran.exitCode !== 0 && planned.realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false),
@@ -190,18 +148,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
         // A run that did not finish (stopped, timed out, not started) leaves nothing to apply: its write set is discarded.
-        const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${WRITE_SET_DISCARDED_NOTE}` : '';
+        const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';
         if (ran && ran.status !== 'exited') {
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
           return { status: 'error', text: `${describeHostShellResult(planned.command, ran, planned.realm)}${ran.status === 'spawn-failed' ? ''
-            : discarded || '\n[deckent] the command was stopped; what it changed before that is unknown.'}`, cleanup: ran.cleanup };
+            : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}`, cleanup: ran.cleanup };
         }
-        const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
-          : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
-          : code === 'EFFECT_REJECTED' ? 'the command could not start'
-          : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
-          : typeof code === 'string' ? code : 'failed';
-        return { status: 'error', text: `[deckent] run_shell: error=${why}` };
+        return { status: 'error', text: describeShellEffectRefusal(code) };
       } finally {
         store.close();
         if (directory) await removeSandboxWriteSetDirectory(directory.dir);

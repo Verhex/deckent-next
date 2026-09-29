@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { AgentToolSpec } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
@@ -10,6 +11,13 @@ export const HOST_SHELL_TARGET_KIND = 'host-shell';
 export const HOST_SHELL_RUN_OPERATION = Object.freeze({ schemaVersion: 1 as const, operation: Object.freeze({ id: 'host.shell.run', version: 1 }),
   targetKind: HOST_SHELL_TARGET_KIND, effectClass: 'write' as const, approval: 'policy' as const, precondition: 'none' as const,
   compensation: null, inputMaxBytes: 65_536 });
+/**
+ * Effect identity of one agent shell call (Astra 2113): the turn, the call's position in it (model round, index in the response) and the
+ * exact arguments. A replay of the same call is the same C11 effect (never run twice); another call is another effect even with the
+ * same command and a provider call id reused across responses.
+ */
+export const agentShellEffectCommandId = (scopeId: string, turnId: string, execution: { readonly round: number; readonly index: number }, argsDigest: string) =>
+  createHash('sha256').update(`agent-shell-effect:2\0${scopeId}\0${turnId}\0${execution.round}\0${execution.index}\0${argsDigest}`).digest('hex');
 /** Longest command the tool accepts. */
 export const HOST_SHELL_COMMAND_MAX_CHARS = 16_384;
 

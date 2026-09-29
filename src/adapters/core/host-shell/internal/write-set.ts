@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { chmod, lstat, mkdir, open, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, posix } from 'node:path';
+import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, posix, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { EffectApprovalGate } from '#engine/index.js';
+import { normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, resolveProductLayout, type ProductLayout } from '#platform/index.js';
 
 /**
  * SHELL-OVERLAY bounds of one sandbox write set (fail closed: over any of them the whole set is refused, never partly applied): entries
@@ -291,4 +292,30 @@ export async function applySandboxWriteSet(input: { readonly scan: SandboxWriteS
     }
   }
   return report;
+}
+
+/**
+ * Where a call's write-set directories may live (SHELL-OVERLAY design §0.1, §3): the project data root's `fileEffects`, then the global state
+ * root's — the first private one whose real path neither holds nor sits inside the project (overlay layers may not nest). None → no write set.
+ */
+export async function sandboxWriteSetRoot(projectRoot: string, layout: ProductLayout, environment: Readonly<Record<string, string | undefined>>): Promise<string | null> {
+  const project = await realpath(projectRoot);
+  const outside = (path: string) => { const down = relative(project, path), up = relative(path, project);
+    return down !== '' && (down.startsWith('..') || isAbsolute(down)) && (up.startsWith('..') || isAbsolute(up)); };
+  const candidates: (() => Promise<string>)[] = [
+    async () => join(await prepareProductDirectory(layout, 'fileEffects'), 'sandbox-writes'),
+    async () => {
+      const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, environment), environment).stateDir;
+      return join(productResourcePath(resolveProductLayout({ projectRoot: global, root: global }), 'fileEffects'), 'sandbox-writes', createHash('sha256').update(project).digest('hex').slice(0, 16));
+    },
+  ];
+  for (const candidate of candidates) {
+    try {
+      const path = await candidate();
+      await mkdir(path, { recursive: true, mode: 0o700 });
+      const real = await realpath(path), info = await stat(real);
+      if (real === path && info.isDirectory() && (info.mode & 0o077) === 0 && info.uid === process.getuid!() && outside(real)) return real;
+    } catch { /* the next candidate */ }
+  }
+  return null;
 }

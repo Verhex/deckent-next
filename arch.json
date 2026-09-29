@@ -1382,7 +1382,10 @@
     "src/adapters/core/host-shell": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/shell-classification",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
       ],
       "plan": "SURFACES"
     },

@@ -1,4 +1,5 @@
 import type { ShellRealm, ShellRealmContainment, ShellRealmMode } from '#domain/index.js';
+import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
 import { runHostShell } from './run.js';
 
@@ -10,7 +11,7 @@ export const hostShellRealm: ShellRealm = Object.freeze({ kind: 'host', run: (re
 export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).';
 /**
  * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/
- * `projectReadOnly` the effect enforces (composition's `shellWritePosture(authority, tier, fullAccessTurn)`), plus whether the turn's
+ * `projectReadOnly` the effect enforces (`shellWritePosture(authority, tier, fullAccessTurn)`), plus whether the turn's
  * layout writes `.git` (and a worktree's common repository) — a full-access turn's layout only, and never under a read-only project.
  * Both sandbox realms build their actual view from this struct (`repositoryWritable` replacing each realm's own inline copy) and the
  * approval card describes it in words (`describeShellWritePosture`), so the boundary and its text can never drift apart.
@@ -28,7 +29,7 @@ export function sandboxWriteView(layout: Pick<ShellSandboxLayout, 'repositoryWri
  * The write posture of sandboxed work no card approves call by call (Astra 2170 R1): the write floor's existing paths are read-only (the
  * floor's matcher is required — a view without it is refused, fail closed), and the whole project is read-only (the scratch area and
  * bubblewrap's private `/tmp` stay writable) unless the work is the shell's narrow mutating set, whose literal targets passed the write
- * check. The one derivation of that posture: composition's `shellWritePosture` takes it for an unattended shell call, and a long-lived
+ * check. The one derivation of that posture: `shellWritePosture` takes it for an unattended shell call, and a long-lived
  * server takes it through `longLivedWritePosture`.
  * SHELL-OVERLAY variant (`writeSet`: a full-auto relaxation in a realm that keeps writes aside, never the narrow set): instead of the
  * read-only project the writes go to an overlay and are applied afterwards, each decided like an edit of its path; the floor's existing
@@ -46,6 +47,33 @@ export function unattendedWritePosture(narrowMutating: boolean, writeSet = false
  * and every card that describes it read this, never a copy.
  */
 export const longLivedWritePosture = () => unattendedWritePosture(false);
+/** Who stands behind one shell call at its effect, as the call decision decided it (`createAgentCallDecisions.execute`, typed, never read from
+ * text): the owner's card, the launched full-access mode (an audited `full-access-call`, MODES-3), a full-auto mode relaxation (an audited
+ * `permission-mode` event of mode full-auto: nobody approved the call, the person's mode did — SHELL-OVERLAY), or nobody (a silent or
+ * standing-approved call). */
+export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' | 'unattended';
+/**
+ * The one derivation of a sandboxed call's write posture (SHELL-AUTONOMY, Astra 2170 R1, MODES-3; owner 2026-09-29: full access is
+ * comprehensive). The realm reads it with the turn's layout: its write floor (the approval floor; in a full-access turn only the
+ * configuration file) and `.git` (writable only in a full-access turn, never under a read-only project).
+ * - owner-approved: the project writes, the write floor included;
+ * - full-access: the project, the write floor and `.git` write; the configuration file stays read-only (the layout's floor in that turn);
+ * - unattended, the narrow mutating set: the project writes, the write floor's existing paths read-only (its literal targets passed the
+ *   write check);
+ * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
+ *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
+ *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
+ * The unattended rule itself is `unattendedWritePosture` (above), which a long-lived MCP server's view also takes (C5); its `writeSet`
+ * variant is SHELL-OVERLAY's full-auto posture (the project's writes kept aside and applied like edits).
+ */
+export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean,
+  writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean } {
+  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false };
+  if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false };
+  // Everything else is the one unattended derivation (shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
+  // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
+  return unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn, authority === 'full-auto' && writeSets && !fullAccessTurn);
+}
 /**
  * The write part of a sandbox realm's approval-card posture, in words, from `ShellSandboxWriteView` alone — never a second decision a
  * realm could compute differently from the view it actually enforces. A realm's own text wraps this with its provider-specific

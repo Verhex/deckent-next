@@ -7,7 +7,8 @@ import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { createAgentCallDecisions, shellWritePosture, type ShellCallAuthority } from '#composition/core/agent-turn/index.js';
+import { createAgentCallDecisions } from '#composition/core/agent-turn/index.js';
+import { shellWritePosture, type ShellCallAuthority } from '#adapters/index.js';
 
 // T-L4 slice 4a (MODES-3: a bindings v2 `auto-edit` entry reads as standart, `ask` as standart that asks for every edit too): the turn's
 // permission decision is taken again at the effect on the policy as it is then. A relaxation writes its audit

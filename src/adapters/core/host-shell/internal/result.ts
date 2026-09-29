@@ -1,4 +1,5 @@
 import type { ShellRealmResult as HostShellResult } from '#domain/index.js';
+import { HOST_SHELL_RUN_OPERATION } from './target.js';
 
 /**
  * What the result says about processes the command left behind (Astra 2124), within the host shell's process-group contract:
@@ -23,4 +24,26 @@ export function describeHostShellResult(command: string, result: HostShellResult
   return `[deckent] run_shell: ${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
     + (notice ? `\n${notice}` : '')
     + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
+}
+
+/** The agent-facing notes a shell call's result may carry beyond the run itself (its write posture and how it ended). */
+export const HOST_SHELL_NOTES = Object.freeze({
+  /** Told to the model when an unattended run failed with the project read-only (so it changes files another way, not by retrying). */
+  projectReadOnly: '[deckent] the project was read-only for this unattended run: change project files with the edit tools, or with a command the owner approves.',
+  /** SHELL-OVERLAY: a full-auto call whose writes could not be kept aside (no private directory outside the project) ran read-only. */
+  writeSetUnavailable: '[deckent] write set: unavailable here (no private directory outside the project); the project was read-only for this run.',
+  /** SHELL-OVERLAY: a run that was stopped kept its writes aside; none of them reached the project. */
+  writeSetDiscarded: '[deckent] the command was stopped; what it changed was kept aside and not applied (the project is unchanged by it).',
+  /** A run stopped in a posture that wrote directly: what it changed is not known. */
+  stoppedUnknown: '[deckent] the command was stopped; what it changed before that is unknown.',
+});
+
+/** The agent-facing result of a shell call whose effect produced no run (policy, approval, not started): its typed code in words. */
+export function describeShellEffectRefusal(code: unknown): string {
+  const why = code === 'POLICY_DENIED' ? `denied by policy (operation ${HOST_SHELL_RUN_OPERATION.operation.id})`
+    : code === 'EFFECT_APPROVAL_REQUIRED' ? 'the command needs an approval that was not given'
+    : code === 'EFFECT_REJECTED' ? 'the command could not start'
+    : typeof code === 'string' && code.startsWith('APPROVAL_') ? `the approval for this call could not be verified (${code}); nothing was run`
+    : typeof code === 'string' ? code : 'failed';
+  return `[deckent] run_shell: error=${why}`;
 }

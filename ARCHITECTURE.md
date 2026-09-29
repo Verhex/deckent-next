@@ -1262,7 +1262,7 @@ owner did not approve at its card — a mode relaxation, a standing approval, a 
 sense of the postures below.
 **Shell write postures (Astra 2170 × MODES-3, lead merge 2026-09-29).** A sandboxed shell call's write posture is derived once, at the
 effect, from who stands behind the call (the call decision hands the effect a typed authority `owner-approved | full-access |
-unattended`, never text) and the planned tier (`shellWritePosture`, composition agent-turn):
+unattended`, never text) and the planned tier (`shellWritePosture`, host-shell, beside `unattendedWritePosture`):
 - **owner-approved** (the owner's card): the project writes, the write floor included; `.git` stays read-only except in a full-access turn.
 - **full-access** (an audited `full-access-call` of a turn launched in full access while the company grant holds; owner 2026-09-29: full
   access is comprehensive and owner-authorized by the mode): the project, the write floor (existing and new names) and `.git` (and a
@@ -1282,7 +1282,7 @@ the `.deckent/**` floor of a narrow unattended call and the full-access configur
 held). MCP server starts — in a turn and from the CLI (trust, health, restart) — build the same layout with the write floor
 (`writeFloor` is required on `ShellSandboxLayout`); both realms refuse a read-only-floor request whose layout carries no matcher (fail
 closed, the server does not start). MCP server views take the unattended posture with the whole project read-only (C5, owner 2026-09-29, until
-SHELL-OVERLAY): one derivation, host-shell `unattendedWritePosture(narrowMutating)` — composition's `shellWritePosture` takes it for
+SHELL-OVERLAY): one derivation, host-shell `unattendedWritePosture(narrowMutating)` — host-shell's `shellWritePosture` takes it for
 unattended shell calls, `longLivedWritePosture()` (not narrow) for a long-lived server; the bubblewrap launch binds the project
 `--ro-bind`, keeps the floor's matcher required (fail closed) and returns the write view it enforces, from which the launch and tools
 cards say "the project is read-only, .git included" and that `realm: host` lets a server write. A sandboxed server therefore creates no
