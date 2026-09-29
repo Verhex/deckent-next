@@ -89,8 +89,13 @@ it('a terminal gets a no-echo prompt on stderr: raw mode on, backspace edits, En
   expect(calls).toEqual([{ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'synth' }]);
   expect(typed.modes).toEqual([true, false]);
   expect(err.text()).toContain('PROVIDER_TOKEN'); expect(out.text() + err.text()).not.toMatch(/syn|nX|th/u);
+  // A pasted multi-byte character split across two reads is one character, not two replacement characters.
+  const bytes = Buffer.from('şé', 'utf8'), split = tty([]);
+  setImmediate(() => { split.write(bytes.subarray(0, 1)); split.write(bytes.subarray(1, 3)); split.write(bytes.subarray(3)); split.write('\r'); });
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN'], { root: f.root, env: f.env, stdin: split, stdout: capture().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
+  expect(calls.at(-1)).toEqual({ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'şé' });
   const cancelled = tty(['abc', '\x03']), cancelErr = capture();
   expect(await main(['secret', 'set', 'PROVIDER_TOKEN'], { root: f.root, env: f.env, stdin: cancelled, stdout: capture().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
-  expect(cancelled.modes).toEqual([true, false]); expect(calls).toHaveLength(1);
+  expect(cancelled.modes).toEqual([true, false]); expect(calls).toHaveLength(2);
   expect(cancelErr.text()).toContain('SECRET_INPUT_CANCELLED'); expect(cancelErr.text()).not.toContain('abc');
 });

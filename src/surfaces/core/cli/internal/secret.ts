@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 import { ErrorRegistry, emit, formatValue, loadConfig, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { isSecretName } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
@@ -48,13 +49,14 @@ async function readPiped(stdin: Input): Promise<string> {
  */
 function readHidden(stdin: Input, stderr: Sink, name: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    let value = '';
+    // A multi-byte character split across two reads stays one character.
+    let value = ''; const decoder = new StringDecoder('utf8');
     const finish = (error: unknown, result?: string) => {
       stdin.off('data', onData); stdin.setRawMode?.(false); stdin.pause(); stderr.write('\n');
       if (error) reject(error instanceof Error ? error : new Error(String(error))); else resolve(result ?? '');
     };
     const onData = (chunk: Buffer | string) => {
-      for (const char of String(chunk)) {
+      for (const char of typeof chunk === 'string' ? chunk : decoder.write(chunk)) {
         if (char === '\r' || char === '\n') { finish(null, value); return; }
         if (char === '\u0003') { finish(ErrorRegistry.createError('SECRET_INPUT_CANCELLED')); return; }
         if (char === '\u0004') { if (!value) { finish(null, value); return; } continue; }
