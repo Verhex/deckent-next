@@ -81,12 +81,31 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   - Gerçek ikili e2e `kernel-config` SECRET-K1 birleşmesinden beri kırmızıydı (`doctor --json` anahtar listesinde `secretStore` yok) →
     beklenti güncellendi (anahtar, varsayılan env deposu raporu, tr insan satırı); e2e 4 dosya + SDK envanteri 22/22.
 
+## On birinci parti (`integrate/2026-09-29-l`, worktree `/home/alperen/deckent-next-integrate-l`, taban `0a69a70` = onuncu parti adayı)
+- Birleşenler (`--no-ff`): MCP-SCHEMA-VALIDATOR `5330cb7e` (kendi JSON Schema doğrulayıcımız cf-worker'ın yerine; arch.json kenarı), BWRAP-SELECT `e194b344`
+  (launcher seçimi, gömülü bwrap 0.13, `ShellCapabilities` v2, paketleme, CI iş tanımı). Ayrıntı ve açık owner maddeleri PLAN "On birinci parti".
+- Entegrasyon: Astra 2177 kopya testi kendi doğrulayıcıya uyarlandı; SHELL-OVERLAY yazım kümesi `launcher.overlay` ile **üretimde etkin** (Astra 2170 duruş
+  testlerinin bwrap full-auto kolu yazım kümesi sonucuna güncellendi); test altyapısı `77d0d2f9` (build gömülü bwrap'ı aşamalar, gerçek-sandbox guard testi,
+  vitest geçici `DECKENT_GLOBAL_HOME`); Astra 2180 R2 testi `e1380841` (0a69a70'te kırmızı, burada yeşil; uyarlama notu proof'ta); belge commit'i.
+- Doğrulama (tam verify değil, lead koşacak): typecheck 0; eslint değişenlerde 0 hata (önceden var 3 uzunluk uyarısı); lint-arch 0 ihlal 0 uyarı; `npm run build` ✓
+  (`bubblewrap=staged from .pack/bwrap/s6-check`, dist kopyası sha `917f8e7f…` = kilit); hedefli vitest (VITEST_MAX_FORKS=2, FORCE_COLOR yok, Docker imajı
+  değişkeni) 59 dosya **775/775, 0 atlanan**, `~/.deckent` değişmedi; overlay kanıtı: `runtime-shell-overlay.test.ts` üretim sandbox listesi ve servisin
+  kendi ölçümüyle (`write set: applied 6`), `shell-overlay-write-set.test.ts` seçilen launcher ile + overlay'siz ölçülen launcher'ın yazım kümesi isteğini
+  reddettiği negatif durum; guard negatif kanıtı: aşamasız 1 başarısız ("/usr/bin/bwrap 0.9.0 < 0.12.0"). build-dist `--bwrap` → `bubblewrap.shipped: true`,
+  tarball'da `linux-x64/bwrap` 0755 + NOTICE/lisans/kaynak, cf-worker/ajv kodu yok (yalnız vendored d.ts yorumları); paketlenmiş dist'ten seçim: `bundled`,
+  `overlay: true`, kopya 0500; pack-smoke Node 24.21 ✓ ve 26.10 ✓. `deps-watch` (güncellenmiş kayıtla) çıkış 0, HIGH 0, MITIGATED 16.
+- Bilinen sınırlar: AppArmor `restricted` yolu gerçek Ubuntu'da ölçülmedi; CI `bwrap-bundle.yml` koşmadı; ana `ci.yml` bwrap aşamalamıyor (guard kısıtsız
+  koşucuda düşer); seçilen launcher denemesi düşerse sıradaki adaya geçilmez; MCP sunucu görünümü hâlâ salt okunur (overlay MCP yolu sonraki dilim);
+  `format` artık yalnız açıklama; `.pack/bundled-aside` (gitignore) test artığı, owner silebilir.
+
 ## Sıradaki
 1. Push adayı `9a3ef2c` (dokuzuncu parti, H+I+J): Astra 2179 incelemesi → PASS'te push.
-2. Onuncu parti (bu dal): tam verify → Astra → PASS'te push.
+2. Onuncu parti (`integrate/2026-09-29-k`): tam verify → Astra → PASS'te push.
+2a. On birinci parti (`integrate/2026-09-29-l`): lead lane/shell-overlay Astra 2180 R1 düzeltmesini birleştirir → tam verify (gömülü bwrap aşamalı) →
+   Astra → PASS'te push.
 3. DEPS-P0 ilk push'tan sonra başlar.
 4. Owner kararları: PLAN "Onuncu parti" açık kararları (secret set|delete yetkisi A/B/C — lead önerisi A; SHELL-OVERLAY O1/O3/O5/O6/O7;
-   JSON Schema doğrulayıcısı + ReDoS — MCP-SCHEMA-VALIDATOR şeridi sürüyor; DEPS-SCHEMA C1 kanıtı) ve sabah listesi
+   JSON Schema doğrulayıcısı + ReDoS — on birinci partide kapandı, yerine `format` / şema korpusu ölçümü / AppArmor / CI maddeleri; DEPS-SCHEMA C1 kanıtı) ve sabah listesi
    `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları; MCP sandbox seçenekleri B/C/D/E
    + tur başı `notice` olayı (v18); DEPS-DIST yayın engelleri (LICENSE, gömülü lisans metinleri) ve DEPS-DIST-B1; ANTHROPIC ilk faturalı duman
    çağrısı ve legacy tarifeler; fast-uri kabul edilmiş riski (2026-10-29); canlı geçiş).

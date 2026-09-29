@@ -38,6 +38,7 @@
     "worker:image": "node assets/worker-image/build.mjs",
     "build": "node scripts/build.mjs",
     "build:terminal-tokens": "node scripts/build-terminal-palette.mjs",
+    "build:bwrap": "node scripts/build-bwrap.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"npm run typecheck\" \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\"",
     "test": "vitest run",

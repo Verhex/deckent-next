@@ -950,22 +950,43 @@ it), the last summary, the three largest items and a `/new` suggestion at ≥ 60
 decision), redrawing an open suggestion list when the index refreshes.
 
 **Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
-`terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process (bwrap
-on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures `unknown`, nothing installed). Sandbox
+`terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process
+(`ShellCapabilities` v2, BWRAP-SELECT): the bubblewrap launcher is selected and run once (below), the user namespace via a short-lived
+native helper, the Landlock ABI; 2.5 s bound, failures `unknown`, nothing installed. The bubblewrap observation is `{ status, launcher,
+rejected, restriction, detail }` — `available` only when the selected launcher's own sandbox run succeeded, `restricted` (typed, with the
+fix) when that run met a user-namespace restriction; every rejected candidate is named. PATH is never read for the launcher. Sandbox
 mechanisms are realm providers (`ShellSandbox.usable(capabilities)` → realm, result marker, a posture function of the call's write view, a notice when the posture
 falls short — or why not), taken in preference order from a code-only composition port (`RuntimeServicePorts.shellSandboxes`; shipped
 list **bubblewrap, then Landlock**). `host` → host (result bytes unchanged); a sandbox mode → the first usable provider; none usable →
 `require-sandbox` refuses before any plan, approval or effect (`SHELL_SANDBOX_UNAVAILABLE`), `prefer-sandbox` runs on the host and says
 so in the approval preview, the live stream, the model result and the finished line (`sandbox: none; running on host (bubblewrap: …;
-landlock: …)`) — never a silent fallback; macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
+landlock: …)`) — never a silent fallback; a preferred mechanism the host restricts (bubblewrap under AppArmor) is a visible fallback too:
+`[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: …; <fix>)` leads the resolution notice (live stream, model result) and
+follows the winning provider's posture (approval card); macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
 bubblewrap | landlock | degraded | none`; only trusted metadata, never command output); the approval card renders that posture against the same `shellWritePosture` result the effect enforces (always `owner-approved` once a card exists; `sandboxWriteView` in `host-shell`), so its project, write-floor and `.git` wording cannot drift from the boundary (host and the no-sandbox fallback keep a fixed text).
 Both sandbox launchers go through the host shell's one process runner (`ShellLaunch`: program, argv ending in `bash --noprofile --norc
 -c`, optional fd 3 setup-failure channel), so the process-group, cancellation, timeout, output-bound and cleanup contract is the same
 everywhere; a realm that cannot set itself up refuses the call (`spawn-failed` → effect `refused`, the reason is the result: "nothing
 was run"), never runs on the host instead.
-**Bubblewrap realm (S9).** `adapters/core/shell-sandbox-bwrap`: `bwrap … -- bash` with the launcher verified at a known path
-(`/usr/bin/bwrap`, `/usr/local/bin/bwrap`, `/bin/bwrap`: regular executable not writable by group/others; PATH never consulted for it),
-usable only with `bubblewrap` and `userNamespace` both measured `available`. View per call: `--unshare-all` (network included; the
+**Bubblewrap realm (S9).** `adapters/core/shell-sandbox-bwrap`: `bwrap … -- bash` with the launcher the probe selected
+(BWRAP-SELECT, owner S1–S3/S6 2026-09-29, eleventh batch): first a system file at `/usr/bin/bwrap`, `/usr/local/bin/bwrap` or `/bin/bwrap`
+(merged `/usr` tried once by canonical path) that is a regular executable, not a symbolic link, root-owned, not writable by group/others,
+without setuid/setgid, in root-owned directories not writable by group/others up to `/`, whose `--version` is at least **0.12.0**
+(GHSA-pxhw-h44j-8pfx / CVE-2026-87766; a distribution backport is not recognized); otherwise the **bundled build**
+(`dist/adapters/core/shell-sandbox-bwrap/bundled/linux-<arch>/bwrap`, resolved from the module URL): its bytes are read once, must hash to
+`BUBBLEWRAP_BUNDLED` (generated from `packaging/bwrap/bwrap.lock.json`), and the same bytes are written to `<global state
+root>/bin/bwrap-<sha256>` (0700 directory, 0500 file, temporary + fsync + rename; an existing copy is reused only when ours, single-link and
+verifying) — that copy is what runs, so an npm install under umask 002 (package file 0775) is not a problem and the package tree's
+permissions are not trusted. PATH never consulted. The probe runs the selected launcher once (`--unshare-all --die-with-parent --new-session
+--ro-bind / / --proc /proc --dev /dev -- /bin/true`, env empty, 1 s); the realm is usable only when that run succeeded, and on every use the
+launcher file must still be the measured one (`dev:ino:size:mtimeNs:ctimeNs`; the bundled copy is re-hashed when its identity moved, a
+changed system file needs a service restart). A launcher inside the project or the scratch area (a state root pointed there) is refused: a
+sandboxed command could replace it. `launcher.overlay` (≥ 0.11.0) is what SHELL-OVERLAY reads. Bundled 0.13.0 is built with
+`-Dassume_kernel=5.15.0` (owner S6: minimum kernel 5.15). Development and tests: `npm run build` stages the locked build into the gitignored
+`src/…/bundled/` from a verifying build-bwrap output (`DECKENT_BWRAP_BUILD` or `.pack/bwrap/*`) and says loudly when none exists;
+`bwrap-real-sandbox-guard.test.ts` fails a Linux host with open user namespaces that selected no working launcher with overlay (the
+bubblewrap tests would otherwise skip); vitest gives every worker a temporary `DECKENT_GLOBAL_HOME`, so the realized copy never lands in
+the owner's `~/.deckent/bin`. View per call: `--unshare-all` (network included; the
 fetch tool is the only egress), `--die-with-parent`, `--new-session`, fresh `/proc`, minimal `/dev`, `/tmp` and HOME as 64 MiB tmpfs
 (HOME never bound: `~/.ssh`, tokens, a ledger under HOME invisible), system prefixes read-only by allowlist (`/usr /etc /bin /sbin
 /lib* /opt /snap /nix /sys`; never `/`, `/mnt`, `/run`, `/var`, `/home`), PATH program directories (`bin`/`.bin`/`sbin` by name; a
@@ -1009,9 +1030,12 @@ directories are not scanned, so a `node_modules/pkg/.env` is readable and a nest
 sessions, audit, keys — every resource but the configuration, TERM-FEEDBACK-1) is closed in the sandbox in every layout, an ignored
 ancestor included (Astra 2162: the deny list's nested literal heads are `WorkspaceScope.protectedAnchors`; an ignored directory holding
 one is listed, its denied entries masked and only the ancestors entered — siblings stay unscanned; a symbolic link on that chain
-refuses the call; a `.gitignore` change cannot lift this); user-namespace-restricted hosts (AppArmor) not measured (the probe's
-`unavailable` makes the realm unusable); the availability gate is the probe's PATH scan while the launcher comes from known paths (a
-service PATH without `/usr/bin` → unusable, fail-closed); `--die-with-parent` should also end a sandboxed command when the service dies
+refuses the call; a `.gitignore` change cannot lift this); AppArmor-restricted Ubuntu (24.04 with the restriction on, 25.04+) is typed
+`restricted` from the launcher's own run and falls back to Landlock visibly; this machine (WSL2) has no restriction sysctl, so that path is
+unit-tested, not measured here; a selected launcher whose run fails is not replaced by the next candidate; between the per-use identity
+check and `spawn` the copy can be swapped by the same user (0700 directory: no other principal; fd-exec not used); aarch64 is built but not
+shipped until a real arm64 realm test (lock `shipArches`); `/bin/true` is the probe's command (a distribution without it reads
+`unavailable`, with the reason); `--die-with-parent` should also end a sandboxed command when the service dies
 (candidate for the "Host shell execution" orphan item) — untested.
 **Landlock realm (S11).** Second provider (chosen when bubblewrap is not usable): each call builds a rule set from a fresh scan of the
 project (`host-shell/internal/landlock.ts`) and runs bash through the native helper `shell-sandbox`
@@ -1292,8 +1316,8 @@ has no OS boundary for any posture.
 **Sandbox write set (SHELL-OVERLAY, owner 2026-09-29: the permanent C5 fix for the shell; `f906c31` + `57bdbf1`, merged with C5-MCP-RO in
 `ee854a8`, tenth batch).** The write set is the `writeSet` variant of host-shell `unattendedWritePosture`, the one unattended derivation. A shell
 call a full-auto relaxation let run (`ShellCallAuthority 'full-auto'`: an audited `permission-mode` event of mode full-auto; tier past the
-narrow set) in a realm that can keep writes aside (`ShellRealmResolution.writeSets`: bubblewrap whose launcher reports ≥ 0.11 —
-`bubblewrapHasOverlay`, `--version` read once per file identity) runs with the project as an overlay (`--overlay-src P --overlay <upper> <work>
+narrow set) in a realm that can keep writes aside (`ShellRealmResolution.writeSets`: bubblewrap whose selected launcher has the overlay
+options — `launcher.overlay` from the probe's version reading, ≥ 0.11.0; BWRAP-SELECT merge, eleventh batch) runs with the project as an overlay (`--overlay-src P --overlay <upper> <work>
 P`; `.git`, the floor's existing paths and the deny masks are bound over it as before). The upper/work directories are Deckent's own (0700;
 host-shell `sandboxWriteSetRoot`: the project data root's `fileEffects/sandbox-writes`, else the global state root's; the first whose real path
 neither holds nor sits in the project — bubblewrap: overlay layers may not nest; none → the read-only posture with a result note). When the
@@ -1313,7 +1337,10 @@ removed after every call, and a crashed service's leftovers are swept (never app
 Owner-approved, full-access, narrow-set and standart postures are unchanged. Cost (this machine): overlay mount +4 ms per call, native listing
 6 ms / 200 entries, **≈ 85–95 ms per applied entry** (measured split: ≈ 79 ms the entry's C11 effect — ledger intent/settle at full
 durability, journal and file fsyncs —, ≈ 16 ms its sealed audit event; 100 files ≈ 9 s; the same class as one edit per file) — open (O6/O7).
-Production: dormant until the bundled bwrap is selected (BWRAP-BUNDLE S1/S2/S7); the system bwrap here is 0.9.0. MCP servers: same mechanism,
+Production: **active** wherever the selected launcher has overlay — the bundled 0.13 (or a system ≥ 0.12); on this machine the system 0.9.0 is
+rejected and the bundled copy is selected, so a full-auto relaxation's writes now go through the write set (measured end to end through the
+production sandbox list and the service's own measurement, `runtime-shell-overlay.test.ts`; without a `workspace.file.write` grant every
+entry is "not applied … (denied by policy)" and `.git` stays read-only inside the overlay view). MCP servers: same mechanism,
 checkpoint = server stop at the end of a turn whose server wrote (design §10), later slice; until then C5-MCP stays open (read-only view above).
 **Full access (MODES-3).** A turn is full access only when `chatTurn.fullAccess: true` (protocol v17) — set by the terminal launched with
 `deckent --full-access` / `deckent terminal --full-access` or by the person's stored start mode `full-access` — and only while a company
@@ -1450,6 +1477,14 @@ format-preserving extension (`.d.cts`→`.cjs`, `.d.mts`→`.mjs`). Only `node:`
 gate: `smoke:dist --types` over TypeScript 5.9/6.0(/7.0) × NodeNext/Bundler with `skipLibCheck: false` and a consumer that uses values,
 derived types (proved non-`any` with `@ts-expect-error`) and a hand-written Standard Schema. Publication stays gated on LICENSE (DEPS-P0) and
 the missing license texts of shipped components.
+**Bundled bubblewrap (BWRAP-SELECT, owner S4/S5 2026-09-29, eleventh batch).** The package ships the bundled bubblewrap of the lock's
+`shipArches` (today x86_64) under `dist/adapters/core/shell-sandbox-bwrap/bundled/` with `NOTICE-bubblewrap.txt`, `licenses/` and `source/`
+(the 0.13.0 tarball, `build.sh`, `bwrap.lock.json`: LGPL-2.1 §4 corresponding source, owner S4). `build-dist --bwrap <build-bwrap output>`
+stages it; a bundle that is not exactly the locked build is a `publishable` blocker. The SBOM lists it as
+`pkg:generic/bubblewrap@0.13.0?download_url=…&checksum=sha256:…` (application, binary SHA-256, source-distribution reference) with the
+statically linked `pkg:apk/alpine/{musl,libcap,gcc}` nested; THIRD-PARTY-NOTICES carries its notice. The binary is built in CI
+(`.github/workflows/bwrap-bundle.yml`, check mode; not yet run), never committed, never downloaded at install (owner S5). deps-watch reads
+`containers/bubblewrap` GitHub security advisories against the bundled version and the minimum system version.
 **SDK surface (DEPS-TYPES, owner 2026-09-29 DEPS-SCHEMA C2-b).** `src/index.ts` is an explicit export list; no layer barrel is re-exported
 wholesale. The reviewed inventory `tests/contracts/composition/sdk-public-exports.json` (TypeScript checker over `src/index.ts`, names with
 value/type kind) is the contract; a change needs `node scripts/sdk-exports.mjs --write` and, for a removal, a CHANGELOG BREAKING line. Live
@@ -1487,6 +1522,8 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-29 | `ShellCapabilities` v1 → v2 (BWRAP-SELECT, owner S7): `bubblewrap` is the selected launcher's observation (`{ status, launcher, rejected, restriction, detail }`) instead of a PATH-scan status; `schemaVersion: 2`. In-process type, pushed at S5, so versioned (not amended in place); every caller moved in the same change. SHELL-OVERLAY reads `launcher.overlay`. | Launcher selection (system ≥ 0.12 → bundled 0.13) makes the observation richer than a status; overlay becomes active in production. |
+| 2026-09-29 | MCP tool schemas are validated by Deckent's own bounded JSON Schema validator (`src/platform/core/validate`); the SDK's @cfworker/json-schema and ajv are neither used nor shipped (MCP-SCHEMA-VALIDATOR). | Owner "problematic dependencies are not accepted": cf-worker maintenance stagnation, ReDoS in `pattern`, fail-open `$dynamicRef` (Astra 2180 R2). |
 | 2026-09-29 | Tenth batch keeps `src/composition` within its 5500-line budget by moving pure host-shell responsibilities to their owning adapter unit, byte-identical: `shellWritePosture` + `ShellCallAuthority` (beside `unattendedWritePosture`), `sandboxWriteSetRoot`, `agentShellEffectCommandId` and the shell result notes/effect-refusal text into `adapters/core/host-shell`; composition keeps the EffectApplication wiring. 5510 → 5432 lines. | FASTURI-OUT, DEPS-TYPES, SECRET-K1 and SHELL-OVERLAY together passed the budget by 10 lines; the 2026-09-28 FOUNDATION rule answers pressure by moving responsibility, not by raising the budget. |
 | 2026-09-29 | SECRET-K1: `SecretStore` port + backend registry; env default, explicit installation-only file backend; one production resolver at every credential read site. | Owner keyring option B, S1/S2/S5; `secret set|delete` authority checkpoint open (PLAN). |
 | 2026-09-29 | Seventh batch keeps `surfaces/core/terminal` within the 2000-line unit budget by moving two dependency-free presentation pieces: the approval-card key mapping (`decisionKey`, `scopedDecisionKey`, `StandingScope`) to `terminal-kit` and `ArrowPicker` to `terminal-render`; `terminal` re-exports the key mapping unchanged. | MODE-UX, PERSISTENT-APPROVALS, `/mcp` and TERM-UX-1 together passed 2000 (2020, then 2041). No budget raise; the next terminal feature splits the unit by responsibility (e.g. a session unit), as TERM-UX-1 noted. |
@@ -2039,22 +2076,33 @@ service replaces the process on next use) and remove. The compiled `deckent-mcp`
 pinned-2026 modes (`mcp-eras-process.test.ts`).
 A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's existing paths read-only (third-party code that no card approves
 call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
-The pool builds the SDK `Client` with `jsonSchemaValidator: new CfWorkerJsonSchemaValidator()` (`@modelcontextprotocol/client/validators/cf-worker`,
-interpreter-based @cfworker/json-schema 4.1.1; MCP-VALIDATOR 2026-09-29): a server's `outputSchema` is untrusted input and never reaches the ajv 8.18 +
-fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the development tree still loads it with
-the SDK). Since FASTURI-OUT (tenth batch) the published package does not contain that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one
-`ajvProvider` import turned into a stub that throws `DeckentRemovedValidatorError` (`MCP_DEFAULT_VALIDATOR_REMOVED`); the build fails when the stub
-is not applied or when ajv/ajv-formats/fast-uri/json-schema-traverse appear in the metafile, the shipped packages or the embedded components. The
-only JSON Schema validator Deckent ships is the SDK's cf-worker interpreter; every SDK `Client` and `Server` is built with `jsonSchemaValidator`
-(contract test `tests/contracts/surfaces/mcp-json-schema-validator.test.ts`). Open: a remote `outputSchema.pattern` is compiled and run
-synchronously (ReDoS: the server controls schema and instance; measured 1.4 s at 27 characters, cf-worker and ajv alike) — lane
-MCP-SCHEMA-VALIDATOR (own bounded validator) is in progress. Every `tools/call` carries the pinned
+The pool builds the SDK `Client` with `jsonSchemaValidator: new DeckentJsonSchemaValidator()` (Deckent's own validator,
+`src/platform/core/validate`; MCP-SCHEMA-VALIDATOR, eleventh batch, owner 2026-09-29 "problematic dependencies are not accepted"): a server's
+`outputSchema` is untrusted input and reaches neither the ajv 8.18 + fast-uri 3.1.0 copy bundled inside SDK 2.2.0 nor the SDK's
+@cfworker/json-schema provider (MCP-VALIDATOR, seventh batch, had used cf-worker). The validator implements the SDK's synchronous
+`jsonSchemaValidator` provider shape for JSON Schema 2020-12 (default, SEP-1613) and draft-07 (draft-06 read as draft-07): the whole reachable
+schema compiles eagerly into closures (no code generation, the schema is never written); `$ref` resolves only inside the document; everything
+not implemented exactly is a typed compile-time refusal (`JsonSchemaRefusal`: `$dynamicRef`/`$recursiveRef`/`$vocabulary`, embedded `$id`,
+remote or relative `$ref`, unknown and cross-dialect keywords, 2019-09 and other dialects, in-place `$ref` cycles, backreference/lookaround
+patterns, size limits) — the pool then refuses the call before sending (`invalid-output-schema`; Astra 2180 R2: a `$dynamicRef` schema that
+cf-worker ignored and answered fail-open is now refused, `astra-2180-dynamic-ref.test.ts`; recursion through a plain `$ref` validates).
+`pattern`/`patternProperties` run on a linear-time Thompson-NFA engine (single-code-point atoms keep V8's u-mode meaning), so a server
+controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Validation is bounded by
+a weighted step budget (5 000 000 ≈ 50 ms on the calibration machine) and instance/evaluation depth; an exhausted bound is `valid: false`
+(fail closed; the SDK reports -32602, `kind: 'output-schema'`, answered, never re-sent). `format` is an annotation unless a checker is
+registered (none in Deckent's wiring) — a relaxation against cf-worker, which asserted formats (owner item in PLAN). The development tree still
+installs the SDK's bundled ajv/fast-uri copy (not loaded by Deckent). Since FASTURI-OUT (tenth batch) the published package does not contain
+that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one `ajvProvider` import
+turned into a stub that throws `DeckentRemovedValidatorError` (`MCP_DEFAULT_VALIDATOR_REMOVED`); the build fails when the stub is not applied
+or when ajv/ajv-formats/fast-uri/json-schema-traverse or @cfworker/json-schema appear in the metafile, the shipped packages or the embedded
+components. Every SDK `Client` and `Server` is built with Deckent's validator (contract test
+`tests/contracts/surfaces/mcp-json-schema-validator.test.ts`). Every `tools/call` carries the pinned
 definition (MCP-PIN-DEF, eighth batch, Jev 12e80d38, 2026-09-29): the pool keeps, per listing, the frozen digest-covered projection of each tool
 (name, title, description, input/output schema, annotations — nothing unpinned reaches the SDK) and passes a fresh copy as
 `callTool(..., { toolDefinition })` (SDK ≥ 2.2). The SDK then neither consults its response cache nor re-lists, so a HEADER_MISMATCH
 (-32020, SEP-2243) is answered as a typed error (`kind: 'header-mismatch'`) and never re-sent (C11; a deliberate deviation from spec
 2026-07-28's "SHOULD re-list and retry" — a retry is a new call with a new decision; a changed definition is re-pinned with
-`deckent mcp approve`). structuredContent is validated with the cf-worker validator against the pinned outputSchema (MCP SHOULD): a result
+`deckent mcp approve`). structuredContent is validated with Deckent's validator against the pinned outputSchema (MCP SHOULD): a result
 that does not conform, or is missing where an outputSchema is declared, is an answered -32602 error (`kind: 'output-schema'`; the SDK raises
 -32600 for "missing", normalized to -32602) — the server answered, so the effect may have happened: the C11 record settles as answered, the
 call is never retried and the model is told the result was withheld. A pinned outputSchema the validator cannot compile is refused before
@@ -2063,7 +2111,8 @@ SDK's post-send checks relies on SDK 2.2.0's message texts (a changed text degra
 tripwire: the `mcp-client.test.ts` -32602 cases). Not yet: a tool with an uncompilable pinned outputSchema is still offered (refused per
 call, not marked `unmappable` at open); with `toolDefinition` the SDK also scans the pinned inputSchema for `x-mcp-header` on every
 modern-era call (headers are ignored on stdio; untested path). The MCP server side validates schemas only in
-`elicitInput`, which Deckent does not use.
+`elicitInput`, which Deckent does not use. The MCP server is given the same validator (`createMcpServer`); every `tools/list` inputSchema
+Deckent publishes compiles with it (contract test).
 **Send authority (MCP-REVOKE, Astra 2174–2176, 2026-09-29).** A one-shot approval of a tool call never stands in for the server's trust.
 `McpToolTarget` (the one dispatch owner) requires an `admit` authority that `pool.call` asks last — after the approval wait and every local
 pre-send check, right before the request is handed to the SDK. `mcpSendAuthority` re-reads both registry files and the scope's trust record

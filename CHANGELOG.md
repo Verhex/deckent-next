@@ -4,6 +4,18 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SECURITY (MCP-SCHEMA-VALIDATOR): MCP tool schemas are validated by Deckent's own bounded JSON Schema validator with a linear-time
+  pattern engine; the MCP SDK's @cfworker/json-schema (and ajv) are neither used nor shipped. Unsupported schema features (for example
+  `$dynamicRef`, which cf-worker silently ignored) are refused before a tool call is sent. `format` is now an annotation (cf-worker asserted it).
+- ADDED (BWRAP-SELECT): the shell sandbox selects its bubblewrap launcher — a root-owned system bwrap ≥ 0.12.0, otherwise the bundled,
+  hash-verified bubblewrap 0.13.0 (x86_64; built reproducibly in CI, run from a verified copy under the global state root). A host that
+  restricts user namespaces with AppArmor falls back to Landlock visibly, with the fix. The package ships the bundled build with its notice,
+  licenses and corresponding source; the SBOM lists it. `ShellCapabilities` is version 2.
+- CHANGED (SHELL-OVERLAY × BWRAP-SELECT): the full-auto shell write set is now active wherever the selected bubblewrap has overlays (the
+  bundled 0.13 included), no longer dormant.
+- BUILD/TEST (BWRAP-SELECT): `npm run build` stages the locked bundled bubblewrap from a verifying build output (and says loudly when there is
+  none); a guard test fails a sandbox-capable Linux host that selected no working launcher instead of letting the real-sandbox tests skip;
+  tests use a temporary `DECKENT_GLOBAL_HOME`, never `~/.deckent`. `npm run build:bwrap` builds the bundled bubblewrap (Docker).
 - BREAKING (DEPS-TYPES, owner 2026-09-29, DEPS-SCHEMA C2-b): the SDK entry (`import … from 'deckent'`) no longer exports the live zod schema
   objects `CORE_SCHEMA`, `SQLITE_STORAGE_OPTIONS`, `DOCKER_EXECUTION_SETTINGS`, `GIT_EXECUTION_SETTINGS`, `ARTIFACT_STORAGE_LIMITS` and
   `bootstrapJournalSchema`; the data types derived from them (`CoreConfig`, `DeckentConfig`, `BootstrapJournal`, …) stay exported. The SDK
@@ -13,7 +25,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
   SDK declarations they name are vendored into `dist/vendor/types/` (THIRD-PARTY-NOTICES lists them). `MessageKey` no longer makes the
   published declarations import JSON. `npm run smoke:dist -- <tgz> --types <ts dir>[,<ts dir>]` checks every TypeScript × resolution.
 - SECURITY (FASTURI-OUT): the published package no longer contains the MCP SDK's bundled ajv 8.18.0 / fast-uri 3.1.0 (8 HIGH advisories);
-  build-dist stubs the SDK default validator and fails if it returns. The MCP server now validates with the SDK's cf-worker validator explicitly.
+  build-dist stubs the SDK default validator and fails if it returns. The MCP server now validates with the SDK's cf-worker validator explicitly. (Superseded by MCP-SCHEMA-VALIDATOR above.)
 - ADDED (SECRET-K1): `secrets.store` config (installation only) with `core.secret-store.env@1` (default) and `core.secret-store.file@1`;
   `deckent secret list`; `doctor` shows the secret store (`--json` `secretStore` and a human line). Every credential read now resolves through
   the configured backend. The `SECRET_*` refusals have English and Turkish texts.
