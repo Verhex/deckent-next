@@ -5,11 +5,12 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { AgentToolSpec, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
-import { createGlobMatcher, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
+import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
 import { ABSENT_FILE_VERSION, EMPTY_DIRECTORY_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, deleteWorkspaceFile, fileContentVersion, readWritableDirectory,
   readWritableFile, removeWorkspaceDirectory, resolveWritable,
   temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
+import { isWriteApprovalFloored } from './floor.js';
 
 /**
  * Effect identity of one file edit call (Astra 2113): the turn, the call's position in it (model round, index in the response), the
@@ -25,15 +26,6 @@ export const WORKSPACE_FILE_WRITE_OPERATION = Object.freeze({ schemaVersion: 1 a
   targetKind: WORKSPACE_FILE_TARGET_KIND, effectClass: 'write' as const, approval: 'policy' as const, precondition: 'record-version' as const,
   compensation: null, inputMaxBytes: 1_048_576 });
 
-/**
- * Writes that always need the owner's approval, whatever policy or mode allows (T-L4 contract §5): repository internals, hooks,
- * CI, package manifests, Deckent and agent configuration. Reads of secret paths are already denied by the workspace scope.
- */
-export const WORKSPACE_WRITE_APPROVAL_FLOOR: readonly string[] = Object.freeze(['.github/**', '.gitlab-ci.yml', '.circleci/**', '.husky/**', '**/.husky/**',
-  'package.json', '**/package.json', 'package-lock.json', '.deckent/**', '.claude/**', '.cursor/**', '.agents/**', 'AGENTS.md', 'CLAUDE.md', 'Makefile', 'Dockerfile']);
-const floorMatchers = WORKSPACE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
-/** True when a resolved workspace-relative path is on the approval floor. */
-export const isWriteApprovalFloored = (rel: string) => floorMatchers.some(match => match(rel));
 const inputSchema = z.object({ content: z.string() }).strict();
 /**
  * SHELL-OVERLAY: one entry of a sandbox write set (the same `workspace.file.write@1`, a target-internal input form): write the bytes the

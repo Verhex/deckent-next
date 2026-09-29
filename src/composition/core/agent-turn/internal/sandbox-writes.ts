@@ -2,12 +2,24 @@ import { createHash } from 'node:crypto';
 import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
 import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
-import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isWriteApprovalFloored, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
+import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isDirectoryWriteApprovalFloored, isWriteApprovalFloored, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
   removeSandboxWriteSetDirectory, scanSandboxWriteSet, writablePath, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
-  type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
+  type LocalPeerIdentity, type SandboxWriteCell, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
+
+/**
+ * The edit path rules for one write-set path: a denied path (`writablePath`), the configuration file (`edit-authority`), the write floor
+ * (`edit-floor`), else `edit`. A directory — one removed, or a new parent one (Astra 2182 R3: `src/package.json/` is the floor name,
+ * whatever it holds) — is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the rules for what it holds.
+ */
+export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel: string) => boolean, rel: string,
+  kind: 'write' | 'delete' | 'rmdir' | 'mkdir'): SandboxWriteCell | 'denied' {
+  const directory = kind === 'rmdir' || kind === 'mkdir', lexical = writablePath(scope, rel);
+  if (!lexical.ok || lexical.rel !== rel || (directory && scope.denied(`${rel}/`))) return 'denied';
+  return authority(rel) ? 'edit-authority' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : 'edit';
+}
 
 /**
  * Settles one finished call's write set (design §5–§6): scan, then every entry through the edit path rules (`writablePath` → denied; the
@@ -34,13 +46,8 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
       return { sessions, store: attempts };
     })();
     return await applySandboxWriteSet({ scan, decider: input.decider, signal: input.signal,
-      // A directory is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the edit rules for what it holds.
-      classify: (rel, kind) => {
-        const lexical = writablePath(scope, rel);
-        if (!lexical.ok || lexical.rel !== rel || (kind === 'rmdir' && scope.denied(`${rel}/`))) return 'denied';
-        return input.authority(rel) ? 'edit-authority' : isWriteApprovalFloored(rel) || (kind === 'rmdir' && isWriteApprovalFloored(`${rel}/-`)) ? 'edit-floor' : 'edit';
-      },
-      ensureParents: (rel, modeOf) => ensureWorkspaceParents(scope, rel, modeOf),
+      classify: (rel, kind) => classifySandboxWritePath(scope, input.authority, rel, kind),
+      ensureParents: (rel, modeOf, admit) => ensureWorkspaceParents(scope, rel, modeOf, admit),
       async execute(change, gate) {
         const expectedVersion = change.kind === 'rmdir' ? EMPTY_DIRECTORY_VERSION : change.lowerVersion;
         const commandId = sha256(`agent-sandbox-write:1\0${input.shellCommandId}\0${change.rel}\0${change.kind}\0${expectedVersion}\0${change.kind === 'write' ? `${change.digest}\0${change.mode}` : ''}`);

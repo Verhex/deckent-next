@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applySandboxWriteSet, createWorkspaceScope, fileContentVersion, isWriteApprovalFloored, scanSandboxWriteSet, WorkspaceFileTarget,
+import { applySandboxWriteSet, createWorkspaceScope, ensureWorkspaceParents, fileContentVersion, isWriteApprovalFloored, scanSandboxWriteSet, WorkspaceFileTarget,
   type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -152,7 +152,7 @@ describe('write-set entries at the file target (SHELL-OVERLAY)', () => {
 describe('write-set apply loop: directories are entries (Astra 2180 R1)', () => {
   it('a directory removal is classified, decided and executed like a file; it is held back when something beneath it stayed', async () => {
     const executed: string[] = [], decided: string[] = [];
-    const scan = { ok: true as const, refused: [], conflicts: [], emptyDirectories: [], directoryModes: new Map<string, number>(),
+    const scan = { ok: true as const, refused: [], conflicts: [], emptyDirectories: [], directoryModes: new Map<string, number>(), newDirectories: new Set<string>(),
       changes: [{ kind: 'delete' as const, rel: 'src/t/a', lowerVersion: 'x' }, { kind: 'delete' as const, rel: 'src/u/b', lowerVersion: 'y' },
         { kind: 'rmdir' as const, rel: 'src/t' }, { kind: 'rmdir' as const, rel: 'src/u' }] };
     const report = await applySandboxWriteSet({ scan, signal: new AbortController().signal, ensureParents: async () => true,
@@ -168,5 +168,94 @@ describe('write-set apply loop: directories are entries (Astra 2180 R1)', () => 
     const stopped = await applySandboxWriteSet({ scan, signal: aborted.signal, ensureParents: async () => true, classify: () => 'edit',
       decider: { async decide() { return { ok: true, gate: { async admit() {} } }; } }, async execute(change) { executed.push(change.rel); } });
     expect(stopped).toMatchObject({ applied: [], stopped: true });
+  });
+});
+
+// Astra 2182 R3: a new parent directory is an entry's precondition decided like the entry itself — before any of them is made.
+describe('write-set apply loop: new parent directories are decided like entries (Astra 2182 R3)', () => {
+  const allow = { ok: true as const, gate: { async admit() {} } };
+  const scanOf = (writes: string[], newDirectories: string[]) => ({ ok: true as const, refused: [], conflicts: [], emptyDirectories: [],
+    directoryModes: new Map<string, number>(), newDirectories: new Set(newDirectories),
+    changes: writes.map(rel => ({ kind: 'write' as const, rel, digest: '0'.repeat(64), size: 1, mode: 0o644, lowerVersion: 'absent' })) });
+  /** The loop with a recording decider: `cells` maps a classified path (a directory as `dir`) to its cell, `refuse` a decided path to its reason. */
+  async function run(writes: string[], newDirectories: string[], cells: Record<string, 'edit-floor' | 'edit-authority' | 'denied'> = {},
+    refuse: Record<string, 'write-floor' | 'configuration-file' | 'denied-by-policy'> = {}) {
+    const decided: string[] = [], made: string[][] = [], executed: string[] = [], classified: string[] = [];
+    const report = await applySandboxWriteSet({ scan: scanOf(writes, newDirectories), signal: new AbortController().signal,
+      classify: (rel, kind) => { classified.push(`${kind}:${rel}`); return cells[rel] ?? 'edit'; },
+      decider: { async decide(rel, cell) { decided.push(`${rel}:${cell}`); return refuse[rel] ? { ok: false, reason: refuse[rel]! } : allow; } },
+      async ensureParents(rel, _modeOf, admit) { made.push(newDirectories.filter(directory => rel.startsWith(`${directory}/`) && admit(directory))); return true; },
+      async execute(change) { executed.push(change.rel); } });
+    return { report, decided, made, executed, classified };
+  }
+
+  it('a floor-named parent (nested under ordinary new ones) refuses the write and every write under it; no parent is made', async () => {
+    const { report, decided, made, executed, classified } = await run(['a/b/package.json/c/x.txt', 'a/b/package.json/y.txt', 'a/ok.txt'],
+      ['a', 'a/b', 'a/b/package.json', 'a/b/package.json/c'], { 'a/b/package.json': 'edit-floor' }, { 'a/b/package.json/': 'write-floor' });
+    expect(classified).toContain('mkdir:a/b/package.json');
+    // The entry first, then each new directory once for the whole set (as `dir/`), shallowest first; the refused one stops before anything is made.
+    expect(decided).toEqual(['a/b/package.json/c/x.txt:edit', 'a/:edit', 'a/b/:edit', 'a/b/package.json/:edit-floor', 'a/b/package.json/y.txt:edit', 'a/ok.txt:edit']);
+    expect(made).toEqual([['a']]);
+    expect(executed).toEqual(['a/ok.txt']);
+    expect(report.notApplied).toEqual([{ rel: 'a/b/package.json/', reason: 'write-floor' }, { rel: 'a/b/package.json/c/x.txt', reason: 'parent-refused' },
+      { rel: 'a/b/package.json/y.txt', reason: 'parent-refused' }]);
+    expect(report.createdDirectories).toEqual(['a']);
+  });
+
+  it('a configuration-named parent asks the owner (not applied); a denied parent name is held back without a decision of its own', async () => {
+    const config = await run(['cfg.json/x'], ['cfg.json'], { 'cfg.json': 'edit-authority' }, { 'cfg.json/': 'configuration-file' });
+    expect(config.decided).toEqual(['cfg.json/x:edit', 'cfg.json/:edit-authority']);
+    expect(config.made).toEqual([]);
+    expect(config.report.notApplied).toEqual([{ rel: 'cfg.json/', reason: 'configuration-file' }, { rel: 'cfg.json/x', reason: 'parent-refused' }]);
+    const denied = await run(['secret/x'], ['secret'], { secret: 'denied' });
+    expect(denied.decided).toEqual(['secret/x:edit']);
+    expect(denied.executed).toEqual([]);
+    expect(denied.report.notApplied).toEqual([{ rel: 'secret/', reason: 'denied' }, { rel: 'secret/x', reason: 'parent-refused' }]);
+    const policy = await run(['n/x'], ['n'], {}, { 'n/': 'denied-by-policy' });
+    expect(policy.report.notApplied).toEqual([{ rel: 'n/', reason: 'denied-by-policy' }, { rel: 'n/x', reason: 'parent-refused' }]);
+    expect(policy.made).toEqual([]);
+  });
+
+  it('a refused entry keeps its own reason and decides none of its directories', async () => {
+    const { report, decided, made } = await run(['.github/workflows/x.yml'], ['.github', '.github/workflows'], { '.github/workflows/x.yml': 'edit-floor' },
+      { '.github/workflows/x.yml': 'write-floor' });
+    expect(decided).toEqual(['.github/workflows/x.yml:edit-floor']);
+    expect(made).toEqual([]);
+    expect(report.notApplied).toEqual([{ rel: '.github/workflows/x.yml', reason: 'write-floor' }]);
+  });
+
+  it('ordinary new directories are decided once and made before their files; an existing parent is not a decision', async () => {
+    const { report, decided, made, executed } = await run(['n1/n2/f', 'n1/n2/g', 'src/h'], ['n1', 'n1/n2']);
+    expect(decided).toEqual(['n1/n2/f:edit', 'n1/:edit', 'n1/n2/:edit', 'n1/n2/g:edit', 'src/h:edit']);
+    expect(made[0]).toEqual(['n1', 'n1/n2']);
+    expect(executed).toEqual(['n1/n2/f', 'n1/n2/g', 'src/h']);
+    expect(report.createdDirectories).toEqual(['n1', 'n1/n2']);
+    expect(report.notApplied).toEqual([]);
+  });
+});
+
+describe('ensureWorkspaceParents makes only decided, non-floor directories — all or none (Astra 2182 R3, defense in depth)', () => {
+  async function project() {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-parents-')); roots.push(root);
+    await mkdir(join(root, 'src'), { recursive: true });
+    return { root, scope: await createWorkspaceScope(root) };
+  }
+  it('refuses a floor-named directory even when admitted, and makes none of the ordinary ones above it', async () => {
+    const { root, scope } = await project();
+    expect(await ensureWorkspaceParents(scope, 'src/package.json/payload.txt', () => 0o755, () => true)).toBe(false);
+    expect(existsSync(join(root, 'src', 'package.json'))).toBe(false);
+    expect(await ensureWorkspaceParents(scope, 'a/b/package.json/c/x.txt', () => 0o755, () => true)).toBe(false);
+    expect(existsSync(join(root, 'a'))).toBe(false);
+    expect(await ensureWorkspaceParents(scope, '.github/workflows/x.yml', () => 0o755, () => true)).toBe(false);
+    expect(existsSync(join(root, '.github'))).toBe(false);
+  });
+  it('refuses a directory the caller did not decide (none made); makes decided ordinary ones with their mode', async () => {
+    const { root, scope } = await project();
+    expect(await ensureWorkspaceParents(scope, 'n1/n2/f', () => 0o755, directory => directory === 'n1')).toBe(false);
+    expect(existsSync(join(root, 'n1'))).toBe(false);
+    expect(await ensureWorkspaceParents(scope, 'n1/n2/f', () => 0o750, () => true)).toBe(true);
+    expect((await lstat(join(root, 'n1', 'n2'))).mode & 0o777).toBe(0o750);
+    // Existing directories are no decision: nothing new is needed, `admit` is never asked.
+    expect(await ensureWorkspaceParents(scope, 'n1/n2/g', () => 0o755, () => { throw new Error('asked'); })).toBe(true);
   });
 });
