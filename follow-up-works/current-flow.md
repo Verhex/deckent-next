@@ -38,7 +38,22 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   `terminal-render`); deny eşleyicisi hızlı yolu platformun tek `GLOB_WILDCARD` tanımını kullanıyor; `APPROVAL_SURFACE_RESTRICTED` ve MCP güven/`/mcp`,
   TERM-UX-1 metinleri en/tr + kayıt; MCP güven deposu okunamazsa typed hata.
 - lint-arch 0 ihlal (`d8fb13a`, belge güncellemesinde ölçüldü).
-- Sıradaki: tam verify (lead) → Astra yeniden incelemesi → PASS'te push → canlı geçiş + MODES-3 canlı göçü (owner onayı).
+- Sonra MCP-VALIDATOR (`f6bd9d3`) ve belge commit'leri eklendi; parti adayı `ce2440f`.
+
+## Sekizinci parti (`integrate/2026-09-29-i`, worktree `/home/alperen/deckent-next-integrate-i`, taban `ce2440f`)
+- Birleşenler (her biri `--no-ff`): MCP-PIN-DEF `c30a651` (pinlenmiş tanım `toolDefinition`, -32020 yeniden gönderilmez, structuredContent
+  doğrulanır); DEPS-SCHEMA `2947c81` + arch kenarı `59d9403` (kayıt `optionsSchema` Standard Schema v1); DEPS-GOV `1c76748` + `3680370` + `b5369fd`
+  (`dependencies.json`, lint-arch dış import kapısı, `deps-watch`, kabul edilmiş riskler; fast-uri girdisi 2026-10-29'da biter); ANTHROPIC-PROFILE
+  `3be2c7a` (model yetenek kaydı, `effort`, adapter v2); GIT-NET `37be829` … `b838569` (birleştirme `dda792e`; `protocol.allow=never` +
+  `GIT_ALLOW_PROTOCOL=''` + lazy fetch yok). Kanıtlar `proof/<KART>-2026-09-29/`. Belge deltası bu commit'te.
+
+## Sıradaki
+1. Yedinci parti `ce2440f`: Astra 2171 incelemesi → PASS'te push.
+2. Sekizinci parti `integrate/2026-09-29-i`: tam verify (lead; öncesinde `deps-watch` parti öncesi koşusu) → Astra → PASS'te push.
+3. DEPS-P0 yedinci parti push'undan sonra başlar.
+4. Owner sabah kararları: P1 tasarımları (anahtar zinciri / OTel / uzak MCP, 17 soru; önce K1 — üretimde `secretResolver` bağlı değil),
+   DEPS-SCHEMA C1/C2, canlı geçiş (bindings v3 + MODES-3 canlı göçü, Node 24.21 varsayılan geçişi dahil); ANTHROPIC ilk faturalı duman çağrısı
+   ve legacy tarifeler.
 
 ## Açık kalanlar
 - Owner tasarım onayları (2026-09-29): soru kartları A, terminalden Agent OS O1, DECKENT.md Öneri 1 — uygulama dilimleri bu partiden sonra (owner: yeni iş yok).

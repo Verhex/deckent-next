@@ -4,6 +4,27 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CHANGED (MCP-PIN-DEF, Jev 12e80d38): an MCP tool call now carries its pinned definition. A server's HEADER_MISMATCH (-32020) is reported
+  to the model as a header mismatch and the call is not sent a second time (before, the SDK re-listed and re-sent it, bypassing the pin).
+  Structured results are checked against the pinned output schema: a nonconforming or missing structured result is an error for the model
+  (-32602; the call may already have acted, it is not retried). A tool whose pinned output schema cannot be compiled is refused with nothing
+  sent.
+- ADDED (DEPS-GOV, owner 2026-09-29): `dependencies.json` records every dependency's owners, purpose, used features, criticality, alternatives,
+  own-solution note, embedded components and review dates; `npm run verify` (lint-arch) now fails when src imports a package that is not a
+  registered runtime dependency of the importing unit, and warns when a review date has passed. `node scripts/deps-watch.mjs <dir>` writes a dated
+  vulnerability/provenance/license/currency report (OSV includes components bundled inside other packages) and exits non-zero on HIGH/CRITICAL.
+  Known, mitigated advisories can be recorded as expiring accepted risks (evidence required); the report shows them as MITIGATED and fails
+  again on expiry or on any new advisory or version change.
+- CHANGED (DEPS-SCHEMA, owner 2026-09-29): adapter module registration — target options schemas are Standard Schema v1 (library-independent);
+  zod schemas keep working. Asynchronous option validation is refused with a typed code. The SDK exports the
+  `StandardSchemaV1`/`StandardJSONSchemaV1`/`StandardTypedV1` types and `isStandardSchemaV1`/`validateStandardSchemaSync`.
+- CHANGED (ANTHROPIC-PROFILE): the Anthropic profile accepts only the thinking modes, off type, effort levels and output bound the pinned
+  model documents (registry dated 2026-09-29) and gains `effort` (`output_config.effort`); adapter `anthropic-messages-http` v2.
+- SECURITY (GIT-NET, owner 2026-09-29 P1): every local Git call of the patch adapter runs with `protocol.allow=never`,
+  `GIT_ALLOW_PROTOCOL=''` and no lazy fetch, so a source repository's own configuration cannot re-open a transport; the workspace
+  broker's pre-clone reads gain `GIT_NO_LAZY_FETCH=1`. `#adapters` gains
+  `GIT_LOCAL_ENV` and `localGitArgs` (no SDK surface change).
+
 - CHANGED (MODES-3, owner 2026-09-29): permission modes are now `standart`, `full-auto` and `full-access`. `standart` (the default) runs
   in-project edits the company marked mode-eligible without a card; `/mode ask-edits on` asks for every edit again. Full access starts
   only at launch (`deckent --full-access`), needs a company grant, keeps Deckent's own state, policy and credentials closed, and audits

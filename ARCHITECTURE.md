@@ -1178,15 +1178,23 @@ The 2026-09-25 review limits (Astra 2078: no path recheck of walked descriptors,
 corrected in `e12a253` (every walked directory and file is re-verified; globs match by a bounded dynamic program); Astra 2091 found
 no new blocker in them.
 
-**Anthropic Messages provider (ANTHROPIC-PROVIDER G8, seventh batch).** Provider adapters: `openai-chat-http` (v4), `openrouter-chat-http`
-(v1) and `anthropic-messages-http` (v1, family `anthropic-messages`, API version `2023-06-01`; unit `adapters/core/provider-anthropic-messages`).
+**Anthropic Messages provider (ANTHROPIC-PROVIDER G8, seventh batch; ANTHROPIC-PROFILE, eighth batch).** Provider adapters: `openai-chat-http` (v4), `openrouter-chat-http`
+(v1) and `anthropic-messages-http` (v2, family `anthropic-messages`, API version `2023-06-01`; unit `adapters/core/provider-anthropic-messages`).
 The adapter takes the provider-neutral (OpenAI-shaped) local request and returns an assembled neutral `chat.completion` evidence; consumers
 do not know the family (one exception: the capability check knows both). `provider-http-json` credential kinds are `none | bearer |
 header(x-api-key)` with bounded static headers; `header` only over https. Spend: price id `anthropic-published-tariff` v1 (published rates
 are profile data; the quote ceiling is integer arithmetic); settlement of usage × tariff does not exist yet, so a responded call stays
 `held` (checkpoint A, blocks real Anthropic use). Thinking continuity: a process-local bounded cache inside the adapter, bound to the
-unchanged request prefix (checkpoint B: `providerContinuation`, v17). Error codes reuse `OPENAI_CHAT_*`. Not yet: profile `effort`, SSE
-byte/token metering in live streaming, a keyring/`secretResolver` link for the key (environment variable only), the owner's smoke test.
+unchanged request prefix (checkpoint B: `providerContinuation`, v17). Error codes reuse `OPENAI_CHAT_*`. Per-model request contract
+(ANTHROPIC-PROFILE, adapter v2): an adapter-owned, dated and sourced capability registry (`internal/models.json`, docs read 2026-09-29)
+lists per model the accepted thinking types (adaptive, manual budget), the single off type (`disabled` | `between_tools` | none) with its
+effort ceiling, `output_config.effort` levels and default, and the synchronous max output. A profile is checked against its pinned model's
+row at load (`OPENAI_CHAT_DEFINITION_INVALID`, no call); an unlisted model admits only no thinking field and no effort. `effort` is profile
+data sent as `output_config.effort` (GA, no beta header) and forwarded to `count_tokens`. Not supported: per-message effort,
+`display: "updates"`, structured output, task budgets. The registry must be re-read from the official pages at least every 30 days or on a new
+model announcement (no refresh mechanism yet). Not yet: SSE byte/token metering in live streaming, a keyring/`secretResolver` link for the key (environment variable only),
+the owner's first billed smoke call (Opus 5.5 `effort`, Sonnet 5.5 `between_tools`), tariff rows for legacy models, a neutral
+`reasoning: {mode, effort}` (P2).
 
 **Sandbox scan speed (SANDBOX-SPEED G2, seventh batch).** Both realms' scans pick their reads per directory by `statfs`: synchronous on
 a local file system, asynchronous elsewhere (`fs-ops`); the verdict is re-read on every call and does not depend on the read flavour
@@ -1376,6 +1384,24 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   transactional ledger carries its own schema version. Legacy `.brain/memory.db` is not a Next store; it stays on
   the workspace deny list and migrates only through the memory cards.
 
+**External dependencies (DEPS-GOV, owner 2026-09-29; eighth batch).** `dependencies.json` (schemaVersion 2; `arch.json`
+`dependencies.registry`) is the single source of truth for every package.json dependency and devDependency: owning arch units or packages,
+purpose, grep-backed features, criticality (P0/P1/P2), alternatives with version and date, own-solution note, embedded (bundled) components
+and lastReview/nextReview (interval ≤ 30/60/90 days by criticality); a `platform` section tracks Node, node:sqlite, bubblewrap, git and
+Docker the same way. lint-arch (offline, in verify) fails when a `src` bare import (static, export-from, `import()`, `typeof import()`,
+`createRequire()()`) is not a package.json `dependency` with a runtime registry entry owned by the importing unit/package, when a
+devDependency is imported from src, when a Node built-in lacks the `node:` prefix, when a module load uses a non-literal specifier, when an
+owner no longer imports the package, when package.json and the registry disagree, and when an installed package's sourcemaps embed
+components other than the registry's `embedded[]`; a passed nextReview only warns. The domain's external allowlist is derived from the
+registry (the former `packages.domain.externalImports` is gone). `scripts/deps-watch.mjs <dir>` (networked, not in verify) writes a dated
+JSON + Markdown report: OSV for the installed tree and embedded components (unrated = HIGH, MAL- = CRITICAL), npm
+latest/deprecated/provenance, alternative versions, `npm audit signatures`, licenses against the registry policy; it exits 1 on
+HIGH/CRITICAL and on any unreadable source. `acceptedRisks` (evidence-backed, expiring ≤ 30 days for HIGH/CRITICAL, ≤ 90 otherwise) turn
+an exactly matching advisory set on one package@version and carrier into MITIGATED report rows that do not fail; expiry or any
+advisory/version/carrier/severity change fails again; lint-arch validates the entries and warns after expiry. The one entry today is
+fast-uri 3.1.0 inside MCP SDK 2.2.0 (expires 2026-10-29: renewed with fresh evidence, or removed when the SDK ships a rebuilt bundle).
+Not yet: weekly scheduling of deps-watch (CI `schedule` or host cron; the pre-batch run is manual).
+
 ## Testing policy
 
 - `tests/contracts/<package>/` — public API and invariant tests only; no internal-function tests.
@@ -1564,6 +1590,15 @@ rules omit Git/product/auth metadata and environment files; exclusions are inclu
 Untracked non-excluded files are included. Only regular UTF-8 text files and executable mode are
 supported; binary/submodule/symlink input fails explicitly. Scan bytes/time use artifact/Git limits;
 `artifacts.patchPreview` config bounds entries, depth and path bytes.
+
+Git transport closure (GIT-NET, owner 2026-09-29 P1; eighth batch): every local Git invocation of the patch adapter (`git-patch`:
+snapshot, integration observation and the command runner share one construction, `GIT_LOCAL_ENV` / `localGitArgs`) reaches no transport, through three independent layers:
+`-c protocol.allow=never` (the owner-named mechanism); `GIT_ALLOW_PROTOCOL=''`, an environment variable that overrides any configuration,
+so a hostile source repository's own `.git/config` (`protocol.file.allow=always`, not suppressed by `GIT_CONFIG_NOSYSTEM`/
+`GIT_CONFIG_GLOBAL`) cannot re-permit a transport (measured residual, closed and mutation-verified); and `GIT_NO_LAZY_FETCH=1` against
+promisor lazy fetch. The `git-workspace` broker is the named local-clone exception (`protocol.file.allow=always` for its clone; its
+pre-clone `rev-parse` calls carry `GIT_NO_LAZY_FETCH=1` but no `GIT_ALLOW_PROTOCOL` — `file` would be needed there, a decision not yet
+made). Not yet: a declared minimum Git version checked at run time.
 
 Owner 2026-09-22 (B05 finding 3): the base tree is listed once (`ls-tree`: paths, modes, object ids, sizes) and
 compared with the descriptor-relative workspace read by Git blob id (`blob <size>\0` hash with the repository's
@@ -1845,6 +1880,19 @@ signature is refused until verification exists (A04-3, owner Q7). Config shape i
 registry identity; `http-conditional` is the Core entry `core.http-conditional-effect@1`). Not yet: module
 loading, signature verification and a separately distributed Enterprise package (A04-3), public SDK export of module registration.
 
+**Standard Schema boundary (DEPS-SCHEMA, owner 2026-09-29; eighth batch).** A target adapter factory's `optionsSchema` is a
+`StandardSchemaV1<unknown, { kind }>` (Standard Schema 1.1.0, https://standardschema.dev; types vendored verbatim under
+`platform/core/validate`, MIT, not an npm dependency), not a zod type: an Enterprise/ERP module may use zod 3.25+, Valibot, ArkType or a
+hand-written validator; Core internals keep zod. The registry is the one validation owner (`AdapterRegistry.targetOptions`, used by config
+validation, `resolveOperationCatalog` and `targets`). Validation is synchronous: a Promise result is refused
+(`OPERATION_TARGET_OPTIONS_ASYNC` in config, `REGISTRY_OPTIONS_ASYNC` at construction; the rejection is consumed); a result without a
+non-empty string `kind` is invalid whatever the vendor's declared type. Admission requires `~standard.version === 1` and a `validate`
+function (`REGISTRY_FACTORY_MISMATCH`) and snapshots `~standard.validate`, so reassigning it after seal changes nothing. `CORE_API_VERSION`
+stays 1 (the change widens what a module may pass; zod 3.25 schemas already satisfy it). The SDK exports the Standard Schema types and
+`isStandardSchemaV1`/`validateStandardSchemaSync` through `platform`. Not yet: config sections (`registerConfigSection`) still take a strict
+zod object (owner checkpoint C1); the SDK entry still publishes six live zod schema values and 44 `z.infer` types (owner checkpoint C2);
+Standard JSON Schema is vendored but unused until zod ≥ 4.2.
+
 **Unified operation catalog (A04-2).** Every producer resolves operations from one catalog: `AdapterRegistry.catalog(configCatalog, configTargetKinds)` unifies the Core code operations (`workspace.file.write@1`, `host.shell.run@1`, `workspace.scratch.write@1`, `network.fetch@1`, `policy.administer@1`, `mcp.tool.call@1` — root registry entries `core.workspace-write@1` / `core.host-shell@1` / `core.scratch-write@1` / `core.network-fetch@1` / `core.policy-administer@1` / `core.mcp-tool-call@1` with no config-built adapter), registered module `provides.operations` and the validated `operations.catalog`, through the pure `unifyOperationCatalog`. Provenance (`core`, recorded by the registry itself; `module`; `config`) is inspection data and grants nothing. Typed refusals, in order: a config target claiming a Core operation's target kind (`OPERATION_TARGET_KIND_RESERVED`), a config entry using a Core operation id at any version (`OPERATION_CORE_REDEFINED`), the same `id@version` from two sources (`OPERATION_CATALOG_CONFLICT`), a config id inside a registered module's namespace — root or overlay, and everything under it — that the module never declared (`OPERATION_NAMESPACE_RESERVED`, owner 2026-09-27 decision 7; checked after an exact `id@version` conflict), a module compensation absent from the unified catalog (`OPERATION_COMPENSATION_UNKNOWN`). Config validation and the composition resolver call the same function, so a configuration that loads cannot resolve differently later; the section-level refusal stays `OPERATIONS_INVALID`. Config shape is unchanged; `findOperation` is gone. CLI `deckent operation`, SDK and the runtime service (MCP) share the one operation producer. The Core ids close the `workspace`, `workspace.file`, `workspace.scratch`, `host`, `network`, `policy` and `mcp` namespaces to overlays. Not yet: the terminal edit/shell producers still hold their own one-entry catalogs over the same descriptor objects; a module `targetKind` without a configured target fails at execution (`EFFECT_OPERATION_UNKNOWN`), not at config time; config entries inside a namespace no registered module owns are still allowed (open).
 
 **MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
@@ -1892,10 +1940,21 @@ A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's exis
 call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
 The pool builds the SDK `Client` with `jsonSchemaValidator: new CfWorkerJsonSchemaValidator()` (`@modelcontextprotocol/client/validators/cf-worker`,
 interpreter-based @cfworker/json-schema 4.1.1; MCP-VALIDATOR 2026-09-29): a server's `outputSchema` is untrusted input and never reaches the ajv 8.18 +
-fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the module still loads with the SDK). Because the pool
-lists tools with `cacheMode: 'bypass'`, the SDK's output-schema validation does not run on an ordinary call; the one compile path is the SDK's
-re-list and resend after a modern-era HEADER_MISMATCH (-32020) — open: that resend bypasses the pool's no-resend rule and the pin, and structured
-results are not validated (MCP SHOULD); proposed fix passes the pinned definition as `toolDefinition`. The MCP server side validates schemas only in
+fast-uri 3.1.0 copy bundled inside SDK 2.2.0 (8 HIGH advisories, not fixable by `overrides`; the module still loads with the SDK). Every `tools/call` carries the pinned
+definition (MCP-PIN-DEF, eighth batch, Jev 12e80d38, 2026-09-29): the pool keeps, per listing, the frozen digest-covered projection of each tool
+(name, title, description, input/output schema, annotations — nothing unpinned reaches the SDK) and passes a fresh copy as
+`callTool(..., { toolDefinition })` (SDK ≥ 2.2). The SDK then neither consults its response cache nor re-lists, so a HEADER_MISMATCH
+(-32020, SEP-2243) is answered as a typed error (`kind: 'header-mismatch'`) and never re-sent (C11; a deliberate deviation from spec
+2026-07-28's "SHOULD re-list and retry" — a retry is a new call with a new decision; a changed definition is re-pinned with
+`deckent mcp approve`). structuredContent is validated with the cf-worker validator against the pinned outputSchema (MCP SHOULD): a result
+that does not conform, or is missing where an outputSchema is declared, is an answered -32602 error (`kind: 'output-schema'`; the SDK raises
+-32600 for "missing", normalized to -32602) — the server answered, so the effect may have happened: the C11 record settles as answered, the
+call is never retried and the model is told the result was withheld. A pinned outputSchema the validator cannot compile is refused before
+sending (`invalid-output-schema`; the SDK would otherwise throw its pre-send -32602, which would look answered). The classification of the
+SDK's post-send checks relies on SDK 2.2.0's message texts (a changed text degrades to `kind: 'server'`, still answered, never resent;
+tripwire: the `mcp-client.test.ts` -32602 cases). Not yet: a tool with an uncompilable pinned outputSchema is still offered (refused per
+call, not marked `unmappable` at open); with `toolDefinition` the SDK also scans the pinned inputSchema for `x-mcp-header` on every
+modern-era call (headers are ignored on stdio; untested path). The MCP server side validates schemas only in
 `elicitInput`, which Deckent does not use.
 
 **MCP 2026-07-28 alignment (sources checked 2026-09-28).** Spec revision 2026-07-28 (published 2026-07-28, modelcontextprotocol.io
