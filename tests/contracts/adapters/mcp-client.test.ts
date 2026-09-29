@@ -142,6 +142,41 @@ describe('MCP client: calls, bounds and failures', () => {
   }, 30_000);
 });
 
+// MCP-VALIDATOR (owner 2026-09-29, "fast-uri hemen düzenlensin"): the SDK's Node default validator is its bundled ajv 8.18 + fast-uri 3.1.0
+// (8 HIGH advisories, fixed in 3.1.7; overrides cannot reach a bundle). A server's `outputSchema` is untrusted: the pool lists with
+// `cacheMode: 'bypass'`, so the SDK compiles it only when a modern server answers `tools/call` with HEADER_MISMATCH (-32020) — the SDK then
+// re-lists (`refresh`) and compiles every listed outputSchema. That compile must run on the interpreter validator (@cfworker/json-schema,
+// the SDK's own `validators/cf-worker`), never on ajv. The spies patch the prototypes of the very modules the SDK loads (Node's module
+// cache; the SDK is external to vitest), and the positive control (cf-worker ≥ 1) proves the path was exercised, so ajv = 0 means something.
+describe('MCP client: a server-supplied outputSchema never reaches the bundled ajv/fast-uri', () => {
+  // A plain schema compiles on cf-worker (the server's -32020 answer comes back); a `$id` built for fast-uri's host confusion
+  // (GHSA-v39h-62p7-jpjc: `%40` becomes `@`) is refused by cf-worker's WHATWG URL resolution: the SDK reports an invalid outputSchema and
+  // does not send the call again (ajv accepted the same schema and re-sent it). The plain case is sent twice: that re-send is the SDK's own
+  // SEP-2243 recovery, outside the pool's "never sent again" rule — recorded as an open lead checkpoint (MCP-VALIDATOR review), not endorsed.
+  it.each([
+    ['a plain outputSchema', { type: 'object', properties: { id: { type: 'string', format: 'uri' } } }, { code: -32020 }, 2],
+    ['a host-confusion $id', { type: 'object', $defs: { remote: { $id: 'http://trusted.example%40evil.example/s', type: 'string' } } },
+      { code: -32602, message: expect.stringContaining("Tool 'hm' has an invalid outputSchema") }, 1],
+  ] as const)('the HEADER_MISMATCH re-list compiles %s with the cf-worker validator, never ajv', async (_label, outputSchema, error, calls) => {
+    const { DefaultJsonSchemaValidator } = await import('@modelcontextprotocol/client/_shims');
+    const { CfWorkerJsonSchemaValidator } = await import('@modelcontextprotocol/client/validators/cf-worker');
+    const seen = { ajv: 0, cfWorker: 0 };
+    const ajvCompile = DefaultJsonSchemaValidator.prototype.getValidator, cfCompile = CfWorkerJsonSchemaValidator.prototype.getValidator;
+    DefaultJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof DefaultJsonSchemaValidator>, ...args) { seen.ajv++; return ajvCompile.apply(this, args); };
+    CfWorkerJsonSchemaValidator.prototype.getValidator = function (this: InstanceType<typeof CfWorkerJsonSchemaValidator>, ...args) { seen.cfWorker++; return cfCompile.apply(this, args); };
+    try {
+      const mismatch = tool('hm', 'header-mismatch', { outputSchema });
+      const f = fixture('dual', [echo, mismatch]), server = f.server([echo, mismatch].map(pinOf)), p = pool();
+      expect(await p.open(server, settings([server]), context(f.root))).toMatchObject({ ok: true, era: 'modern' });
+      expect(await p.call('fx', 'hm', pinOf(mismatch).digest, {}, { timeoutMs: 5_000, signal: new AbortController().signal })).toMatchObject({ outcome: 'answered', error });
+      expect(seen).toEqual({ ajv: 0, cfWorker: 1 });
+      expect(f.events().filter(event => event.event === 'call')).toHaveLength(calls);
+    } finally {
+      DefaultJsonSchemaValidator.prototype.getValidator = ajvCompile; CfWorkerJsonSchemaValidator.prototype.getValidator = cfCompile;
+    }
+  }, 30_000);
+});
+
 describe('MCP client: paginated tool lists (SDK 2.2.0 follows nextCursor; the pool bounds the walk)', () => {
   const many = (count: number) => Array.from({ length: count }, (_, index) => tool(`t${index}`, 'echo'));
   it.each(['legacy', 'dual'] as const)('a %s server listing over several pages is read to its end and every page is verified against the pins', async mode => {
