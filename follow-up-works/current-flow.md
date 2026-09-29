@@ -11,6 +11,13 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - Ana checkout `dd63fd9` + `0e0ca63` ff; Astra/owner WIP'i (core-memory, `hemen-donulecek-is.md`, `auto-edit-test.txt`) korunuyor; Astra 2167 notları
   yamada (`.deckent/host/reviews/astra-main-notes-2026-09-29-live6.patch`) ve aşağıya işlendi.
 
+## Dış çalışma alanı sadeleştirmesi — Astra, 2026-09-29
+Owner isteğiyle 7 tüketilmiş devir/plan belgesi ve 18 eski, referanssız kanıt girdisi
+`../deckent-refactor-work/archive/2026-09-29-consumed/` altına arşivlendi (71 dosya; `moves.json` eski → yeni yollar, `README.md` geri alma).
+Paket ayrı dizine açılarak ve taşınan özgünler SHA-256 ile doğrulandı; içerik silinmedi. `COMPLETED-PLAN.md`'deki beş tarihsel bağlantı
+yeni yollara çevrildi (hedefler var); diğer iki belge ve 18 kanıt girdisine izli belgelerde referans yok. Manifest aracı sembolik bağları
+izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanıtları ve owner WIP'i yerinde; arşiv için bekleyen silme yok.
+
 ## Astra 2167/2168 (2026-09-29)
 - Aday `0e0ca63`: kapsamlı olmayan bağımsız **PASS** (2166 wildcard ürün yolu kapandı: desteklenmeyen etkili yol typed admission reddi; normal/bracket/brace
   desteği korunuyor). İzole build + native, lint-arch 0, 95/95 hedefli test; gerçek servis başlangıcı ve iki realm'de onaylı tur kanıtı. Opus tam verify logu

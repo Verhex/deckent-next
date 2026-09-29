@@ -78,12 +78,12 @@ ilk geçersiz parçada okuma durur ve bağlantı kapanır (boşaltma yok); neden
 
 Owner: `deckent` → etkileşimli terminal (TTY; pipe'ta yardım), `deckent --help` → yardım; Claude Code kalitesi altı kabul edilmez;
 kullanıcı ve Enterprise için aynı. Terminal ve yerel sunum hattı Cursor'dan Opus'a geçti; askıya alınan ana hat
-`follow-up-works/hemen-donulecek-is.md` (izlenmeyen owner dosyası; kalıcı kopya `deckent-refactor-work/HEMEN-DONULECEK-IS-2026-09-23.md`). Jev 5e41ffaf `foundation_then_quality` 0,97; owner onayı. Owner kararları: runtime servisi
+`follow-up-works/hemen-donulecek-is.md` (izlenmeyen owner dosyası; kalıcı kopya `deckent-refactor-work/archive/2026-09-29-consumed/documents/HEMEN-DONULECEK-IS-2026-09-23.md`). Jev 5e41ffaf `foundation_then_quality` 0,97; owner onayı. Owner kararları: runtime servisi
 kapalıysa terminal **otomatik başlatır** (runtime adopt/spawn yetkisi kabul edildi; aynı principal, yerel soket, mevcut policy);
 çalışan llama.cpp container'ı yeniden yapılandırılabilir; vLLM kıyası için `vllm/vllm-openai:v0.30.0` + `RedHatAI/Qwen3.8-27B-INT4`
 indirilebilir; bozuk 3,6 GB CRACK GGUF yalnız raporlanır. Sıra: T0 giriş → L1 yerel sunucu denetleyici → L2 vLLM/llama.cpp ölçümlü
 kıyas → S-STREAM → T1 Claude Code sınıfı girdi/görünüm → T2 onay/iptal/canlı worker → A araç döngüsü + D15b. Tahmin 55–75 mühendislik
-günü (ölçüm değil). Analiz: dış çalışma alanı `TERMINAL-NATIVE-AND-LOCAL-SERVING-PLAN-2026-09-23.md`.
+günü (ölçüm değil). Analiz: dış çalışma alanı `archive/2026-09-29-consumed/documents/TERMINAL-NATIVE-AND-LOCAL-SERVING-PLAN-2026-09-23.md`.
 **T0 uygulandı (2026-09-23):** `deckent` (TTY) → terminal, pipe/dumb → yardım; scope `--scope` veya `terminal.scopeId`; servis yoksa
 arka planda `runtime serve` (0600 günlük, hazır olma süresi, sahiplik hatasında başlatma yok, başarısızlık ölümcül değil), terminal
 kapansa da çalışır. Açık: eski sürümle başlamış servisin fark edilmesi (canlı denemede eski servis yeni `terminal.scopeId` alanını
@@ -118,8 +118,8 @@ Satırların açık kalan kısımları (B06-2, C12/A04/A03, B09-2/B09-3, tekrarl
 
 ## Paralel geliştirme sahipliği ve devirler — 2026-09-22/23 (kapandı)
 
-- **Owner 2026-09-22 akşam devri:** Fable dilimlerini tamamladı (A02, B05 ilk dilim, iptal settlement, patch limitleri, toolchain güncellik + rebuild, imaj sürümleme); süreç Opus 5.5'e devredilir, ilk işi Cursor terminal WIP'inin kontrollü main'e alınmasıdır. [Opus devir paketi](../deckent-refactor-work/OPUS-CONTINUATION-2026-09-22.md).
-- **Owner 2026-09-22 geçici devir (tamamlandı):** limit yenilenene kadar kabul edilmiş 40 ana maddenin rutin geliştirme yürütücüsü Fable. İlk A02, ardından B05–B07 kabul/kurtarma; Cursor E24/F26 sahipliği korunur. [Devir paketi](../deckent-refactor-work/FABLE-CONTINUATION-2026-09-22.md). Bu devir yeni mimari/yetki/DOGFOOD/push izni veya bağımsız review değildir; eski iletişim kanalı açılmaz.
+- **Owner 2026-09-22 akşam devri:** Fable dilimlerini tamamladı (A02, B05 ilk dilim, iptal settlement, patch limitleri, toolchain güncellik + rebuild, imaj sürümleme); süreç Opus 5.5'e devredilir, ilk işi Cursor terminal WIP'inin kontrollü main'e alınmasıdır. [Opus devir paketi](../deckent-refactor-work/archive/2026-09-29-consumed/documents/OPUS-CONTINUATION-2026-09-22.md).
+- **Owner 2026-09-22 geçici devir (tamamlandı):** limit yenilenene kadar kabul edilmiş 40 ana maddenin rutin geliştirme yürütücüsü Fable. İlk A02, ardından B05–B07 kabul/kurtarma; Cursor E24/F26 sahipliği korunur. [Devir paketi](../deckent-refactor-work/archive/2026-09-29-consumed/documents/FABLE-CONTINUATION-2026-09-22.md). Bu devir yeni mimari/yetki/DOGFOOD/push izni veya bağımsız review değildir; eski iletişim kanalı açılmaz.
 
 - **PROVIDERS / SURFACES — local LLM ve terminal: Cursor.** İzole repo `/home/alperen/deckent-next-wt-local-llm`, branch `feat/local-llm-terminal`, başlangıç `652d1c2`. Bu hat Cursor tarafından refaktör edilir; main tarafında aynı kapsamda ikinci uygulama açılmaz. Worktree izolasyonu güvenlik sandbox’ı veya kaynak/port/GPU izolasyonu değildir.
 - Bildirilen dilimler: local-llm yaşam döngüsü/config/parallelSlots → aynı endpoint’te eşzamanlı istek kanıtı → inference profil/launcher seçenekleri → token bütçesi/admission → ayrı terminal portu. Bu kayıt vLLM/SGLang seçimi, host toolkit kurulumu veya yeni erişim sınırı kabulü değildir. Tek-slot kök nedeni hipotezi kurulu binary ve gerçek eşzamanlı sunucu/transport/Run ölçümüyle ayrıştırılır; `--parallel` argümanının yokluğu tek başına kök neden kanıtı değildir. Legacy yalnız salt okunur kaynaktır.
@@ -156,7 +156,7 @@ Bu doğrulama açık model unknown'ının çözüldüğü anlamına gelmez.
 Son dört dilimin yerel commitleri `dcab7e6` ve `652d1c2`: onay, canlı oturum, reference-only teslim/kurtarma ve üç native sağlayıcının paralel yerel koşumu. Kayıtlı son doğrulama 1541 ürün/265 dosya, 25 native, 36 host; fail/skip0. [Kanıt özeti](../deckent-refactor-work/proof/FOUR-STEP-EXECUTION/review.md) ve [commit/hash/koşum kaydı](../deckent-refactor-work/proof/FOUR-STEP-EXECUTION/completion.json) önceki Linux koşumunun kanıtıdır; belge eşlemesinde canlı worker yeniden çalıştırılmadı. Bağımsız inceleme yapılmadı; Fable kanalı kapalı.
 
 - [Temizlik öncesi eksiksiz plan ve tarihsel kartlar](../deckent-refactor-work/archive/PLAN-before-flow-split-2026-09-21-55a9ec25aa3b.md) — geçmiş/iptal/kanıt; aktif yürütme izni değildir.
-- [İlk onaylı refaktör planı](../deckent-refactor-work/PLAN-APPROVED-2026-09-16.md) ve [backlog kaynağı](../deckent-refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md) — güncel owner kararlarıyla çelişen legacy öneriler uygulanmaz.
+- [İlk onaylı refaktör planı](../deckent-refactor-work/archive/2026-09-29-consumed/documents/PLAN-APPROVED-2026-09-16.md) ve [backlog kaynağı](../deckent-refactor-work/backlog/MASTER-EXTRACT-2026-09-16.md) — güncel owner kararlarıyla çelişen legacy öneriler uygulanmaz.
 
 ## Dış owner kararlarının plana bağlanması — 2026-09-21 (uygulananlar)
 
