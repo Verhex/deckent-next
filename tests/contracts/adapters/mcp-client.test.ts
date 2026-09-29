@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
 import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName,
   readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
-  type McpLiveTool, type McpTrustCard } from '#adapters/index.js';
+  type McpLiveTool, type McpTrustCard, type ShellSandbox } from '#adapters/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
@@ -141,6 +141,31 @@ describe('MCP client: calls, bounds and failures', () => {
     expect(opened.ok && opened.posture).toContain('sandbox: none');
     await expect.poll(() => p.stderr('fx'), { timeout: 5_000 }).toContain('fixture stderr');
     expect(p.stderr('fx')).not.toContain('abcdef0123456789abcdef');
+  }, 30_000);
+
+  it('REALM-NOTICE: a sandbox that wins after a preferred one was passed over names that fallback on the card posture (the shell\'s own line)', async () => {
+    const f = fixture('dual'), p = pool();
+    const inside = 'bwrap at /work/project/.deckent/host/global/bin/bwrap-917f is inside the project or scratch area, where a sandboxed command could replace it';
+    const caps = { schemaVersion: 2 as const, platform: 'linux', bubblewrap: { status: 'available' as const, launcher: null, rejected: [], restriction: null, detail: null },
+      userNamespace: 'available' as const, landlock: { status: 'available' as const, abi: 7 } };
+    const refused: ShellSandbox = { kind: 'bubblewrap', usable: () => ({ ok: false, reason: inside }) };
+    const view = { projectReadOnly: true, writeFloorReadOnly: true, repositoryWritable: false };
+    // A stand-in launch-capable provider: `env -- <command>` (no isolation; only the card's words are under test).
+    const wins: ShellSandbox = { kind: 'landlock', usable: () => ({ ok: true, realm: { kind: 'landlock', run: async () => { throw new Error('not run'); } }, marker: 'sandbox: landlock',
+      posture: () => 'stand-in', notice: null, containment: 'sandbox', launch: async () => ({ ok: true, file: '/usr/bin/env', args: [], view, posture: 'stand-in view' }) }) };
+    const server = { ...f.server([pinOf(echo)]), realm: 'prefer-sandbox' as const };
+    const opened = await p.open(server, settings([server]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes: [refused, wins], capabilities: caps });
+    expect(opened).toMatchObject({ ok: true, sandboxed: true });
+    expect(opened.ok && opened.posture.split('\n')).toEqual([expect.stringMatching(/^sandbox: stand-in view; /u),
+      `[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: ${inside}).`]);
+    // No provider passed over → no fallback line.
+    const q = pool(), clean = await q.open(server, settings([server]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes: [wins], capabilities: caps });
+    expect(clean.ok && clean.posture).not.toContain('instead of');
+    // None can hold the server: require-sandbox refuses naming every (bounded, one-line) reason; nothing starts.
+    const caged = { ...server, realm: 'require-sandbox' as const };
+    const noisy: ShellSandbox = { kind: 'bubblewrap', usable: () => ({ ok: false, reason: `a\nb ${'x'.repeat(1_000)}` }) };
+    const denied = await pool().open(caged, settings([caged]), { cwd: f.root, environment: {}, sandboxes: [noisy], capabilities: caps });
+    expect(denied).toMatchObject({ ok: false, reason: 'sandbox-unavailable', detail: expect.stringMatching(/^bubblewrap: a b x+…$/u) });
   }, 30_000);
 });
 

@@ -7,3 +7,4 @@ export { sweepFullPreviews } from './internal/preview.js';
 export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';
 export { renderMcpStartNotice, runConfiguredMcpCommand } from './internal/mcp.js';
+export { inspectConfiguredShellRealm } from './internal/shell.js';

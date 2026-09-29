@@ -4,3 +4,4 @@ export { BUBBLEWRAP_GIT_WALK_MAX_ENTRIES, BUBBLEWRAP_MASK_MAX, BUBBLEWRAP_WALK_M
 export { BUBBLEWRAP_KNOWN_PATHS, BUBBLEWRAP_MINIMUM_SYSTEM_VERSION, BUBBLEWRAP_OVERLAY_VERSION, selectBubblewrapLauncher, shellSandboxCapabilities, verifyBubblewrapLauncher,
   type BubblewrapSelectOptions } from './internal/launcher.js';
 export { BUBBLEWRAP_BUNDLED } from './internal/bundled.js';
+export { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport, type ShellRealmSelectionView } from './internal/select.js';

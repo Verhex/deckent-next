@@ -1,6 +1,6 @@
 import type { AgentToolSpec, EffectCommand, JsonObject } from '#domain/index.js';
-import { bubblewrapShellSandbox } from '#adapters/core/shell-sandbox-bwrap/index.js';
-import { landlockShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
+import { shippedShellSandboxes } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import type { ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import type { McpClientPool, McpLaunchContext, McpServerOpen } from './pool.js';
 import type { McpClientSettings, McpToolCell, McpTrustBinding } from './pin.js';
 import { agentMcpEffectCommandId, describeMcpApproval, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND } from './target.js';
@@ -70,5 +70,5 @@ export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
 /** The shipped sandbox providers for a server started outside the service (`inspect`: trust, health, restart): the shell's, in its order,
  * without a scratch area, with the same write floor as a turn's launch (Astra 2170 R2: one contract for every server start). */
 export const mcpInspectSandboxes = (project: ShellSandboxLayout['project'], writeFloor: NonNullable<ShellSandboxLayout['writeFloor']>) =>
-  [bubblewrapShellSandbox({ project, scratchDir: null, writeFloor }), landlockShellSandbox({ project, scratchDir: null, writeFloor })];
+  shippedShellSandboxes({ project, scratchDir: null, writeFloor });
 

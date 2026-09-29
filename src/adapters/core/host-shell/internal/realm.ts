@@ -88,17 +88,40 @@ export function describeShellWritePosture(view: ShellSandboxWriteView): string {
   return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}`
     : `the project is writable, its write floor included, ${git}`;
 }
+/** A provider the resolver passed over, and why (its own `usable()` reason; `restricted` when the host restricts it, S3). */
+export interface ShellSandboxRejection { readonly kind: string; readonly reason: string; readonly restricted?: boolean }
+/** The longest rejection reason a notice carries (the AppArmor fix, the longest shipped reason, is ~300 characters). */
+export const SANDBOX_REASON_MAX_CHARS = 480;
+/** One rejection reason as a notice shows it: one line (control characters become spaces), bounded. Reasons are the providers' own
+ * trusted metadata (paths, versions, the fix) — never command output. */
+export function boundSandboxReason(reason: string): string {
+  // eslint-disable-next-line no-control-regex
+  const line = reason.replace(/[\u0000-\u001f\u007f]+/gu, ' ').trim();
+  return line.length > SANDBOX_REASON_MAX_CHARS ? `${line.slice(0, SANDBOX_REASON_MAX_CHARS - 1)}…` : line;
+}
+/** `bubblewrap: <reason>; landlock: <reason>` — the rejections as every sandbox notice names them. */
+export const describeSandboxRejections = (rejected: readonly Pick<ShellSandboxRejection, 'kind' | 'reason'>[]) =>
+  rejected.map(item => `${item.kind}: ${boundSandboxReason(item.reason)}`).join('; ');
+/**
+ * REALM-NOTICE (live 2026-09-29): the one line that says a later sandbox runs because every preferred one was passed over — whatever the
+ * reason (a host restriction, a launcher inside the project, an unavailable mechanism). Shell realms and MCP launches both use it; null
+ * when nothing was passed over.
+ */
+export function describeSandboxFallback(chosen: string, rejected: readonly Pick<ShellSandboxRejection, 'kind' | 'reason'>[]): string | null {
+  return rejected.length ? `[deckent] sandbox: ${chosen} instead of ${rejected.map(item => item.kind).join(', ')} (${describeSandboxRejections(rejected)}).` : null;
+}
 /**
  * A chosen realm. `marker` leads the result's first line (`sandbox: bubblewrap | landlock | degraded | none`; null for the explicit
  * host mode, whose bytes are unchanged), `notice` is shown on the live stream and at the end of the result when the posture falls
- * short (host fallback, degraded Landlock), `posture` renders the approval card's line for where the command runs from the call's
- * actual write view (the notice included when there is one); a realm without a write boundary (host, no sandbox usable) ignores it.
+ * short (host fallback, degraded Landlock, a preferred provider passed over), `posture` renders the approval card's line for where the
+ * command runs from the call's actual write view (the notice included when there is one); a realm without a write boundary (host, no
+ * sandbox usable) ignores it. `rejected`: the providers passed over before the choice, in order (doctor reads it; absent = none).
  */
 export type ShellRealmResolution = { readonly ok: true; readonly realm: ShellRealm; readonly marker: string | null; readonly notice: string | null;
   readonly posture: (view: ShellSandboxWriteView) => string; readonly containment: ShellRealmContainment;
   /** SHELL-OVERLAY: the realm can run a call with the project as an overlay write set (`ShellRealmRequest.writeSet`); absent = cannot. */
-  readonly writeSets?: boolean }
-  | { readonly ok: false; readonly code: 'SHELL_SANDBOX_UNAVAILABLE' | 'SHELL_REALM_UNSUPPORTED' };
+  readonly writeSets?: boolean; readonly rejected?: readonly ShellSandboxRejection[] }
+  | { readonly ok: false; readonly code: 'SHELL_SANDBOX_UNAVAILABLE' | 'SHELL_REALM_UNSUPPORTED'; readonly rejected?: readonly ShellSandboxRejection[] };
 
 /** What a sandbox realm needs to lay out its view of the machine: the project scope (real root, deny floor, ignored names) and the
  * turn's scratch area (SCR-A); nothing about the command. */
@@ -138,31 +161,33 @@ export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly Shell
 /**
  * Picks the realm for one call (S5, S9, S11). `host` is host. Under `prefer-sandbox` / `require-sandbox` the first usable provider
  * wins (list order = preference); with none, `require-sandbox` refuses (typed, before any plan) and `prefer-sandbox` runs on the
- * host with a visible notice naming every mechanism and why it was not usable — never a silent fallback. Capabilities describe
- * mechanisms, never enforcement.
+ * host with a visible notice naming every mechanism and why it was not usable — never a silent fallback. A later provider that wins
+ * after an earlier one was passed over, for any reason, is a visible fallback too (REALM-NOTICE). Capabilities describe mechanisms,
+ * never enforcement.
  */
 export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapabilities, sandboxes: readonly ShellSandbox[] = []): ShellRealmResolution {
   if (capabilities.platform !== 'linux') return { ok: false, code: 'SHELL_REALM_UNSUPPORTED' };
   if (mode === 'host') return { ok: true, realm: hostShellRealm, marker: null, notice: null, posture: () => HOST_SHELL_POSTURE, containment: 'host' };
-  const reasons: string[] = [], restricted: { readonly kind: string; readonly line: string }[] = [];
+  const rejected: ShellSandboxRejection[] = [];
   for (const sandbox of sandboxes) {
     const usable = sandbox.usable(capabilities);
     if (usable.ok) {
-      const writeSets = usable.writeSets ? { writeSets: true } : {};
-      // A preferred mechanism the host restricts (S3: AppArmor user namespaces) is a visible fallback, with the fix: the notice reaches the
-      // live stream and the model result, the posture the approval card.
-      const fallback = restricted.length ? `[deckent] sandbox: ${sandbox.kind} instead of ${restricted.map(item => item.kind).join(', ')} (${restricted.map(item => item.line).join('; ')}).` : null;
-      if (!fallback) return { ok: true, realm: usable.realm, marker: usable.marker, notice: usable.notice, posture: usable.posture, containment: usable.containment, ...writeSets };
+      const writeSets = usable.writeSets ? { writeSets: true } : {}, passed = Object.freeze([...rejected]);
+      // A preferred mechanism passed over — the host restricts it (S3: AppArmor user namespaces, with the fix) or it is unusable for any
+      // other reason (a launcher inside the project) — is a visible fallback: the notice reaches the live stream and the model result,
+      // the posture the approval card.
+      const fallback = describeSandboxFallback(sandbox.kind, passed);
+      if (!fallback) return { ok: true, realm: usable.realm, marker: usable.marker, notice: usable.notice, posture: usable.posture, containment: usable.containment, ...writeSets, rejected: passed };
       const posture = (view: ShellSandboxWriteView) => `${usable.posture(view)}\n${fallback}`;
       return { ok: true, realm: usable.realm, marker: usable.marker, notice: usable.notice ? `${fallback} ${usable.notice}` : fallback, posture, containment: usable.containment,
-        ...writeSets };
+        ...writeSets, rejected: passed };
     }
-    reasons.push(`${sandbox.kind}: ${usable.reason}`);
-    if (usable.restricted) restricted.push({ kind: sandbox.kind, line: `${sandbox.kind}: ${usable.reason}` });
+    rejected.push({ kind: sandbox.kind, reason: usable.reason, ...(usable.restricted ? { restricted: true } : {}) });
   }
-  if (mode === 'require-sandbox') return { ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' };
-  const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';
+  const passed = Object.freeze([...rejected]);
+  if (mode === 'require-sandbox') return { ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: passed };
+  const why = passed.length ? describeSandboxRejections(passed) : 'no sandbox mechanism is available';
   const notice = `[deckent] sandbox: none; running on host (${why}). Files, processes and network are reachable.`;
   // No sandbox ran: the host fallback has no write boundary either, so the card's text is the same fixed notice (never the write view).
-  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host' };
+  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host', rejected: passed };
 }

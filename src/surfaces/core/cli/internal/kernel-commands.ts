@@ -83,6 +83,8 @@ export interface CommandContext extends ModelCommandContext {
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
   // SECRET-K1 (owner S1): the active secret backend and its state; doctor-only, never a hard failure of doctor. `secret list` names only.
   inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
+  // REALM-NOTICE: the shell realm a call here gets and every sandbox provider passed over (read-only measurement); doctor-only.
+  inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
@@ -103,6 +105,16 @@ export interface CommandContext extends ModelCommandContext {
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
+}
+/** One realm resolution as doctor shows it (the adapter's `ShellRealmReport` shape; surfaces keep their own view). */
+interface ShellRealmSelection { readonly selected: string | null; readonly marker: string | null; readonly notice: string | null; readonly code: string | null;
+  readonly rejected: readonly { readonly kind: string; readonly reason: string }[] }
+export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mode: string; readonly preferSandbox: ShellRealmSelection | null }
+/** The realm lines in the product's own sandbox words (the result marker, then the notice the live stream shows); no catalog text. */
+function shellRealmLines(report: ShellRealmDoctorView): string[] {
+  const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
+    ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
+  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'prefer-sandbox (MCP default)') : [])];
 }
 interface Parsed { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; toolchains: boolean; language?: string }
 function parse(argv: readonly string[]): Parsed {
@@ -176,9 +188,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     ? await context.assessModelInvocationDelivery(root, options) : [];
   // SECRET-K1: additive; null when unwired. The configuration is read for the selection only (no reference resolved for this report).
   const secretStore = context.inspectSecretStore ? await context.inspectSecretStore(root, options) : null;
+  // REALM-NOTICE: additive; null when unwired. The measurement itself is bounded and never throws (a failed probe reads `unknown`).
+  const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery, secretStore,
+    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery, secretStore, shellRealm,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
@@ -187,6 +201,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : []),
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
-    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : [])].join('\n'));
+    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
+  ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

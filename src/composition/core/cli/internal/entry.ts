@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
-import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerTranscript } from '#composition/core/worker-observation/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { listConfiguredStandingGrants, revokeConfiguredStandingGrant } from '#composition/core/approvals/index.js';
@@ -51,6 +51,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     runMcpCommand: runConfiguredMcpCommand,
     // SECRET-K1: doctor's secret store line and `secret list` (names only).
     inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames,
+    inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,

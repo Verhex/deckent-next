@@ -71,7 +71,7 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
   });
   it('requires a usable sandbox provider, even if every host capability is present', async () => {
     const capabilities = await probeShellCapabilities(linux(undefined, true));
-    expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', capabilities)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [] });
     expect(resolveShellRealm('prefer-sandbox', capabilities)).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringContaining('sandbox: none') });
     const host = resolveShellRealm('host', capabilities);
@@ -85,14 +85,19 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     const unusable = { kind: 'landlock' as const, usable: vi.fn(() => ({ ok: false as const, reason: 'no-abi' })) };
     const posture = () => 'in a bubblewrap sandbox';
     const usable = { kind: 'bubblewrap' as const, usable: vi.fn(() => ({ ok: true as const, realm, marker: 'sandbox: bubblewrap', posture, notice: null, containment: 'sandbox' as const })) };
-    expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture,
-      containment: 'sandbox' });
+    // REALM-NOTICE: a later provider that wins after one was passed over says so (stream/result notice, card posture), whatever the reason.
+    const later = resolveShellRealm('prefer-sandbox', capabilities, [unusable, usable]);
+    expect(later).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: '[deckent] sandbox: bubblewrap instead of landlock (landlock: no-abi).',
+      posture: expect.any(Function), containment: 'sandbox', rejected: [{ kind: 'landlock', reason: 'no-abi' }] });
+    expect(later.ok && later.posture(OWNER_APPROVED_STANDART)).toBe('in a bubblewrap sandbox\n[deckent] sandbox: bubblewrap instead of landlock (landlock: no-abi).');
+    expect(resolveShellRealm('prefer-sandbox', capabilities, [usable])).toEqual({ ok: true, realm, marker: 'sandbox: bubblewrap', notice: null, posture, containment: 'sandbox',
+      rejected: [] });
     expect(resolveShellRealm('require-sandbox', capabilities, [usable])).toMatchObject({ ok: true, realm });
     expect(resolveShellRealm('host', capabilities, [usable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: null, notice: null });
     expect(usable.usable).toHaveBeenCalledWith(capabilities);
     expect(resolveShellRealm('prefer-sandbox', capabilities, [unusable])).toMatchObject({ ok: true, realm: hostShellRealm, marker: 'sandbox: none', containment: 'host',
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*landlock: no-abi/u) });
-    expect(resolveShellRealm('require-sandbox', capabilities, [unusable])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', capabilities, [unusable])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [{ kind: 'landlock', reason: 'no-abi' }] });
   });
   // S9 + S11 merged: the shipped providers in the shipped order, against fake measurements (no sandbox runs here).
   it('picks bubblewrap when usable, Landlock when bubblewrap is not, and names both reasons when neither is', async () => {
@@ -102,17 +107,18 @@ describe('shell realm configuration and measured capabilities (S5)', () => {
     const bwrapUsable = providers[0]!.usable(both).ok;
     expect(resolveShellRealm('prefer-sandbox', both, providers)).toMatchObject(bwrapUsable
       ? { ok: true, realm: { kind: 'bubblewrap' }, marker: 'sandbox: bubblewrap', notice: null, containment: 'sandbox' }
-      : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', containment: 'sandbox' });
+      : { ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', containment: 'sandbox', notice: expect.stringMatching(/^\[deckent\] sandbox: landlock instead of bubblewrap \(bubblewrap: /u) });
     const noBwrap = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 7, landlockErrno: 0 }, false));
     const landlockPicked = resolveShellRealm('require-sandbox', noBwrap, providers);
-    expect(landlockPicked).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', notice: null, containment: 'sandbox' });
+    expect(landlockPicked).toMatchObject({ ok: true, realm: { kind: 'landlock' }, marker: 'sandbox: landlock', containment: 'sandbox',
+      notice: '[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: bubblewrap unavailable).' });
     expect(landlockPicked.ok && landlockPicked.posture(OWNER_APPROVED_STANDART)).toContain('Landlock');
     expect(resolveShellRealm('prefer-sandbox', await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: 3, landlockErrno: 0 }, false)), providers))
       .toMatchObject({ realm: { kind: 'landlock' }, marker: 'sandbox: degraded', notice: expect.stringContaining('DEGRADED'), containment: 'degraded' });
     const neither = await probeShellCapabilities(linux({ userNamespace: false, landlockAbi: -1, landlockErrno: 38 }, false));
     expect(resolveShellRealm('prefer-sandbox', neither, providers)).toMatchObject({ ok: true, realm: { kind: 'host' }, marker: 'sandbox: none', containment: 'host',
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; running on host \(bubblewrap: bubblewrap unavailable; landlock: landlock unavailable\)/u) });
-    expect(resolveShellRealm('require-sandbox', neither, providers)).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(resolveShellRealm('require-sandbox', neither, providers)).toMatchObject({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [{ kind: 'bubblewrap' }, { kind: 'landlock' }] });
   });
   it.skipIf(process.platform !== 'linux')('host delegates to the existing runner without changing output or result fields', async () => {
     const request = { command: 'printf "host-bytes\\n"', cwd: '/tmp', environment: {} };
