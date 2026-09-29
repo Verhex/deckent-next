@@ -952,13 +952,13 @@ decision), redrawing an open suggestion list when the index refreshes.
 **Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
 `terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process (bwrap
 on PATH, user namespace via a short-lived native helper, Landlock ABI; 2.5 s bound, failures `unknown`, nothing installed). Sandbox
-mechanisms are realm providers (`ShellSandbox.usable(capabilities)` → realm, result marker, card posture, a notice when the posture
+mechanisms are realm providers (`ShellSandbox.usable(capabilities)` → realm, result marker, a posture function of the call's write view, a notice when the posture
 falls short — or why not), taken in preference order from a code-only composition port (`RuntimeServicePorts.shellSandboxes`; shipped
 list **bubblewrap, then Landlock**). `host` → host (result bytes unchanged); a sandbox mode → the first usable provider; none usable →
 `require-sandbox` refuses before any plan, approval or effect (`SHELL_SANDBOX_UNAVAILABLE`), `prefer-sandbox` runs on the host and says
 so in the approval preview, the live stream, the model result and the finished line (`sandbox: none; running on host (bubblewrap: …;
 landlock: …)`) — never a silent fallback; macOS/Windows `SHELL_REALM_UNSUPPORTED`. Every result's first line names its realm (`sandbox:
-bubblewrap | landlock | degraded | none`; only trusted metadata, never command output); the approval card shows the realm's posture.
+bubblewrap | landlock | degraded | none`; only trusted metadata, never command output); the approval card renders that posture against the same `shellWritePosture` result the effect enforces (always `owner-approved` once a card exists; `sandboxWriteView` in `host-shell`), so its project, write-floor and `.git` wording cannot drift from the boundary (host and the no-sandbox fallback keep a fixed text).
 Both sandbox launchers go through the host shell's one process runner (`ShellLaunch`: program, argv ending in `bash --noprofile --norc
 -c`, optional fd 3 setup-failure channel), so the process-group, cancellation, timeout, output-bound and cleanup contract is the same
 everywhere; a realm that cannot set itself up refuses the call (`spawn-failed` → effect `refused`, the reason is the result: "nothing
@@ -1053,7 +1053,7 @@ tools. Policy first: the `agent-tool` decision and the `operation` decision for 
 deny is answered before anything else and never offered. Then the command is classified (slice 3a over the turn's workspace scope):
 only a read-only command of bounded reach (risk `none`) runs without asking, and only under allow; `low` (traversal, repository
 objects), modify and the destructive table ask the owner in standart and full-auto (a launched full-access turn lowers them, MODES-3). In full-auto inside an enforced sandbox realm a contained command of any other tier but destructive runs without asking when the company rule is mode-eligible (SHELL-AUTONOMY; outside the narrow mutating set such a run sees the project read-only, Astra 2170); the realm, not the classifier, bounds it — paths outside the project are left to the realm (bubblewrap: private `/tmp` tmpfs, empty HOME; Landlock: writes outside the project and scratch area refused). The
-approval preview shows the exact command, its risk tier and reason, and where it runs (the realm's posture: bubblewrap, Landlock and its limits, or the host: not a sandbox). Every run is a C11 effect on the
+approval preview shows the exact command, its risk tier and reason, and where it runs (the realm's posture: bubblewrap, Landlock and its limits, or the host: not a sandbox — described from the call's own write posture). Every run is a C11 effect on the
 `host-shell` target (live peer session, operation policy re-evaluated before the effect, intent before spawn; the approval subject's
 `resource` shows at most the first 200 characters of the command, and the exact command is bound by the arguments digest); each run is its own
 record, so an uncertain run never makes the shell busy; its effect identity is the turn, the call's position (model round, index in
