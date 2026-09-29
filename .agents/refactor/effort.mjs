@@ -55,6 +55,12 @@ export async function record(root, sliceId, type, opts, now = new Date().toISOSt
   const last = prior.at(-1);
   ensure(type === 'start' ? prior.length === 0 : prior.length > 0, type === 'start' ? 'EFFORT_ALREADY_STARTED' : 'EFFORT_NOT_STARTED');
   ensure(!last || last.type !== 'end', 'EFFORT_ENDED');
+  // Argument errors are reported before clock state: a usage error must not depend on the wall clock (seen: a WSL clock step made a bad
+  // --reason surface as EFFORT_NOT_MONOTONIC).
+  if (type === 'phase') {
+    ensure(KINDS.includes(opts.kind), 'EFFORT_KIND');
+    ensure(opts.kind === 'blocked' ? BLOCKED_REASONS.includes(opts.reason) : opts.reason === undefined, 'EFFORT_BLOCKED_REASON');
+  }
   const { at, atSource } = timestamp(opts, now);
   ensure(!last || instant(at) >= instant(last.at), 'EFFORT_NOT_MONOTONIC');
   const base = { schemaVersion: 1, type, sliceId, sequence: prior.length + 1, at, atSource, note: note(opts), evidenceRefs: evidence(opts) };
