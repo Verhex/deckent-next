@@ -4,8 +4,10 @@
 // The source tarball and the linked components' license texts are verified against the lock before anything runs; the output sha256 is
 // compared with the lock (a mismatch fails) unless `--record` writes it. The output directory must not exist or be empty.
 // Usage: node scripts/build-bwrap.mjs [--arch x86_64|aarch64|all] [--out .pack/bwrap/<time>] [--cache .pack/bwrap/cache] [--record]
+//        node scripts/build-bwrap.mjs --constant          (re-generates the runtime identity constant from the lock; `--record` does it too)
+//        node scripts/build-bwrap.mjs --stage-dev <out>   (a verified build output → src/…/bundled/, gitignored, for src-mode tests and `npm run build`)
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +15,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGING = join(ROOT, 'packaging', 'bwrap');
 const LOCK = join(PACKAGING, 'bwrap.lock.json');
+/** The runtime's expected identity of the bundled build (BWRAP-SELECT), generated from the lock; a contract test keeps them equal. */
+export const IDENTITY_MODULE = join(ROOT, 'src', 'adapters', 'core', 'shell-sandbox-bwrap', 'internal', 'bundled.ts');
+/** Where the runtime resolves the bundled build, relative to the package's `dist` (and to `src` in development). */
+export const BUNDLED_DIR = join('adapters', 'core', 'shell-sandbox-bwrap', 'bundled');
 export const BWRAP_ARCHES = Object.freeze(['x86_64', 'aarch64']);
 /** Node's `process.arch` for each build architecture: the directory the runtime would resolve inside the package. */
 export const NODE_ARCH = Object.freeze({ x86_64: 'x64', aarch64: 'arm64' });
@@ -51,7 +57,63 @@ export function lockProblems(lock) {
   for (const part of lock.linked ?? []) {
     if (part.licenseText && !SHA256.test(part.licenseText.sha256 ?? '')) problems.push(`linked ${part.name} license text is not pinned`);
   }
+  if (!Array.isArray(lock.shipArches) || !lock.shipArches.length || !lock.shipArches.every(arch => BWRAP_ARCHES.includes(arch))) problems.push(`shipArches must name built architectures: ${lock.shipArches}`);
   return problems;
+}
+
+/** The TypeScript module the runtime compares the bundled file with: version, minimum kernel and the sha256 of each shipped architecture. */
+export function bundledIdentityModule(lock) {
+  const sha = lock.shipArches.map(arch => `    ${NODE_ARCH[arch]}: '${lock.outputs[arch].sha256}',`).join('\n');
+  return ['// Generated from packaging/bwrap/bwrap.lock.json by `node scripts/build-bwrap.mjs --constant` (BWRAP-SELECT); do not edit.',
+    '/** The bundled bubblewrap build this package ships: its version, the oldest kernel it supports and its sha256 per Node architecture. */',
+    'export const BUBBLEWRAP_BUNDLED = Object.freeze({', `  version: '${lock.version}',`, `  minimumKernel: '${lock.minimumKernel}',`,
+    `  sha256: Object.freeze({\n${sha}\n  }) as Readonly<Partial<Record<string, string>>>,`, '});', ''].join('\n');
+}
+
+/** Problems of a staged bundle directory against the lock (empty when it is exactly the locked build for the shipped architectures). */
+export function bundleProblems(dir, lock) {
+  const problems = [];
+  if (!existsSync(dir)) return [`no bundled bubblewrap at ${dir}`];
+  const shipped = lock.shipArches.map(arch => `linux-${NODE_ARCH[arch]}`);
+  for (const entry of readdirSync(dir).filter(name => name.startsWith('linux-'))) if (!shipped.includes(entry)) problems.push(`${entry} is not a shipped architecture`);
+  for (const arch of lock.shipArches) {
+    const path = join(dir, `linux-${NODE_ARCH[arch]}`, 'bwrap');
+    if (!existsSync(path)) { problems.push(`missing linux-${NODE_ARCH[arch]}/bwrap`); continue; }
+    const digest = sha256(readFileSync(path));
+    if (digest !== lock.outputs[arch].sha256) problems.push(`linux-${NODE_ARCH[arch]}/bwrap sha256 ${digest} is not the locked ${lock.outputs[arch].sha256}`);
+  }
+  for (const file of ['NOTICE-bubblewrap.txt', 'licenses/bubblewrap-COPYING', 'licenses/musl-COPYRIGHT', 'licenses/libcap-License',
+    `source/bubblewrap-${lock.version}.tar.xz`, 'source/build.sh', 'source/bwrap.lock.json']) if (!existsSync(join(dir, file))) problems.push(`missing ${file}`);
+  const tarball = join(dir, 'source', `bubblewrap-${lock.version}.tar.xz`), shippedLock = join(dir, 'source', 'bwrap.lock.json');
+  if (existsSync(tarball) && sha256(readFileSync(tarball)) !== lock.source.sha256) problems.push('source tarball does not match the lock');
+  if (existsSync(shippedLock) && JSON.stringify(JSON.parse(readFileSync(shippedLock, 'utf8'))) !== JSON.stringify(lock)) problems.push('source/bwrap.lock.json is not the lock');
+  return problems;
+}
+
+/** Copies a build output (`<out>/out` of this script, or that directory itself) into `target` as the runtime expects it: the shipped
+ * architectures' binaries (0755) with the notice, license texts and the corresponding source (LGPL-2.1 §4). Refuses anything off the lock.
+ * The recipe and lock shipped are the repository's (the binaries' locked sha256 proves they are what this recipe builds); the notice is
+ * regenerated from the lock. */
+export function stageBundle(from, target, lock) {
+  const out = existsSync(join(from, 'out')) ? join(from, 'out') : from;
+  for (const arch of lock.shipArches) {
+    const digest = sha256(readFileSync(join(out, arch, 'bwrap')));
+    if (digest !== lock.outputs[arch].sha256) throw new Error(`${join(out, arch, 'bwrap')} sha256 ${digest} is not the locked ${lock.outputs[arch].sha256}`);
+  }
+  rmSync(target, { recursive: true, force: true }); mkdirSync(target, { recursive: true });
+  for (const arch of lock.shipArches) {
+    const dir = join(target, `linux-${NODE_ARCH[arch]}`); mkdirSync(dir);
+    copyFileSync(join(out, arch, 'bwrap'), join(dir, 'bwrap')); chmodSync(join(dir, 'bwrap'), 0o755);
+  }
+  writeFileSync(join(target, 'NOTICE-bubblewrap.txt'), bwrapNotice(lock));
+  cpSync(join(out, 'licenses'), join(target, 'licenses'), { recursive: true });
+  mkdirSync(join(target, 'source'));
+  copyFileSync(join(out, 'source', `bubblewrap-${lock.version}.tar.xz`), join(target, 'source', `bubblewrap-${lock.version}.tar.xz`));
+  copyFileSync(join(PACKAGING, 'build.sh'), join(target, 'source', 'build.sh'));
+  writeFileSync(join(target, 'source', 'bwrap.lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
+  const problems = bundleProblems(target, lock);
+  if (problems.length) throw new Error(`staged bundle is not the locked build: ${problems.join('; ')}`);
+  return target;
 }
 
 /** The notice shipped next to the executable: what it is, its license, where its exact source is, and the linked components. The
@@ -69,6 +131,9 @@ export function bwrapNotice(lock) {
 
 async function main() {
   const lock = JSON.parse(readFileSync(LOCK, 'utf8'));
+  if (process.argv.includes('--constant')) { writeFileSync(IDENTITY_MODULE, bundledIdentityModule(lock)); process.stdout.write(`${IDENTITY_MODULE}\n`); return; }
+  const stageFrom = option('--stage-dev', null);
+  if (stageFrom) { process.stdout.write(`${stageBundle(resolve(stageFrom), join(ROOT, 'src', BUNDLED_DIR), lock)}\n`); return; }
   const arch = option('--arch', 'all');
   const arches = arch === 'all' ? BWRAP_ARCHES : [arch];
   if (!arches.every(value => BWRAP_ARCHES.includes(value))) throw new Error(`unknown --arch ${arch}`);
@@ -121,6 +186,7 @@ async function main() {
     lock.outputs = { ...lock.outputs };
     for (const name of arches) lock.outputs[name] = { nodeArch: NODE_ARCH[name], sha256: results[name].sha256 };
     writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n');
+    writeFileSync(IDENTITY_MODULE, bundledIdentityModule(lock));
   }
   // The corresponding source travels with the output, after a `--record` wrote the lock, so the shipped lock names these outputs.
   mkdirSync(join(out, 'out', 'source'));

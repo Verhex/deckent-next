@@ -285,7 +285,9 @@
       "nextReview": "2026-10-29"
     },
     "bubblewrap": {
-      "requirement": "system bwrap at /usr/bin, /usr/local/bin or /bin; owner 2026-09-29: ship a pinned, hash-verified bwrap >=0.13 per architecture and accept a system bwrap only above the minimum",
+      "requirement": "system bwrap >= 0.12.0 at /usr/bin, /usr/local/bin or /bin (root-owned file and directories; PATH never read), else the bundled, sha256-verified build run from a 0700 copy under the global state root (owner S1/S2 2026-09-29)",
+      "bundled": { "version": "0.13.0", "lock": "packaging/bwrap/bwrap.lock.json", "license": "LGPL-2.1-or-later", "minimumSystemVersion": "0.12.0", "shipArches": ["x86_64"],
+        "advisories": { "source": "github-security-advisories", "repository": "containers/bubblewrap" } },
       "owners": ["src/adapters/core/shell-sandbox-bwrap", "src/adapters/core/host-shell"],
       "purpose": "Primary shell sandbox realm (namespaces, read-only system binds, deny masks).",
       "criticality": "P0",
@@ -294,7 +296,9 @@
         { "name": "Seatbelt (macOS)", "note": "macOS realm after Linux/WSL2 (owner OS order)." }
       ],
       "ownSolution": "Own namespace launcher is possible but duplicates a reviewed tool; ship pinned upstream bwrap instead.",
-      "watch": ["Upstream 0.12.0 fixed symlink escape (GHSA-pxhw-h44j-8pfx); Ubuntu 24.04 ships 0.9.0 with the CVE patch reverted (0ubuntu0.3)."],
+      "watch": ["Upstream 0.12.0 fixed symlink escape (GHSA-pxhw-h44j-8pfx / CVE-2026-87766, high, < 0.12.0); deps-watch reads the repository's GitHub security advisories against the bundled version and the minimum system version.",
+        "Ubuntu 24.04 ships 0.9.0 (below the minimum: not used); on AppArmor-restricted hosts the bundled copy needs a root-installed profile (typed restricted fallback to Landlock).",
+        "aarch64 builds reproducibly but ships only after a real arm64 realm test (lock shipNote)."],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },

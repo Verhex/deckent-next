@@ -22,7 +22,7 @@ function run(cmd, args) {
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) { if (entry.name !== 'build' && entry.name !== 'node_modules') walk(path, out); }
+    if (entry.isDirectory()) { if (entry.name !== 'build' && entry.name !== 'node_modules' && entry.name !== 'bundled') walk(path, out); }
     else out.push(path);
   }
   return out;
@@ -93,5 +93,9 @@ for (const bin of BINS) {
   if (existsSync(path) && statSync(path).isFile()) chmodSync(path, 0o755);
 }
 const native = buildNative();
+// BWRAP-SELECT: a bubblewrap build staged for development (`node scripts/build-bwrap.mjs --stage-dev <out>`, gitignored) goes where the
+// runtime resolves it; absent → the package has none (build-dist gates releases on the locked build, never this step).
+const BUNDLED = join('adapters', 'core', 'shell-sandbox-bwrap', 'bundled');
+const bundled = existsSync(join(SRC, BUNDLED)) ? (cpSync(join(SRC, BUNDLED), join(DIST, BUNDLED), { recursive: true }), 'copied') : 'absent';
 const identity = buildIdentity();
-process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, ${Math.round(performance.now() - started)}ms\n`);
+process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, bubblewrap=${bundled}, ${Math.round(performance.now() - started)}ms\n`);

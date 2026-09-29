@@ -1,10 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // DEPS-DIST: the bundled package's SBOM comes from the bundler's metafile (bytes actually shipped), not from package.json; OSV reads it back.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { bundledPackages, cyclonedx, embeddedInBundle, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
+import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { declarationImports, publishedManifest } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -80,6 +81,34 @@ describe('dist SBOM', () => {
     expect(notices.text).toContain('- fast-uri@3.1.0 (in @scope/carrier@2.2.0): BSD-3-Clause');
     expect(notices.gaps).toEqual(['unlicensed@1.0.0: no license file in the installed package',
       'fast-uri@3.1.0 (in @scope/carrier@2.2.0): license text not shipped by the carrier']);
+  });
+});
+
+describe('bundled native executables in the SBOM and notices (BWRAP-SELECT)', () => {
+  it('lists the shipped bubblewrap per architecture with its binary hash, corresponding source and linked Alpine packages; deps-watch skips it', () => {
+    const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
+    const native = bundledNativeComponents(lock);
+    expect(native).toHaveLength(1);
+    const [bwrap] = native as Component[] & { externalReferences?: unknown[] }[];
+    expect(bwrap).toMatchObject({ type: 'application', name: 'bubblewrap', version: '0.13.0', licenses: [{ license: { id: 'LGPL-2.1-or-later' } }],
+      purl: `pkg:generic/bubblewrap@0.13.0?download_url=${encodeURIComponent(lock.source.url)}&checksum=sha256:${lock.source.sha256}`,
+      hashes: [{ alg: 'SHA-256', content: lock.outputs.x86_64.sha256 }],
+      externalReferences: [{ type: 'source-distribution', url: lock.source.url, hashes: [{ alg: 'SHA-256', content: lock.source.sha256 }] }, { type: 'vcs', url: 'https://github.com/containers/bubblewrap' }] });
+    expect(bwrap!.properties).toContainEqual({ name: 'deckent:bundle:path', value: 'dist/adapters/core/shell-sandbox-bwrap/bundled/linux-x64/bwrap' });
+    expect(bwrap!.components!.map(item => [item.purl, item.licenses])).toEqual([
+      ['pkg:apk/alpine/musl@1.2.6-r2?arch=x86_64&distro=alpine-3.24.2', [{ license: { id: 'MIT' } }]],
+      ['pkg:apk/alpine/libcap@2.78-r0?arch=x86_64&distro=alpine-3.24.2', [{ license: { id: 'BSD-3-Clause' } }]],
+      ['pkg:apk/alpine/gcc@15.2.0-r5?arch=x86_64&distro=alpine-3.24.2', [{ expression: 'GPL-3.0-or-later WITH GCC-exception-3.1' }]]]);
+    const bom = cyclonedx({ pkg: { name: 'deckent', version: '1.0.0', license: 'Apache-2.0' }, identity: { sourceTreeSha256: 'abc', sourceCommit: null }, tools: [],
+      shipped: [], embedded: [], native, timestamp: 't' });
+    expect(bom.components).toEqual(native);
+    expect(bom.dependencies[0].dependsOn).toEqual([bwrap!['bom-ref']]);
+    expect(sbomComponents(bom)).toEqual([]); // not an npm component: OSV is not asked, the GitHub advisory watch is
+    const notices = thirdPartyNotices('/', { pkg: { name: 'deckent', version: '1.0.0' }, shipped: [], embedded: [],
+      native: [{ name: 'bubblewrap', version: '0.13.0', notice: 'bubblewrap 0.13.0 (LGPL-2.1-or-later) notice', dir: 'dist/adapters/core/shell-sandbox-bwrap/bundled' }] });
+    expect(notices.text).toContain('## bubblewrap 0.13.0 (separate executable)');
+    expect(notices.text).toContain('bubblewrap 0.13.0 (LGPL-2.1-or-later) notice');
+    expect(notices.gaps).toEqual([]);
   });
 });
 

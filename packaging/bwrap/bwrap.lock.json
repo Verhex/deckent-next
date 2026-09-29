@@ -49,11 +49,14 @@
     "-Dzsh_completion=disabled",
     "-Dassume_kernel=5.15.0"
   ],
+  "minimumKernel": "5.15.0",
   "linked": [
     {
       "name": "musl",
       "version": "1.2.6-r2",
       "license": "MIT",
+      "apk": "musl",
+      "spdx": "MIT",
       "licenseText": {
         "url": "https://git.musl-libc.org/cgit/musl/plain/COPYRIGHT?h=v1.2.6",
         "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
@@ -63,6 +66,8 @@
       "name": "libcap",
       "version": "2.78-r0",
       "license": "BSD-3-Clause OR GPL-2.0-only (BSD-3-Clause elected)",
+      "apk": "libcap",
+      "spdx": "BSD-3-Clause",
       "licenseText": {
         "url": "https://git.kernel.org/pub/scm/libs/libcap/libcap.git/plain/License?h=libcap-2.78",
         "sha256": "68467e731f4744bd6e0bb69e8df9c3a994e09cd6b203d0c41327ac6d079c581d"
@@ -72,6 +77,8 @@
       "name": "gcc runtime objects (crtbegin/crtend, libgcc)",
       "version": "15.2.0-r5",
       "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "apk": "gcc",
+      "spdx": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "licenseText": null
     }
   ],
@@ -86,6 +93,10 @@
       "sha256": "f9380897c4126d256e2d9580d89ccdfe1c13877c13dfd9cea212f02021460c4e"
     }
   },
+  "shipArches": [
+    "x86_64"
+  ],
+  "shipNote": "aarch64 builds reproducibly (outputs.aarch64) but is not shipped until a real arm64 host runs the realm tests (owner 2026-09-29; only qemu --version was run)",
   "resolvedPackages": {
     "host": [
       "alpine-baselayout-3.7.2-r1",
@@ -197,6 +208,5 @@
       "zlib-1.3.2-r0",
       "zstd-libs-1.5.7-r2"
     ]
-  },
-  "minimumKernel": "5.15.0"
+  }
 }

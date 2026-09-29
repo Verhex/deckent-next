@@ -1,13 +1,28 @@
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 // BWRAP-BUNDLE: the shipped bubblewrap is identified by one lock (source, build image, every package, outputs); the build refuses a lock
 // that does not pin all of them, and the notice shipped next to the binary names its license, exact source and linked components.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { BWRAP_ARCHES, bwrapNotice, lockProblems } from '../../../scripts/build-bwrap.mjs';
+import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, IDENTITY_MODULE, lockProblems, stageBundle } from '../../../scripts/build-bwrap.mjs';
 
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const buildScript = readFileSync(new URL('../../../packaging/bwrap/build.sh', import.meta.url), 'utf8');
 const mutated = (change: (copy: typeof lock) => void) => { const copy = structuredClone(lock); change(copy); return lockProblems(copy) as string[]; };
+const roots: string[] = [];
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+/** A build-bwrap output tree with fake binaries whose sha256 a copy of the lock then names. */
+function fakeBuild() {
+  const root = mkdtempSync(join(tmpdir(), 'bwrap-stage-')); roots.push(root);
+  const out = join(root, 'build', 'out'), copy = structuredClone(lock);
+  for (const arch of BWRAP_ARCHES) { mkdirSync(join(out, arch), { recursive: true }); writeFileSync(join(out, arch, 'bwrap'), `fake ${arch}\n`); copy.outputs[arch].sha256 = sha(`fake ${arch}\n`); }
+  mkdirSync(join(out, 'licenses')); for (const name of ['bubblewrap-COPYING', 'musl-COPYRIGHT', 'libcap-License']) writeFileSync(join(out, 'licenses', name), name);
+  mkdirSync(join(out, 'source')); writeFileSync(join(out, 'source', `bubblewrap-${lock.version}.tar.xz`), 'tarball'); copy.source.sha256 = sha('tarball');
+  return { root, build: join(root, 'build'), copy };
+}
 
 describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
   it('pins source, image, every package and one output per architecture; a missing pin is a named problem', () => {
@@ -31,5 +46,35 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     const notice = bwrapNotice(lock) as string;
     for (const text of [`bubblewrap ${lock.version}`, lock.license, lock.source.url, lock.source.sha256, lock.source.commit,
       ...lock.linked.map((part: { name: string; license: string }) => `${part.name}`)]) expect(notice).toContain(text);
+  });
+
+  it('the runtime identity constant is generated from the lock and ships only the architectures the lock ships (aarch64 withheld)', () => {
+    expect(readFileSync(IDENTITY_MODULE, 'utf8')).toBe(bundledIdentityModule(lock));
+    expect(lock.shipArches).toEqual(['x86_64']);
+    expect(lock.shipNote).toMatch(/arm64/u);
+    expect(lock.mesonOptions).toContain('-Dassume_kernel=5.15.0');
+    expect(lock.minimumKernel).toBe('5.15.0');
+    expect(mutated(copy => { copy.shipArches = ['riscv64']; })).toEqual(['shipArches must name built architectures: riscv64']);
+  });
+
+  it('stages only the locked binaries of shipped architectures with notice, licenses and the corresponding source; refuses anything else', () => {
+    const { root, build, copy } = fakeBuild();
+    const target = join(root, 'bundled');
+    stageBundle(build, target, copy);
+    expect(statSync(join(target, 'linux-x64', 'bwrap')).mode & 0o777).toBe(0o755);
+    expect(() => statSync(join(target, 'linux-arm64'))).toThrow();
+    expect(readFileSync(join(target, 'NOTICE-bubblewrap.txt'), 'utf8')).toBe(bwrapNotice(copy));
+    expect(readFileSync(join(target, 'source', 'build.sh'), 'utf8')).toBe(buildScript);
+    expect(JSON.parse(readFileSync(join(target, 'source', 'bwrap.lock.json'), 'utf8'))).toEqual(copy);
+    expect(bundleProblems(target, copy)).toEqual([]);
+    expect(bundleProblems(target, lock)).toContain('source/bwrap.lock.json is not the lock');
+    // Drift is named: a changed binary, an extra architecture, a missing source file.
+    writeFileSync(join(target, 'linux-x64', 'bwrap'), 'other\n'); cpSync(join(target, 'linux-x64'), join(target, 'linux-arm64'), { recursive: true });
+    rmSync(join(target, 'source', 'build.sh'));
+    expect(bundleProblems(target, copy)).toEqual(['linux-arm64 is not a shipped architecture',
+      `linux-x64/bwrap sha256 ${sha('other\n')} is not the locked ${copy.outputs.x86_64.sha256}`, 'missing source/build.sh']);
+    // A build output off the lock is never staged.
+    writeFileSync(join(build, 'out', 'x86_64', 'bwrap'), 'tampered\n'); chmodSync(join(build, 'out', 'x86_64', 'bwrap'), 0o755);
+    expect(() => stageBundle(build, join(root, 'again'), copy)).toThrow(/is not the locked/u);
   });
 });
