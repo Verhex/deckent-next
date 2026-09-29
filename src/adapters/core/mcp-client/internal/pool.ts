@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Client, CallToolResult, VersionNegotiationMode } from '@modelcontextprotocol/client';
+import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
@@ -51,8 +51,12 @@ export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legac
   readonly serverInfo: { readonly name: string; readonly version: string } | null; readonly sandboxed: boolean; readonly posture: string;
   readonly tools: readonly McpToolVerdict[] } | { readonly ok: false; readonly reason: 'sandbox-unavailable' | 'start-failed' | 'list-failed' | 'restart-limit' | 'too-many-tools';
   readonly detail?: string };
-export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: { readonly code: number; readonly message: string } }
-  | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' }
+/** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
+ * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
+ * server answered, so its effect may have happened). */
+export interface McpAnsweredError { readonly code: number; readonly message: string; readonly kind: 'server' | 'header-mismatch' | 'output-schema' }
+export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: CallToolResult } | { readonly outcome: 'answered'; readonly error: McpAnsweredError }
+  | { readonly outcome: 'refused'; readonly reason: 'not-connected' | 'pin-mismatch' | 'cancelled' | 'invalid-output-schema' }
   | { readonly outcome: 'unknown'; readonly reason: 'timed-out' | 'connection-closed' | 'cancelled' | 'failed' };
 
 interface ServerState {
@@ -62,8 +66,10 @@ interface ServerState {
   starts: number;
   failed: string | null;
   stderr: Buffer;
-  listing: { readonly generation: number; readonly digests: ReadonlyMap<string, string> } | null;
+  listing: { readonly generation: number; readonly tools: ReadonlyMap<string, PinnedTool> } | null;
   last: Extract<McpServerOpen, { ok: true }> | null;
+  /** The validator this process's client compiles with (the pool's pre-send compile uses the same one). */
+  validator: JsonSchemaValidator | null;
   lock: Promise<unknown>;
 }
 /** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each).
@@ -77,6 +83,24 @@ const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprot
 const listAllTools = async (client: Client, timeoutMs: number) =>
   (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.timeout(timeoutMs * 2) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
+type JsonSchemaValidator = { getValidator(schema: Record<string, unknown>): unknown };
+/** One listed tool as the pin binds it: its digest and exactly the digest-covered fields (frozen; nothing unpinned reaches the SDK). The
+ * validator writes into a schema it compiles (@cfworker's `__absolute_uri__`), so every use gets a fresh copy of the frozen pin; `compiles`
+ * caches whether the pinned outputSchema compiles (null = not compiled yet). */
+interface PinnedTool { readonly digest: string; readonly definition: Tool; compiles: boolean | null }
+const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object') { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } return value; };
+function pinnedTools(tools: readonly McpLiveTool[]): ReadonlyMap<string, PinnedTool> {
+  return new Map(tools.map(tool => {
+    const { name, title, description, inputSchema, outputSchema, annotations } = tool;
+    const definition: McpLiveTool = deepFreeze(structuredClone(Object.fromEntries(Object.entries({ name, title, description, inputSchema, outputSchema, annotations })
+      .filter(([, value]) => value !== undefined)) as unknown as McpLiveTool));
+    return [name, { digest: mcpToolPinDigest(definition), definition: definition as unknown as Tool, compiles: null }];
+  }));
+}
+/** SEP-2243 HeaderMismatch (Streamable HTTP; the SDK does not export its constant). */
+const HEADER_MISMATCH = -32020;
+/** The SDK's own post-send structured-result checks (client 2.2.0 `callTool`): missing (-32600), nonconforming or unvalidatable (-32602). */
+const OUTPUT_SCHEMA_FAILURE = /^(?:Tool .+ has an output schema but did not return structured content|Structured content does not match the tool's output schema|Failed to validate structured content)/su;
 
 /**
  * The runtime service's MCP servers (MCP-CLIENT): each is started by the first turn (or `inspect`) that needs it, listed, verified against its
@@ -96,7 +120,8 @@ export class McpClientPool {
     const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0])).digest('hex');
     let state = this.states.get(server.id);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); state = undefined; }
-    if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, lock: Promise.resolve() };
+    if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
+      lock: Promise.resolve() };
       this.states.set(server.id, state); }
     const current = state, run = current.lock.then(() => this.openLocked(current, server, settings, context));
     current.lock = run.catch(() => undefined);
@@ -121,7 +146,7 @@ export class McpClientPool {
       return { ok: false, reason: 'list-failed', detail: String(errorCode(error) ?? 'failed') };
     }
     if (tools.length > MCP_CLIENT_TOOLS_MAX) return { ok: false, reason: 'too-many-tools', detail: `${tools.length} > ${MCP_CLIENT_TOOLS_MAX}` };
-    state.listing = { generation: state.generation, digests: new Map(tools.map(tool => [tool.name, mcpToolPinDigest(tool)])) };
+    state.listing = { generation: state.generation, tools: pinnedTools(tools) };
     const info = client.getServerVersion();
     state.last = { ok: true, era: client.getProtocolEra() === 'modern' ? 'modern' : 'legacy', protocolVersion: client.getNegotiatedProtocolVersion() ?? null,
       serverInfo: info ? { name: String(info.name), version: String(info.version) } : null, sandboxed: state.last?.sandboxed ?? false,
@@ -137,39 +162,56 @@ export class McpClientPool {
     });
     // Both eras: `server/discover` first (2026-07-28), the `initialize` handshake when the server is not modern (stdio: a sibling probe process).
     const negotiation: VersionNegotiationMode = 'auto';
+    const validator = new CfWorkerJsonSchemaValidator();
     const client = new Client({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { supportedProtocolVersions: [...MCP_CLIENT_PROTOCOL_VERSIONS],
       versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX,
-      jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
+      jsonSchemaValidator: validator });
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
       return { ok: false, reason: 'start-failed', detail: String(errorCode(error) ?? (error as Error)?.message ?? 'failed').slice(0, 200) };
     }
     if (this.closed) { await client.close().catch(() => undefined); return { ok: false, reason: 'start-failed', detail: 'the service is stopping' }; }
-    state.generation++; state.client = client;
+    state.generation++; state.client = client; state.validator = validator;
     client.onclose = () => { if (state.client === client) state.client = null; };
     state.last = { ok: true, era: 'legacy', protocolVersion: null, serverInfo: null, sandboxed: launch.sandboxed, posture: launch.posture, tools: [] };
     return state.last;
   }
   /**
-   * Sends one `tools/call` on the live process whose listing matched `digest` (a restarted process is listed again first). Nothing is sent when
-   * the server is not connected, the pin no longer matches or the call was cancelled first. After sending: an answer (a result or a JSON-RPC
-   * error) is `answered`; a timeout, a cancellation or a closed connection is `unknown` — it is never sent again here.
+   * Sends one `tools/call` on the live process whose listing matched `digest` (a restarted process is listed again first), carrying that
+   * listing's pinned definition (`toolDefinition`): the SDK validates structuredContent against the pinned outputSchema and never re-lists or
+   * re-sends (MCP-PIN-DEF). Nothing is sent when the server is not connected, the pin no longer matches, the pinned outputSchema cannot be
+   * compiled or the call was cancelled first. After sending: an answer (a result or a JSON-RPC error, HEADER_MISMATCH and a nonconforming
+   * structured result included) is `answered`; a timeout, a cancellation or a closed connection is `unknown` — it is never sent again here.
    */
   async call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal }): Promise<McpCallOutcome> {
     const state = this.states.get(serverId), client = state?.client;
     if (!state || !client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
-      try { const tools = await listAllTools(client, options.timeoutMs);
-        state.listing = { generation: state.generation, digests: new Map(tools.map(entry => [entry.name, mcpToolPinDigest(entry)])) }; }
+      try { state.listing = { generation: state.generation, tools: pinnedTools(await listAllTools(client, options.timeoutMs)) }; }
       catch { return { outcome: 'refused', reason: 'not-connected' }; }
     }
-    if (state.listing.digests.get(tool) !== digest) return { outcome: 'refused', reason: 'pin-mismatch' };
+    const pinned = state.listing.tools.get(tool);
+    if (!pinned || pinned.digest !== digest) return { outcome: 'refused', reason: 'pin-mismatch' };
+    // The SDK compiles the given definition before sending and throws -32602 when it cannot: compiled here first (the same validator), so
+    // that case is refused with nothing sent instead of looking answered.
+    const definition = structuredClone(pinned.definition), outputSchema = pinned.definition.outputSchema as Record<string, unknown> | undefined;
+    if (outputSchema && state.validator) {
+      if (pinned.compiles === null) try { state.validator.getValidator(structuredClone(outputSchema)); pinned.compiles = true; } catch { pinned.compiles = false; }
+      if (!pinned.compiles) return { outcome: 'refused', reason: 'invalid-output-schema' };
+    }
     if (options.signal.aborted) return { outcome: 'refused', reason: 'cancelled' };
-    try { return { outcome: 'answered', result: await client.callTool({ name: tool, arguments: args }, { timeout: options.timeoutMs, signal: options.signal }) as CallToolResult }; }
-    catch (error) {
+    try {
+      return { outcome: 'answered', result: await client.callTool({ name: tool, arguments: args },
+        { timeout: options.timeoutMs, signal: options.signal, toolDefinition: definition }) as CallToolResult };
+    } catch (error) {
       const [{ ProtocolError }] = await loadClientSdk();
-      if (error instanceof ProtocolError) return { outcome: 'answered', error: { code: error.code, message: error.message } };
+      if (error instanceof ProtocolError) {
+        if (error.code === HEADER_MISMATCH) return { outcome: 'answered', error: { code: error.code, message: error.message, kind: 'header-mismatch' } };
+        if (outputSchema && (error.code === -32600 || error.code === -32602) && OUTPUT_SCHEMA_FAILURE.test(error.message))
+          return { outcome: 'answered', error: { code: -32602, message: error.message, kind: 'output-schema' } };
+        return { outcome: 'answered', error: { code: error.code, message: error.message, kind: 'server' } };
+      }
       const code = errorCode(error);
       if (code === 'NOT_CONNECTED' || (error as Error)?.message === 'Not connected') return { outcome: 'refused', reason: 'not-connected' };
       if (options.signal.aborted) return { outcome: 'unknown', reason: 'cancelled' };

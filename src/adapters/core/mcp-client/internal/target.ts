@@ -21,8 +21,9 @@ export const agentMcpEffectCommandId = (scopeId: string, turnId: string, executi
 const inputSchema = z.object({ server: z.string().min(1), tool: z.string().min(1), digest: z.string().regex(/^[a-f0-9]{64}$/), arguments: z.record(z.string(), z.unknown()) }).strict();
 /**
  * One MCP tool call as a C11 effect target. Each call is its own record and is never repeated (`lookup` is always unknown). Nothing sent
- * (not connected, the pin no longer matches, cancelled first) → refused; the server answered (a result, `isError`, a JSON-RPC error) → the
- * effect happened; sent then timed out, cancelled or the process died → unknown.
+ * (not connected, the pin no longer matches, its pinned outputSchema cannot be compiled, cancelled first) → refused; the server answered (a
+ * result, `isError`, a JSON-RPC error, HEADER_MISMATCH, a structured result that does not conform to the pinned outputSchema) → the effect
+ * happened; sent then timed out, cancelled or the process died → unknown.
  */
 export class McpToolTarget implements EffectTarget {
   readonly kind = MCP_TOOL_TARGET_KIND;
@@ -68,7 +69,13 @@ export function describeMcpResult(outcome: McpCallOutcome, display: string, maxB
   const tag = `[deckent] ${display}:`;
   if (outcome.outcome === 'refused') return { status: 'error', text: `${tag} error=${outcome.reason}; nothing was sent` };
   if (outcome.outcome === 'unknown') return { status: 'error', text: `${tag} error=${outcome.reason}; the call was sent and its outcome is unknown; it is not sent again` };
-  if ('error' in outcome) return { status: 'error', text: `${tag} error=server-error ${outcome.error.code}: ${redactText(outcome.error.message, [], 1_000)}` };
+  if ('error' in outcome) {
+    const { code, kind } = outcome.error, message = redactText(outcome.error.message, [], 1_000);
+    if (kind === 'header-mismatch') return { status: 'error', text: `${tag} error=header-mismatch ${code}: ${message}; the call was sent once and the server rejected it; it is not sent again` };
+    if (kind === 'output-schema') return { status: 'error', text: `${tag} error=invalid-structured-result ${code}: ${message}; the server answered (its effect may have happened) `
+      + 'but its structured result does not match the pinned output schema; the result is withheld and the call is not sent again' };
+    return { status: 'error', text: `${tag} error=server-error ${code}: ${message}` };
+  }
   const items = (Array.isArray(outcome.result.content) ? outcome.result.content : []) as Record<string, unknown>[];
   const texts = items.map(contentText);
   if (!items.some(item => item['type'] === 'text') && outcome.result.structuredContent !== undefined) texts.push(JSON.stringify(outcome.result.structuredContent));
