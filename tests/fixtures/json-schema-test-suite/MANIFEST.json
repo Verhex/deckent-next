@@ -1,0 +1,366 @@
+{
+ "upstream": "https://github.com/json-schema-org/JSON-Schema-Test-Suite",
+ "commit": "5b0ee1613e45fcc2bddac00e07c19cd49b00d8a8",
+ "committed": "2026-09-21T18:57:04Z",
+ "license": "MIT (LICENSE)",
+ "vendored": "2026-09-29",
+ "transformation": "JSON.parse → JSON.stringify (one line); content unchanged",
+ "files": {
+  "draft2020-12/additionalProperties.json": {
+   "upstream": "tests/draft2020-12/additionalProperties.json",
+   "sha256": "b96bd533416386ac6421737b48c5c072870ab5dbea910585e9e8fa6305c7ca91"
+  },
+  "draft2020-12/allOf.json": {
+   "upstream": "tests/draft2020-12/allOf.json",
+   "sha256": "81045b06706a28f6aa337b485b41a764098e10ac73bb1d346ba0a4285a63e970"
+  },
+  "draft2020-12/anchor.json": {
+   "upstream": "tests/draft2020-12/anchor.json",
+   "sha256": "6f60e0782be6072733701459684cadf3741ddd60d96b14698b4d9a19075e9f1e"
+  },
+  "draft2020-12/anyOf.json": {
+   "upstream": "tests/draft2020-12/anyOf.json",
+   "sha256": "7a6fe41602496c256334ffa3e6fb457b26ac23b97ca03cb16b724ad21a7d216d"
+  },
+  "draft2020-12/boolean_schema.json": {
+   "upstream": "tests/draft2020-12/boolean_schema.json",
+   "sha256": "9c8828d325b88a0c632fca22405d5481548b49fb0f9f5536ee401e4d66aa8582"
+  },
+  "draft2020-12/const.json": {
+   "upstream": "tests/draft2020-12/const.json",
+   "sha256": "83a148d2589cbd211e7e64b31763290f8869d763f513de4658e8d25f0fcc025e"
+  },
+  "draft2020-12/contains.json": {
+   "upstream": "tests/draft2020-12/contains.json",
+   "sha256": "086782fc8b54ac77a4a2afe8b84f8cc7fc9ca7b22473ebd8db3480f2eb8d0ab6"
+  },
+  "draft2020-12/content.json": {
+   "upstream": "tests/draft2020-12/content.json",
+   "sha256": "9b08c408d32cf64f1966aa300cc246355799d883ed278a61d720493f61711bab"
+  },
+  "draft2020-12/default.json": {
+   "upstream": "tests/draft2020-12/default.json",
+   "sha256": "db4a8382727f6c687a0fc7bb24347e010c3fcfabd1207150ce025e1a763f6094"
+  },
+  "draft2020-12/defs.json": {
+   "upstream": "tests/draft2020-12/defs.json",
+   "sha256": "5a352f0b1ad9aa906758fa4d363a77c4c4b29cfc193e8d6f7ab1e184be2a75d5"
+  },
+  "draft2020-12/dependentRequired.json": {
+   "upstream": "tests/draft2020-12/dependentRequired.json",
+   "sha256": "0824c393115498ac1a62551c3174a3ccd54ee4ef323d5eb9de0dfe3a185ad666"
+  },
+  "draft2020-12/dependentSchemas.json": {
+   "upstream": "tests/draft2020-12/dependentSchemas.json",
+   "sha256": "f77df8d5243c0f58e04053a14a30706f5a6d5a9e7eccbfd17f8d6445841f8752"
+  },
+  "draft2020-12/dynamicRef.json": {
+   "upstream": "tests/draft2020-12/dynamicRef.json",
+   "sha256": "dabad36a92ad5747f6b4f77907addf64795422589bbebdea7af8ff1a2b61879d"
+  },
+  "draft2020-12/enum.json": {
+   "upstream": "tests/draft2020-12/enum.json",
+   "sha256": "1abe7eb883bde4a78c62f08e484e16f32b72ca5c1be725aa54d85cc4546b5031"
+  },
+  "draft2020-12/exclusiveMaximum.json": {
+   "upstream": "tests/draft2020-12/exclusiveMaximum.json",
+   "sha256": "e37fc110c48e2a9de564579ceba3e8ab098a36f904dcc1ef02f8cf7b59dc0473"
+  },
+  "draft2020-12/exclusiveMinimum.json": {
+   "upstream": "tests/draft2020-12/exclusiveMinimum.json",
+   "sha256": "0395a2423606d07943d3d355d1c9c4a474cc7cb544d3c8f266ceab801c5f0a6d"
+  },
+  "draft2020-12/format.json": {
+   "upstream": "tests/draft2020-12/format.json",
+   "sha256": "3baf934e2aeace523012f92994e3c9f4b6142d68ba9ece0c12becaffa52eaf5f"
+  },
+  "draft2020-12/if-then-else.json": {
+   "upstream": "tests/draft2020-12/if-then-else.json",
+   "sha256": "4bc76318e6df0e8294cb9aa8a3bf95f04fa9cfea96f295a3b55e725d1289c809"
+  },
+  "draft2020-12/infinite-loop-detection.json": {
+   "upstream": "tests/draft2020-12/infinite-loop-detection.json",
+   "sha256": "9fffe850049048a0e411133f7e5fec347f97c077bde65b34c67dadf96e046bcc"
+  },
+  "draft2020-12/items.json": {
+   "upstream": "tests/draft2020-12/items.json",
+   "sha256": "d924a8171f1f1d04ff026a4e3491d1376297145563158543005b7073b69ab913"
+  },
+  "draft2020-12/maxContains.json": {
+   "upstream": "tests/draft2020-12/maxContains.json",
+   "sha256": "2d7cf7557b87b15a08457badc66905593834bbdda98f325a22d136dfdefe81ed"
+  },
+  "draft2020-12/maxItems.json": {
+   "upstream": "tests/draft2020-12/maxItems.json",
+   "sha256": "59fa6236c0766aaac5fb7c9ef82e205c230efa94271485f614218291be7cbc5c"
+  },
+  "draft2020-12/maxLength.json": {
+   "upstream": "tests/draft2020-12/maxLength.json",
+   "sha256": "ac43a3991586f2d2d1e7e37cad01bb1a7b1c5d9ad7b558d6029d24b41a04d1a9"
+  },
+  "draft2020-12/maxProperties.json": {
+   "upstream": "tests/draft2020-12/maxProperties.json",
+   "sha256": "4f1d14ac74862f134e6769884a7e72d47328daf91e2c6b475ae5f99891e3477d"
+  },
+  "draft2020-12/maximum.json": {
+   "upstream": "tests/draft2020-12/maximum.json",
+   "sha256": "dfbc88ef4ede2966250fb2ad44076856d51481ea01ce679cca70efe47606ee90"
+  },
+  "draft2020-12/minContains.json": {
+   "upstream": "tests/draft2020-12/minContains.json",
+   "sha256": "2aca05e48dbdf605fe14c775f5470061cf4c8b679e3e6a955a18334ea97d3c23"
+  },
+  "draft2020-12/minItems.json": {
+   "upstream": "tests/draft2020-12/minItems.json",
+   "sha256": "9792cedc446be654836b42d0312eca12051e9e2f24cd5d95dcd3f3fc9adccd0a"
+  },
+  "draft2020-12/minLength.json": {
+   "upstream": "tests/draft2020-12/minLength.json",
+   "sha256": "999e9731c57a1296e06e8b9b36b0531614ab7a6ac3c20db6fed50badbf3850ab"
+  },
+  "draft2020-12/minProperties.json": {
+   "upstream": "tests/draft2020-12/minProperties.json",
+   "sha256": "00f641408d1dc3ff81743e0c730eb430ff818e3bbe37007a64138bd513ade05a"
+  },
+  "draft2020-12/minimum.json": {
+   "upstream": "tests/draft2020-12/minimum.json",
+   "sha256": "f6a29cb574b76621da23636a636cf12cb31b01646b89543e6ce1a813376439a3"
+  },
+  "draft2020-12/multipleOf.json": {
+   "upstream": "tests/draft2020-12/multipleOf.json",
+   "sha256": "ada35b586efe55186d35d8888a4e4954724c313253b59bd47ec03637a44cb4ad"
+  },
+  "draft2020-12/not.json": {
+   "upstream": "tests/draft2020-12/not.json",
+   "sha256": "1fd6ef263efd365680c6aaf8f23aa5430d7b9f80b84f46b1208b1ed8353c28b4"
+  },
+  "draft2020-12/oneOf.json": {
+   "upstream": "tests/draft2020-12/oneOf.json",
+   "sha256": "a8d80a786d07769cb9b8b9a8903ca4f7aa564446ae6b781c7f7f6ffea11ed363"
+  },
+  "draft2020-12/pattern.json": {
+   "upstream": "tests/draft2020-12/pattern.json",
+   "sha256": "60713a3b01957fad54f00ab30b378463b3e07b35242c945a9325f8d6ae7080fc"
+  },
+  "draft2020-12/patternProperties.json": {
+   "upstream": "tests/draft2020-12/patternProperties.json",
+   "sha256": "0ffca33f7c234490248c8a1cb6a68c8cd25e1ff96cffa116ed13bf27d0f88871"
+  },
+  "draft2020-12/prefixItems.json": {
+   "upstream": "tests/draft2020-12/prefixItems.json",
+   "sha256": "5b2006fb0d99f9df8e25e384d665edc57427e7849ac0f963f541626fd82bb522"
+  },
+  "draft2020-12/properties.json": {
+   "upstream": "tests/draft2020-12/properties.json",
+   "sha256": "58f01566cfe3e1fc4fb851d3b2eab13768d65ba5dbc4e9f9387ceaf4244a0522"
+  },
+  "draft2020-12/propertyNames.json": {
+   "upstream": "tests/draft2020-12/propertyNames.json",
+   "sha256": "54469f831102465060d0db9a9611e827fb7e87df38179d8a28ac45c10576ef83"
+  },
+  "draft2020-12/ref.json": {
+   "upstream": "tests/draft2020-12/ref.json",
+   "sha256": "ae53f3f57c220879729225eb416cecac909f06b5adaf15f799b4f3e7c0612998"
+  },
+  "draft2020-12/refRemote.json": {
+   "upstream": "tests/draft2020-12/refRemote.json",
+   "sha256": "8fcb97acb2b76308cab9d82eccd7388dd7d6ca59cf68f6d03281bc40adc9c7ee"
+  },
+  "draft2020-12/required.json": {
+   "upstream": "tests/draft2020-12/required.json",
+   "sha256": "3e3900dd0e546c1cb4aaab6b24ea0e06a8f7f8c05b272dcc87e85332501ed42e"
+  },
+  "draft2020-12/type.json": {
+   "upstream": "tests/draft2020-12/type.json",
+   "sha256": "4c5cbe6cbcd28af73761091367b20e07d0403847e236c06c31fc27061bd81192"
+  },
+  "draft2020-12/unevaluatedItems.json": {
+   "upstream": "tests/draft2020-12/unevaluatedItems.json",
+   "sha256": "477e7e734ba86a76fc605d34afa6867ab25081b072792c2d853cbe666e42b7da"
+  },
+  "draft2020-12/unevaluatedProperties.json": {
+   "upstream": "tests/draft2020-12/unevaluatedProperties.json",
+   "sha256": "cdf9b1c6253470b01da5482c6833553f56e1fb652bf466476faa19c8f0cd2c7c"
+  },
+  "draft2020-12/uniqueItems.json": {
+   "upstream": "tests/draft2020-12/uniqueItems.json",
+   "sha256": "ed84ef6ddc827659e257ba64cbe9679f06932b6320bea5c07622bf3d2cc4daa5"
+  },
+  "draft2020-12/vocabulary.json": {
+   "upstream": "tests/draft2020-12/vocabulary.json",
+   "sha256": "7c753d28de2d551fe0329b5a0ac939de921ffe1dfd1c82336e8d4a78d904ce8a"
+  },
+  "draft2020-12/optional-ecmascript-regex.json": {
+   "upstream": "tests/draft2020-12/optional/ecmascript-regex.json",
+   "sha256": "8ee6227f32327b5debb30a78088636f5eef3968840f685c615d4be636fd90c92"
+  },
+  "draft2020-12/optional-non-bmp-regex.json": {
+   "upstream": "tests/draft2020-12/optional/non-bmp-regex.json",
+   "sha256": "b01f24ba860f74baad227988571d44edd6461f51dc5319e418802f2f789721f1"
+  },
+  "draft2020-12/optional-float-overflow.json": {
+   "upstream": "tests/draft2020-12/optional/float-overflow.json",
+   "sha256": "bfccb3bf6e4eb6f15a572dccc0e7ad93e6ff24911991355fd9ba2d75deae02e1"
+  },
+  "draft7/additionalItems.json": {
+   "upstream": "tests/draft7/additionalItems.json",
+   "sha256": "c25888a38a6db63d31daa9bce5647038513a54a327dabaeb2548189f6a51fb64"
+  },
+  "draft7/additionalProperties.json": {
+   "upstream": "tests/draft7/additionalProperties.json",
+   "sha256": "6ab2e5091d2d75fc047767b42cafdb493b67f2559b05bf33202a154363824b4c"
+  },
+  "draft7/allOf.json": {
+   "upstream": "tests/draft7/allOf.json",
+   "sha256": "940b67eca31bc9035a9864a5b00a720e6880d7780e6e4db85403bfa12222fd7a"
+  },
+  "draft7/anyOf.json": {
+   "upstream": "tests/draft7/anyOf.json",
+   "sha256": "1175062b77388b03432d61f1b43448a71b5b2bb03696215ebe52fa5be69eec61"
+  },
+  "draft7/boolean_schema.json": {
+   "upstream": "tests/draft7/boolean_schema.json",
+   "sha256": "9c8828d325b88a0c632fca22405d5481548b49fb0f9f5536ee401e4d66aa8582"
+  },
+  "draft7/const.json": {
+   "upstream": "tests/draft7/const.json",
+   "sha256": "65d2b152fbbbdd3291beb3dcc048dea1644acf3c59c68b5f72f521b5a927fcf9"
+  },
+  "draft7/contains.json": {
+   "upstream": "tests/draft7/contains.json",
+   "sha256": "2a27945551b0189c264709147b46608fedb1d50b0d841817757ef60ba445f024"
+  },
+  "draft7/default.json": {
+   "upstream": "tests/draft7/default.json",
+   "sha256": "b0c16241a36d86af33b33183da33b15f5d883a141fbc2ee451d57ec679f17e7e"
+  },
+  "draft7/definitions.json": {
+   "upstream": "tests/draft7/definitions.json",
+   "sha256": "b1159d8adeb80362bfc09b925b20f4bacdf698f8fe437d9859b4403dfff87b24"
+  },
+  "draft7/dependencies.json": {
+   "upstream": "tests/draft7/dependencies.json",
+   "sha256": "e5c757b8c79b669eab621eb7b2801c99aecd94dd16aa4e41662992509d249fd5"
+  },
+  "draft7/enum.json": {
+   "upstream": "tests/draft7/enum.json",
+   "sha256": "069890108f4f83e62c9be9f42af63b5de911555e6644d83cd89c08ff644a43bb"
+  },
+  "draft7/exclusiveMaximum.json": {
+   "upstream": "tests/draft7/exclusiveMaximum.json",
+   "sha256": "a51392482efa787d7fcea34de78de441a8807b1881ec0bc414f013cab0bf5812"
+  },
+  "draft7/exclusiveMinimum.json": {
+   "upstream": "tests/draft7/exclusiveMinimum.json",
+   "sha256": "08435add3250275173074d2b7ad519806baae83be95d7397d3a514b8ad7561d3"
+  },
+  "draft7/format.json": {
+   "upstream": "tests/draft7/format.json",
+   "sha256": "8c670c5bbf816d1bb6a7be7db526d31989e2fe3d2f95198ee7c28c34136c8f22"
+  },
+  "draft7/if-then-else.json": {
+   "upstream": "tests/draft7/if-then-else.json",
+   "sha256": "c581c49c9fd9dcaaa140bf1cee7ef9adc090399865faad75a59bf8e0c5af05a1"
+  },
+  "draft7/infinite-loop-detection.json": {
+   "upstream": "tests/draft7/infinite-loop-detection.json",
+   "sha256": "c247742221355ae165edaada14385669382c6d0cdbcc933ce8f9a693b9444de7"
+  },
+  "draft7/items.json": {
+   "upstream": "tests/draft7/items.json",
+   "sha256": "6480f868b34c832265c9ee42a7643e16873c74f11c8d735d8eea5e494c93ed02"
+  },
+  "draft7/maxItems.json": {
+   "upstream": "tests/draft7/maxItems.json",
+   "sha256": "913397eff076de4eb63982c6682fb40cfd6117900da34f8fbb3a71839bcc813c"
+  },
+  "draft7/maxLength.json": {
+   "upstream": "tests/draft7/maxLength.json",
+   "sha256": "3330342d36c85a7334ea3f7deb168beae26617ce83cc1d43b6ba2f618b3c2f4e"
+  },
+  "draft7/maxProperties.json": {
+   "upstream": "tests/draft7/maxProperties.json",
+   "sha256": "b57f784fdb7ec266cef13afd2de4ab9f2cfc7e2bdd86428d90be0212106babd3"
+  },
+  "draft7/maximum.json": {
+   "upstream": "tests/draft7/maximum.json",
+   "sha256": "b3094bf70bea8df1eb17c22a9afb47af1bcf3b8d6616bfb8bce95c1ee874e2e3"
+  },
+  "draft7/minItems.json": {
+   "upstream": "tests/draft7/minItems.json",
+   "sha256": "706f786718b5af39ca447d006909aa3adba53ebffe450d97cc7773f47d97bb46"
+  },
+  "draft7/minLength.json": {
+   "upstream": "tests/draft7/minLength.json",
+   "sha256": "6faf7b73d1eac9615da33147a05e0fdde90737b62a175d1ce2a9a0bc98eaaaa5"
+  },
+  "draft7/minProperties.json": {
+   "upstream": "tests/draft7/minProperties.json",
+   "sha256": "c958aade9248bf33ae2670171379671f0484aeec434c44c9f2adf4b87f39bcf7"
+  },
+  "draft7/minimum.json": {
+   "upstream": "tests/draft7/minimum.json",
+   "sha256": "8e13e2a245ecffc0c39481430583ef3b11ce1ac3eb5d02617bfe6f8a022b1579"
+  },
+  "draft7/multipleOf.json": {
+   "upstream": "tests/draft7/multipleOf.json",
+   "sha256": "919162ca3ea2aa831d403b1100a04aba53e7ff2e48810a65e7f4a88ceb959ff9"
+  },
+  "draft7/not.json": {
+   "upstream": "tests/draft7/not.json",
+   "sha256": "c225b4d75dfb2a485006236f005070a2aae2f60090c761ffaf947a3259de77da"
+  },
+  "draft7/oneOf.json": {
+   "upstream": "tests/draft7/oneOf.json",
+   "sha256": "0eff07bc5ec108eb324aeb61d9ff130a3e689b0ab4b26af40561e6b1eda3a26c"
+  },
+  "draft7/pattern.json": {
+   "upstream": "tests/draft7/pattern.json",
+   "sha256": "92f42bdbf24f20b2b6378a8dfa882a8b40746170303f5dbe5b4cade420599507"
+  },
+  "draft7/patternProperties.json": {
+   "upstream": "tests/draft7/patternProperties.json",
+   "sha256": "2e27cf7e3c459d15c7d9a40f3daebdf673ca49c283b3bbcb3ac1f4c2d333ec4d"
+  },
+  "draft7/properties.json": {
+   "upstream": "tests/draft7/properties.json",
+   "sha256": "b8246287c2b214d0e17ed4b1904b92cfde803d52546a901ce123a7ecce5b75cb"
+  },
+  "draft7/propertyNames.json": {
+   "upstream": "tests/draft7/propertyNames.json",
+   "sha256": "847e2fb9ba870632c9a13c04133511a3af9d98165de56df64c99b1d6f2eac355"
+  },
+  "draft7/ref.json": {
+   "upstream": "tests/draft7/ref.json",
+   "sha256": "217aebe267fab77ff9bb3332d559054cf1602077abb3395dae417c0b6db6d789"
+  },
+  "draft7/refRemote.json": {
+   "upstream": "tests/draft7/refRemote.json",
+   "sha256": "6051ea8dfa9cdb3d7ec5802e7eb824be40ae5bc0d224706055d3cb57eeae6455"
+  },
+  "draft7/required.json": {
+   "upstream": "tests/draft7/required.json",
+   "sha256": "66946289772a5e931835060187b18e63bc215fbebf981b2d40d1c945145676f4"
+  },
+  "draft7/type.json": {
+   "upstream": "tests/draft7/type.json",
+   "sha256": "091aa31e688df20891de7884878b527745ddac0a3ced6d19a5ea4aa075dbbe00"
+  },
+  "draft7/uniqueItems.json": {
+   "upstream": "tests/draft7/uniqueItems.json",
+   "sha256": "c633e14ebbaa66dfba92023aada363510d8f37395dc2aaabdc249465f095c454"
+  },
+  "draft7/optional-ecmascript-regex.json": {
+   "upstream": "tests/draft7/optional/ecmascript-regex.json",
+   "sha256": "fa7d8aa98ec490ababb80d127d27f5f8ad934a94407f32ec7f45ac4b0c0e6626"
+  },
+  "draft7/optional-non-bmp-regex.json": {
+   "upstream": "tests/draft7/optional/non-bmp-regex.json",
+   "sha256": "4bc9203fdcac901c98a0509543017762b03a4393cc547cf35e57579e232c5c39"
+  },
+  "draft7/optional-float-overflow.json": {
+   "upstream": "tests/draft7/optional/float-overflow.json",
+   "sha256": "94b97e3f41cd765b52f05f8377ea1209e4bf0bd0da698b76e3869388a8fb9dc7"
+  }
+ }
+}

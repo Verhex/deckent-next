@@ -2,16 +2,19 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
-import { createMcpServer } from '#surfaces/core/mcp/index.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
+import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 
 // FASTURI-OUT (owner 2026-09-29): the published package replaces the MCP SDK's default (ajv + fast-uri) validator with a stub that throws
-// when built, so every Deckent path must hand the SDK its cf-worker validator. The dev/test tree still installs the SDK with ajv inside;
-// these checks keep Deckent code off it there too (the client's compile path is spied in tests/contracts/adapters/mcp-client.test.ts).
+// when built, so every Deckent path must hand the SDK a validator. MCP-SCHEMA-VALIDATOR (owner 2026-09-29): that validator is Deckent's own
+// (`#platform/core/validate`); the SDK's @cfworker/json-schema provider is not used either. The dev/test tree still installs the SDK with ajv
+// and cf-worker inside; these checks keep Deckent code off them (the client's compile path is spied in tests/contracts/adapters/mcp-client.test.ts).
 const SRC = join(import.meta.dirname, '../../../src');
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry =>
   entry.isDirectory() ? walk(join(dir, entry.name)) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : []);
-const SDK_DEFAULT_VALIDATOR = /^@modelcontextprotocol\/[^/]+\/(?:_shims|validators\/ajv)$/u;
+const SDK_DEFAULT_VALIDATOR = /^@modelcontextprotocol\/[^/]+\/(?:_shims|validators\/(?:ajv|cf-worker))$/u;
 const SDK_CONSTRUCTED = new Set(['Client', 'Server', 'McpServer']);
 
 /** Every SDK default-validator specifier, every SDK Client/Server construction without `jsonSchemaValidator`, and every one-argument
@@ -49,11 +52,26 @@ describe('MCP SDK default validator (ajv/fast-uri) is never used by Deckent code
     expect(constructions.map(site => site.replace(/:\d+$/u, '')).sort()).toEqual(['adapters/core/mcp-client/internal/pool.ts', 'surfaces/core/mcp/internal/server.ts']);
   });
 
-  it('the Server Deckent builds validates with the cf-worker interpreter, not the SDK default', async () => {
+  it('the Server Deckent builds validates with Deckent\'s own validator, not the SDK default or cf-worker', async () => {
     const server = createMcpServer({}, { maxConcurrentCalls: 1, responseMaxBytes: 1000 }, 'en');
     try {
       // Private SDK field (no public accessor): read only here, as the runtime counterpart of the static check above.
-      expect((server as unknown as { _jsonSchemaValidator: unknown })._jsonSchemaValidator).toBeInstanceOf(CfWorkerJsonSchemaValidator);
+      expect((server as unknown as { _jsonSchemaValidator: unknown })._jsonSchemaValidator).toBeInstanceOf(DeckentJsonSchemaValidator);
     } finally { await server.close(); }
+  });
+
+  it('every tool Deckent\'s MCP server lists has an inputSchema its own validator compiles (draft-07 from zod-to-json-schema)', async () => {
+    // Every optional application present (the operation catalog is data, not a handler), so every tool is listed.
+    const applications = new Proxy({}, { get: (_target, key) => key === 'operationCatalog' ? [] : async () => ({}) }) as McpApplications;
+    const server = createMcpServer(applications, { maxConcurrentCalls: 1, responseMaxBytes: 1000 }, 'en');
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'test', version: '1' }, { jsonSchemaValidator: new DeckentJsonSchemaValidator() });
+    await server.connect(serverSide); await client.connect(clientSide);
+    try {
+      const tools = (await client.listTools()).tools, validator = new DeckentJsonSchemaValidator(), refused: string[] = [];
+      for (const tool of tools) try { validator.getValidator(tool.inputSchema); } catch (error) { refused.push(`${tool.name}: ${(error as Error).message}`); }
+      expect(refused).toEqual([]);
+      expect(tools.length).toBeGreaterThan(20);
+    } finally { await client.close(); await server.close(); }
   });
 });

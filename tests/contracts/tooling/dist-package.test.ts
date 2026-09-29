@@ -104,18 +104,21 @@ describe('MCP SDK ajv provider stub and guard', () => {
   });
 
   it('reports every signal: unstubbed _shims, forbidden inputs, shipped packages and shipped embedded components', () => {
-    const clean = { metafile: { inputs: { 'node_modules/@modelcontextprotocol/client/dist/shimsNode.mjs': {}, 'node_modules/@modelcontextprotocol/client/dist/cfWorkerProvider-B.mjs': {} } },
+    const clean = { metafile: { inputs: { 'node_modules/@modelcontextprotocol/client/dist/shimsNode.mjs': {}, 'src/platform/core/validate/internal/json-schema.ts': {} } },
       shipped: [{ name: '@modelcontextprotocol/client', version: '2.2.0' }], embedded: [{ name: 'fast-uri', version: '3.1.0', carrier: '@modelcontextprotocol/client@2.2.0', shipped: false, carrierFiles: [] }],
       hits: new Map([['@modelcontextprotocol/client/_shims', 1]]) };
     expect(ajvGuard(clean)).toEqual([]);
     expect(ajvGuard({ ...clean, hits: new Map(),
       metafile: { inputs: { ...clean.metafile.inputs, 'node_modules/@modelcontextprotocol/client/dist/ajvProvider-97rDpkRx.mjs': {}, 'node_modules/@modelcontextprotocol/server/dist/index.mjs': {},
-        'node_modules/fast-uri/index.js': {} } },
+        'node_modules/fast-uri/index.js': {}, 'node_modules/@modelcontextprotocol/server/dist/cfWorkerProvider-p3WaZPqB.mjs': {} } },
       shipped: [...clean.shipped, { name: 'fast-uri', version: '3.1.8' }],
-      embedded: [{ ...clean.embedded[0], shipped: true, carrierFiles: ['dist/ajvProvider-97rDpkRx.mjs'] }] })).toEqual([
+      embedded: [{ ...clean.embedded[0], shipped: true, carrierFiles: ['dist/ajvProvider-97rDpkRx.mjs'] },
+        { name: '@cfworker/json-schema', version: '4.1.1', carrier: '@modelcontextprotocol/server@2.2.0', shipped: true, carrierFiles: ['dist/cfWorkerProvider-p3WaZPqB.mjs'] }] })).toEqual([
       '@modelcontextprotocol/client/_shims was bundled without the ajv stub', '@modelcontextprotocol/server/_shims was bundled without the ajv stub',
       'bundle input node_modules/@modelcontextprotocol/client/dist/ajvProvider-97rDpkRx.mjs', 'bundle input node_modules/fast-uri/index.js',
-      'shipped package fast-uri@3.1.8', 'embedded fast-uri@3.1.0 in @modelcontextprotocol/client@2.2.0 (dist/ajvProvider-97rDpkRx.mjs)']);
+      'bundle input node_modules/@modelcontextprotocol/server/dist/cfWorkerProvider-p3WaZPqB.mjs',
+      'shipped package fast-uri@3.1.8', 'embedded fast-uri@3.1.0 in @modelcontextprotocol/client@2.2.0 (dist/ajvProvider-97rDpkRx.mjs)',
+      'embedded @cfworker/json-schema@4.1.1 in @modelcontextprotocol/server@2.2.0 (dist/cfWorkerProvider-p3WaZPqB.mjs)']);
   });
 });
 

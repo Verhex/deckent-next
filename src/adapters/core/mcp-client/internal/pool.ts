@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
@@ -79,24 +79,22 @@ interface ServerState {
   listing: { readonly generation: number; readonly tools: ReadonlyMap<string, PinnedTool> } | null;
   last: Extract<McpServerOpen, { ok: true }> | null;
   /** The validator this process's client compiles with (the pool's pre-send compile uses the same one). */
-  validator: JsonSchemaValidator | null;
+  validator: DeckentJsonSchemaValidator | null;
   lock: Promise<unknown>;
 }
 /** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each).
- * The validator is the SDK's interpreter provider (@cfworker/json-schema): a server's `outputSchema` is untrusted and must never be compiled by
- * the Node default (the bundled ajv 8.18 + fast-uri 3.1.0, whose advisories no install-time override can reach). */
-let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio'),
-  typeof import('@modelcontextprotocol/client/validators/cf-worker')]> | undefined;
-const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio'),
-  import('@modelcontextprotocol/client/validators/cf-worker')]);
+ * A server's `outputSchema` is untrusted: it is compiled by Deckent's own validator (MCP-SCHEMA-VALIDATOR: bounded, linear-time `pattern`,
+ * unsupported features refused), never by the SDK's Node default (the bundled ajv 8.18 + fast-uri 3.1.0, whose advisories no install-time
+ * override can reach) nor by its @cfworker/json-schema provider. */
+let clientSdk: Promise<readonly [typeof import('@modelcontextprotocol/client'), typeof import('@modelcontextprotocol/client/stdio')]> | undefined;
+const loadClientSdk = () => clientSdk ??= Promise.all([import('@modelcontextprotocol/client'), import('@modelcontextprotocol/client/stdio')]);
 /** Every page of the server's tool list (one deadline for the whole walk, each page also bounded); the pin then covers every page. */
 const listAllTools = async (client: Client, timeoutMs: number) =>
   (await client.listTools(undefined, { cacheMode: 'bypass', timeout: timeoutMs, signal: AbortSignal.timeout(timeoutMs * 2) })).tools as McpLiveTool[];
 const errorCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
-type JsonSchemaValidator = { getValidator(schema: Record<string, unknown>): unknown };
-/** One listed tool as the pin binds it: its digest and exactly the digest-covered fields (frozen; nothing unpinned reaches the SDK). The
- * validator writes into a schema it compiles (@cfworker's `__absolute_uri__`), so every use gets a fresh copy of the frozen pin; `compiles`
- * caches whether the pinned outputSchema compiles (null = not compiled yet). */
+/** One listed tool as the pin binds it: its digest and exactly the digest-covered fields (frozen; nothing unpinned reaches the SDK). Deckent's
+ * validator never writes into a schema (the SDK might); every use still gets a fresh copy of the frozen pin; `compiles` caches whether the
+ * pinned outputSchema compiles (null = not compiled yet). */
 interface PinnedTool { readonly digest: string; readonly definition: Tool; compiles: boolean | null }
 const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object') { for (const child of Object.values(value)) deepFreeze(child); Object.freeze(value); } return value; };
 function pinnedTools(tools: readonly McpLiveTool[]): ReadonlyMap<string, PinnedTool> {
@@ -164,7 +162,7 @@ export class McpClientPool {
     return state.last;
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string): Promise<McpServerOpen> {
-    const [{ Client }, { StdioClientTransport }, { CfWorkerJsonSchemaValidator }] = await loadClientSdk();
+    const [{ Client }, { StdioClientTransport }] = await loadClientSdk();
     const transport = new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
     transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
@@ -172,7 +170,7 @@ export class McpClientPool {
     });
     // Both eras: `server/discover` first (2026-07-28), the `initialize` handshake when the server is not modern (stdio: a sibling probe process).
     const negotiation: VersionNegotiationMode = 'auto';
-    const validator = new CfWorkerJsonSchemaValidator();
+    const validator = new DeckentJsonSchemaValidator();
     const client = new Client({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { supportedProtocolVersions: [...MCP_CLIENT_PROTOCOL_VERSIONS],
       versionNegotiation: { mode: negotiation, probe: { timeoutMs: settings.connectTimeoutMs } }, listMaxPages: MCP_CLIENT_LIST_PAGES_MAX,
       jsonSchemaValidator: validator });

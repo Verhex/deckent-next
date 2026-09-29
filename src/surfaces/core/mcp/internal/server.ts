@@ -6,10 +6,9 @@ import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocati
 import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
-import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, t, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
@@ -187,8 +186,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     } });
   definitions.push(...operationToolDefinitions(applications, locale));
   // The SDK's Node default validator is its bundled ajv + fast-uri, which the published package replaces with a throwing stub (FASTURI-OUT);
-  // cf-worker is the only JSON Schema validator Deckent ships (no path validates with it today; form elicitation would).
-  const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator() }); let active = 0;
+  // Deckent's own validator is the only JSON Schema validator it ships (MCP-SCHEMA-VALIDATOR; no server path validates today, form elicitation would).
+  const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, { capabilities: { tools: {} }, jsonSchemaValidator: new DeckentJsonSchemaValidator() }); let active = 0;
   const failure = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code }) }] });
   const invocationLimit = (code: string): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text',
     text: JSON.stringify({ schemaVersion: 1, code, message: t('mcp.error.modelInvocationResultLimit', {}, locale) }) }] });
