@@ -6,6 +6,7 @@
 //   runtime  `deckent runtime serve` → ready → `runtime describe` (N-API peer_credentials.node next to the bundle, SO_PEERCRED) → SIGTERM
 //   terminal `deckent terminal` in a pseudo-TTY (lazy ink/react/yoga render), quit with Ctrl+C twice
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
+//   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP code, of `deckent-mcp` only the MCP server
 //   imports  every shipped .js file names only node: builtins, relative files or the package's own #imports (nothing left to resolve)
 //   types    (release gate, only with --types <typescript dir>) a consumer project type-checks `import * from 'deckent'` with
 //            skipLibCheck off and nothing but the installed package and @types/node on its resolution path
@@ -34,9 +35,10 @@ const want = name => !only || only.includes(name);
 let root = presetRoot ? resolve(presetRoot) : null, installDir = null, bin = name => join(root, 'node_modules/.bin', name);
 if (!root) {
   const project = join(base, 'install'); mkdirSync(project); writeFileSync(join(project, 'package.json'), '{"name":"smoke","version":"0.0.0","private":true}\n');
-  const npm = join(dirname(node), '../lib/node_modules/npm/bin/npm-cli.js');
+  // npm bundled with this Node (nvm/official layout); otherwise the npm on PATH, which then runs on its own Node.
+  const bundled = join(dirname(node), '../lib/node_modules/npm/bin/npm-cli.js'), npm = existsSync(bundled) ? [node, bundled] : ['npm'];
   const started = performance.now();
-  const install = spawnSync(node, [npm, 'install', tarball, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--cache', join(base, 'empty-cache')],
+  const install = spawnSync(npm[0], [...npm.slice(1), 'install', tarball, '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--cache', join(base, 'empty-cache')],
     { cwd: project, env, encoding: 'utf8', timeout: 300_000 });
   record('install', install.status === 0, { ms: Math.round(performance.now() - started), status: install.status,
     installedPackages: existsSync(join(project, 'node_modules')) ? readdirSync(join(project, 'node_modules')).filter(name => !name.startsWith('.')) : [],
@@ -116,6 +118,23 @@ if (want('native') && report.checks.install?.ok !== false) {
   const loaded = addons.map(path => { const result = run([node, '-e', `const m = require(${JSON.stringify(path)}); process.stdout.write(Object.getOwnPropertyNames(m).sort().join(','))`], { cwd: base });
     return { path: path.slice(root.length + 1), status: result.status, exports: result.stdout, stderr: result.stderr.trim().slice(-300) }; });
   record('native', addons.length > 0 && loaded.every(item => item.status === 0 && item.exports.length > 0), { addons: loaded });
+}
+
+if (want('lazy') && report.checks.install?.ok !== false) {
+  // Mirrors tests/contracts/composition/startup-graph.test.ts on the shipped files: esbuild marks every bundled module with a
+  // `// node_modules/<pkg>/…` header, so a heavy package in the static closure of an entry means a lazy import() was lost.
+  const imports = manifest.imports ?? {}, STATIC = /(?:^|[\n;])\s*(?:import|export)\b[^'";]*?\bfrom\s*["']([^"']+)["']|(?:^|[\n;])\s*import\s*["']([^"']+)["']/g;
+  const target = (file, spec) => spec.startsWith('.') ? resolve(dirname(file), spec) : spec.startsWith('#')
+    ? Object.entries(imports).map(([key, value]) => spec.startsWith(key.replace('*', '')) ? join(root, value.replace('*', spec.slice(key.length - 1))) : null).find(Boolean) : null;
+  const reach = entry => { const seen = new Set(), stack = [entry], heavy = new Set();
+    while (stack.length) { const file = stack.pop(); if (seen.has(file) || !file.endsWith('.js')) continue; seen.add(file);
+      const code = readFileSync(file, 'utf8');
+      for (const match of code.matchAll(/^\/\/ node_modules\/((?:@[^/]+\/)?[^/]+)\//gm)) if (['ink', 'react', 'react-reconciler', 'yoga-layout', '@modelcontextprotocol'].some(name => match[1] === name || match[1].startsWith(`${name}/`))) heavy.add(match[1]);
+      for (const match of code.matchAll(STATIC)) { const next = target(file, match[1] ?? match[2]); if (next) stack.push(next); } }
+    return { files: seen.size, heavy: [...heavy].sort() }; };
+  const cli = reach(join(root, manifest.bin.deckent)), mcp = reach(join(root, manifest.bin['deckent-mcp']));
+  record('lazy', cli.heavy.length === 0 && mcp.heavy.every(name => name.startsWith('@modelcontextprotocol/server') || name === '@modelcontextprotocol/core'),
+    { cli, mcp });
 }
 
 if (want('imports') && report.checks.install?.ok !== false) {

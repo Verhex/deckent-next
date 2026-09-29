@@ -57,6 +57,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const identity = JSON.parse(readFileSync(join(dist, 'build-identity.json'), 'utf8'));
   const source = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   if (identity.packageVersion !== source.version) throw new Error(`dist was built for ${identity.packageVersion}, package.json is ${source.version}: rebuild`);
+  // Only a previous build-dist output (or an absent directory) is replaced; never an arbitrary --out tree.
+  if (existsSync(out) && readdirSync(out).length && !existsSync(join(out, 'summary.json'))) throw new Error(`refusing to replace ${out}: not a build-dist output`);
   rmSync(out, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
 
   const files = walk(dist);
