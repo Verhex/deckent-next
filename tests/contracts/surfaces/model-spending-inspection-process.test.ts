@@ -66,7 +66,7 @@ async function startRuntime(project: string, env: Record<string, string>) {
   }), 'RUNTIME_READY_TIMEOUT');
 }
 function ledgerSnapshot(path: string) {
-  const db = new DatabaseSync(path, { readOnly: true });
+  const db = new DatabaseSync(path, { readOnly: true, timeout: 5_000 });
   try { return JSON.stringify({ accounts: db.prepare('SELECT * FROM provider_spend_accounts ORDER BY scope_id').all(),
     reservations: db.prepare('SELECT * FROM model_invocation_spend_reservations ORDER BY scope_id,invocation_id').all() }); }
   finally { db.close(); }
