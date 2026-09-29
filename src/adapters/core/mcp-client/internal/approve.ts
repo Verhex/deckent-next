@@ -6,7 +6,7 @@ import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
-import { McpClientPool, type McpLaunchContext } from './pool.js';
+import { McpClientPool, mcpRealmPosture, type McpLaunchContext } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, type McpScope, type McpServerEntry } from './registry.js';
 import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
@@ -25,6 +25,8 @@ export interface McpTrustCard {
   readonly phase: 'launch' | 'tools'; readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string;
   readonly command: string; readonly args: readonly string[]; readonly variables: readonly { readonly name: string; readonly set: boolean }[];
   readonly envNames: readonly string[]; readonly realm: string; readonly note: string | null;
+  /** Where it runs and what it may write (C5: a sandboxed server sees the project read-only): the realm's meaning on the launch card, the view
+   * it started in on the tools card. */
   readonly posture?: string; readonly era?: string; readonly protocolVersion?: string | null;
   readonly tools?: readonly { readonly name: string; readonly digest: string; readonly description: string | null; readonly annotations: unknown; readonly alwaysAsk: boolean }[];
 }
@@ -76,6 +78,8 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const template = [server.entry.command, ...(server.entry.args ?? []), ...Object.values(server.entry.env ?? {})];
   const launchCard: McpTrustCard = { phase: 'launch', name: server.name, scope: server.scope, file: server.file, definitionDigest: server.definitionDigest,
     command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(expanded.env), realm: server.entry.realm ?? 'prefer-sandbox',
+    // C5: the launch card already says what the realm means for the server's writes (the tools card then names the actual view).
+    posture: mcpRealmPosture(server.entry.realm ?? 'prefer-sandbox'),
     variables: [...new Set(template.flatMap(text => [...text.matchAll(VARIABLE)].map(match => match[1]!)))].map(name => ({ name,
       set: context.environment[name] !== undefined && context.environment[name] !== '' })),
     note: server.scope === 'project' ? 'project file: credential-shaped variables read as empty; secret references are refused' : null };

@@ -57,9 +57,9 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     try {
       await new EffectApplication({ async resolve(ref) { return ref.id === MCP_TOOL_CALL_OPERATION.operation.id && ref.version === 1 ? MCP_TOOL_CALL_OPERATION : null; } },
         { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock).execute(command);
-      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes) : describeMcpRefusal(entry.display, 'no-result');
+      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry) : describeMcpRefusal(entry.display, 'no-result');
     } catch (error) {
-      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes)
+      return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry)
         : describeMcpRefusal(entry.display, error instanceof EffectError ? error.code : (error as { code?: unknown })?.code);
     } finally { store.close(); }
   } };

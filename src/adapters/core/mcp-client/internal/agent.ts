@@ -15,6 +15,8 @@ export interface McpOfferedTool {
   readonly cell: McpToolCell;
   readonly command: string;
   readonly posture: string;
+  /** C5: the server's sandbox shows it the project read-only (a failed answer then says so and how to let it write). */
+  readonly projectReadOnly: boolean;
   readonly timeoutMs: number;
   /** The server's scope and definition as trusted when the turn read them (MCP-REVOKE: the send re-checks them; null: never sent). */
   readonly binding: McpTrustBinding | null;
@@ -33,7 +35,7 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
+        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, projectReadOnly: state.projectReadOnly, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
         binding: server.binding ?? null }));
     }
   }

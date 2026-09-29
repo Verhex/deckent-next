@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS,
-  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, sandboxWriteView, shellSandboxCapabilities, type ShellRealmResolution, openSqliteAttemptStore,
+  HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, resolveShellRealm, sandboxWriteView, shellSandboxCapabilities, unattendedWritePosture, type ShellRealmResolution, openSqliteAttemptStore,
   type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -35,11 +35,12 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'unattended'
  * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
  *   existing or new, appears without a card. In a full-access turn an unattended call means the grant no longer holds (a revoked grant reads
  *   as standart): it is read-only whatever its tier, since that turn's layout floor is only the configuration file.
+ * The unattended rule itself is `unattendedWritePosture` (host-shell), which a long-lived MCP server's view also takes (C5).
  */
 export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPermissionTier, fullAccessTurn: boolean): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean } {
   if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false };
   if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false };
-  return { writeFloorReadOnly: true, projectReadOnly: tier !== 'narrow-mutating' || fullAccessTurn };
+  return unattendedWritePosture(tier === 'narrow-mutating' && !fullAccessTurn);
 }
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }

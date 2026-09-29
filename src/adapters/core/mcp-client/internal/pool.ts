@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
@@ -22,18 +22,29 @@ export interface McpLaunchContext {
   /** Measured host capabilities (defaults to the process-wide probe). */
   readonly capabilities?: ShellCapabilities;
 }
-/** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view. */
+/** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view.
+ * `projectReadOnly`: the write view the launch enforces (false on the host, where no posture has an OS boundary). */
 type Launch = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Record<string, string>; readonly sandboxed: boolean;
-  readonly posture: string; readonly sandbox?: { readonly prefix: readonly string[]; readonly command: string; readonly args: readonly string[] } }
+  readonly projectReadOnly: boolean; readonly posture: string; readonly sandbox?: { readonly prefix: readonly string[]; readonly command: string; readonly args: readonly string[] } }
   | { readonly ok: false; readonly reason: 'sandbox-unavailable'; readonly detail: string };
 const HOST_POSTURE = 'host: runs on this machine as your user (not a sandbox: files, processes and network are reachable)';
-const SANDBOX_POSTURE = 'sandbox: bubblewrap (the project is writable, HOME and everything else hidden, no network; it ends with the service)';
+/** C5 (owner 2026-09-29): how an owner lets a sandboxed server write the project — the explicit host realm, shown on every card. */
+export const MCP_HOST_REALM_HINT = 'a server that must write the project needs `realm: host` in its registry entry (it then runs unsandboxed)';
+/**
+ * The launch card's line (before anything starts): what the realm will mean for the server, from the same long-lived write posture the
+ * sandbox view enforces (`longLivedWritePosture`); whether a sandbox is usable is known only at the start (the tools card names it).
+ */
+export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string {
+  if (realm === 'host') return HOST_POSTURE;
+  const write = describeShellWritePosture(sandboxWriteView({}, longLivedWritePosture()));
+  return `sandbox${realm === 'prefer-sandbox' ? ' when one is usable (else on the host, said at the start)' : ' required'}: ${write}; ${MCP_HOST_REALM_HINT}`;
+}
 
 /** The realm of one server (the shell's modes): `host` as is; a sandbox provider that can hold a long-lived process wraps the command;
  * none usable → `require-sandbox` refuses, `prefer-sandbox` runs on the host and says so (never silently). */
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
   const env = { ...server.env };
-  if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, posture: HOST_POSTURE };
+  if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(), reasons: string[] = [];
   if (capabilities.platform !== 'linux') reasons.push(`platform ${capabilities.platform}`);
   else for (const sandbox of context.sandboxes) {
@@ -42,17 +53,19 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
     if (!usable.launch) { reasons.push(`${sandbox.kind}: runs one command at a time`); continue; }
     const launch = await usable.launch(context.environment);
     if (!launch.ok) { reasons.push(`${sandbox.kind}: ${launch.reason}`); continue; }
-    return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, posture: SANDBOX_POSTURE,
-      sandbox: { prefix: launch.args, command: server.command, args: server.args } };
+    // The card's words come from the view this launch enforces (C5: the project read-only), with how to let a server write.
+    return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, projectReadOnly: launch.view.projectReadOnly,
+      posture: `sandbox: ${launch.posture}${launch.view.projectReadOnly ? `; ${MCP_HOST_REALM_HINT}` : ''}`, sandbox: { prefix: launch.args, command: server.command, args: server.args } };
   }
   const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';
   if (server.realm === 'require-sandbox') return { ok: false, reason: 'sandbox-unavailable', detail: why };
-  return { ok: true, command: server.command, args: server.args, env, sandboxed: false,
+  return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false,
     posture: `sandbox: none; runs on host (${why}). Files, processes and network are reachable.` };
 }
 
+/** An opened server: `projectReadOnly` is the write view its sandbox enforces (C5; false on the host), `posture` the cards' words for it. */
 export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legacy'; readonly protocolVersion: string | null;
-  readonly serverInfo: { readonly name: string; readonly version: string } | null; readonly sandboxed: boolean; readonly posture: string;
+  readonly serverInfo: { readonly name: string; readonly version: string } | null; readonly sandboxed: boolean; readonly projectReadOnly: boolean; readonly posture: string;
   readonly tools: readonly McpToolVerdict[] } | { readonly ok: false; readonly reason: 'sandbox-unavailable' | 'start-failed' | 'list-failed' | 'restart-limit' | 'too-many-tools';
   readonly detail?: string } | { readonly ok: false; readonly reason: 'sandbox-unreachable'; readonly detail: string; readonly diagnosis: McpSandboxDiagnosis };
 /** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
@@ -160,7 +173,7 @@ export class McpClientPool {
     const info = client.getServerVersion();
     state.last = { ok: true, era: client.getProtocolEra() === 'modern' ? 'modern' : 'legacy', protocolVersion: client.getNegotiatedProtocolVersion() ?? null,
       serverInfo: info ? { name: String(info.name), version: String(info.version) } : null, sandboxed: state.last?.sandboxed ?? false,
-      posture: state.last?.posture ?? '', tools: verifyMcpTools(server, tools) };
+      projectReadOnly: state.last?.projectReadOnly ?? false, posture: state.last?.posture ?? '', tools: verifyMcpTools(server, tools) };
     return state.last;
   }
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string): Promise<McpServerOpen> {
@@ -193,7 +206,8 @@ export class McpClientPool {
     if (this.closed) { await client.close().catch(() => undefined); return { ok: false, reason: 'start-failed', detail: 'the service is stopping' }; }
     state.generation++; state.client = client; state.validator = validator;
     client.onclose = () => { if (state.client === client) state.client = null; };
-    state.last = { ok: true, era: 'legacy', protocolVersion: null, serverInfo: null, sandboxed: launch.sandboxed, posture: launch.posture, tools: [] };
+    state.last = { ok: true, era: 'legacy', protocolVersion: null, serverInfo: null, sandboxed: launch.sandboxed, projectReadOnly: launch.projectReadOnly,
+      posture: launch.posture, tools: [] };
     return state.last;
   }
   /**
