@@ -55,7 +55,7 @@ describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot 
     // ls-tree -l needs the blob's size; on a promisor-missing object this is exactly the Git operation the
     // audit flagged as able to trigger a network fetch during snapshot/observe.
     await expect(listBase(lease, options, budget)).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
-    // The object was never fetched: still reported missing, and no new pack arrived from the promisor remote.
+    // The object was never fetched: `rev-list --missing=print` still reports it missing after the attempt.
     expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
   });
 });
