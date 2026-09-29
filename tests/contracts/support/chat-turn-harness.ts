@@ -43,7 +43,9 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   /** FETCH: the `terminal.fetch` section, and the test-only transport handed to the in-process service (never config or env). */
   fetch?: Record<string, unknown>; fetchTransport?: HttpFetchTransport;
   /** S9/S11: the sandbox providers a shell call may pick (code-only port); `() => []` is the "no sandbox mechanism usable" host. */
-  sandboxes?: ShellSandboxFactory } = {}) {
+  sandboxes?: ShellSandboxFactory;
+  /** LANG-CRASH: the service's own locale (its environment); absent = no locale in the environment (English). */
+  serviceLanguage?: string } = {}) {
   const model = modelWith(options.tokenize === true, options.thinkingSwitch === true), catalog = catalogWith(options.tokenize === true, options.thinkingSwitch === true);
   const root = await mkdtemp(join(tmpdir(), 'deckent-chat-turn-')); roots.push(root);
   const project = join(root, 'project'), data = options.dataRoot ? join(project, options.dataRoot) : options.dataInside ? join(project, '.deckent', 'live-data') : join(root, 'data'), home = join(root, 'home');
@@ -119,7 +121,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
     : [{ id: 'read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me,
       resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }]), ...(options.extraGrants ?? [])];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'allow', restrictions: [], grants }), { mode: 0o600 });
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', ...(options.serviceLanguage ? { DECKENT_LANGUAGE: options.serviceLanguage } : {}) };
   const interrupted: unknown[] = [], swept: unknown[] = [], released: unknown[] = [], scratchSwept: unknown[] = [];
   const start = async (observed = true) => {
     const service = await startConfiguredRuntimeService(project, observed ? { async onPage() {}, async onError() {},

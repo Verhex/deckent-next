@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync as readFixture } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { AGENT_TURN_NO_PROGRESS_NOTE, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
+import { AGENT_TURN_NO_PROGRESS_NOTE, AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionInstruction, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
   renderAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
@@ -457,10 +457,35 @@ it('closes the turn with a note that says how to go on when the summary call its
 it('names the running model from its catalog reference and tells the model that Deckent state is protected, without naming its paths (v4)', () => {
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
-    model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' } });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(4); expect(prompt.startsWith('[Deckent runtime instructions v4]')).toBe(true);
+    model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(5); expect(prompt.startsWith('[Deckent runtime instructions v5]')).toBe(true);
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
   expect(prompt).not.toMatch(/terminal-sessions|ledger\.db/); expect(prompt).toContain('Deckent configuration: .deckent/config.json (readable)');
+});
+
+// LANG-CRASH (live session 1d428e9f, owner: "tamamen Türkçe iletişim istiyorum, ihlal edilemez"): the local model answered several turns in
+// English after a Turkish question. The service prompt (v5) names the person's reply language explicitly, first and as its last line, and
+// the compaction instruction writes the summary in that language instead of "the language of the conversation" (which carried the drift).
+it('states the reply language of the locale first and last (v5); the compaction instruction keeps it', () => {
+  const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
+  const model = { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' };
+  const render = (language: 'en' | 'tr', withTools: boolean) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: withTools ? [readFile] : [], model, language });
+  for (const withTools of [true, false]) {
+    const tr = render('tr', withTools).split('\n'), en = render('en', withTools).split('\n');
+    expect(tr[2]).toBe('- Reply language: Turkish (Türkçe). Always answer the user in Turkish (Türkçe): every answer, progress line, question and summary,'
+      + ' even when files, tool results, earlier messages or these instructions are in another language. Code, paths, commands, identifiers and'
+      + ' quoted output stay as written.');
+    expect(tr.at(-1)).toBe('- Write every reply to the user in Turkish (Türkçe).');
+    expect(en[2]).toMatch(/^- Reply language: English\. Always answer the user in English: /); expect(en.at(-1)).toBe('- Write every reply to the user in English.');
+    expect(en.join('\n')).not.toMatch(/Türkçe|Turkish/);
+    // Deterministic, and the only difference between the locales is the language itself (the request digest binds the rendered text).
+    expect(render('tr', withTools)).toBe(tr.join('\n'));
+    expect(tr.join('\n').replaceAll('Turkish (Türkçe)', 'English')).toBe(en.join('\n'));
+  }
+  expect(AGENT_TURN_REPLY_LANGUAGES).toEqual({ en: 'English', tr: 'Turkish (Türkçe)' });
+  expect(agentCompactionInstruction('tr')).toMatch(/Write every string in Turkish \(Türkçe\); paths, code, commands and identifiers stay as written\.$/);
+  expect(agentCompactionInstruction('en')).toMatch(/Write every string in English; /);
+  expect(agentCompactionInstruction('tr')).not.toContain('language of the conversation');
 });
