@@ -1,12 +1,13 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
+import { probeShellCapabilities, runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { resolveProductLayout } from '#platform/index.js';
-import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
+import { runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
 
@@ -248,4 +249,71 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     expect(await ask.call('mcp__fx__echo', { text: 'ask' })).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
   }, 90_000);
+});
+
+// MCP-SANDBOX-PATHS follow-up (lead 2026-09-29): no MCP failure is silent. A server the default realm (prefer-sandbox, the shipped bubblewrap)
+// cannot start is named in the turn's result note (protocol v17's existing `note`, no wire change) with its display-safe diagnosis; the failure
+// is recorded for that exact definition, so its first-use card is not asked again every turn; `/mcp` shows it; `/mcp approve` retries.
+const RAW_SERVER = `import { createInterface } from 'node:readline';
+const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
+createInterface({ input: process.stdin }).on('line', line => { const m = JSON.parse(line);
+  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'raw', version: '1' } } });
+  else if (m.method === 'tools/list') send({ id: m.id, result: { tools: [{ name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } }] } });
+  else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } }); });
+`;
+const capabilities = await probeShellCapabilities();
+const sandboxReady = capabilities.bubblewrap === 'available' && capabilities.userNamespace === 'available' && existsSync('/usr/bin/bwrap');
+describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silent (MCP-SANDBOX-PATHS, real bubblewrap)', () => {
+  const elsewhere = () => { const dir = mkdtempSync(join(tmpdir(), 'deckent-mcp-elsewhere-')); roots.push(dir); writeFileSync(join(dir, 'server.mjs'), RAW_SERVER); return dir; };
+  const slash = async (f: Harness) => mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'en');
+  it('first use: the yes cannot start it → one note naming the hidden path; the next turn asks no card; /mcp shows it; /mcp approve asks again', async () => {
+    const dir = elsewhere(), script = join(dir, 'server.mjs');
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { fx: { command: process.execPath, args: [script] } });
+    f.state.script = [{ content: 'First.' }];
+    const first = await answered(f, 'turn-hidden-1', 'allow');
+    expect(requested(first.events).map(event => event.kind === 'approval.requested' ? event.summary : '')).toEqual(['mcp_trust · mcp:fx · launch']);
+    expect(first.result.note).toContain(`MCP server fx did not start: the argument ${script} exists on this machine but not in its bubblewrap sandbox view`);
+    expect(first.result.note).toContain('/mcp approve fx');
+    f.state.script = [{ content: 'Second.' }];
+    const second = await answered(f, 'turn-hidden-2', 'allow');
+    expect(requested(second.events)).toEqual([]);
+    expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
+    expect(await slash(f)).toContainEqual(expect.stringContaining(`! fx: MCP server fx did not start: the argument ${script}`));
+    await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
+    expect((await slash(f)).some(line => line.includes('did not start'))).toBe(false);
+    f.state.script = [{ content: 'Third.' }];
+    expect(requested((await answered(f, 'turn-hidden-3', 'deny')).events)).toHaveLength(1);
+  }, 90_000);
+  it('a trusted server that no longer starts: every turn says so (no tools, no card); /mcp shows the reason; a `${VAR}` path is never expanded', async () => {
+    const dir = elsewhere(), f = await runtime({ extraGrants: mcpGrants() });
+    (f.env as Record<string, string>)['MCP_TOOLS_DIR'] = join(f.project, 'tools');
+    mkdirSync(join(f.project, 'tools')); writeFileSync(join(f.project, 'tools', 'inside.mjs'), RAW_SERVER);
+    symlinkSync(join(f.project, 'tools', 'inside.mjs'), join(f.project, 'tools', 'server.mjs'));
+    await f.start();
+    registry(f.project, { fx: { command: process.execPath, args: ['${MCP_TOOLS_DIR}/server.mjs'] } }); await approve(f.project, f.env);
+    rmSync(join(f.project, 'tools', 'server.mjs')); symlinkSync(join(dir, 'server.mjs'), join(f.project, 'tools', 'server.mjs'));
+    for (const turnId of ['turn-trusted-1', 'turn-trusted-2']) {
+      f.state.script = [{ content: 'No tools.' }];
+      const { result, events } = await answered(f, turnId, 'allow');
+      expect(requested(events)).toEqual([]);
+      expect(result.note).toContain('MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs exists on this machine');
+      expect(result.note).toContain('/mcp reconnect fx');
+      expect(result.note).not.toContain(dir); expect(result.note).not.toContain(join(f.project, 'tools'));
+    }
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
+    const lines = await slash(f);
+    expect(lines).toContainEqual(expect.stringContaining('! fx: MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs'));
+    expect(lines.join('\n')).not.toContain(dir);
+  }, 90_000);
+});
+
+describe('the MCP notices in the turn note (pure)', () => {
+  it('come first, keep the engine note whole and fit the result bound (4096) by shortening only the MCP part', () => {
+    expect(withMcpNotices([], 'engine')).toBe('engine');
+    expect(withMcpNotices(['a.', 'b.'], null)).toBe('a. b.');
+    expect(withMcpNotices(['a.'], 'engine')).toBe('a. engine');
+    const long = withMcpNotices(['x'.repeat(5_000)], 'engine note');
+    expect(long!.length).toBe(4_096); expect(long!.endsWith('… engine note')).toBe(true);
+  });
 });

@@ -3,6 +3,7 @@ import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@mode
 import { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { shellSandboxCapabilities, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
+import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the 2025 `initialize` era as the fallback. */
@@ -21,8 +22,10 @@ export interface McpLaunchContext {
   /** Measured host capabilities (defaults to the process-wide probe). */
   readonly capabilities?: ShellCapabilities;
 }
+/** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view. */
 type Launch = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Record<string, string>; readonly sandboxed: boolean;
-  readonly posture: string } | { readonly ok: false; readonly reason: 'sandbox-unavailable'; readonly detail: string };
+  readonly posture: string; readonly sandbox?: { readonly prefix: readonly string[]; readonly command: string; readonly args: readonly string[] } }
+  | { readonly ok: false; readonly reason: 'sandbox-unavailable'; readonly detail: string };
 const HOST_POSTURE = 'host: runs on this machine as your user (not a sandbox: files, processes and network are reachable)';
 const SANDBOX_POSTURE = 'sandbox: bubblewrap (the project is writable, HOME and everything else hidden, no network; it ends with the service)';
 
@@ -39,7 +42,8 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
     if (!usable.launch) { reasons.push(`${sandbox.kind}: runs one command at a time`); continue; }
     const launch = await usable.launch(context.environment);
     if (!launch.ok) { reasons.push(`${sandbox.kind}: ${launch.reason}`); continue; }
-    return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, posture: SANDBOX_POSTURE };
+    return { ok: true, command: launch.file, args: [...launch.args, '--', server.command, ...server.args], env, sandboxed: true, posture: SANDBOX_POSTURE,
+      sandbox: { prefix: launch.args, command: server.command, args: server.args } };
   }
   const why = reasons.length ? reasons.join('; ') : 'no sandbox mechanism is available';
   if (server.realm === 'require-sandbox') return { ok: false, reason: 'sandbox-unavailable', detail: why };
@@ -50,7 +54,7 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
 export type McpServerOpen = { readonly ok: true; readonly era: 'modern' | 'legacy'; readonly protocolVersion: string | null;
   readonly serverInfo: { readonly name: string; readonly version: string } | null; readonly sandboxed: boolean; readonly posture: string;
   readonly tools: readonly McpToolVerdict[] } | { readonly ok: false; readonly reason: 'sandbox-unavailable' | 'start-failed' | 'list-failed' | 'restart-limit' | 'too-many-tools';
-  readonly detail?: string };
+  readonly detail?: string } | { readonly ok: false; readonly reason: 'sandbox-unreachable'; readonly detail: string; readonly diagnosis: McpSandboxDiagnosis };
 /** An answered call's JSON-RPC error: the server's own (`server`), SEP-2243 HEADER_MISMATCH (`header-mismatch`, -32020; never re-sent), or a
  * structured result that does not conform to the pinned outputSchema or is missing although one is declared (`output-schema`, -32602; the
  * server answered, so its effect may have happened). */
@@ -169,7 +173,16 @@ export class McpClientPool {
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
-      return { ok: false, reason: 'start-failed', detail: String(errorCode(error) ?? (error as Error)?.message ?? 'failed').slice(0, 200) };
+      const failed = { ok: false as const, reason: 'start-failed' as const, detail: String(errorCode(error) ?? (error as Error)?.message ?? 'failed').slice(0, 200) };
+      if (!launch.sandbox) return failed;
+      // MCP-SANDBOX-PATHS: a sandboxed start that failed is explained by probing the same view (what it hides, or what the command needs
+      // from outside it); the outcome stays a failure — never a start on the host instead.
+      const diagnosed = await diagnoseSandboxedStart({ file: launch.command, prefix: launch.sandbox.prefix }, { command: launch.sandbox.command,
+        args: launch.sandbox.args, pathVariable: launch.env['PATH'] ?? process.env['PATH'], cwd });
+      if (!diagnosed) return failed;
+      // Not found on this machine either (no name: the command may carry an expanded `${VAR}`; the cards show its template).
+      if (diagnosed.kind === 'not-found') return { ...failed, detail: 'command not found' };
+      return { ok: false, reason: 'sandbox-unreachable', detail: diagnosed.diagnosis.kind, diagnosis: diagnosed.diagnosis };
     }
     if (this.closed) { await client.close().catch(() => undefined); return { ok: false, reason: 'start-failed', detail: 'the service is stopping' }; }
     state.generation++; state.client = client; state.validator = validator;

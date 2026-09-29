@@ -2,6 +2,18 @@ import { t, resolveLocale, type Locale, type Params } from '#platform/core/i18n/
 import { NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
+/** The neutral English reason of MCP_SANDBOX_COMMAND_UNREACHABLE (CLEANUP-MARK: replaced by catalog keys per kind). */
+function mcpSandboxReason(p: Params): string {
+  const way = 'move it into the project or a PATH toolchain directory, or give this server `realm: host` (it then runs unsandboxed)';
+  if (p['kind'] === 'path-hidden') {
+    const target = p['target'] ? ` -> ${String(p['target'])}` : '';
+    return `sandbox: the ${p['role'] === 'command' ? 'command' : 'argument'} ${String(p['path'])}${target} exists on this machine but not in the bubblewrap view `
+      + `(only the project, system directories and PATH toolchain directories are visible; HOME and /tmp are empty); ${way}`;
+  }
+  if (p['kind'] === 'package-runner') return `sandbox: ${String(p['runner'])} fetches the server at start, but the bubblewrap view has no network and an empty HOME `
+    + '(no package cache); install the server into the project or a PATH toolchain directory and run it from there, or give this server `realm: host`';
+  return `sandbox: ${String(p['runner'])} needs its daemon socket, which is outside the bubblewrap view; give this server \`realm: host\` (it then runs unsandboxed)`;
+}
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   APPROVAL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INVALID', p, l) }) },
@@ -170,6 +182,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MCP_SERVER_NAME_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NAME_INVALID', p, l) }) },
   MCP_SANDBOX_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SANDBOX_UNAVAILABLE', p, l) }) },
   MCP_SERVER_START_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SERVER_START_FAILED', p, l) }) },
+  // MCP-SANDBOX-PATHS (2026-09-29): the default realm's bubblewrap view cannot reach what the server needs (params: name, kind, and role/path/target
+  // or runner). CLEANUP-MARK: until the lead lands `error.MCP_SANDBOX_COMMAND_UNREACHABLE.*` (i18n-delta.json), the reason is neutral English
+  // inside the existing localized start-failed frame; the code and params are final.
+  MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_SERVER_START_FAILED', { name: String(p['name'] ?? ''), reason: mcpSandboxReason(p) }, l) }) },
   MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
   MCP_APPROVAL_NEEDS_TERMINAL: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_APPROVAL_NEEDS_TERMINAL', p, l) }) },
   MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },

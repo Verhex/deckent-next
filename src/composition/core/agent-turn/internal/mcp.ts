@@ -10,14 +10,17 @@ import { agentWorkspaceDeny } from './turn.js';
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
   readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
-  readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string }) {
+  readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string;
+  /** MCP-SANDBOX-PATHS: what could not be decided or started this turn (display-safe), for the turn's result note — never silent. */
+  readonly onNotices?: (notices: readonly string[]) => void }) {
   const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
   const opened = await openTurnMcp({ registry: { projectRoot: input.projectRoot, layout: context.layout, environment, secret: async name => input.options.secretResolver
     ? input.options.secretResolver(name) : environment[name] }, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, ledgerPath: () => context.path(), policyRevision: async () => String((await context.policy.load().catch(() => null) as { revision?: unknown } | null)?.revision ?? 'unknown') });
-  if (!opened) return null;
-  const { settings, offered } = opened, tools = mcpTurnTools(offered);
+  if (opened.notices.length) input.onNotices?.(opened.notices);
+  if (!opened.settings) return null;
+  const { offered } = opened, settings = opened.settings, tools = mcpTurnTools(offered);
   return { ...tools, async apply(name: string, args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number },
     gate: EffectApprovalGate): Promise<AgentToolOutcome> {
     const entry = tools.entry(name);

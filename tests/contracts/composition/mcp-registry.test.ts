@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, appendFileSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -141,6 +141,36 @@ describe.skipIf(process.platform !== 'linux')('MCP trust decisions (owner 2026-0
     const out: string[] = [];
     await mcpCommand(['mcp', 'list', '--json'], { root: other, env: w.env, stdout: { write: (text: string) => { out.push(text); return true; } }, runMcpCommand: runConfiguredMcpCommand });
     expect(byName(JSON.parse(out.join('')) as Record<string, unknown>)['fx']).toMatchObject({ scope: 'user', status: 'trusted', health: 'connected' });
+  }, 60_000);
+
+  // MCP-SANDBOX-PATHS (2026-09-29): what the owner sees when the default realm (prefer-sandbox, the shipped bubblewrap) cannot reach a server.
+  it.skipIf(!sandboxReady)('add of a server outside the sandbox view names the hidden path (typed); list of a trusted one that moved out says why', async () => {
+    const w = workspace(), elsewhere = join(w.base, 'elsewhere');
+    mkdirSync(elsewhere); mkdirSync(join(w.project, 'tools'));
+    // Dependency-free (the SDK fixture's node_modules live outside any sandbox view).
+    const raw = `import { createInterface } from 'node:readline';
+const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');
+createInterface({ input: process.stdin }).on('line', line => { const m = JSON.parse(line);
+  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'raw', version: '1' } } });
+  else if (m.method === 'tools/list') send({ id: m.id, result: { tools: [{ name: 'probe', description: 'probe', inputSchema: { type: 'object', properties: {} } }] } });
+  else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } }); });
+`;
+    const script = join(elsewhere, 'server.mjs'), inside = join(w.project, 'tools', 'inside.mjs'), link = join(w.project, 'tools', 'server.mjs');
+    writeFileSync(script, raw); writeFileSync(inside, raw);
+    const refused = await w.cli('add', '--yes', 'hidden', '--', process.execPath, script).catch((error: unknown) => error as { code: string; message: string });
+    expect(refused).toMatchObject({ code: 'MCP_SANDBOX_COMMAND_UNREACHABLE' });
+    expect((refused as { message: string }).message).toContain(script);
+    // A path written with a `${VAR}` is named as written (the cards' rule: never an expanded value).
+    (w.env as Record<string, string>)['MCP_ELSEWHERE'] = elsewhere;
+    const templated = await w.cli('add', '--yes', 'templated', '--', process.execPath, '${MCP_ELSEWHERE}/server.mjs').catch((error: unknown) => error as { code: string; message: string });
+    expect(templated).toMatchObject({ code: 'MCP_SANDBOX_COMMAND_UNREACHABLE', params: { path: '${MCP_ELSEWHERE}/server.mjs', target: '' } });
+    expect((templated as { message: string }).message).not.toContain(elsewhere);
+    // A trusted server whose script is a link that later points outside the view: `list` carries the typed reason and the path, not only "start-failed".
+    symlinkSync(inside, link);
+    expect(await w.cli('add', '--yes', 'linked', '--', process.execPath, link)).toMatchObject({ trust: 'trusted' });
+    rmSync(link); symlinkSync(script, link);
+    expect(byName(await w.cli('list'))['linked']).toMatchObject({ status: 'trusted', health: 'failed', failure: 'sandbox-unreachable',
+      diagnosis: { kind: 'path-hidden', role: 'argument', path: link, target: script } });
   }, 60_000);
 });
 

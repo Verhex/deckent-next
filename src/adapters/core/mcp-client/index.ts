@@ -5,6 +5,7 @@ export { MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_PROTOCOL_VERSIONS, MCP_CLIENT_STD
 export { agentMcpEffectCommandId, describeMcpApproval, describeMcpRefusal, describeMcpResult, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND,
   McpToolTarget } from './internal/target.js';
 export { mcpInspectSandboxes, mcpTurnTools, openMcpAgentTools, type McpOfferedTool } from './internal/agent.js';
+export type { McpSandboxDiagnosis } from './internal/diagnose.js';
 export { expandMcpEntry, MCP_PROJECT_REGISTRY_PATH, MCP_REGISTRY_FILE, MCP_SCOPE_PRECEDENCE, mcpDefinitionDigest, mcpRegistryPaths, mcpServerEntrySchema,
   readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistry, type McpRegistryEntry, type McpRegistryProblem, type McpScope,
   type McpServerEntry } from './internal/registry.js';
