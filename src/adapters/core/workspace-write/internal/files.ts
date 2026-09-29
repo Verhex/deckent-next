@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readlink, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, readlink, rename, rmdir, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { posix } from 'node:path';
 import type { WorkspaceScope } from '#adapters/core/workspace-read/index.js';
@@ -213,16 +213,43 @@ export async function ensureWorkspaceParents(scope: WorkspaceScope, rel: string,
   return true;
 }
 
-/** SHELL-OVERLAY: removes an empty workspace directory (after a write set's deletions); a denied, missing or non-empty one stays. */
-export async function removeEmptyWorkspaceDirectory(scope: WorkspaceScope, rel: string): Promise<boolean> {
-  if (!rel || scope.denied(rel) || scope.denied(`${rel}/`)) return false;
-  const parentRel = posix.dirname(rel) === '.' ? '' : posix.dirname(rel);
-  const parent = await scope.open(parentRel, 'dir');
-  if (!parent.ok) return false;
+/** SHELL-OVERLAY record versions of a directory (a write set's directory removal is conditional on the directory being empty). */
+export const EMPTY_DIRECTORY_VERSION = 'empty-directory';
+export const NON_EMPTY_DIRECTORY_VERSION = 'non-empty-directory';
+/** The version of `target` when it is a real directory (opened from its parent with no link followed): empty or not; null when it is not a
+ * directory (absent, a file, a link — the file rules apply). A denied directory is refused like a denied file. */
+export async function readWritableDirectory(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>): Promise<string | null> {
+  if (scope.denied(`${target.rel}/`)) throw new WorkspaceWriteError('rejected', 'denied');
+  const dir = await openParent(scope, target);
   try {
-    const info = await lstat(proc(parent.handle, posix.basename(rel))).catch(() => null);
-    if (!info?.isDirectory()) return false;
-    await rmdir(proc(parent.handle, posix.basename(rel)));
-    return true;
-  } catch { return false; } finally { await parent.handle.close(); }
+    const info = await lstat(proc(dir, target.name)).catch(() => null);
+    if (!info?.isDirectory()) return null;
+    const opened = await open(proc(dir, target.name), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try { return (await readdir(`/proc/self/fd/${opened.fd}`)).length === 0 ? EMPTY_DIRECTORY_VERSION : NON_EMPTY_DIRECTORY_VERSION; }
+    finally { await opened.close(); }
+  } finally { await dir.close(); }
+}
+/**
+ * SHELL-OVERLAY: conditional removal of one empty workspace directory (a sandbox write set's directory removal), journaled like a file
+ * removal: `prepared` before the `rmdir`, `committed` after it (parent fsync); a directory that is not empty (or not there) refuses as a
+ * changed precondition and nothing is removed; a crash between the two phases is unknown.
+ */
+export async function removeWorkspaceDirectory(scope: WorkspaceScope, target: Extract<WritablePath, { ok: true }>, attempt: Pick<WriteAttempt, 'phase'>): Promise<void> {
+  if (await readWritableDirectory(scope, target) !== EMPTY_DIRECTORY_VERSION) throw new WorkspaceWriteError('precondition', 'the directory is not empty or not there');
+  const dir = await openParent(scope, target);
+  try {
+    if (!(await scope.verify(dir, target.parentRel))) throw new WorkspaceWriteError('changed', 'directory moved before the removal');
+    await attempt.phase({ state: 'prepared' });
+    try { await rmdir(proc(dir, target.name)); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'ENOENT' || code === 'ENOTDIR') {
+        await attempt.phase({ state: 'aborted' });
+        throw new WorkspaceWriteError('precondition', 'the directory changed during the removal');
+      }
+      throw error;
+    }
+    await dir.sync();
+    await attempt.phase({ state: 'committed' });
+  } finally { await dir.close(); }
 }

@@ -1,4 +1,4 @@
-export { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, deleteWorkspaceFile, ensureWorkspaceParents, fileContentVersion, readWritableFile, removeEmptyWorkspaceDirectory,
+export { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, deleteWorkspaceFile, ensureWorkspaceParents, fileContentVersion, readWritableFile, EMPTY_DIRECTORY_VERSION, NON_EMPTY_DIRECTORY_VERSION, readWritableDirectory, removeWorkspaceDirectory,
   resolveWritable, writablePath, writeWorkspaceFile,
   WorkspaceWriteError, type CurrentFile, type WritablePath } from './internal/files.js';
 export { unifiedDiff } from './internal/diff.js';

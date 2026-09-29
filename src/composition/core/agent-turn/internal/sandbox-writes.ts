@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
 import { prepareProductDirectory, SystemTrustedClock } from '#platform/index.js';
-import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isWriteApprovalFloored, openSqliteAttemptStore, removeEmptyWorkspaceDirectory,
+import { applySandboxWriteSet, createLocalPeerSession, ensureWorkspaceParents, isWriteApprovalFloored, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
   removeSandboxWriteSetDirectory, scanSandboxWriteSet, writablePath, WORKSPACE_FILE_TARGET_KIND, WORKSPACE_FILE_WRITE_OPERATION, WorkspaceFileTarget,
   type LocalPeerIdentity, type SandboxWriteDecider, type SandboxWriteSetDirectory, type SandboxWriteSetReport, type WorkspaceScope } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -34,13 +34,19 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
       return { sessions, store: attempts };
     })();
     return await applySandboxWriteSet({ scan, decider: input.decider, signal: input.signal,
-      classify: rel => { const lexical = writablePath(scope, rel); return !lexical.ok || lexical.rel !== rel ? 'denied' : input.authority(rel) ? 'edit-authority' : isWriteApprovalFloored(rel) ? 'edit-floor' : 'edit'; },
-      ensureParents: (rel, modeOf) => ensureWorkspaceParents(scope, rel, modeOf), removeDirectory: rel => removeEmptyWorkspaceDirectory(scope, rel),
+      // A directory is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the edit rules for what it holds.
+      classify: (rel, kind) => {
+        const lexical = writablePath(scope, rel);
+        if (!lexical.ok || lexical.rel !== rel || (kind === 'rmdir' && scope.denied(`${rel}/`))) return 'denied';
+        return input.authority(rel) ? 'edit-authority' : isWriteApprovalFloored(rel) || (kind === 'rmdir' && isWriteApprovalFloored(`${rel}/-`)) ? 'edit-floor' : 'edit';
+      },
+      ensureParents: (rel, modeOf) => ensureWorkspaceParents(scope, rel, modeOf),
       async execute(change, gate) {
-        const commandId = sha256(`agent-sandbox-write:1\0${input.shellCommandId}\0${change.rel}\0${change.kind}\0${change.lowerVersion}\0${change.kind === 'write' ? `${change.digest}\0${change.mode}` : ''}`);
+        const expectedVersion = change.kind === 'rmdir' ? EMPTY_DIRECTORY_VERSION : change.lowerVersion;
+        const commandId = sha256(`agent-sandbox-write:1\0${input.shellCommandId}\0${change.rel}\0${change.kind}\0${expectedVersion}\0${change.kind === 'write' ? `${change.digest}\0${change.mode}` : ''}`);
         const command: EffectCommand = { schemaVersion: 1, commandId, scopeId: input.scopeId, operation: WORKSPACE_FILE_WRITE_OPERATION.operation,
-          target: { kind: WORKSPACE_FILE_TARGET_KIND, id: change.rel }, idempotencyKey: commandId, expectedVersion: change.lowerVersion,
-          input: { writeSet: change.kind === 'write' ? { change: 'write', digest: change.digest, mode: change.mode } : { change: 'delete' } } };
+          target: { kind: WORKSPACE_FILE_TARGET_KIND, id: change.rel }, idempotencyKey: commandId, expectedVersion,
+          input: { writeSet: change.kind === 'write' ? { change: 'write', digest: change.digest, mode: change.mode } : { change: change.kind } } };
         const { sessions, store: attempts } = await lazy();
         await new EffectApplication({ async resolve(ref) {
           return ref.id === WORKSPACE_FILE_WRITE_OPERATION.operation.id && ref.version === WORKSPACE_FILE_WRITE_OPERATION.operation.version ? WORKSPACE_FILE_WRITE_OPERATION : null;

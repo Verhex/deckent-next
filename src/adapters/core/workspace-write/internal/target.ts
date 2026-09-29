@@ -5,7 +5,8 @@ import { z } from 'zod';
 import type { AgentToolSpec, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { createGlobMatcher, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
-import { ABSENT_FILE_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, deleteWorkspaceFile, fileContentVersion, readWritableFile, resolveWritable,
+import { ABSENT_FILE_VERSION, EMPTY_DIRECTORY_VERSION, WORKSPACE_WRITE_MAX_FILE_BYTES, WorkspaceWriteError, deleteWorkspaceFile, fileContentVersion, readWritableDirectory,
+  readWritableFile, removeWorkspaceDirectory, resolveWritable,
   temporaryPresent, writeAttemptTemporary, writeWorkspaceFile, type WritePhase } from './files.js';
 import { unifiedDiff } from './diff.js';
 
@@ -34,6 +35,8 @@ const inputSchema = z.object({ content: z.string() }).strict();
 const writeSetInputSchema = z.object({ writeSet: z.discriminatedUnion('change', [
   z.object({ change: z.literal('write'), digest: z.string().regex(/^[0-9a-f]{64}$/), mode: z.number().int().min(0).max(0o777) }).strict(),
   z.object({ change: z.literal('delete') }).strict(),
+  // An empty directory the command removed (its files' removals are their own entries, applied first); version `empty-directory`.
+  z.object({ change: z.literal('rmdir') }).strict(),
 ]) }).strict();
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 /** The bytes of `rel` under the (private, settled) upper directory, opened one component at a time with no link followed. */
@@ -84,7 +87,13 @@ export class WorkspaceFileTarget implements EffectTarget {
     return target;
   }
   private async version(ref: EffectTargetRef) {
-    const current = await readWritableFile(this.scope, await this.writable(ref), this.maxBytes);
+    const target = await this.writable(ref);
+    // SHELL-OVERLAY: a write-set target also records directories (empty or not); the edit tools' target keeps refusing them.
+    if (this.options.writeSet) {
+      const directory = await readWritableDirectory(this.scope, target).catch(() => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); });
+      if (directory !== null) return directory;
+    }
+    const current = await readWritableFile(this.scope, target, this.maxBytes);
     if (!current.ok) throw new EffectTargetError('EFFECT_TARGET_REJECTED');
     return current.version;
   }
@@ -104,12 +113,13 @@ export class WorkspaceFileTarget implements EffectTarget {
   }
   async observe(ref: EffectTargetRef) { return { version: await this.version(ref) }; }
   /** The change one request asks for: new bytes (and, for a write set, their mode) or a removal; null when the input is not accepted here. */
-  private async change(request: EffectApplyRequest): Promise<{ readonly bytes: Buffer | null; readonly mode?: number } | null> {
+  private async change(request: EffectApplyRequest): Promise<{ readonly bytes: Buffer | null; readonly mode?: number; readonly directory?: true } | null> {
     const edit = inputSchema.safeParse(request.input);
     if (edit.success) return { bytes: Buffer.from(edit.data.content, 'utf8') };
     const entry = writeSetInputSchema.safeParse(request.input), upper = this.options.writeSet?.upper;
     if (!entry.success || !upper) return null;
-    if (entry.data.writeSet.change === 'delete') return request.expectedVersion === ABSENT_FILE_VERSION ? null : { bytes: null };
+    if (entry.data.writeSet.change === 'rmdir') return request.expectedVersion === EMPTY_DIRECTORY_VERSION ? { bytes: null, directory: true } : null;
+    if (entry.data.writeSet.change === 'delete') return request.expectedVersion === ABSENT_FILE_VERSION || request.expectedVersion === EMPTY_DIRECTORY_VERSION ? null : { bytes: null };
     const bytes = await readUpperFile(upper, request.target.id, this.maxBytes);
     return bytes && fileContentVersion(bytes) === entry.data.writeSet.digest ? { bytes, mode: entry.data.writeSet.mode } : null;
   }
@@ -134,6 +144,10 @@ export class WorkspaceFileTarget implements EffectTarget {
       escapedTo: next.state === 'escaped' ? next.where : null });
     const { createMode, maxFileBytes } = this.options;
     try {
+      if (change.directory) {
+        await removeWorkspaceDirectory(this.scope, target, { phase });
+        return { version: ABSENT_FILE_VERSION };
+      }
       if (!bytes) {
         await deleteWorkspaceFile(this.scope, target, request.expectedVersion, { phase, ...(maxFileBytes ? { maxFileBytes } : {}) });
         return { version: ABSENT_FILE_VERSION };
