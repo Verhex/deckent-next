@@ -2410,8 +2410,15 @@ provider catalog **document** (schemaVersion 2: channel `{kind native-cli|http-a
 `nativeId`, `lifecycle {state active|legacy|deprecated|retired, deprecatedOn, retireNotBefore, retiredOn, source{url, observedOn}}`,
 `minCliVersion`, `efforts`, `aliases`); `model_catalog_activations(scope_id, channel_id, model_id)` is per-scope, hierarchical activation
 (channel row = empty model id); `model_catalog_receipts(scope_id, command_id)`. One governed command (`register | activate | deactivate`,
-SDK `applyModelCatalog`) with receipt; authority = the existing `model-activation` policy resource (register/activate need `activate`,
-deactivate needs `deactivate`; target id = sha256 of `deckent.model-catalog-target.v1`). v43 is additive and shape-checked (IF NOT EXISTS
+SDK `applyModelCatalog`) with receipt; authority = the existing `model-activation` policy resource; `register` writes installation-wide facts and needs
+installation-level authority: the scoped `activate` decision **and** the policy.administer delegation bound over `scopes: 'all'` for each
+channel target on the same policy snapshot (a deny/restriction in any scope refuses; scopes registered later are covered — catalog
+administrators need a `model-activation` grant with `scopes: "all"`); `activate`/`deactivate` are scope-level; receipts record
+`level: installation|scope` (Astra 2197 WC-R1; target id = sha256 of `deckent.model-catalog-target.v1`). A pinned native profile's executed
+argv is bound to its catalog pin by the native-coding adapter (`assertNativeWorkerBinding`: compiler shape only, one `<model flag> <exact
+id>` immediately before `--`); Run admission refuses divergence with `WORKER_MODEL_BINDING_MISMATCH` before any write (WC-R2). `register`
+validates the final merged channel (kept + written models): alias ≠ exact id, aliases unique (`MODEL_CATALOG_ALIAS_CONFLICT`, full
+rollback; WC-R3). v43 is additive and shape-checked (IF NOT EXISTS
 like v39/v41); the service-start upgrade backs up v42; a v42 build refuses v43 (`ATTEMPT_STORE_VERSION`). The chat catalog (config
 `provider_catalog` v1) and chat activation are unchanged (golden binding digest test); chat moves onto the ledger copy in a later slice.
 Native coding invocation v4 pins `{channelId, modelId, auxiliaryModelIds}`; `nativeSubscription` v2 carries it; argv carries only the
