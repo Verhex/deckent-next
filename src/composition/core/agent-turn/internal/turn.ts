@@ -162,7 +162,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
-      model: { ...chat.reference, nativeId: binding.definition.model.nativeId }, language,
+      model: { ...chat.reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
       // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
       shell: shell ? await shell.posture() : null });

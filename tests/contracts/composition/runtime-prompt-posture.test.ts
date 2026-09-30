@@ -26,7 +26,7 @@ async function systemPrompt(input: { readonly realm: 'require-sandbox' | 'prefer
   expect(turn.status).toBe('ok');
   const system = f.sent[0]!.messages[0]!;
   expect(system.role).toBe('system');
-  expect(system.content.startsWith('[Deckent runtime instructions v6]')).toBe(true);
+  expect(system.content.startsWith('[Deckent runtime instructions v7]')).toBe(true);
   return system.content;
 }
 const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.')) ?? '';

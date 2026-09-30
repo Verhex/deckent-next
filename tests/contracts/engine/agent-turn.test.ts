@@ -458,7 +458,7 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(6); expect(prompt.startsWith('[Deckent runtime instructions v6]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(7); expect(prompt.startsWith('[Deckent runtime instructions v7]')).toBe(true);
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
@@ -501,10 +501,10 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
     tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(6);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(7);
 
   const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
-  expect(open.startsWith('[Deckent runtime instructions v6]')).toBe(true);
+  expect(open.startsWith('[Deckent runtime instructions v7]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
     + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'
@@ -538,4 +538,81 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   // No shell posture (no shell tool offered): the v5 no-network line and the plain shell note.
   const plain = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile], model, language: 'en' });
   expect(plain).toContain(noNetwork);
+});
+
+// TRUNCATED-TOOLCALL (live 2026-09-30, 18:12–18:18 UTC): with maxCompletionTokens 8192 the local model cut large write_file / run_shell
+// arguments at exactly 8192 completion tokens five times; vLLM v0.30.0 streams such a round as finish_reason "tool_calls" (its metrics say
+// "length"). The completion count at the requested limit, or finish_reason "length", marks the round truncated: none of its calls runs, the
+// model is told to split, and the turn's note says so. Provider-neutral: the loop reads only the round's usage and finish.
+const writeFile: AgentToolSpec = { name: 'write_file', version: 1, toolClass: 'edit', description: 'Write.',
+  inputSchema: { type: 'object', required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } } };
+const cut = (toolCalls: ReturnType<typeof call>[], completionTokens: number | null, finish = 'tool_calls'): AgentRoundOutcome =>
+  ({ status: 'responded', content: '', reasoning: '', toolCalls, finish, usage: completionTokens === null ? null : { promptTokens: 10, completionTokens } });
+async function limited(p: ReturnType<typeof ports>, completionLimitTokens = 8192) {
+  const events: AgentTurnEvent[] = [];
+  const result = await runAgentTurn({ messages: user, tools: [...tools, writeFile], signal: new AbortController().signal, emit: event => events.push(event),
+    admission: { outputReserveTokens: completionLimitTokens, safetyReserveTokens: 2048, completionLimitTokens } }, p.value);
+  return { result, events, toolResults: events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []) };
+}
+
+it('never runs a tool call of a round that reached the completion limit, even when its arguments are valid JSON, and tells the model to split (TRUNCATED-TOOLCALL a)', async () => {
+  // The dangerous shape: a parser that closes the JSON would hand over half a document as a valid call (vLLM PR #53739 terminates it).
+  const half = call('c1', 'write_file', { path: 'docs/plan.md', content: '# Plan\n\n1. first step\n2. seco' });
+  const p = ports([cut([half], 8192), answer('Split it.')]);
+  const { result, events, toolResults } = await limited(p);
+  expect(p.executed).toEqual([]); expect(p.authorized).toEqual([]);
+  expect(result).toMatchObject({ finish: 'stop', rounds: 2, toolCalls: 0 });
+  expect(events.filter(event => event.kind === 'tool.started' || event.kind === 'tool.finished').map(({ kind, ...rest }) => [kind, (rest as { status?: string }).status ?? null]))
+    .toEqual([['tool.started', null], ['tool.finished', 'invalid-arguments']]);
+  expect(events.find(event => event.kind === 'tool.started')).toMatchObject({ callId: 'c1', name: 'write_file', target: null });
+  expect(toolResults).toEqual([expect.stringMatching(/^\[deckent\] write_file: error=output-limit \(this answer reached the output limit of 8192 tokens while writing the call, so its arguments are incomplete; nothing ran\)/)]);
+  expect(toolResults[0]).toMatch(/Do not send the same call again\. Write large content in parts/);
+  expect(result.note).toMatch(/1 tool call was cut at the model's output limit \(8192 tokens\) and not run/);
+  // The unterminated shape vLLM v0.30.0 streams today gets the same answer, not the generic JSON error.
+  const open = ports([cut([call('c1', 'write_file', '{"path": "docs/plan.md", "content": "# Plan\\n\\n1. fir')], 8192), answer('ok')]);
+  const second = await limited(open);
+  expect(open.executed).toEqual([]); expect(second.toolResults[0]).toMatch(/error=output-limit/); expect(second.toolResults[0]).not.toMatch(/not valid JSON/);
+  // finish_reason "length" alone (a provider that reports it honestly, or no usage) marks the round too; every call of the round is refused.
+  const honest = ports([cut([call('c1', 'read_file', { path: 'a' }), call('c2', 'write_file', { path: 'b', content: 'x' })], null, 'length'), answer('ok')]);
+  const third = await limited(honest);
+  expect(honest.executed).toEqual([]); expect(third.toolResults).toHaveLength(2); expect(third.result.note).toMatch(/2 tool calls were cut/);
+});
+
+it('runs a tool call below the completion limit, and keeps a plain text answer cut by length as it was (TRUNCATED-TOOLCALL b, c)', async () => {
+  const below = ports([cut([call('c1', 'write_file', { path: 'b.md', content: 'whole' })], 8191), answer('Written.')]);
+  const { result } = await limited(below);
+  expect(below.executed).toEqual(['write_file:{"path":"b.md","content":"whole"}']); expect(result).toMatchObject({ finish: 'stop', toolCalls: 1, note: null });
+  const text = ports([{ status: 'responded', content: 'A long answer that was cut', reasoning: '', toolCalls: [], finish: 'length', usage: { promptTokens: 1, completionTokens: 8192 } }]);
+  const plain = await limited(text);
+  expect(plain.result).toMatchObject({ finish: 'length', rounds: 1, note: null, answer: 'A long answer that was cut' });
+  // Without a known limit (no admission) only finish_reason "length" can mark a round; a full count alone is not guessed.
+  const unknown = ports([cut([call('c1', 'read_file', { path: 'a' })], 8192), answer('ok')]);
+  await run(unknown); expect(unknown.executed).toEqual(['read_file:{"path":"a"}']);
+});
+
+it('counts truncated rounds as no progress, so a repeated oversize call gets the no-progress note (TRUNCATED-TOOLCALL)', async () => {
+  const big = () => cut([call('c1', 'write_file', { path: 'docs/plan.md', content: 'y'.repeat(100) })], 8192);
+  const p = ports([big(), big(), answer('I will split it.')]);
+  const { result, events } = await limited(p);
+  expect(p.executed).toEqual([]); expect(result).toMatchObject({ finish: 'stop', rounds: 3 });
+  expect(events.some(event => event.kind === 'message' && event.message.role === 'user' && event.message.content === AGENT_TURN_NO_PROGRESS_NOTE)).toBe(true);
+  expect(result.note).toMatch(/2 tool calls were cut/);
+});
+
+it('tells the model its per-answer output limit and how to write large content in parts, only when an edit tool is offered (v7)', () => {
+  const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
+  const model = { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' };
+  const spec = (name: string, toolClass: AgentToolSpec['toolClass']): AgentToolSpec => ({ name, version: 1, toolClass, description: name,
+    inputSchema: { type: 'object', required: [], properties: {} } });
+  const render = (names: [string, AgentToolSpec['toolClass']][], outputLimitTokens?: number) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
+    tools: names.map(([name, toolClass]) => spec(name, toolClass)), model, language: 'tr', ...(outputLimitTokens ? { outputLimitTokens } : {}) }).split('\n');
+  const rule = (lines: string[]) => lines.find(line => line.startsWith('- One answer, tool call arguments included'));
+  const all = render([['read_file', 'read'], ['edit_file', 'edit'], ['write_file', 'edit'], ['run_shell', 'shell'], ['scratch_write', 'edit']], 8192);
+  expect(rule(all)).toBe('- One answer, tool call arguments included, may use at most 8192 output tokens; a call cut at that limit is refused and nothing runs.'
+    + ' Write large content in parts: create the file with its first part, then add each next part with edit_file (old_string = the current last lines),'
+    + ' or write the parts with scratch_write and join them with one run_shell command.');
+  expect(all.at(-1)).toBe('- Write every reply to the user in Turkish (Türkçe).');
+  expect(rule(render([['write_file', 'edit']], 16384))).toMatch(/at most 16384 output tokens; .*current last lines\)\.$/);
+  expect(rule(render([['write_file', 'edit']]))).toMatch(/at most a limited number of output tokens;/);
+  expect(rule(render([['read_file', 'read']], 8192))).toBeUndefined();
 });

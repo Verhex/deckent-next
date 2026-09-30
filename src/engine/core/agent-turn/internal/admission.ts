@@ -12,10 +12,12 @@ export interface AgentTurnAdmission {
   readonly safetyReserveTokens: number;
   readonly requestMaxBytes: number;
   readonly requestReserveBytes: number;
+  /** The completion limit every round requests: a round that reaches it is truncated and its tool calls never run (TRUNCATED-TOOLCALL). */
+  readonly completionLimitTokens: number;
 }
 
 export function agentTurnAdmission(maxCompletionTokens: number, inputMaxBytes: number): AgentTurnAdmission {
   return Object.freeze({ outputReserveTokens: maxCompletionTokens, safetyReserveTokens: SAFETY_RESERVE_TOKENS, requestMaxBytes: inputMaxBytes,
     // The longest answer (a token is at most 4 UTF-8 bytes) and one user message of up to an eighth of the bound, at most 32 KiB.
-    requestReserveBytes: maxCompletionTokens * 4 + Math.min(32_768, Math.floor(inputMaxBytes / 8)) });
+    requestReserveBytes: maxCompletionTokens * 4 + Math.min(32_768, Math.floor(inputMaxBytes / 8)), completionLimitTokens: maxCompletionTokens });
 }

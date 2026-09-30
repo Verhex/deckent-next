@@ -160,7 +160,8 @@ describe('one admission formula for the service and the terminal (engine agentTu
   it('terminal: the admission it derives from the configuration is the same formula, whatever the service does', async () => {
     const f = await runtime({ windowTokens: 100_000, count: () => 900 });
     const admission = await assertTerminalChatReady(f.project, { env: f.env });
-    expect(admission).toEqual({ outputReserveTokens: 128, safetyReserveTokens: 2_048, requestMaxBytes: 262_144, requestReserveBytes: 128 * 4 + 32_768 });
+    expect(admission).toEqual({ outputReserveTokens: 128, safetyReserveTokens: 2_048, requestMaxBytes: 262_144, requestReserveBytes: 128 * 4 + 32_768,
+      completionLimitTokens: 128 });
     const history = talk(8);
     expect(terminalCompactionExpected(history, { promptTokens: 74_000, windowTokens: 100_000 }, admission)).toBe(true);
     expect(terminalCompactionExpected(history, { promptTokens: 72_000, windowTokens: 100_000 }, admission)).toBe(false);
