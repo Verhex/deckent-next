@@ -11,7 +11,9 @@ export function syncPackageMetadata(root, write = false) {
   const content = JSON.stringify(metadata, null, 2) + '\n';
   const target = join(root, metadataPath);
   if (write) writeFileSync(target, content);
-  else if (!existsSync(target) || readFileSync(target, 'utf8') !== content) throw new Error('PACKAGE_METADATA_STALE: run node scripts/package-metadata.mjs --write');
+  // This generated JSON is text: Git may check it out as CRLF. Ignore only that
+  // representation difference; stale fields and all other formatting still fail.
+  else if (!existsSync(target) || readFileSync(target, 'utf8').replace(/\r\n/g, '\n') !== content) throw new Error('PACKAGE_METADATA_STALE: run node scripts/package-metadata.mjs --write');
   return metadata;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
