@@ -768,6 +768,7 @@
   "terminal.render.toolSummary.matches": "{count} matches",
   "terminal.render.toolSummary.matchesMore": "{count}+ matches",
   "terminal.render.toolSummary.entries": "{count} entries",
+  "terminal.render.toolTracked": "tracked files: {deleted} deleted, {overwritten} overwritten",
   "terminal.render.toolSandboxNone": "sandbox: none",
   "terminal.render.toolSandboxDegraded": "sandbox: degraded",
   "terminal.session.banner": "Deckent terminal session (line mode). Commands: /status, /exit.",

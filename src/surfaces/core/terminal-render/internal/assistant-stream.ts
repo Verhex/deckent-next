@@ -1,4 +1,5 @@
-import { describeAgentToolCallTarget, summarizeAgentToolResult, type AgentChatMessage, type ToolResultSummary, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import { describeAgentToolCallTarget, summarizeAgentToolResult, trackedChangesOfToolResult, type AgentChatMessage, type ToolResultSummary, type ToolTrackedChanges,
+  type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { EMPTY_SEGMENTER, feedSegmenter, flushSegmenter, segmenterTail, type LiveTail, type Segment, type SegmenterState } from './stream-segmenter.js';
 
 /**
@@ -22,8 +23,9 @@ type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
  * `summary` (TL-B D2) is set only for a finished read-class call whose own result text matched a known shape. */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number;
   cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary;
-  /** FA-TRACKED-WARN: a full-access shell call deleted or overwrote git-tracked files (counts; the result text names them). */
-  trackedChanges?: ToolDelta['trackedChanges'] }>;
+  /** FA-TRACKED-WARN: a full-access shell call deleted or overwrote git-tracked files (counts from its result's trusted leading metadata;
+   * the result text names them). */
+  trackedChanges?: ToolTrackedChanges }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
 export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
 /** Characters of a running call's streamed output kept for the live region. */
@@ -81,6 +83,8 @@ export type AssistantStreamState = Readonly<{
    * call's pattern-first target, a call's result summary (null when its text matched no known shape). Only these small values are kept. */
   toolLineTargets: ReadonlyMap<string, string>;
   toolLineSummaries: ReadonlyMap<string, ToolResultSummary | null>;
+  /** FA-TRACKED-WARN: a finished shell call's tracked-file counts, read from the same result message (only calls that have them). */
+  toolLineTracked: ReadonlyMap<string, ToolTrackedChanges>;
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -103,7 +107,7 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 export function startAssistantStream(nowMs: number): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
     earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '', toolLineTargets: new Map(),
-    toolLineSummaries: new Map() });
+    toolLineSummaries: new Map(), toolLineTracked: new Map() });
 }
 
 /** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
@@ -158,7 +162,9 @@ const safeTarget = (target: string | null) => target === null ? null : terminalS
  */
 function noteToolLine(state: AssistantStreamState, message: AgentChatMessage): AssistantStreamState {
   if (message.role === 'tool') {
-    return Object.freeze({ ...state, toolLineSummaries: new Map(state.toolLineSummaries).set(message.toolCallId, summarizeAgentToolResult(message.name, message.content)) });
+    const tracked = trackedChangesOfToolResult(message.name, message.content);
+    return Object.freeze({ ...state, toolLineSummaries: new Map(state.toolLineSummaries).set(message.toolCallId, summarizeAgentToolResult(message.name, message.content)),
+      ...(tracked ? { toolLineTracked: new Map(state.toolLineTracked).set(message.toolCallId, tracked) } : {}) });
   }
   if (message.role !== 'assistant' || message.toolCalls.length === 0) return state;
   const targets = new Map(state.toolLineTargets);
@@ -204,14 +210,14 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
         [...pending, ...text]);
     }
     // The engine sends every call's result message before `tool.finished`; without one there is nothing to summarize.
-    const summary = state.toolLineSummaries.get(delta.callId) ?? null;
+    const summary = state.toolLineSummaries.get(delta.callId) ?? null, tracked = state.toolLineTracked.get(delta.callId);
     const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target, status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)),
       ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}),
-      ...(delta.trackedChanges !== undefined ? { trackedChanges: delta.trackedChanges } : {}) });
-    const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries);
-    targets.delete(delta.callId); summaries.delete(delta.callId);
-    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries }), [...pending, ...text, unit]);
+      ...(tracked ? { trackedChanges: tracked } : {}) });
+    const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries), trackedLines = new Map(state.toolLineTracked);
+    targets.delete(delta.callId); summaries.delete(delta.callId); trackedLines.delete(delta.callId);
+    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries, toolLineTracked: trackedLines }), [...pending, ...text, unit]);
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };

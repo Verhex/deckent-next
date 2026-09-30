@@ -31,20 +31,11 @@ export type AgentToolSpec = z.infer<typeof agentToolSpecSchema>;
 export const agentToolCleanupSchema = z.enum(['clean', 'group-ended', 'unverified']);
 export type AgentToolCleanup = z.infer<typeof agentToolCleanupSchema>;
 
-/**
- * FA-TRACKED-WARN (owner 2026-09-30, option A): how many of the project's git-tracked files a full-access shell call left deleted or
- * overwritten, measured on the file system before and after the call (never read from the command's text). Only a host shell call
- * of a full-access turn that changed at least one tracked file carries it; its result text names the paths (bounded).
- */
-export const agentToolTrackedChangesSchema = z.object({ deleted: z.number().int().nonnegative().safe(), overwritten: z.number().int().nonnegative().safe() }).strict().readonly();
-export type AgentToolTrackedChanges = z.infer<typeof agentToolTrackedChangesSchema>;
-
 /** What a tool returns to the loop: model-facing text (bounded by the tool) and whether it succeeded. */
 export const agentToolOutcomeSchema = z.object({
   status: z.enum(['ok', 'error']),
   text: z.string(),
   cleanup: agentToolCleanupSchema.optional(),
-  trackedChanges: agentToolTrackedChangesSchema.optional(),
 }).strict().readonly();
 export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
 

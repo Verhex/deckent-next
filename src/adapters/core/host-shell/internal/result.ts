@@ -17,11 +17,14 @@ export function hostShellCleanupNote(cleanup: HostShellResult['cleanup']): strin
 }
 
 /** The agent-facing result text of one run: the realm marker, how it ended and after how long, the command (cut at 120), the kept
- * output, then the realm notice and the cleanup note. */
-export function describeHostShellResult(command: string, result: HostShellResult, realm: { readonly marker: string | null; readonly notice: string | null } | null): string {
+ * output, then the realm notice and the cleanup note. FA-TRACKED-WARN: a full-access call that deleted or overwrote git-tracked files
+ * leads with `tracked: deleted=N overwritten=M; ` — the first thing after the tool prefix, so neither the command's text nor its output
+ * can supply it (the terminal's finished line reads it from there, `trackedChangesOfToolResult`). */
+export function describeHostShellResult(command: string, result: HostShellResult, realm: { readonly marker: string | null; readonly notice: string | null } | null,
+  tracked?: { readonly deleted: number; readonly overwritten: number }): string {
   const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
   const note = hostShellCleanupNote(result.cleanup), notice = realm?.notice ?? null;
-  return `[deckent] run_shell: ${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
+  return `[deckent] run_shell: ${tracked ? `tracked: deleted=${tracked.deleted} overwritten=${tracked.overwritten}; ` : ''}${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
     + (notice ? `\n${notice}` : '')
     + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
 }

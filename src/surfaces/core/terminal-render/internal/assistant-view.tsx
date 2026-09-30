@@ -23,7 +23,7 @@ export type AssistantRenderLabels = Readonly<{
   toolSandboxDegraded?: string;
   toolCleanup?: Readonly<Record<Exclude<NonNullable<ToolUnit['cleanup']>, 'clean'>, string>>;
   /** FA-TRACKED-WARN: suffix of a full-access shell call that deleted or overwrote git-tracked files, `{deleted}`/`{overwritten}` placeholders,
-   * shown in the warning tone. Optional until the catalog carries `terminal.render.toolTracked` (see `i18n-delta.json`). */
+   * shown in the warning tone (`terminal.render.toolTracked`; a label set without it falls back to the neutral en text). */
   toolTracked?: string;
   /** Result summary words for a finished read-class call (TL-B D2): `{shown}`/`{total}`/`{count}` placeholders. Optional
    * until the catalog carries `terminal.render.toolSummary.*` (see `i18n-delta.json`); the row falls back to short,
@@ -59,7 +59,7 @@ const NEUTRAL_COMPACTION_CANCELLED = 'Summarizing was cancelled before it finish
 const NEUTRAL_TOOL_SUMMARY: NonNullable<AssistantRenderLabels['toolSummary']> = { lines: '{shown}/{total} lines', linesMore: '{shown}/{total} lines, more available',
   headings: '{shown}/{total} headings', headingsMore: '{shown}/{total} headings, more available', matches: '{count} matches', matchesMore: '{count}+ matches',
   entries: '{count} entries' };
-// FA-TRACKED-WARN: equals the proposed `en` catalog value.
+// FA-TRACKED-WARN: equals the `en` catalog value of `terminal.render.toolTracked`.
 const NEUTRAL_TOOL_TRACKED = 'tracked files: {deleted} deleted, {overwritten} overwritten';
 const seconds = (ms: number, digits = 1) => (ms / 1000).toFixed(digits);
 const tokenText = (count: number, approximate: boolean) => `${approximate ? '~' : ''}${count}`;

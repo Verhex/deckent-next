@@ -3,8 +3,6 @@ import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallSta
 /** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
  * module directly (`terminal-kit`'s declared dependency is `agent-turn`; `AgentToolCleanup` itself is declared in `agent-tool`). */
 type FinishedToolCleanup = Extract<AgentTurnStreamEvent, { readonly kind: 'tool.finished' }>['cleanup'];
-/** `tool.finished`'s optional `trackedChanges` (FA-TRACKED-WARN), derived the same way. */
-type FinishedToolTrackedChanges = Extract<AgentTurnStreamEvent, { readonly kind: 'tool.finished' }>['trackedChanges'];
 
 /** One chat message as sent to the model for a plain (tool-less) turn. */
 export type ChatTurnMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -19,6 +17,9 @@ export type ToolResultSummary =
   | { readonly kind: 'matches'; readonly count: number; readonly more: boolean }
   | { readonly kind: 'entries'; readonly count: number }
   | { readonly kind: 'sandbox-none' } | { readonly kind: 'sandbox-degraded' };
+/** FA-TRACKED-WARN: git-tracked files a full-access shell call deleted or overwrote, read by the renderer from the trusted leading
+ * metadata of the call's own result (`trackedChangesOfToolResult`); protocol v18 carries no field for it (a typed one waits for v19). */
+export type ToolTrackedChanges = { readonly deleted: number; readonly overwritten: number };
 
 /**
  * Surface-facing streaming turn contract (S-STREAM, Jev 1370d942). The producer (composition over the runtime protocol)
@@ -32,11 +33,10 @@ export type TurnDelta =
   | { readonly kind: 'reasoning'; readonly text: string }
   | { readonly kind: 'usage'; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number | null }
   /** An agent tool call: `started` with the engine's target, then `finished` with its typed status and duration (T-L3). `cleanup`
-   * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined; so does `trackedChanges`
-   * (FA-TRACKED-WARN: a full-access shell call that deleted or overwrote git-tracked files, typed, never read from text). The tool line's pattern-first
+   * (Astra 2124) only ever arrives on a finished host shell call; every other call leaves it undefined. The tool line's pattern-first
    * target and result summary (TL-B D2) are derived by the renderer from the `message` deltas, not carried here. */
   | { readonly kind: 'tool'; readonly phase: 'started' | 'finished'; readonly callId: string; readonly name: string; readonly target: string | null;
-    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup; readonly trackedChanges?: FinishedToolTrackedChanges }
+    readonly status: AgentToolCallStatus | null; readonly ms: number | null; readonly cleanup?: FinishedToolCleanup }
   /** A message the turn appended: the caller's history continues from exactly these (not rendered). */
   | { readonly kind: 'message'; readonly message: AgentChatMessage }
   /** The round's measured prompt against the window (T-L5); `upper-bound` is shown as approximate. `compacting` (TL-A, derived on the

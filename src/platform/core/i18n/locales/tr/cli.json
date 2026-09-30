@@ -768,6 +768,7 @@
   "terminal.render.toolSummary.matches": "{count} eşleşme",
   "terminal.render.toolSummary.matchesMore": "{count}+ eşleşme",
   "terminal.render.toolSummary.entries": "{count} giriş",
+  "terminal.render.toolTracked": "izlenen dosyalar: {deleted} silindi, {overwritten} üzerine yazıldı",
   "terminal.render.toolSandboxNone": "sandbox: yok",
   "terminal.render.toolSandboxDegraded": "sandbox: kısmi",
   "terminal.session.banner": "Deckent terminal oturumu (satır modu). Komutlar: /status, /exit.",

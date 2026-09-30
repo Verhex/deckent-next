@@ -161,14 +161,15 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       // FA-TRACKED-WARN (owner 2026-09-30): a full-access call's effect on git-tracked files is measured around it — shown, told to the model,
       // audited through `track` (the sealed `tracked-files-changed` event), never blocked.
       const baseline = authority === 'full-access' ? await snapshotTrackedFiles(scope.root) : null;
-      const tracked = async (ran: HostShellResult | null): Promise<Pick<AgentToolOutcome, 'trackedChanges'> & { readonly text: string }> => {
+      // The counts lead the result's first line (`describeHostShellResult`); protocol v18 has no typed field for them (v19 hook, docs-delta).
+      const tracked = async (ran: HostShellResult | null): Promise<{ readonly text: string; readonly counts?: { readonly deleted: number; readonly overwritten: number } }> => {
         if (!baseline || !ran || ran.status === 'spawn-failed') return { text: '' };
         const change = baseline.kind === 'measured' ? await compareTrackedFiles(baseline) : null;
         const line = change ? describeTrackedFilesChange(change, await track?.(change) === true) : describeTrackedFilesUnchecked(baseline);
         if (!line) return { text: '' };
         channel.emit({ kind: 'tool.output', callId, stream: 'stderr', text: `${line}\n` });
         await channel.drained();
-        return { text: `\n${line}`, ...(change ? { trackedChanges: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
+        return { text: `\n${line}`, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
       };
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
       try {
@@ -181,29 +182,29 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const ran = result as HostShellResult | null;
         if (!ran) return { status: 'error', text: '[deckent] run_shell: error=no-result' };
         await showCleanup(ran);
-        const { text: trackedLine, ...trackedChanges } = await tracked(ran);
+        const { text: trackedLine, counts } = await tracked(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
         const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false),
           context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm)}${note}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
-          cleanup: ran.cleanup, ...trackedChanges };
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
+          cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;
         await channel.drained();
         const ran = result as HostShellResult | null;
         if (ran) await showCleanup(ran);
-        const { text: trackedLine, ...trackedChanges } = await tracked(ran);
+        const { text: trackedLine, counts } = await tracked(ran);
         // A run that did not finish (stopped, timed out, not started) leaves nothing to apply: its write set is discarded.
         const discarded = directory && ran && ran.status !== 'spawn-failed' ? `\n${HOST_SHELL_NOTES.writeSetDiscarded}` : '';
         if (ran && ran.status !== 'exited') {
           // A realm that could not start the command (e.g. its sandbox could not be set up) says why; nothing ran, so nothing is unknown.
-          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, realm)}${ran.status === 'spawn-failed' ? ''
-            : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}${trackedLine}`, cleanup: ran.cleanup, ...trackedChanges };
+          return { status: 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${ran.status === 'spawn-failed' ? ''
+            : discarded || `\n${HOST_SHELL_NOTES.stoppedUnknown}`}${trackedLine}`, cleanup: ran.cleanup };
         }
-        return { status: 'error', text: `${describeShellEffectRefusal(code)}${trackedLine}`, ...trackedChanges };
+        return { status: 'error', text: `${describeShellEffectRefusal(code)}${trackedLine}` };
       } finally {
         store.close();
         if (directory) await removeSandboxWriteSetDirectory(directory.dir);
