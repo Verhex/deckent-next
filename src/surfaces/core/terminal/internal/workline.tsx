@@ -395,8 +395,9 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, ...props } = options;
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
+  // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
-    { exitOnCtrlC: false, patchConsole: false, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}) });
+    { exitOnCtrlC: false, patchConsole: false, ...((stdout ?? process.stdout).isTTY === true ? { interactive: true } : {}), ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}) });
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
   try { await instance.waitUntilExit(); }
