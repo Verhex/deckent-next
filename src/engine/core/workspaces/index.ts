@@ -4,3 +4,5 @@ export { workspaceSourceSchema, runWorkspaceCustodySchema, RunWorkspaceCustodyEr
 export type { WorkspaceSource, RunWorkspaceCustody, RunWorkspaceCustodyStore } from './internal/run-custody.js';
 export { RunWorkspaceAcquisitionApplication } from './internal/acquire.js';
 export type { RunWorkspaceProvider } from './internal/acquire.js';
+export { WorkTargetError, assertWorkTarget } from './internal/work-target.js';
+export type { WorkTargetErrorCode, WorkTargetObservation, WorkTargetContext } from './internal/work-target.js';

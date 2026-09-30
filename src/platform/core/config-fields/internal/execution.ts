@@ -21,4 +21,12 @@ export const ADOPTION_VERIFICATION_REQUIREMENT = z.object({ kind: configIdentity
     parameters: z.record(z.string(), z.unknown()) }).strict()).min(1).max(16) }).strict();
 export const ADOPTION_TARGET_SETTINGS = z.object({ targets: z.array(z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/)).max(64).default([]),
   verification: ADOPTION_VERIFICATION_REQUIREMENT.nullable().default(null) }).strict();
+/** WORK-TARGETS (owner 2026-09-30 K1 = W2): the named repositories Deckent's coding work runs against, instead of the project root.
+ * Absent = today's behavior (the project root and its checkout HEAD). Slice 1 supports exactly one Git target; the list shape and the
+ * versioned `schemaVersion` keep the contract ready for more. Non-Git business systems are not work targets (C11 effect port).
+ * `baseRef` names the base branch: Runs start from its tip and delivery/integration preconditions compare against it, never the
+ * target checkout's HEAD. Unknown keys stay refused (strict), so an older build fails closed instead of targeting the project root. */
+export const WORK_TARGET_SETTINGS = z.object({ schemaVersion: z.literal(1),
+  targets: z.array(z.object({ id: configIdentity, kind: z.literal('git'), path: z.string().min(1).max(4096),
+    baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/) }).strict()).min(1).max(1) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { GitIntegrationTarget, GitIntegrationDelivery, LocalOsSessionAuthority, openSqliteAttemptStore, validateDockerSupervisorProfile } from '#adapters/index.js';
+import { GitIntegrationTarget, GitIntegrationDelivery, LocalOsSessionAuthority, openSqliteAttemptStore, resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
 import { WorkspacePatchApplication, WorkspaceIntegrationInspection, WorkspaceDeliveryApplication, integrationDeliveryCommandSchema, type IntegrationDeliveryCommand } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { workspacePatchContext } from './configured.js';
@@ -11,7 +11,7 @@ export async function deliverConfiguredWorkspaceIntegration(root: string, input:
     const c = await workspacePatchContext(root, command.identity, options, false, 'write');
     await c.authorization.authorizeIdentity('deliver-integration', command.identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    const git = { ...c.config.execution.git, sourceRoot: resolve(root), workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
+    const git = { ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
     const target = new GitIntegrationTarget(git, { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes });
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);

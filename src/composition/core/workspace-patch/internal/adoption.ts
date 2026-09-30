@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
 import { SystemTrustedClock, ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { GitIntegrationAdoption, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore,
-  validateDockerSupervisorProfile } from '#adapters/index.js';
+  resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema,
+import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, workTargetAdoptionAuthorization,
   type IntegrationAdoptionCommand, type IntegrationRollbackCommand } from '#engine/index.js';
 import { criterionWithin } from '#capabilities/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -15,14 +15,16 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     const c = await workspacePatchContext(root, identity, options, false, 'write');
     await c.authorization.authorizeIdentity(action, identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    const git = { ...c.config.execution.git, sourceRoot: resolve(root), workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
+    // K2 = A: moving a configured work target's branch also needs work-target:adopt on it (engine checks it first and before the effect).
+    const target = await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout), authorization = workTargetAdoptionAuthorization(c.authorization, c.policySource, target.id);
+    const git = { ...c.config.execution.git, ...target.git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
     const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try {
       const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),
-        c.config.execution.adoption.targets, sessions, c.authorization, clock, { registry: c.config.admission?.registry ?? null,
+        c.config.execution.adoption.targets, sessions, authorization, clock, { registry: c.config.admission?.registry ?? null,
           requirement: c.config.execution.adoption.verification, criterionWithin,
           authorizeRun: (scopeId, runId, principal) => runs.authorize('inspect', { scopeId, runId }, principal),
           source: new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)) }));

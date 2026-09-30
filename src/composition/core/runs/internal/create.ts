@@ -2,8 +2,8 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { assertNativeWorkerBinding, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker } from '#adapters/index.js';
-import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, PoolPolicyAuthorization,
+import { assertNativeWorkerBinding, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
+import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization,
   DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -29,7 +29,7 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
     },
   };
   const app = new RunAdmissionApplication(store, { async verify() { return principal; } },
-    new RunPolicyAuthorization({ async load() { return document; } }), new PoolPolicyAuthorization({ async load() { return document; } }), { async resolve(admitted) {
+    new RunPolicyAuthorization({ async load() { return document; } }), executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null), { async resolve(admitted) {
       const profile = config.admission;
       if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
       const execution = resolveExecutionRegistry(admitted.graph, profile.registry, {
@@ -64,7 +64,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
     const command = runAdmissionSchema.parse(fields);
     return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }, replay) => {
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-      const git = { ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
+      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
       const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
       try {

@@ -10,7 +10,10 @@ import { workspaceRequestSchema, WorkspaceError, type WorkspaceBroker, type Work
 import format from './format.json' with { type: 'json' };
 import { fingerprintGitSource, gitSourceBaseSchema, gitSourcePreimageSchema, type GitSourceBase } from './source-base.js';
 const exec = promisify(execFile);
-const optionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1) }).strict().readonly();
+/** `baseRef` (WORK-TARGETS): a configured work target's base branch. Present, a Run's base is its tip and delivery/integration compare
+ * against it; absent, the source checkout's HEAD as before (the option is then not part of any fingerprint). */
+const optionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1),
+  baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/).optional() }).strict().readonly();
 export type GitWorkspaceOptions = z.infer<typeof optionsSchema>;
 const recordSchema = z.object({ schemaVersion: z.literal(2), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) }).strict();
@@ -117,7 +120,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       const canonicalRepository = await realpath(repository);
       await this.checkedDirectory(canonicalRepository);
       const source = gitSourcePreimageSchema.parse({ schemaVersion: 1, sourceRoot: canonicalSource, repositoryRoot: canonicalRepository });
-      const revision = explicitCommit === undefined ? 'HEAD^{commit}' : `${explicitCommit}^{commit}`;
+      const revision = explicitCommit === undefined ? `${this.options.baseRef ?? 'HEAD'}^{commit}` : `${explicitCommit}^{commit}`;
       const commit = await this.git(temporary, ['-C', canonicalSource, 'rev-parse', '--verify', revision], true);
       if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit)) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
       if (explicitCommit !== undefined && commit !== explicitCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');

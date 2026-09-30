@@ -38,13 +38,18 @@ export class GitIntegrationDelivery implements IntegrationDeliveryTarget {
     if (refs !== `${plan.ref} ${plan.commit}`) throw new WorkspacePatchError('PATCH_CONFLICT');
     return true;
   }
+  /** The base precondition names the work target's base branch when one is configured, else the source checkout's HEAD. A moved base
+   * branch is the typed PATCH_BASE_ADVANCED (deliver again from a new Run on the current base); a moved HEAD stays PATCH_CONFLICT. */
   async publish(plan: IntegrationDeliveryPlan) {
     if (await this.delivered(plan)) return;
-    try { await this.git(['update-ref', '--stdin'], `start\nverify HEAD ${plan.baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
+    const base = this.options.baseRef ?? 'HEAD';
+    try { await this.git(['update-ref', '--stdin'], `start\nverify ${base} ${plan.baseCommit}\ncreate ${plan.ref} ${plan.commit}\nprepare\ncommit\n`); }
     catch (error) {
       // A concurrent identical command may have won. Exact ref/commit custody is the only recovery evidence.
       if (await this.delivered(plan)) return;
-      if (await this.git(['rev-parse', '--verify', 'HEAD^{commit}']) !== plan.baseCommit) throw new WorkspacePatchError('PATCH_CONFLICT');
+      if (await this.git(['rev-parse', '--verify', `${base}^{commit}`]) !== plan.baseCommit) {
+        throw new WorkspacePatchError(this.options.baseRef ? 'PATCH_BASE_ADVANCED' : 'PATCH_CONFLICT');
+      }
       throw error;
     }
   }
