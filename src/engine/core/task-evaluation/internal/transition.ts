@@ -1,4 +1,4 @@
-import { applyTaskEvaluation, attemptSnapshotSchema, runSnapshotSchema, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError } from '#domain/index.js';
+import { applyTaskEvaluation, attemptSnapshotSchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, taskEvaluationSchema, TaskEvaluationError } from '#domain/index.js';
 import { dispatchRecordSchema } from '#engine/core/dispatch/index.js';
 import { assertRunExecution } from '#engine/core/runs/index.js';
 
@@ -14,6 +14,11 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
     dispatch = dispatchRecordSchema.parse(dispatchInput); evaluation = taskEvaluationSchema.parse(evaluationInput);
     assertRunExecution(run.graph, run.execution);
   } catch { invalid(); }
+  // WORKER-CURRENCY-2: a Run whose frozen profile pins a worker model is evaluated only with that attempt's model evidence (and never
+  // with evidence for another pin); a task without a pin never carries it. The ledger commit re-runs this check.
+  const pinned = readWorkerModelPin(run.execution.tasks.find(entry => entry.taskId === evaluation.identity.taskId)?.profile.parameters);
+  if (!pinned !== !evaluation.model || (pinned && (pinned.provider !== evaluation.model!.provider
+    || JSON.stringify(pinned.pin) !== JSON.stringify(evaluation.model!.requested)))) invalid();
   if (!Number.isSafeInteger(expectedRunRevision) || expectedRunRevision < 0 || run.revision !== expectedRunRevision) stale();
   const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, evaluation.identity));
   if (!binding || !sameAttemptIdentity(attempt.identity, evaluation.identity) || !sameAttemptIdentity(dispatch.request.identity, evaluation.identity)) stale();

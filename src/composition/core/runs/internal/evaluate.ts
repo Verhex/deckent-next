@@ -3,6 +3,7 @@ import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { evaluateProcessExit, validateProcessExitCriterion } from '#capabilities/index.js';
 import { authenticate, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, projectRunView, type TaskEvaluationCommand } from '#engine/index.js';
+import type { TaskEvaluationModel } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -28,8 +29,9 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
       }, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.
       const receipt = await application.execute(command);
+      const model = (JSON.parse(receipt.command) as { evaluation?: { model?: TaskEvaluationModel } }).evaluation?.model; // WORKER-CURRENCY-2 recorded model evidence
       return Object.freeze({ schemaVersion: 1 as const, layout,
-        evaluation: Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) }) });
+        evaluation: Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}) }) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

@@ -1,8 +1,8 @@
 import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { SystemTrustedClock, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteInventoryReader, DockerSupervisor, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization, assertRequestCompany,
+import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { openSqliteInventoryReader, DockerSupervisor, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
+import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization, assertRequestCompany, describeAttemptWorkerModels,
   type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
@@ -44,8 +44,11 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
               const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
               const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity).catch(() => null);
-              workers.push({ ...basic, provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle,
-                patchRecorded: !!record.patch, files, diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+              const run = await reader.loadRun(entry.identity.scopeId, entry.identity.runId).catch(() => null); // WORKER-CURRENCY-2 pinned model row (sealed, else live `pending`)
+              const model = run ? await describeAttemptWorkerModels(run, entry.identity, reader, { read: async (...args) => new FileArtifactStore({ root: await inspectProductDirectory(target.layout, 'artifacts'),
+                maxBytes: target.config.artifacts.maxBytes }).read(...args) }, files?.usage ?? null).catch(() => undefined) : null;
+              workers.push({ ...basic, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle,
+                patchRecorded: !!record.patch, files, diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []), ...(model === undefined ? ['model-unavailable'] : []),
                   ...(files ? files.log.diagnostics : ['activity-unavailable'])] });
             } catch (error) { workers.push({ ...basic, diagnostics: [['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
           }

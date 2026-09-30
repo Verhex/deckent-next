@@ -1,14 +1,15 @@
 import { z } from 'zod';
-import { attemptIdentitySchema, counterSchema, identitySchema, runSnapshotSchema, sameAttemptIdentity,
+import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity,
   taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
-  type EvaluatorDefinition, type VerifiedPrincipal } from '#domain/index.js';
+  type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunBoundDispatchStore, DispatchTerminal } from '#engine/core/dispatch/index.js';
 import { assertRunExecution, RunStoreError, type RunStore } from '#engine/core/runs/index.js';
+import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
-import { verifyDispatchEvaluationEvidence } from './evidence.js';
+import { TaskEvidenceError, verifyDispatchEvaluationEvidence } from './evidence.js';
 import { proposeTaskEvaluationCommit } from './transition.js';
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
@@ -20,7 +21,8 @@ export interface TaskEvaluationAuthorization {
 export interface TaskTerminalEvaluator {
   evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: DispatchTerminal): Promise<'pass' | 'fail' | 'unknown'>;
 }
-type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'load'> & Pick<RunStore, 'loadRun' | 'loadRunReceipt'>;
+type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'load'> & Pick<RunStore, 'loadRun' | 'loadRunReceipt'>
+  & Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
 
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.
@@ -62,9 +64,11 @@ export class TaskEvaluationApplication {
     const task = run.graph.tasks.find(value => value.id === identity.taskId);
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
     const evidenceId = 'dispatch-output';
+    const model = await this.workerModel(run, identity);
     const proposed = taskEvaluationSchema.parse({ schemaVersion: 1, evaluationId: command.commandId, identity,
       graphRevision: run.graph.revision, attemptRevision: attempt.revision,
       criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: [evidenceId] })),
+      ...(model ? { model } : {}),
     });
     proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, proposed);
     await verifyDispatchEvaluationEvidence(proposed, dispatch.request, [{ evidenceId, receipt: dispatch.output }],
@@ -79,5 +83,19 @@ export class TaskEvaluationApplication {
     await this.authorization.authorize(identity, principal);
     return this.store.commitTaskEvaluation({ commandId: command.commandId, actor,
       expectedRevision: command.expectedRevision, evaluation, dispatch });
+  }
+  /**
+   * Worker model evidence of a pinned attempt (WORKER-CURRENCY-2, owner rule A; Jev 933e43f2, 58ffe1c9): the host-sealed verdict from the
+   * sealed event log, recorded with the evaluation; the domain turns `substituted` into a failed Task and a Claude attempt without a
+   * sealed `verified` verdict into a hold. A present but unreadable log refuses evaluation (typed, nothing recorded): never a silent pass.
+   */
+  private async workerModel(run: RunSnapshot, identity: AttemptIdentity): Promise<TaskEvaluationModel | undefined> {
+    if (!readWorkerModelPin(run.execution.tasks.find(entry => entry.taskId === identity.taskId)?.profile.parameters)) return undefined;
+    let sealed;
+    try { sealed = await readSealedWorkerEvents(this.store, this.artifacts, identity); }
+    catch { throw new TaskEvidenceError('TASK_EVIDENCE_INVALID'); }
+    const view = projectAttemptWorkerModels(run, identity.taskId, sealed)!;
+    return { provider: view.provider, requested: view.requested, init: view.init, usage: view.usage,
+      verdict: view.verdict === 'pending' ? 'unverified' : view.verdict, unexpected: view.unexpected, evidence: sealed ? 'sealed' : 'absent' };
   }
 }

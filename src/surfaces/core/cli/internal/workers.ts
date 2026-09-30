@@ -3,6 +3,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
+import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerObservationHandler = (root: string, query: WorkerObservationQuery, options: ConfigLoadOptions) => Promise<WorkerObservationReport>;
 export async function workersCommand(argv: readonly string[], context: CommandContext) {
   const values = new Map<string, string>(); let json = false;
@@ -32,7 +33,8 @@ export async function workersCommand(argv: readonly string[], context: CommandCo
     const result = await context.inspectWorkers(root, query, options);
     emit(result, { ...sinks, json, render: report => [t('cli.workers.heading', { time: new Date(report.observedAt).toISOString() }, locale),
       ...report.sources.flatMap(source => [JSON.stringify({ source: source.id, path: source.path, status: source.status, truncated: source.truncated, nextAfter: source.nextAfter }),
-        ...source.workers.map(worker => JSON.stringify(worker))]), t('cli.workers.notice', {}, locale)].join('\n') });
+        ...source.workers.flatMap(worker => [JSON.stringify(worker), ...(worker.model ? [t('cli.workers.model', { task: worker.taskId, line: renderWorkerModelLine(worker.model, locale) }, locale)] : [])])]),
+      t('cli.workers.notice', {}, locale)].join('\n') });
     if (argv[1] !== 'watch' || (samples !== undefined && ++count >= samples)) return;
     try { await wait(config.inspection.workers.heartbeatMs, undefined, { signal: context.signal }); } catch { if (context.signal?.aborted) return; throw ErrorRegistry.createError('WORKER_OBSERVATION_UNAVAILABLE'); }
   } while (!context.signal?.aborted);

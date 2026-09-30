@@ -38,6 +38,8 @@ export const ADOPTION_VERIFICATION_LEDGER_VERSION = 42;
 // WORKER-CURRENCY-1: ledger model catalog (channel + exact model id facts, scoped hierarchical activation, receipts).
 export const MODEL_CATALOG_LEDGER_VERSION = 43;
 export const INTEGRATION_LEDGER_VERSION = 30;
+// Sealed worker event logs (table since v35); read-only readers require it before reading a log.
+export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
   // 43 (ledger model catalog, WORKER-CURRENCY-1): `migrateModelCatalog` in migration-v43.ts, dispatched below like v41.
   // 41 (audit events, general Core audit port): `migrateAuditEvents` in migration-v41.ts, dispatched below like v39.
