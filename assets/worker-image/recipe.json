@@ -1,12 +1,55 @@
 {
   "schemaVersion": 2,
   "repository": "deckent/worker",
-  "imageVersion": "r2-20260922",
-  "previousVersion": "r1-20260921",
+  "imageVersion": "r3-20260922",
+  "previousVersion": "r2-20260922",
   "baseImage": "node:24-trixie-slim",
   "npmProviders": [
-    {"id": "codex", "package": "@openai/codex", "channel": "latest", "command": "codex", "helpArgs": ["exec", "--help"], "requiredFlags": ["--json", "--model", "--dangerously-bypass-approvals-and-sandbox", "--ignore-user-config"]},
-    {"id": "claude", "package": "@anthropic-ai/claude-code", "channel": "latest", "command": "claude", "helpArgs": ["--help"], "requiredFlags": ["--output-format", "--model", "--dangerously-skip-permissions", "--safe-mode", "--settings"]}
+    {
+      "id": "codex",
+      "package": "@openai/codex",
+      "channel": "latest",
+      "command": "codex",
+      "helpArgs": [
+        "exec",
+        "--help"
+      ],
+      "requiredFlags": [
+        "--json",
+        "--model",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--ignore-user-config"
+      ]
+    },
+    {
+      "id": "claude",
+      "package": "@anthropic-ai/claude-code",
+      "channel": "latest",
+      "command": "claude",
+      "helpArgs": [
+        "--help"
+      ],
+      "requiredFlags": [
+        "--output-format",
+        "--model",
+        "--dangerously-skip-permissions",
+        "--safe-mode",
+        "--settings"
+      ]
+    }
   ],
-  "cursor": {"id": "cursor", "installer": "https://cursor.com/install", "command": "cursor-agent", "helpArgs": ["--help"], "requiredFlags": ["--output-format", "--model", "--force", "--trust"]}
+  "cursor": {
+    "id": "cursor",
+    "installer": "https://cursor.com/install",
+    "command": "cursor-agent",
+    "helpArgs": [
+      "--help"
+    ],
+    "requiredFlags": [
+      "--output-format",
+      "--model",
+      "--force",
+      "--trust"
+    ]
+  }
 }
