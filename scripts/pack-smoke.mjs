@@ -4,7 +4,8 @@
 //   mcp      `deckent-mcp` stdio: initialize + tools/list
 //   client   `deckent mcp add --realm host` against the installed `deckent-mcp` (lazy MCP client SDK, cross-spawn, pinning)
 //   runtime  `deckent runtime serve` → ready → `runtime describe` (N-API peer_credentials.node next to the bundle, SO_PEERCRED) → SIGTERM
-//   terminal `deckent terminal` in a pseudo-TTY (lazy ink/react/yoga render), quit with Ctrl+C twice
+//   terminal start contract: TTY `deckent` workline (lazy ink/react/yoga render: banner, Ready, composer placeholder, no line prompt; Ctrl+C
+//            twice), piped `deckent terminal` typed refusal, line mode on a TTY (tr prompt) and piped (no prompt) — texts from the shipped catalogs
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
 //   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP code, of `deckent-mcp` only the MCP server
 //   imports  every shipped .js file names only node: builtins, relative files or the package's own #imports (nothing left to resolve)
@@ -12,7 +13,8 @@
 //            NodeNext and Bundler resolution, per given TypeScript, with nothing but the installed package and @types/node on its path
 // Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <ts dir>[,<ts dir>]]
 //        [--types-root <dir holding @types/node>] [--keep] [--only a,b]
-// Prints a JSON report; exit 1 when any check fails. Not part of verify (needs a packed tarball): run per supported Node before a release.
+// Prints a JSON report; exit 1 when any check fails. The tarball path (install, runtime, client, --types) runs per supported Node before a
+// release; the fast --root subset (version,mcp,native,lazy,imports,terminal) runs in every verify via tests/contracts/tooling/pack-smoke-dist.test.ts.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { builtinModules } from 'node:module';
@@ -136,13 +138,59 @@ async function runtimeCheck() {
 }
 if (want('runtime') && report.checks.install?.ok !== false) await runtimeCheck();
 
-if (want('terminal') && report.checks.install?.ok !== false) {
-  const project = fixture('terminal-project', { terminal: { autostartService: false, scopeId: 'smoke' } });
-  const script = spawnSync('/bin/sh', ['-c', `(sleep 4; printf '\\003'; sleep 1; printf '\\003') | script -qfec "${bin('deckent')} terminal" /dev/null`],
-    { cwd: project, env, encoding: 'utf8', timeout: 30_000 });
-  const text = script.stdout.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`, 'gu'), ''); // strip ANSI CSI sequences
-  record('terminal', script.status === 0 && text.includes('deckent>'), { status: script.status, sample: text.replace(/\s+/g, ' ').slice(0, 300) });
+/** One pseudo-TTY session through util-linux `script`: each step waits until the (ANSI-stripped) output contains `wait`, then sends `send`
+ * after `delayMs`. Resolves with the exit status, the stripped text and whether the time limit killed it. */
+const ESC = String.fromCharCode(27), ANSI = new RegExp(`${ESC}(?:\\[[0-9;?]*[ -/]*[@-~]|\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)|[()][0-9A-Za-z]|[=>])`, 'gu');
+const plain = text => text.replace(ANSI, '').replace(/\r/gu, '');
+function pty(command, cwd, steps, timeoutMs = 30_000) {
+  return new Promise(done => {
+    const child = spawn('script', ['-qfec', command, '/dev/null'], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let raw = '', next = 0, timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
+    child.stdout.on('data', chunk => { raw += chunk;
+      while (next < steps.length && plain(raw).includes(steps[next].wait)) { const step = steps[next++]; setTimeout(() => child.stdin.write(step.send), step.delayMs ?? 0); } });
+    child.stdin.on('error', () => undefined);
+    child.once('close', code => { clearTimeout(timer); done({ status: code, text: plain(raw), timedOut }); });
+  });
 }
+async function terminalCheck() {
+  // Terminal start contract (batch 16 workline composer; the line mode keeps its prompt). The expected words come from the installed package's
+  // own message catalogs, so a wording change follows the catalog; what is asserted is which surface shows what:
+  //   TTY `deckent`                 workline: banner, status `Ready`, composer placeholder — and no line-mode prompt; Ctrl+C twice exits 0
+  //   piped `deckent terminal`      typed refusal TERMINAL_TTY_REQUIRED, exit 2 (the workline needs a terminal on both ends)
+  //   TTY `terminal session --lang tr`  line mode: Turkish banner and `deckent› ` prompt; /exit closes with the closed line, exit 0
+  //   piped `terminal session`      line mode without banner or prompt: /status answers, an unknown /command is reported, exit 0
+  const catalog = locale => JSON.parse(readFileSync(join(root, 'dist/platform/core/i18n/locales', locale, 'cli.json'), 'utf8'));
+  const en = catalog('en'), tr = catalog('tr'), words = key => key.split('{')[0].trim();
+  const project = fixture('terminal-project', { terminal: { autostartService: false, scopeId: 'smoke' } });
+  const cases = {}, verdict = (name, ok, detail) => { cases[name] = { ok, ...detail }; };
+  // Whitespace-normalised: the workline wraps long lines at word boundaries to the pseudo-terminal width.
+  const flat = text => text.replace(/\s+/gu, ' ');
+  const expect = (text, wanted, unwanted = []) => ({ missing: wanted.filter(item => !flat(text).includes(flat(item))), unexpected: unwanted.filter(item => flat(text).includes(flat(item))) });
+
+  const workline = await pty(bin('deckent'), project, [{ wait: en['terminal.workline.placeholder'], send: '\u0003', delayMs: 300 },
+    { wait: en['terminal.workline.placeholder'], send: '\u0003', delayMs: 900 }]);
+  const w = expect(workline.text, [en['terminal.workline.banner'], en['terminal.workline.statusReady'], en['terminal.workline.placeholder']], [en['terminal.session.prompt'].trim()]);
+  verdict('worklineTty', workline.status === 0 && !workline.timedOut && !w.missing.length && !w.unexpected.length,
+    { status: workline.status, timedOut: workline.timedOut, ...w, sample: workline.text.replace(/\s+/gu, ' ').slice(0, 300) });
+
+  const refused = run([bin('deckent'), 'terminal'], { cwd: project, input: 'hello\n', timeout: 20_000 });
+  verdict('worklinePiped', refused.status === 2 && refused.stderr.includes('[TERMINAL_TTY_REQUIRED]') && refused.stdout.trim() === '',
+    { status: refused.status, stderr: refused.stderr.trim().slice(-300) });
+
+  const session = await pty(`${bin('deckent')} terminal session --lang tr`, project, [{ wait: tr['terminal.session.prompt'].trimEnd(), send: '/exit\r', delayMs: 200 }]);
+  const l = expect(session.text, [tr['terminal.session.banner'], tr['terminal.session.prompt'].trimEnd(), tr['terminal.session.closed']]);
+  verdict('sessionTty', session.status === 0 && !session.timedOut && !l.missing.length,
+    { status: session.status, timedOut: session.timedOut, ...l, sample: session.text.replace(/\s+/gu, ' ').slice(0, 300) });
+
+  const piped = run([bin('deckent'), 'terminal', 'session'], { cwd: project, input: '/status\n/nope\n/exit\n', timeout: 20_000 });
+  const p = expect(`${piped.stdout}${piped.stderr}`, [words(en['terminal.status.chat']), `${en['terminal.workline.unknownCommand']}: /nope`],
+    [en['terminal.session.prompt'].trim(), en['terminal.session.banner'], en['terminal.session.closed']]);
+  verdict('sessionPiped', piped.status === 0 && !p.missing.length && !p.unexpected.length, { status: piped.status, ...p, stderr: piped.stderr.trim().slice(-300) });
+
+  record('terminal', Object.values(cases).every(item => item.ok), { cases });
+}
+if (want('terminal') && report.checks.install?.ok !== false) await terminalCheck();
 
 if (want('native') && report.checks.install?.ok !== false) {
   const addons = [], find = dir => { for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name);

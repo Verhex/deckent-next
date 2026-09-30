@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 // DEPS-DIST: the bundled package's SBOM comes from the bundler's metafile (bytes actually shipped), not from package.json; OSV reads it back.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
+import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, lockedLicenseTexts, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { ajvGuard, declarationImports, publishedManifest, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -229,5 +231,54 @@ describe('published declarations (DEPS-TYPES)', () => {
       "dist/index.d.ts: 'missing' does not resolve (nodenext)",
       "node_modules/aug/index.d.ts: declare module 'other' cannot be relocated",
     ]);
+  });
+});
+
+// PACK-SMOKE (2026-09-30): a component whose installed copy ships no license text takes the locked upstream text for exactly its name@version
+// and SPDX id; a missing, moved or altered text is a blocker, never a silent fallback.
+describe('locked upstream license texts', () => {
+  const digest = (text: string) => createHash('sha256').update(text).digest('hex');
+  const lockTree = (texts: unknown[], files: Record<string, string>) => tree({ 'packaging/licenses/licenses.lock.json': JSON.stringify({ schemaVersion: 1, texts }),
+    ...Object.fromEntries(Object.entries(files).map(([path, text]) => [`packaging/licenses/${path}`, text])) });
+  const entry = (name: string, version: string, text: string, extra: Record<string, unknown> = {}) =>
+    ({ name, version, license: 'MIT', file: `${name}@${version}/LICENSE`, sha256: digest(text), source: { url: `https://example.test/${name}`, commit: 'abc' }, ...extra });
+
+  it('fills a shipped package and an embedded component once per name@version, and reports which entries were used', async () => {
+    const root = await lockTree([entry('yoga', '3.2.1', 'yoga text'), entry('ctype', '1.0.5', 'ctype text'), entry('stale', '0.0.1', 'old')],
+      { 'yoga@3.2.1/LICENSE': 'yoga text', 'ctype@1.0.5/LICENSE': 'ctype text', 'stale@0.0.1/LICENSE': 'old' });
+    const locked = lockedLicenseTexts(root);
+    expect(locked.problems).toEqual([]);
+    const shipped = [{ name: 'yoga', version: '3.2.1', license: 'MIT', licenseFiles: [], dir: 'node_modules/yoga' }];
+    const embedded = ['client', 'server'].map(carrier => ({ name: 'ctype', version: '1.0.5', license: 'MIT', carrier: `@mcp/${carrier}@2.2.0`, shipped: true, carrierFiles: ['dist/x.mjs'] }));
+    const notices = thirdPartyNotices(root, { pkg: { name: 'deckent', version: '1.0.0' }, shipped, embedded, locked: locked.texts });
+    expect(notices.gaps).toEqual([]);
+    expect(notices.lockedUsed).toEqual(['ctype@1.0.5', 'yoga@3.2.1']);
+    expect(notices.text).toContain(`upstream text from https://example.test/yoga at commit abc, sha256 ${digest('yoga text')}`);
+    expect(notices.text.split('ctype text').length - 1).toBe(1);
+    // Without the lock the same inputs are gaps, as before.
+    expect(thirdPartyNotices(root, { pkg: { name: 'deckent', version: '1.0.0' }, shipped, embedded }).gaps).toEqual(['yoga@3.2.1: no license file in the installed package',
+      'ctype@1.0.5 (in @mcp/client@2.2.0): license text not shipped by the carrier', 'ctype@1.0.5 (in @mcp/server@2.2.0): license text not shipped by the carrier']);
+  });
+
+  it('keeps the gap when the version or SPDX id differs, and refuses altered, missing or escaping texts', async () => {
+    const root = await lockTree([entry('yoga', '3.2.1', 'yoga text', { license: 'BSD-3-Clause' }), entry('ctype', '1.0.5', 'ctype text'),
+      entry('altered', '1.0.0', 'original'), entry('gone', '1.0.0', 'x'), entry('escape', '1.0.0', 'x', { file: '../../escape' })],
+    { 'yoga@3.2.1/LICENSE': 'yoga text', 'ctype@1.0.5/LICENSE': 'ctype text', 'altered@1.0.0/LICENSE': 'edited by hand' });
+    const locked = lockedLicenseTexts(root);
+    expect(locked.problems).toEqual([`altered@1.0.0: locked license text sha256 ${digest('edited by hand')} does not match the lock (${digest('original')})`,
+      'gone@1.0.0: locked license text gone@1.0.0/LICENSE missing or outside packaging/licenses', 'escape@1.0.0: locked license text ../../escape missing or outside packaging/licenses']);
+    const notices = thirdPartyNotices(root, { pkg: { name: 'deckent', version: '1.0.0' }, locked: locked.texts,
+      shipped: [{ name: 'yoga', version: '3.2.1', license: 'MIT', licenseFiles: [], dir: 'node_modules/yoga' }],
+      embedded: [{ name: 'ctype', version: '1.0.6', license: 'MIT', carrier: '@mcp/client@2.2.0', shipped: true, carrierFiles: ['dist/x.mjs'] }] });
+    expect(notices.gaps).toEqual(['yoga@3.2.1: no license file in the installed package; the locked text is BSD-3-Clause, the package declares MIT',
+      'ctype@1.0.6 (in @mcp/client@2.2.0): license text not shipped by the carrier']);
+    expect(notices.lockedUsed).toEqual([]);
+  });
+
+  it('the repository lock: every text present and byte-identical to its recorded upstream sha256', () => {
+    const root = fileURLToPath(new URL('../../..', import.meta.url));
+    const locked = lockedLicenseTexts(root);
+    expect(locked.problems).toEqual([]);
+    expect([...locked.texts.keys()].sort()).toEqual(['content-type@1.0.5', 'yoga-layout@3.2.1']);
   });
 });
