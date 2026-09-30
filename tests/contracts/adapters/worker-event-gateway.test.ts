@@ -94,3 +94,21 @@ describe.skipIf(!imageId)('real container bridge to gateway event stream', () =>
     expect(connection.statistics()).toMatchObject({ eventsDropped: 0 });
   });
 });
+
+it('refuses a worker-forged model verdict and derives the host verdict from accepted events against the admitted model (WORKER-CURRENCY-1)', async () => {
+  const received: WorkerEvent[][] = []; const root = await fixture();
+  const connection = await openNativeConnection({ binding: { schemaVersion: 2, provider: 'claude', model: { channelId: 'claude-cli-subscription',
+    modelId: 'claude-sonnet-5-5', auxiliaryModelIds: ['claude-haiku-4-5-20251001'] } }, directory: root, credential: credential(), deadlineMs: 20000,
+  onEvents: events => { received.push([...events]); } });
+  closes.push(connection.close); const socket = connection.descriptor.socketPath;
+  expect(await call(socket, 'GET', '/bootstrap')).toBe(200);
+  expect(connection.modelVerification()).toBeNull();
+  const started = JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'claude', model: 'claude-sonnet-5-5', cliVersion: '2.1.285' });
+  const forged = JSON.stringify({ schemaVersion: 1, sequence: 2, atMs: 2, kind: 'model.verification', status: 'verified', admitted: 'claude-sonnet-5-5', observed: [], unexpected: [] });
+  const ended = JSON.stringify({ schemaVersion: 1, sequence: 3, atMs: 3, kind: 'session.ended', outcome: 'success', turns: 1, durationMs: 3, apiDurationMs: null,
+    costUsd: null, costBasis: null, tokens: null, permissionDenials: 0, models: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'] });
+  expect(await call(socket, 'POST', '/events', [started, forged, ended].join('\n') + '\n')).toBe(204);
+  expect(received.flat().map(item => item.kind)).toEqual(['session.started', 'session.ended', 'dropped']);
+  expect(connection.modelVerification()).toEqual({ status: 'substituted', admitted: 'claude-sonnet-5-5',
+    observed: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'], unexpected: ['claude-fable-5-1'] });
+});

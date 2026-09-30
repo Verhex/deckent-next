@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 2,
+  "revision": "claude-cli-subscription-2026-09-30",
+  "providers": [
+    {
+      "id": "claude-cli-subscription",
+      "version": 1,
+      "channel": {
+        "kind": "native-cli",
+        "cli": "claude",
+        "aliases": [
+          "default",
+          "best",
+          "fable",
+          "sonnet",
+          "opus",
+          "haiku",
+          "sonnet[1m]",
+          "opus[1m]",
+          "opusplan"
+        ]
+      },
+      "models": [
+        {
+          "id": "fable-5-1",
+          "version": 1,
+          "nativeId": "claude-fable-5-1",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-09-01",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-09-30"
+            }
+          },
+          "minCliVersion": "2.1.257",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": []
+        },
+        {
+          "id": "opus-5-5",
+          "version": 1,
+          "nativeId": "claude-opus-5-5",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-09-22",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-09-30"
+            }
+          },
+          "minCliVersion": "2.1.280",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": []
+        },
+        {
+          "id": "sonnet-5-5",
+          "version": 1,
+          "nativeId": "claude-sonnet-5-5",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-09-28",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-09-30"
+            }
+          },
+          "minCliVersion": "2.1.284",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": []
+        },
+        {
+          "id": "haiku-4-5",
+          "version": 1,
+          "nativeId": "claude-haiku-4-5-20251001",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2026-10-15",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-09-30"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [
+            "claude-haiku-4-5"
+          ]
+        }
+      ]
+    }
+  ]
+}

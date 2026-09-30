@@ -375,6 +375,8 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/adapters/core/sqlite-model-activation",
+        "src/engine/core/model-activation",
         "src/adapters/core/approval-store",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -1013,6 +1015,7 @@
     },
     "src/engine/core/model-activation": {
       "dependencies": [
+        "src/engine/core/toolchain-currency",
         "src/domain/core/model-activation",
         "src/domain/core/primitives",
         "src/domain/core/principal",

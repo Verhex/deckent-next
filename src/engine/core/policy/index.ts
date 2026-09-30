@@ -8,7 +8,7 @@ export type { ScopeAccess, ScopeRegistry } from './internal/membership.js';
 export { getPolicyVocabulary } from '#domain/index.js';
 export { ServicePolicyAuthorization } from './internal/service.js';
 export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service.js';
-export { ModelActivationPolicyAuthorization } from './internal/model-activation.js';
+export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } from './internal/model-activation.js';
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
 export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';
 export { AgentToolPolicyAuthorization } from './internal/agent-tool.js';

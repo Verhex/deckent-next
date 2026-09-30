@@ -5,6 +5,7 @@ import { z } from 'zod';
 export const WORKER_EVENT_SCHEMA_VERSION = 1;
 const count = z.number().int().nonnegative().safe();
 const text = (max: number) => z.string().max(max);
+const MAX_MODELS = 16;
 export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
 export type WorkerToolClass = z.infer<typeof workerToolClassSchema>;
 export const workerProviderSchema = z.enum(['claude', 'codex', 'cursor']);
@@ -22,8 +23,12 @@ export const workerEventSchema = z.discriminatedUnion('kind', [
   z.object({ ...base, kind: z.literal('limit'), limit: z.enum(['max-turns', 'budget', 'duration', 'structured-output']), detail: text(120) }).strict(),
   z.object({ ...base, kind: z.literal('session.ended'), outcome: z.enum(['success', 'error', 'limit']), turns: count, durationMs: count,
     apiDurationMs: count.nullable(), costUsd: z.number().nonnegative().finite().nullable(), costBasis: text(32).nullable(), tokens: tokens.nullable(),
-    permissionDenials: count }).strict(),
+    permissionDenials: count, models: z.array(text(128)).max(MAX_MODELS).readonly().optional() }).strict(),
   z.object({ ...base, kind: z.literal('unmapped'), nativeType: text(64), count: z.number().int().positive().safe() }).strict(),
+  /** Host-generated after the gateway closed (WORKER-CURRENCY-1): the admitted exact model compared with the models the worker reported.
+   * `substituted` lists every unexpected model; `unverified` means the provider reports no per-model evidence. Never accepted from a worker. */
+  z.object({ ...base, kind: z.literal('model.verification'), status: z.enum(['verified', 'substituted', 'unverified']), admitted: text(256).nullable(),
+    observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly() }).strict(),
   /** Host-generated when caps drop events; never produced by a worker. */
   z.object({ ...base, kind: z.literal('dropped'), reason: z.enum(['event-cap', 'byte-cap', 'invalid', 'order']), count: z.number().int().positive().safe() }).strict(),
 ]);
@@ -52,6 +57,9 @@ export interface WorkerEventSummary {
   readonly toolCalls: Readonly<Record<WorkerToolClass, number>>; readonly toolErrors: number; readonly filesTouched: readonly string[];
   readonly messages: number; readonly quota: readonly { readonly window: string; readonly utilization: number }[];
   readonly unmapped: number; readonly dropped: number; readonly events: number;
+  /** Models the provider reported for the session (Claude `result.modelUsage` keys) and the host verdict, when present. */
+  readonly models: readonly string[] | null;
+  readonly modelVerification: Readonly<{ status: 'verified' | 'substituted' | 'unverified'; unexpected: readonly string[] }> | null;
 }
 const MAX_FILES = 100;
 /** Pure summary for interpretation: what the worker did, how long, how many tokens and how well the cache served it. */
@@ -61,6 +69,7 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
   const files = new Set<string>(), quota = new Map<string, number>();
   let provider: string | null = null, model: string | null = null, ended: Extract<WorkerEvent, { kind: 'session.ended' }> | null = null;
   let toolErrors = 0, messages = 0, unmapped = 0, dropped = 0;
+  let verification: WorkerEventSummary['modelVerification'] = null;
   for (const event of events) {
     if (event.kind === 'session.started') { provider = event.provider; model = event.model; }
     else if (event.kind === 'tool.call') { toolCalls[event.toolClass]++; if (event.target && (event.toolClass === 'edit' || event.toolClass === 'write') && files.size < MAX_FILES) files.add(event.target); }
@@ -74,6 +83,7 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
     else if (event.kind === 'unmapped') unmapped += event.count;
     else if (event.kind === 'dropped') dropped += event.count;
     else if (event.kind === 'session.ended') ended = event;
+    else if (event.kind === 'model.verification') verification = Object.freeze({ status: event.status, unexpected: event.unexpected });
   }
   // The provider's final totals are authoritative over the running sum of per-message usage.
   const total = ended?.tokens ?? running;
@@ -82,5 +92,26 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
     apiDurationMs: ended?.apiDurationMs ?? null, tokens: Object.freeze({ ...total }), cacheReadRatio: prompt > 0 ? total.cacheRead / prompt : null,
     costUsd: ended?.costUsd ?? null, costBasis: ended?.costBasis ?? null, toolCalls: Object.freeze(toolCalls), toolErrors,
     filesTouched: Object.freeze([...files].sort()), messages, quota: Object.freeze([...quota].map(([window, utilization]) => Object.freeze({ window, utilization }))),
-    unmapped, dropped, events: events.length });
+    unmapped, dropped, events: events.length, models: ended?.models ?? null, modelVerification: verification });
+}
+
+export type WorkerModelVerification = Readonly<{ status: 'verified' | 'substituted' | 'unverified'; admitted: string | null;
+  observed: readonly string[]; unexpected: readonly string[] }>;
+/**
+ * Pure host verdict (WORKER-CURRENCY-1, Jev f49cb4f6): a Claude session is `verified` only when it started on the admitted exact model,
+ * reported usage for it, and every other reported model is one the profile declared as auxiliary. Anything else the worker used is
+ * `substituted` (listed). Providers without per-model evidence, profiles without an admitted model, or a session without usage are `unverified`.
+ */
+export function verifyWorkerModels(input: Readonly<{ provider: 'claude' | 'codex' | 'cursor';
+  admitted: Readonly<{ modelId: string; auxiliaryModelIds: readonly string[] }> | null; startedModel: string | null; usedModels: readonly string[] | null }>): WorkerModelVerification {
+  const observed = Object.freeze([...new Set([...(input.startedModel === null ? [] : [input.startedModel]), ...(input.usedModels ?? [])])].sort());
+  const admitted = input.admitted?.modelId ?? null;
+  if (input.provider !== 'claude' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: Object.freeze([]) });
+  const allowed = new Set([input.admitted.modelId, ...input.admitted.auxiliaryModelIds]);
+  const unexpected = new Set(observed.filter(model => !allowed.has(model)));
+  if (input.startedModel !== null && input.startedModel !== input.admitted.modelId) unexpected.add(input.startedModel);
+  const list = Object.freeze([...unexpected].sort());
+  if (list.length > 0) return Object.freeze({ status: 'substituted', admitted, observed, unexpected: list });
+  const complete = input.startedModel === input.admitted.modelId && (input.usedModels ?? []).includes(input.admitted.modelId);
+  return Object.freeze({ status: complete ? 'verified' : 'unverified', admitted, observed, unexpected: list });
 }

@@ -38,7 +38,7 @@ export * from '#engine/core/installation/index.js';
 export * from '#engine/core/provider-catalog/index.js';
 export * from '#engine/core/model-activation/index.js';
 export * from '#engine/core/model-invocation/index.js';
-export { ModelActivationPolicyAuthorization } from '#engine/core/policy/index.js';
+export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ProviderSpendAccountPolicyAuthorization, AgentToolPolicyAuthorization } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';

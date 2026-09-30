@@ -1,5 +1,6 @@
 /**
- * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v41: v42 changed
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v42: v43 only
+ * added the four model catalog tables, so dropping them is exact); `DOWNGRADE_TO_V41_LEDGER_SQL` also goes back to v41 (v42 changed
  * only the adoption record contract, so the version alone goes back — exact for a ledger without v2 adoption records, which a test
  * writes in the v1 form itself); `DOWNGRADE_TO_V40_LEDGER_SQL` also removes the v41 audit tables and their append-only triggers;
  * `DOWNGRADE_TO_V39_LEDGER_SQL` also reverses the v40 approvals rebuild to the
@@ -9,9 +10,11 @@
  * `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL again, the
  * checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 41;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = 'PRAGMA user_version=41;';
-export const DOWNGRADE_TO_V40_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TRIGGER audit_events_no_update; DROP TRIGGER audit_events_no_delete;
+export const PREVIOUS_LEDGER_VERSION = 42;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `DROP TABLE model_catalog_receipts; DROP TABLE model_catalog_activations;
+  DROP TABLE model_catalog_models; DROP TABLE model_catalog_channels; PRAGMA user_version=42;`;
+export const DOWNGRADE_TO_V41_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} PRAGMA user_version=41;`;
+export const DOWNGRADE_TO_V40_LEDGER_SQL = `${DOWNGRADE_TO_V41_LEDGER_SQL} DROP TRIGGER audit_events_no_update; DROP TRIGGER audit_events_no_delete;
   DROP TABLE audit_counters; DROP TABLE audit_events; PRAGMA user_version=40;`;
 export const DOWNGRADE_TO_V39_LEDGER_SQL = `${DOWNGRADE_TO_V40_LEDGER_SQL} CREATE TABLE approvals_v39(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call')),
     run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,

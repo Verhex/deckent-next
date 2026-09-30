@@ -152,14 +152,17 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
     const limit = { error_max_turns: 'max-turns', error_max_budget_usd: 'budget', error_max_structured_output_retries: 'structured-output' }[subtype];
     if (limit) emit('limit', { limit, detail: subtype });
     const usage = (data.usage ?? {}) as Record<string, unknown>, details = (usage.output_tokens_details ?? {}) as Record<string, unknown>;
-    const models = Object.values((data.modelUsage ?? {}) as Record<string, Record<string, unknown>>);
+    const usage_ = data.modelUsage && typeof data.modelUsage === 'object' && !Array.isArray(data.modelUsage) ? data.modelUsage as Record<string, Record<string, unknown>> : null;
+    const models = Object.values(usage_ ?? {});
     emit('session.ended', { outcome: subtype === 'success' && data.is_error !== true ? 'success' : limit ? 'limit' : 'error', turns: num(data.num_turns),
       durationMs: num(data.duration_ms), apiDurationMs: typeof data.duration_api_ms === 'number' ? num(data.duration_api_ms) : null,
       costUsd: typeof data.total_cost_usd === 'number' && Number.isFinite(data.total_cost_usd) && data.total_cost_usd >= 0 ? data.total_cost_usd : null,
       costBasis: typeof models[0]?.costBasis === 'string' ? String(models[0].costBasis).slice(0, 32) : null,
       tokens: { input: num(usage.input_tokens), output: num(usage.output_tokens), cacheRead: num(usage.cache_read_input_tokens), cacheWrite: num(usage.cache_creation_input_tokens),
         thinking: typeof details.thinking_tokens === 'number' ? num(details.thinking_tokens) : null },
-      permissionDenials: Array.isArray(data.permission_denials) ? data.permission_denials.length : 0 });
+      permissionDenials: Array.isArray(data.permission_denials) ? data.permission_denials.length : 0,
+      // Every model the session used (exact ids as keys), so the host can compare them with the admitted model (WORKER-CURRENCY-1).
+      ...(usage_ ? { models: Object.keys(usage_).sort().slice(0, 16).map(key => key.slice(0, 128)) } : {}) });
   } else miss(type);
   return events;
 }
