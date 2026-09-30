@@ -91,7 +91,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         const closedSink = await events?.close();
         // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
         const unreported = connection?.statistics().eventsUnreported ?? 0;
-        const received = closedSink?.events ?? [];
+        const verification = connection?.modelVerification() ?? null;
+        const received = verification ? [...(closedSink?.events ?? []), { schemaVersion: 1 as const, sequence: (closedSink?.events.at(-1)?.sequence ?? 0) + 1,
+          atMs: closedSink?.events.at(-1)?.atMs ?? 0, kind: 'model.verification' as const, ...verification }] : closedSink?.events ?? [];
         const sealed = unreported > 0 ? [...received, { schemaVersion: 1 as const, sequence: (received.at(-1)?.sequence ?? 0) + 1, atMs: received.at(-1)?.atMs ?? 0,
           kind: 'dropped' as const, reason: 'event-cap' as const, count: unreported }] : received;
         if (sealed.length) {

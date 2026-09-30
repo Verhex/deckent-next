@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CURRENT_LEDGER_VERSION, MODEL_CATALOG_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, upgradeExistingProductLedger } from '#adapters/index.js';
-import { parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
+import { createHash } from 'node:crypto';
+import { encodeModelBindingDefinition, parseModelCatalogCommand, parseProviderCatalog, parseProviderCatalogDocument } from '#domain/index.js';
 import type { ModelCatalogAdmission } from '#engine/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { seedCatalog } from '../support/model-catalog.js';
@@ -60,6 +61,13 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     const older = await ledger(); const raw = new DatabaseSync(older.path); raw.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); raw.close();
     await expect(openSqliteModelCatalogReader(older.path, options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   });
+  it('rolls the v43 step back when a same-name object of another shape exists (ledger stays at v42)', async () => {
+    const { path } = await ledger();
+    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE model_catalog_models(id INTEGER PRIMARY KEY, payload TEXT);`); db.close();
+    expect(() => openSqliteLedger(path, options, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+    expect(version(path)).toBe(42);
+    expect(rows(path, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'model_catalog%'").map(row => row.name)).toEqual(['model_catalog_models']);
+  });
   it('registers facts, activates hierarchically, replays exactly and refuses conflicts, unknown targets and stale revisions', async () => {
     const { path } = await ledger(); const catalog = await seedCatalog();
     const store = await openSqliteModelCatalogStore(path, options, 'forbid');
@@ -111,5 +119,15 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     expect(bad(doc => { doc.providers[0].models[0].efforts = ['medium', 'medium']; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
     expect(bad(doc => { doc.providers[0].models[0].nativeId = '--fallback-model'; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
     expect(bad(doc => { delete doc.providers[0].models[0].lifecycle; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
+  });
+  it('keeps the chat catalog contract byte-stable: a v1 declaration binds to the same digest as before v43 (existing activations stay valid)', () => {
+    const catalog = parseProviderCatalog({ schemaVersion: 1, revision: 'r', providers: [{ id: 'local', version: 1, models: [{ id: 'qwen', version: 1, nativeId: 'Qwen/Qwen3-8B',
+      protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [{ id: 'text', version: 1, state: 'supported' }] }] }] }] });
+    const definition = { encodingVersion: 1, provider: { id: 'local', version: 1 }, model: catalog.providers[0]!.models[0] };
+    // Golden value measured on main 6b15406a (before this slice) with the same input.
+    expect(createHash('sha256').update(encodeModelBindingDefinition(definition), 'utf8').digest('hex')).toBe('a185c83527b619a6d9ecfe50e30286fb22be917e2eb314fe51c0c62b3d9903c8');
+    // A v2 catalog document is never accepted as a v1 chat catalog (and vice versa): one shape per reader until chat moves to the ledger.
+    expect(() => parseProviderCatalog({ schemaVersion: 2, revision: 'r', providers: [] })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
+    expect(() => parseProviderCatalogDocument({ schemaVersion: 1, revision: 'r', providers: [] })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
   });
 });

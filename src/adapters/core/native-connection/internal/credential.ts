@@ -6,7 +6,12 @@ import { z } from 'zod';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 
-export const nativeSubscriptionSchema = z.object({ schemaVersion: z.literal(1), provider: z.enum(['codex', 'claude', 'cursor']),
+const exactModelId = z.string().min(1).max(256).refine(value => value.trim() === value && !value.startsWith('-')
+  && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
+/** v2 (WORKER-CURRENCY-1): the admitted catalog reference — channel and exact model id, plus declared helper model ids. The host compares the
+ * models the worker reports against it (model.verification); v1 profiles carry none and are refused for new Runs at admission. */
+export const nativeSubscriptionSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: z.enum(['codex', 'claude', 'cursor']),
+  model: z.object({ channelId: z.string().min(1).max(256), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly() }).strict().readonly().optional(),
   promptDelivery: nativePromptDeliverySchema.optional(),
   finalReport: z.object({ schemaVersion: z.literal(1) }).strict().readonly().optional(),
   preflight: z.object({ schemaVersion: z.literal(1), cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
@@ -14,7 +19,7 @@ export const nativeSubscriptionSchema = z.object({ schemaVersion: z.literal(1), 
     helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),
     requiredFlags: z.array(z.string().regex(/^--[a-z][a-z-]*$/).max(64)).min(1).max(20).readonly(),
   }).strict().readonly().optional(),
-}).strict().readonly();
+}).strict().refine(value => (value.schemaVersion === 2) === (value.model !== undefined)).readonly();
 export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export class NativeConnectionError extends Error {
   constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE') { super(code); this.name = 'NativeConnectionError'; }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { executionProfileDefinitionSchema } from '#domain/index.js';
-import { compileNativeCodingDockerProfile, nativeCodingInvocationSchema } from '#adapters/index.js';
+import { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from '#adapters/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 const requestSchema = z.object({ schemaVersion: z.literal(1), template: executionProfileDefinitionSchema,
@@ -13,5 +13,7 @@ export function prepareNativeCodingProfile(input: unknown) {
   try {
     const profile = compileNativeCodingDockerProfile(request.data.template, request.data.invocation);
     return Object.freeze({ schemaVersion: 1 as const, profile, activation: 'not-activated' as const });
-  } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+  } catch (error) {
+    throw ErrorRegistry.createError(error instanceof NativeCodingProfileError && error.code === 'WORKER_MODEL_ALIAS_REFUSED' ? error.code : 'EXECUTION_PROFILE_INVALID');
+  }
 }

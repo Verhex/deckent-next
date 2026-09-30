@@ -132,6 +132,7 @@
     "WorkerObservationReport": "type",
     "WorkspacePatch": "type",
     "admitModelActivation": "value",
+    "applyModelCatalog": "value",
     "adoptConfiguredWorkspaceIntegration": "value",
     "applyInstallation": "value",
     "assertActorAssurance": "value",

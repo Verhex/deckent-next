@@ -23,7 +23,8 @@
       "model_instructions_file=\"/tmp/deckent-prompt/core.txt\"",
       "-c",
       "project_doc_max_bytes=0"
-    ]
+    ],
+    "modelAliases": []
   },
   "claude": {
     "executable": "claude",
@@ -45,6 +46,17 @@
     "coreArgs": [
       "--system-prompt",
       "__DECKENT_CORE_PROMPT__"
+    ],
+    "modelAliases": [
+      "default",
+      "best",
+      "fable",
+      "sonnet",
+      "opus",
+      "haiku",
+      "sonnet[1m]",
+      "opus[1m]",
+      "opusplan"
     ]
   },
   "cursor": {
@@ -62,6 +74,7 @@
     ],
     "disabledArgs": null,
     "coreChannel": "inline",
-    "coreArgs": []
+    "coreArgs": [],
+    "modelAliases": []
   }
 }

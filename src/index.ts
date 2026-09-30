@@ -61,7 +61,8 @@ export type { DeclaredModelsInspection } from '#engine/index.js';
 export { inspectModelBinding } from '#composition/index.js';
 export type { ModelBindingInspection } from '#engine/index.js';
 export type { ModelReference, ModelBindingDefinition } from '#domain/index.js';
-export { admitConfiguredModelActivation as admitModelActivation, inspectConfiguredModelActivation as inspectModelActivation } from '#composition/index.js';
+export { admitConfiguredModelActivation as admitModelActivation, inspectConfiguredModelActivation as inspectModelActivation,
+  applyConfiguredModelCatalog as applyModelCatalog } from '#composition/index.js';
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
 export type { ModelActivationResult, ModelActivationInspection } from '#engine/index.js';
 export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation, purgeRuntimeModelInvocationContent as purgeModelInvocationContent,

@@ -12,7 +12,7 @@ import { nativeSubscriptionSchema, NativeConnectionError, projectNativeCredentia
 import { scrubWorkerEvent } from './event-guard.js';
 import { secretValues } from './worker.js';
 import { readNativeClientHello } from './tls-hello.js';
-import { workerEventSchema, type WorkerEvent } from '#domain/index.js';
+import { verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -51,6 +51,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   // The values this gateway projects into the worker; kept only to scrub events it receives (never sent anywhere).
   let secrets: string[] = secretValues(projected);
   let lastSequence = 0;
+  const reported: { started: string | null; used: readonly string[] | null; ended: boolean } = { started: null, used: null, ended: false };
   // Worker-reported events after the bootstrap only: bounded per request and per attempt, schema-validated, strictly ordered.
   const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
     // Budget exhausted (one event and a little space stay reserved): refuse without parsing; the loss is sealed later.
@@ -68,8 +69,11 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
         if (!line) continue;
         let parsed; try { parsed = workerEventSchema.safeParse(JSON.parse(line)); } catch { parsed = null; }
         const bytes = Buffer.byteLength(line);
-        if (!parsed?.success || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
+        // A worker can never claim the host's model verdict; such a line is invalid like any other forged host event.
+        if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
         lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(scrubWorkerEvent(parsed.data, secrets));
+        if (parsed.data.kind === 'session.started') reported.started = parsed.data.model;
+        else if (parsed.data.kind === 'session.ended') { reported.ended = true; reported.used = parsed.data.models ?? null; }
       }
       statistics.eventsDropped += dropped;
       if (dropped) {
@@ -139,6 +143,9 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     await chmod(socketPath, 0o600);
     timer = setTimeout(() => { void close().catch(() => undefined); }, input.deadlineMs); timer.unref();
     return Object.freeze({ descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, bootstrapPath, bootstrapSha256 }),
-      statistics: () => Object.freeze({ ...statistics, closed }), close });
+      statistics: () => Object.freeze({ ...statistics, closed }), close,
+      /** Host verdict over the accepted worker events against the admitted model (null until the session ended). */
+      modelVerification: () => reported.ended ? verifyWorkerModels({ provider: binding.provider, admitted: binding.model ?? null,
+        startedModel: reported.started, usedModels: reported.used }) : null });
   } catch { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
 }

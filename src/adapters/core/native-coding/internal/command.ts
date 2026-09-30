@@ -7,21 +7,28 @@ import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from '
 // This versioned adapter supports the owner-admitted isolated, unattended coding pilot only.
 // Its CLI flags implement native protocols, not mutable permission/model selection policy.
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
+const modelArgument = argument.refine(value => value.length <= 256 && !value.startsWith('-') && value.trim() === value);
+/** v4 (WORKER-CURRENCY-1): the model is a catalog reference — channel id and exact API model id — plus the exact ids of helper models
+ * the CLI may use on its own (declared, never passed as flags). Admission checks all of them against the ledger catalog. */
+const pinnedModelSchema = z.object({ channelId: z.string().min(1).max(256).refine(value => value.trim() === value), modelId: modelArgument,
+  auxiliaryModelIds: z.array(modelArgument).max(8).readonly() }).strict().readonly();
 export const nativeCodingInvocationSchema = z.object({
-  schemaVersion: z.union([z.literal(2), z.literal(3)]), maxTurns: z.number().int().positive().safe().optional(), provider: z.enum(['codex', 'claude', 'cursor']),
+  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), maxTurns: z.number().int().positive().safe().optional(), provider: z.enum(['codex', 'claude', 'cursor']),
   cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   discovery: z.object({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
     settings: z.object({ disableAllHooks: z.boolean() }).strict().readonly().optional(),
   }).strict().readonly().default({ schemaVersion: 1, mode: 'disabled' }),
   permissionMode: z.literal('unattended'),
-  model: argument.refine(value => value.length <= 256 && !value.startsWith('-') && value.trim() === value),
+  model: z.union([modelArgument, pinnedModelSchema]),
   prompt: argument.refine(value => Buffer.byteLength(value, 'utf8') <= 65_536).optional(),
   composition: nativePromptCompositionSchema.optional(),
-}).strict().refine(value => value.schemaVersion === 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined)).readonly();
+}).strict().refine(value => value.schemaVersion >= 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined))
+  .refine(value => (value.schemaVersion === 4) === (typeof value.model === 'object')).readonly();
 export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
 export class NativeCodingProfileError extends Error {
-  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED') {
+  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED'
+    | 'WORKER_MODEL_ALIAS_REFUSED') {
     super(code); this.name = 'NativeCodingProfileError';
   }
 }
@@ -38,7 +45,13 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const invocation = parsed.data;
   const command = commands[invocation.provider];
   if (invocation.maxTurns !== undefined && invocation.provider !== 'claude') throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
-  if (invocation.schemaVersion === 3 && Number(template.parameters.outputBytes) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  if (invocation.schemaVersion >= 3 && Number(template.parameters.outputBytes) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
+  // Owner 2026-09-30: models are pinned by exact id; a CLI alias (data, per CLI) or a moving `-latest` name is refused, never resolved.
+  const pinned = typeof invocation.model === 'object' ? invocation.model : null;
+  const modelId = pinned ? pinned.modelId : invocation.model as string;
+  if ([modelId, ...(pinned?.auxiliaryModelIds ?? [])].some(id => (command.modelAliases as readonly string[]).includes(id) || id.endsWith('-latest'))) {
+    throw new NativeCodingProfileError('WORKER_MODEL_ALIAS_REFUSED');
+  }
   const turnArgs = invocation.maxTurns === undefined ? [] : ['--max-turns', String(invocation.maxTurns)];
   const { mode, settings } = invocation.discovery;
   if ((mode === 'disabled' && !command.disabledArgs)
@@ -51,10 +64,11 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const coreArgs = delivery ? command.coreArgs : [];
   // No shell interpolation. End-of-options keeps even a dash-prefixed prompt as task data.
   const argv = [command.executable, ...command.args, ...turnArgs, ...discoveryArgs, ...settingsArgs, ...coreArgs,
-    command.modelFlag, invocation.model, '--', delivery ? '__DECKENT_TASK_PROMPT__' : invocation.prompt!];
+    command.modelFlag, modelId, '--', delivery ? '__DECKENT_TASK_PROMPT__' : invocation.prompt!];
   const profile = executionProfileDefinitionSchema.parse({ ...template, parameters: { ...template.parameters, argv,
-    nativeSubscription: { schemaVersion: 1, provider: invocation.provider,
-      ...(invocation.schemaVersion === 3 ? { finalReport: { schemaVersion: 1 } } : {}),
+    nativeSubscription: { schemaVersion: pinned ? 2 : 1, provider: invocation.provider,
+      ...(pinned ? { model: { channelId: pinned.channelId, modelId: pinned.modelId, auxiliaryModelIds: [...pinned.auxiliaryModelIds] } } : {}),
+      ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,
       requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...discoveryArgs,

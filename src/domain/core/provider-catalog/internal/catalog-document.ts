@@ -64,7 +64,8 @@ function channelIssues(catalog: ProviderCatalogDocument): ValidationIssue[] {
       if (models.has(`${model.id}\0${model.version}`)) issue('providers', p, 'models', m, 'id'); models.add(`${model.id}\0${model.version}`);
       if (model.minCliVersion !== null && provider.channel.kind !== 'native-cli') issue('providers', p, 'models', m, 'minCliVersion');
       if (new Set(model.efforts).size !== model.efforts.length) issue('providers', p, 'models', m, 'efforts');
-      if ((model.lifecycle.state === 'retired') !== (model.lifecycle.retiredOn !== null)) issue('providers', p, 'models', m, 'lifecycle');
+      // A retired entry names its day; any other state may carry an announced retirement day, after which admission treats it as retired.
+      if (model.lifecycle.state === 'retired' && model.lifecycle.retiredOn === null) issue('providers', p, 'models', m, 'lifecycle');
     });
     [...provider.channel.aliases, ...provider.models.flatMap(model => model.aliases)].forEach((alias, a) => {
       if (exact.has(alias) || aliases.has(alias)) issue('providers', p, 'aliases', a); aliases.add(alias);
