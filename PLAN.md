@@ -400,6 +400,9 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); o adayın tam
 
 ## Kanıt ve durum
 
+- **Açık (dağıtım/SBOM, Astra 2192 teyitli):** `dist-sbom.mjs` ve dist-ajv-stub gömülü kopya tespiti `node_modules/<ad>` yol önekine bakıyor;
+  proje dışı/sembolik bağlı `node_modules` (pnpm düzeni, worktree bağı) altında gömülü fast-uri/cf-worker satırları raporlanmıyor. Ürün çalışma
+  zamanı kusuru değil; kurulum/düzen bağımsız tespit + negatif test gerekli (kanıt `proof/INTEGRATE-2026-09-30-P-verify-279d22c6-symlinked-node-modules.log`).
 - **Astra 2188 — 2026-09-30 @ `02601269`: REVISE (13. parti)** → düzeltme **on dördüncü parti** `integrate/2026-09-30-o` `51b19dc5`:
   **Astra 2190 PASS** (REVIEW 2191; bağımsız build +144 test 0 skip, launcher 48/48, 1677 dosya birebir), **push `4a2ac04..51b19dc5`** 2026-09-30.
   N1 (belge): "tek inode" ifadesi 0.5 s askıda yayıncı istisnasıyla yazıldı (sonraki partide). [Astra 2190](../deckent-refactor-work/proof/ASTRA-2190-2026-09-30/review.md).

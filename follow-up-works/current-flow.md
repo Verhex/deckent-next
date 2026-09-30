@@ -14,7 +14,10 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   istem v6 kabuk duruşunu turun realm çözümünden (`createAgentShell().posture()`, çağrılarla aynı resolveRealm/callRealm) yazar —
   açık görünüm: ağ + gerçek HOME + proje/.git yazılabilir, Deckent durumu mühürlü; kapalı: ağ yok, HOME gizli; host: sandbox yok; fetch_url ayrı.
   Host realm'de standart/full-auto istemi de artık ağın erişilebilir olduğunu söyler (doğru, görünür değişiklik). requestDigest istem hash'i
-  içerdiğinden eski turn id tekrarı AGENT_TURN_CONFLICT (bilinçli). Kanıt `proof/PROMPT-POSTURE-2026-09-30/`. Sıradaki: tam verify → Astra → push → canlı. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
+  içerdiğinden eski turn id tekrarı AGENT_TURN_CONFLICT (bilinçli). Kanıt `proof/PROMPT-POSTURE-2026-09-30/`.
+  Astra 2192 REVISE R9 P2 (istem config'i koşulsuz mühürlü diyordu; full-access içinde owner-approved çağrı mevcut config içeriğini yazabilir)
+  → `0542196b`: yapısal taban (durum/policy/kimlik) ile config kuralı (onaysız salt okunur, onaylı çağrı mevcut içeriği değiştirebilir) ayrı;
+  `posture().configuration` `shellWritePosture('owner-approved')` kaynağından; Astra reviewer testi gerçek serviste kırmızı→yeşil (r9/). Sıradaki: tam verify → Astra. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
 - **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
   Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
   protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
