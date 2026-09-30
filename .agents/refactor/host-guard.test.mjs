@@ -14,6 +14,7 @@ function ctx(over = {}) {
   return {
     root, legacy,
     vitestRunning: () => false,
+    distUsers: () => [],
     readLines: () => 46,
     refreshMemoryManifest: () => 'refreshed (stub)',
     sessionSummary: () => 'summary (stub)',
@@ -75,6 +76,23 @@ test('build and verify are denied only while vitest runs', () => {
   assert.equal(decision(guard('pre-tool', bash('npm run lint'), running)), 'pass');
   assert.equal(decision(guard('pre-tool', bash('echo "npm run build later"'), running)), 'pass');
   assert.equal(decision(guard('pre-tool', bash('npm run build'), ctx())), 'pass');
+});
+
+test('U1: build/verify of a checkout whose dist runs a live process is denied; other trees and a quiet checkout pass', async () => {
+  const { buildTargets } = await import('./host-guard.mjs');
+  const live = ctx({ distUsers: dir => (dir === root ? [4242] : []) });
+  const denied = guard('pre-tool', { ...bash('npm run build'), cwd: root }, live);
+  assert.equal(decision(denied), 'deny');
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /U1: .*4242.*dev-release\.mjs/);
+  assert.equal(decision(guard('pre-tool', bash('npm run verify'), live)), 'deny'); // no cwd in the event: the hook root
+  assert.equal(decision(guard('pre-tool', bash(`node ${root}/scripts/build.mjs`), live)), 'deny');
+  assert.equal(decision(guard('pre-tool', bash(`npm --prefix ${root} run build`), live)), 'deny');
+  assert.equal(decision(guard('pre-tool', bash(`cd /tmp/other-worktree && npm run build`), live)), 'pass');
+  assert.equal(decision(guard('pre-tool', { ...bash('npm run build'), cwd: '/tmp/next-root-lane' }, live)), 'pass');
+  assert.equal(decision(guard('pre-tool', bash('npm run test && npm run lint'), live)), 'pass');
+  assert.equal(decision(guard('pre-tool', bash('echo "npm run build"'), live)), 'pass');
+  assert.equal(decision(guard('pre-tool', bash('npm run build'), ctx())), 'pass');
+  assert.deepEqual(buildTargets('cd /a && cd b && npm run build; node ../c/scripts/build.mjs', '/x'), ['/a/b', '/a/c']);
 });
 
 test('post-tool: CLAUDE.md line cap and core-memory manifest refresh', () => {
