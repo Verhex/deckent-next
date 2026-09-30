@@ -438,6 +438,15 @@ sequential process launches inside one `it` (CI-FIX F6, sixteenth batch); the fi
 process-identical assertion counts, longest step ≈ 7 s locally (`b9b2ce15`). The earlier 22–23 s single-test measurement predates the
 split and is no longer current evidence; a real GitHub runner run is the open proof.
 
+CI preparation (CI-FIX F1–F3): the required Linux job pulls the Docker test fixture by digest (`bash scripts/ci-docker-fixture.sh`:
+`node@sha256:8ec5d755…`, local image id checked and exported as `DECKENT_TEST_DOCKER_IMAGE` through `GITHUB_ENV`; a failed daemon, pull,
+identity check or unprivileged container run fails preparation — tests are never skipped). It then builds bubblewrap in check mode, stages it
+(`scripts/build-bwrap.mjs --arch x86_64 --out …`, `--stage-dev …`), builds the product and runs `scripts/ci-shell-realm.mjs`, which checks both
+staged trees against the lock, places the launcher through the service path and requires the compiled `doctor.shellRealm` to select usable
+bubblewrap (only the ephemeral runner enables user namespaces via its AppArmor sysctl; not a product installation step; `realm-arm64` stays
+disabled). Workflow expressions are checked locally with actionlint v1.7.7 (`go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7`,
+then `actionlint -shellcheck= -pyflakes= .github/workflows/*.yml`; no npm dependency).
+
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
