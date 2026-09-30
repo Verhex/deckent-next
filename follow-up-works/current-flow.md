@@ -9,7 +9,12 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   **Canlı (2026-09-30):** instance `6eb54a8c`, build main `979b4b02` (= `51b19dc5` + belge), Node 24.21, config `language: tr`;
   doğrulama: Türkçe yanıt, tam erişimde gerçek HOME, `.deckent/mcp.json` read-only, bubblewrap gömülü (bildirim yok), context7 ok.
   Canlı bulgu: tam erişim turunda istem "Network access: none" diyor → model ağı reddediyor; düzeltme lane/prompt-posture (istem v6).
-  Kanıt `proof/LIVE-SWITCH-BATCH14-2026-09-30/README.md`. Birleşmiş worktree/dallar temizlendi. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
+  Kanıt `proof/LIVE-SWITCH-BATCH14-2026-09-30/README.md`. Birleşmiş worktree/dallar temizlendi.
+- **On beşinci parti (2026-09-30):** `integrate/2026-09-30-p` (worktree `/home/alperen/deckent-next-integrate-p`) = PROMPT-POSTURE `37449c8a`:
+  istem v6 kabuk duruşunu turun realm çözümünden (`createAgentShell().posture()`, çağrılarla aynı resolveRealm/callRealm) yazar —
+  açık görünüm: ağ + gerçek HOME + proje/.git yazılabilir, Deckent durumu mühürlü; kapalı: ağ yok, HOME gizli; host: sandbox yok; fetch_url ayrı.
+  Host realm'de standart/full-auto istemi de artık ağın erişilebilir olduğunu söyler (doğru, görünür değişiklik). requestDigest istem hash'i
+  içerdiğinden eski turn id tekrarı AGENT_TURN_CONFLICT (bilinçli). Kanıt `proof/PROMPT-POSTURE-2026-09-30/`. Sıradaki: tam verify → Astra → push → canlı. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
 - **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
   Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
   protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
