@@ -740,7 +740,7 @@ with `[deckent] grep: matches=N` (`N` = `:`-marked hit lines actually returned, 
 than found: hit cap, byte-cap cut, skipped or unscanned files). The terminal's grep count comes only from that last line, or 0 from
 the "no matches" line (`+` when the search was not complete); without it (older result, other producer, final byte-cap cut) no
 summary is shown — hit rows are never parsed back, since a workspace path may contain `:` (Astra 2145 R2). Tool `version` unchanged.
-**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 5),
+**Model-facing system prompt (TL-C D4).** The runtime service renders a versioned (`AGENT_TURN_SYSTEM_PROMPT_VERSION`, now 6),
 English, deterministic instruction segment in code (protocol text like tool descriptions, never a catalog string): project root,
 Deckent data root (workspace-relative when inside the project, else marked unreadable; v4 names Deckent's own state protected),
 the configuration path, protected places, the declared tools by class (read / edit / shell), that policy and the permission mode
@@ -766,6 +766,9 @@ local model can still drift; no post-check exists (a post-answer language check 
 wire: terminal and service differ only for `terminal --lang` or a service started from another environment. Lead decision (2026-09-30): B now —
 the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
 v19 (v18 is released) and ships with the next protocol bundle.
+System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
+(the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed; closed = no network; host;
+unavailable), and `Network access: none` stays only when the shell has no network. Every turn's request digest changes again.
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
@@ -1153,7 +1156,7 @@ is also the command's `HOME`; in the bubblewrap realm HOME is an empty tmpfs and
 **Agent fetch tool (FETCH S6/S7/S10, owner 2026-09-28).** `terminal.fetch` (schemaVersion 1, optional): `egress: none | allowlist |
 approval` (default `none`), `allowedHosts[]` (exact lowercase DNS names; no wildcard, no IP), `maxBytes` (4 MiB), `timeoutMs` (30 s),
 `maxRedirects` (3); no proxy field (corporate proxy is a separate slice). `none` builds nothing: no `fetch_url`, no transport use, and
-the system prompt says there is no network access. **Egress mapping (decided, Jev ee030c0e 0.90 / sufficiency 0.77): `allowlist`
+the system prompt says there is no network access (v6: unless the shell's posture reaches the network — then fetch_url is named not offered). **Egress mapping (decided, Jev ee030c0e 0.90 / sufficiency 0.77): `allowlist`
 refuses every host outside `allowedHosts` without a card or a DNS lookup (`host-not-allowed`); `approval` runs listed hosts under
 policy and opens an owner card for any other host.** A redirect is followed only to the call's own host (for an approved call: the host
 the owner approved) or an allowlisted host (decided, Q2). A timeout before the TLS handshake finished sent no HTTP request and is

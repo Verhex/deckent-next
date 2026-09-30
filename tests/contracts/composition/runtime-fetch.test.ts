@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { agentToolArgumentsDigest } from '#engine/index.js';
-import { scratchSessionKey } from '#adapters/index.js';
+import { landlockShellSandbox, scratchSessionKey, type ShellSandboxFactory } from '#adapters/index.js';
+import { linuxShellHost } from '../../fixtures/shell-host.js';
 import { me, principal, runtime } from '../support/chat-turn-harness.js';
 import { startFetchFixture, type FetchFixture } from '../support/fetch-fixture.js';
 
@@ -73,7 +74,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
     // One C11 effect of the Core network operation, settled; the model learned the tool from the system prompt v3.
     expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'network-fetch', state: 'settled' }]);
     const system = systemOf(f.state.requests[0]!);
-    expect(system.startsWith('[Deckent runtime instructions v5]')).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v6]')).toBe(true);
     expect(system).toContain('fetch_url'); expect(system).toContain('docs.example');
     expect(toolNames(f.state.requests[0]!)).toContain('fetch_url');
   }, 60_000);
@@ -152,7 +153,10 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
 
   it('egress none (the default): no fetch tool is declared, the prompt says there is no network access, and a call is an unknown tool', async () => {
     const t = await tlsFixture();
-    const f = await runtime({ extraGrants: fetchGrants(), fetchTransport: t.transport }); await f.start();
+    // v6 PROMPT-POSTURE: the no-network line also depends on the shell's realm (a host fallback reaches the network), so the realm is pinned
+    // to a closed sandbox (synthetic Landlock measurement; no shell runs here) instead of whatever this host's providers give.
+    const closed: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi: 6 } })) }];
+    const f = await runtime({ extraGrants: fetchGrants(), fetchTransport: t.transport, sandboxes: closed }); await f.start();
     f.state.script = [call('fetch_url', { url: 'https://docs.example/x' }), { content: 'Offline.' }];
     const { events, result } = await answered(f, 'turn-none', null);
     expect(toolNames(f.state.requests[0]!)).not.toContain('fetch_url');

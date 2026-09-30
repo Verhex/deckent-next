@@ -53,14 +53,16 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     mkdir(home, { mode: 0o700 })]);
   await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
-  const state = { requests: 0, script: [] as { name: string; arguments: string }[] };
+  // `sent`: every request body the model endpoint received, in order (PROMPT-POSTURE reads the sent system prompt).
+  const state = { requests: 0, script: [] as { name: string; arguments: string }[], sent: [] as { messages: { role: string; content: string }[] }[] };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
     object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   const usage = `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
     usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 } })}\n\n`;
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    req.resume();
+    const body: Buffer[] = []; req.on('data', (part: Buffer) => body.push(part));
     req.on('end', () => {
+      state.sent.push(JSON.parse(Buffer.concat(body).toString('utf8')) as (typeof state.sent)[number]);
       // Odd requests are the call round of a turn, even ones its closing round.
       const call = state.requests++ % 2 === 0 ? state.script.shift() : undefined;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -124,5 +126,5 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const audit = () => rows('SELECT record FROM audit_events ORDER BY sequence').map(row => JSON.parse(String((row as { record: string }).record)) as
     { event: { eventId: string; policyRevision: string; principal: unknown; subject: Record<string, unknown> & { call: Record<string, unknown> } } });
   const counters = () => Object.fromEntries(rows('SELECT counter, count FROM audit_counters').map(row => [(row as { counter: string }).counter, (row as { count: number }).count]));
-  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority };
+  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent };
 }
