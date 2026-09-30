@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { immutableJsonObjectSchema } from '#domain/index.js';
+import { immutableJsonObjectSchema, wellFormedModelJson } from '#domain/index.js';
 import { sumCeilUsdCents, decimalText, multiplyRate } from './decimal.js';
 import { OpenRouterPricingError } from './error.js';
 import { requireTariffRates, type OpenRouterTariff } from './tariff.js';
@@ -13,7 +13,12 @@ const requestSchema = immutableJsonObjectSchema.pipe(z.object({ model: z.string(
 export function parseOpenRouterTextRequest(input: unknown) {
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) throw new OpenRouterPricingError('INVALID_REQUEST');
-  return Object.freeze({ ...parsed.data, messages: Object.freeze(parsed.data.messages.map(message => Object.freeze({ ...message }))) });
+  // Same boundary as parseOpenAiChatTextRequest (SURROGATE-CUT): a lone UTF-16 surrogate is serialized as `\udXXX` and a
+  // provider tokenizer rejects the request. Every message string is made well-formed (U+FFFD) here,
+  // before the HTTP body and the tariff bodyDigest. The admitted command is not rewritten. The replacement is pure and
+  // idempotent, so a replay sends the same bytes; well-formed text is returned unchanged, so those bodies stay byte-identical.
+  const data = wellFormedModelJson(parsed.data);
+  return Object.freeze({ ...data, messages: Object.freeze(data.messages.map(message => Object.freeze({ ...message }))) });
 }
 export interface OpenRouterTextReservation {
   readonly schemaVersion: 1; readonly currency: 'USD'; readonly maxChargeMinorUnits: number;
