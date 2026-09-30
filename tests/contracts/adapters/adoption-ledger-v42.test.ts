@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { ADOPTION_VERIFICATION_LEDGER_VERSION, CURRENT_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteAttemptStore, upgradeExistingProductLedger } from '#adapters/index.js';
 import { integrationAdoptionCommandSchema, integrationAdoptionIntentSchema } from '#engine/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V41_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -24,12 +24,12 @@ const v1Rollback = (commandId: string, adoptionCommandId: string, targetRef: str
   command: { schemaVersion: 1, commandId, identity, adoptionCommandId }, targetRef, fromCommit: delivered, toCommit: base, actor });
 
 it('upgrades a v41 ledger to v42: 0600 backup at v41, v1 adoptions rewritten losslessly to v2, rollbacks and corrupt rows untouched', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(42); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42); expect(PREVIOUS_LEDGER_VERSION).toBe(41);
+  expect(CURRENT_LEDGER_VERSION).toBe(43); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
   const root = await mkdtemp(join(tmpdir(), 'dn-adoption-v42-')); roots.push(root);
   const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
   openSqliteLedger(path, options).close();
   const db = new DatabaseSync(path);
-  db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+  db.exec(DOWNGRADE_TO_V41_LEDGER_SQL);
   const insert = db.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)');
   insert.run('s', 'settled', 'refs/heads/one', 1, 'adopt', v1Adopt('settled', 'refs/heads/one'), 1);
   insert.run('s', 'interrupted', 'refs/heads/two', 1, 'adopt', v1Adopt('interrupted', 'refs/heads/two'), 0);
@@ -45,11 +45,11 @@ it('upgrades a v41 ledger to v42: 0600 backup at v41, v1 adoptions rewritten los
 
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-28T12:00:00.000Z'));
   const backupPath = join(backups, 'ledger-v41-2026-09-28T12-00-00-000Z.db');
-  expect(upgrade).toEqual({ from: 41, to: 42, backupPath });
+  expect(upgrade).toEqual({ from: 41, to: 43, backupPath });
   expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
   expect(version(backupPath)).toBe(41);
   expect(rows(backupPath, 'SELECT * FROM workspace_adoptions ORDER BY target_ref,sequence')).toEqual(before);
-  expect(version(path)).toBe(42);
+  expect(version(path)).toBe(43);
 
   const after = Object.fromEntries(rows(path, 'SELECT command_id,intent FROM workspace_adoptions').map(row => [String(row.command_id), String(row.intent)]));
   const expected = (commandId: string, targetRef: string) => JSON.stringify(integrationAdoptionIntentSchema.parse({ ...JSON.parse(v1Adopt(commandId, targetRef)),

@@ -37,7 +37,7 @@ function event(scopeId: string, n: number, cell: 'edit-non-floor' | 'shell-modif
 
 it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, every row kept, then the append-only audit table admits events', async () => {
   const { path, backups } = await ledger();
-  expect(CURRENT_LEDGER_VERSION).toBe(42); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
+  expect(CURRENT_LEDGER_VERSION).toBe(43); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
   const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V40_LEDGER_SQL);
   db.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot) VALUES(?,?,?,?,?,?,?,?)')
     .run('scope', 'op', 'operation', null, null, 'b'.repeat(64), 0, '{"op":1}');

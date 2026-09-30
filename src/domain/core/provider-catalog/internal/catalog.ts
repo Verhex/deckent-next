@@ -17,7 +17,7 @@ const capabilitySchema = z.object({
   version: counterSchema.positive(),
   state: z.enum(['supported', 'unsupported', 'unknown']),
 }).strict().readonly();
-const protocolSchema = z.object({
+export const providerProtocolSchema = z.object({
   family: identitySchema,
   version: identitySchema,
   capabilities: z.array(capabilitySchema).readonly(),
@@ -26,7 +26,7 @@ const modelSchema = z.object({
   id: identitySchema,
   version: counterSchema.positive(),
   nativeId: nativeIdSchema,
-  protocols: z.array(protocolSchema).min(1).readonly(),
+  protocols: z.array(providerProtocolSchema).min(1).readonly(),
 }).strict().readonly();
 const providerSchema = z.object({
   id: identitySchema,

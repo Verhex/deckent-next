@@ -28,14 +28,28 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 42;
+export const CURRENT_LEDGER_VERSION = 43;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
 // B06-2b: adoption intent v2 (verification binding); exact v1 adopt records are rewritten, the table is unchanged.
 export const ADOPTION_VERIFICATION_LEDGER_VERSION = 42;
+// WORKER-CURRENCY-1: ledger model catalog (channel + exact model id facts, scoped hierarchical activation, receipts).
+export const MODEL_CATALOG_LEDGER_VERSION = 43;
 export const INTEGRATION_LEDGER_VERSION = 30;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  // WORKER-CURRENCY-1 (owner 2026-09-30, Jev 55471f68): the model catalog lives in the ledger. Facts are installation-wide, keyed by
+  // (channel id, exact model id); activation is per scope, the channel row has model_id '' (SQLite keys cannot hold NULL); receipts per
+  // (scope, command). Additive: no existing table or row changes, so the upgrade is lossless by construction.
+  43: `CREATE TABLE model_catalog_channels(channel_id TEXT NOT NULL PRIMARY KEY,revision INTEGER NOT NULL CHECK(revision>=1),record TEXT NOT NULL);
+    CREATE TABLE model_catalog_models(channel_id TEXT NOT NULL REFERENCES model_catalog_channels(channel_id),model_id TEXT NOT NULL CHECK(model_id<>''),
+      revision INTEGER NOT NULL CHECK(revision>=1),lifecycle TEXT NOT NULL CHECK(lifecycle IN('active','legacy','deprecated','retired')),
+      record TEXT NOT NULL,PRIMARY KEY(channel_id,model_id));
+    CREATE TABLE model_catalog_activations(scope_id TEXT NOT NULL,channel_id TEXT NOT NULL,model_id TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK(revision>=1),state TEXT NOT NULL CHECK(state IN('active','inactive')),record TEXT NOT NULL,
+      PRIMARY KEY(scope_id,channel_id,model_id));
+    CREATE TABLE model_catalog_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    PRAGMA user_version=43;`,
   // 41 (audit events, general Core audit port): `migrateAuditEvents` in migration-v41.ts, dispatched below like v39.
   // C12 G1: catalog operation approvals. SQLite cannot widen a CHECK in place, so `approvals` is rebuilt row for row (every task and
   // tool-call row and its sealed snapshot unchanged), the v38 indexes are recreated and operations get their own (scope, digest) index.

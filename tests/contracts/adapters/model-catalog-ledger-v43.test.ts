@@ -1,0 +1,115 @@
+import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { CURRENT_LEDGER_VERSION, MODEL_CATALOG_LEDGER_VERSION, openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, upgradeExistingProductLedger } from '#adapters/index.js';
+import { parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
+import type { ModelCatalogAdmission } from '#engine/index.js';
+import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { seedCatalog } from '../support/model-catalog.js';
+
+const roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const options = { busyTimeoutMs: 1_000, journalMode: 'wal' as const, durability: 'full' as const };
+const rows = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
+const version = (path: string) => rows(path, 'PRAGMA user_version')[0]?.user_version;
+const actor = { id: 'local-os:1000', issuer: 'local-os', subject: '1000', assurance: 'os-user' as const };
+const authorization = { revision: 'p', ruleId: 'catalog' };
+function admission(command: unknown): ModelCatalogAdmission {
+  const parsed = parseModelCatalogCommand(command);
+  const targets = parsed.action === 'register' ? parsed.catalog.providers.map(p => ({ channelId: p.id, modelId: null }))
+    : [{ channelId: parsed.channelId, modelId: parsed.modelId }];
+  return { command: parsed, actor, admittedAtMs: 1, authorizations: targets.map(target => ({ target, action: parsed.action === 'deactivate' ? 'deactivate' : 'activate', authorization })) };
+}
+async function ledger() {
+  const root = await mkdtemp(join(tmpdir(), 'dn-model-catalog-')); roots.push(root);
+  const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close(); return { root, path };
+}
+const channel = 'claude-cli-subscription';
+
+describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => {
+  it('upgrades a v42 ledger losslessly: 0600 backup at v42, every existing table byte-equal, four empty catalog tables', async () => {
+    expect(CURRENT_LEDGER_VERSION).toBe(43); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(42);
+    const { root, path } = await ledger(); const backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
+    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+    // An existing chat activation row and receipt must survive untouched.
+    db.prepare('INSERT INTO model_activations(scope_id,provider_id,provider_version,model_id,model_version,revision,record) VALUES(?,?,?,?,?,?,?)')
+      .run('s', 'local', 1, 'qwen', 1, 1, '{"kept":true}');
+    db.prepare('INSERT INTO model_activation_receipts(scope_id,command_id,record) VALUES(?,?,?)').run('s', 'c', '{"kept":true}');
+    db.close();
+    const tables = (file: string) => rows(file, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(row => String(row.name));
+    const dump = (file: string, names: string[]) => Object.fromEntries(names.map(name => [name, rows(file, `SELECT * FROM "${name}"`)]));
+    const before = tables(path), beforeRows = dump(path, before);
+    expect(before.filter(name => name.startsWith('model_catalog'))).toEqual([]);
+    expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+    const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-30T12:00:00.000Z'));
+    const backupPath = join(backups, 'ledger-v42-2026-09-30T12-00-00-000Z.db');
+    expect(upgrade).toEqual({ from: 42, to: 43, backupPath });
+    expect((await stat(backupPath)).mode & 0o777).toBe(0o600); expect(version(backupPath)).toBe(42); expect(version(path)).toBe(43);
+    expect(dump(path, before)).toEqual(beforeRows);
+    expect(tables(path).filter(name => name.startsWith('model_catalog'))).toEqual(['model_catalog_activations', 'model_catalog_channels', 'model_catalog_models', 'model_catalog_receipts']);
+    for (const name of ['model_catalog_activations', 'model_catalog_channels', 'model_catalog_models', 'model_catalog_receipts']) expect(rows(path, `SELECT count(*) AS n FROM ${name}`)[0]!.n).toBe(0);
+  });
+  it('refuses a ledger newer than this build on writer and admission-reader opens (the rule a v42 build applies to v43)', async () => {
+    const { path } = await ledger();
+    const db = new DatabaseSync(path); db.exec('PRAGMA user_version=44;'); db.close();
+    expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+    await expect(openSqliteModelCatalogReader(path, options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+    const older = await ledger(); const raw = new DatabaseSync(older.path); raw.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); raw.close();
+    await expect(openSqliteModelCatalogReader(older.path, options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+  });
+  it('registers facts, activates hierarchically, replays exactly and refuses conflicts, unknown targets and stale revisions', async () => {
+    const { path } = await ledger(); const catalog = await seedCatalog();
+    const store = await openSqliteModelCatalogStore(path, options, 'forbid');
+    try {
+      const register = { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog };
+      const first = await store.apply(admission(register));
+      expect(first.replayed).toBe(false);
+      expect(first.receipt.changes.map(change => `${change.kind}:${change.modelId ?? '-'}:${change.revision}`)).toEqual(['channel:-:1',
+        'model:claude-fable-5-1:1', 'model:claude-haiku-4-5-20251001:1', 'model:claude-opus-5-5:1', 'model:claude-sonnet-5-5:1']);
+      expect(await store.apply(admission(register))).toEqual({ replayed: true, receipt: first.receipt });
+      await expect(store.apply(admission({ ...register, scopeId: 's', catalog: { ...catalog, revision: 'other' } }))).rejects.toMatchObject({ code: 'MODEL_CATALOG_COMMAND_CONFLICT' });
+      // Unchanged facts are not rewritten; a lifecycle change bumps only that model.
+      expect((await store.apply(admission({ ...register, commandId: 'same' }))).receipt.changes).toEqual([]);
+      const retired = structuredClone(catalog); const haiku = retired.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001');
+      haiku.lifecycle = { ...haiku.lifecycle, state: 'retired', retiredOn: '2026-10-15' };
+      expect((await store.apply(admission({ ...register, commandId: 'retire', catalog: retired }))).receipt.changes)
+        .toEqual([{ kind: 'model', channelId: channel, modelId: 'claude-haiku-4-5-20251001', revision: 2 }]);
+      const activate = (commandId: string, modelId: string | null, expectedRevision = 0, action = 'activate') =>
+        store.apply(admission({ schemaVersion: 1, commandId, scopeId: 's', action, channelId: channel, modelId, expectedRevision }));
+      await expect(activate('unknown-model', 'claude-sonnet-9')).rejects.toMatchObject({ code: 'MODEL_CATALOG_NOT_FOUND' });
+      await expect(store.apply(admission({ schemaVersion: 1, commandId: 'unknown-channel', scopeId: 's', action: 'activate', channelId: 'nope', modelId: null, expectedRevision: 0 })))
+        .rejects.toMatchObject({ code: 'MODEL_CATALOG_NOT_FOUND' });
+      await expect(activate('deactivate-missing', null, 0, 'deactivate')).rejects.toMatchObject({ code: 'MODEL_CATALOG_NOT_ACTIVE' });
+      expect((await activate('channel', null)).receipt.changes).toEqual([{ kind: 'activation', channelId: channel, modelId: null, revision: 1 }]);
+      await expect(activate('stale', null, 0)).rejects.toMatchObject({ code: 'MODEL_CATALOG_REVISION_CONFLICT' });
+      await activate('sonnet', 'claude-sonnet-5-5');
+    } finally { store.close(); }
+    const reader = await openSqliteModelCatalogReader(path, options);
+    try {
+      expect((await reader.channel(channel))?.channel).toMatchObject({ kind: 'native-cli', cli: 'claude' });
+      expect((await reader.models(channel)).map(entry => [entry.modelId, entry.model.lifecycle.state])).toEqual([['claude-fable-5-1', 'active'],
+        ['claude-haiku-4-5-20251001', 'retired'], ['claude-opus-5-5', 'active'], ['claude-sonnet-5-5', 'active']]);
+      expect(await reader.activation('s', channel, null)).toMatchObject({ state: 'active', revision: 1 });
+      expect(await reader.activation('s', channel, 'claude-sonnet-5-5')).toMatchObject({ state: 'active', revision: 1 });
+      // Activation is scope-partitioned: another scope sees nothing.
+      expect(await reader.activation('other', channel, 'claude-sonnet-5-5')).toBeNull();
+    } finally { reader.close(); }
+    // A row whose record disagrees with its key columns is corrupt, never silently used.
+    const raw = new DatabaseSync(path); raw.prepare("UPDATE model_catalog_models SET lifecycle='active' WHERE model_id='claude-haiku-4-5-20251001'").run(); raw.close();
+    const again = await openSqliteModelCatalogReader(path, options);
+    try { await expect(again.models(channel)).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); } finally { again.close(); }
+  });
+  it('rejects catalog documents that break channel invariants (duplicate exact id, alias shadowing an exact id, CLI data on an API channel)', async () => {
+    const catalog = await seedCatalog(); expect(() => parseProviderCatalogDocument(catalog)).not.toThrow();
+    const bad = (mutate: (doc: typeof catalog) => void) => { const doc = structuredClone(catalog); mutate(doc); return () => parseProviderCatalogDocument(doc); };
+    expect(bad(doc => { doc.providers[0].models.push({ ...doc.providers[0].models[0], id: 'copy' }); })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
+    expect(bad(doc => { doc.providers[0].channel.aliases.push('claude-sonnet-5-5'); })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
+    expect(bad(doc => { doc.providers[0].channel = { kind: 'http-api', cli: null, aliases: [] }; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
+    expect(bad(doc => { doc.providers[0].models[0].efforts = ['medium', 'medium']; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
+    expect(bad(doc => { doc.providers[0].models[0].nativeId = '--fallback-model'; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
+    expect(bad(doc => { delete doc.providers[0].models[0].lifecycle; })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
+  });
+});
