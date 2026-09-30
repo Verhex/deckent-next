@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, modelTextPrefix } from '#domain/index.js';
 import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalOutcome } from '#engine/index.js';
 import { ErrorRegistry, prepareProductFile, type ProductLayout, type TrustedClock } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
@@ -137,7 +137,7 @@ export function describeMcpTrustCard(card: McpTrustCard): string {
     `env: ${card.envNames.join(', ') || 'none'}`, `realm: ${card.realm}${card.posture ? ` — ${card.posture}` : ''}`, `definition: ${card.definitionDigest}`,
     ...(card.note ? [`note: ${card.note}`] : []),
     ...(card.tools ? [`tools (${card.tools.length}; ${card.era ?? ''} ${card.protocolVersion ?? ''}):`, ...card.tools.map(tool => `  ${tool.name} ${tool.digest.slice(0, 12)}${
-      tool.alwaysAsk ? ' always-ask' : ''}${tool.description ? ` — ${tool.description.slice(0, 160)}` : ''}`)] : [])];
+      tool.alwaysAsk ? ' always-ask' : ''}${tool.description ? ` — ${modelTextPrefix(tool.description, 160)}` : ''}`)] : [])];
   return lines.join('\n');
 }
 

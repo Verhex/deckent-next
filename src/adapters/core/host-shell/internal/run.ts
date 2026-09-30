@@ -1,4 +1,4 @@
-import type { ShellRealmRequest as HostShellRequest, ShellRealmResult as HostShellResult } from '#domain/index.js';
+import { modelTextPrefix, type ShellRealmRequest as HostShellRequest, type ShellRealmResult as HostShellResult } from '#domain/index.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -212,7 +212,7 @@ export function runShellProcess(launch: ShellLaunch, request: HostShellRequest, 
     });
     // The launcher's status channel (fd 3): text is a setup failure before anything ran; `close` below waits for its end too.
     let setupFailure = '';
-    child.stdio[3]?.on('data', (chunk: Buffer) => { if (setupFailure.length < LAUNCH_STATUS_MAX_BYTES) setupFailure += chunk.toString('utf8').slice(0, LAUNCH_STATUS_MAX_BYTES); });
+    child.stdio[3]?.on('data', (chunk: Buffer) => { if (setupFailure.length < LAUNCH_STATUS_MAX_BYTES) setupFailure += modelTextPrefix(chunk.toString('utf8'), LAUNCH_STATUS_MAX_BYTES); });
     child.once('close', (code, signal) => {
       void (reaping ?? Promise.resolve<HostShellResult['cleanup']>('clean')).then(cleanup => finish(setupFailure !== ''
         ? Object.freeze({ ...done('spawn-failed', null, null, cleanup), output: `[deckent] ${setupFailure.trim()}; nothing was run.` })

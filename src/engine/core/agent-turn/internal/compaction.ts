@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { AgentTurnMessage } from '#domain/index.js';
+import { modelTextBoundary, modelTextPrefix, type AgentTurnMessage } from '#domain/index.js';
 import { AGENT_TURN_REPLY_LANGUAGES, type AgentTurnReplyLanguage } from './system-prompt.js';
 
 /** Compaction starts when a round's measured prompt plus its reserves passes this share of the window (legacy high-water). */
@@ -43,8 +43,9 @@ export function planAgentCompaction(messages: readonly AgentTurnMessage[]): Agen
   return Object.freeze({ system, older: Object.freeze(rest.slice(0, start)), tail: Object.freeze(rest.slice(start)) });
 }
 
+// Every cut below is at a code point boundary (SURROGATE-CUT): a split emoji would persist a lone surrogate the provider rejects.
 const cut = (text: string, limit: number) => text.length <= limit ? text
-  : `${text.slice(0, limit)} …[cut: ${text.length} characters, sha256 ${createHash('sha256').update(text).digest('hex').slice(0, 16)}]`;
+  : `${modelTextPrefix(text, limit)} …[cut: ${text.length} characters, sha256 ${createHash('sha256').update(text).digest('hex').slice(0, 16)}]`;
 const list = (title: string, items: readonly string[]) => items.length ? [`${title}:`, ...items.map(item => `- ${item}`)] : [];
 
 /** Each earlier assistant text and tool result is carried by the mechanical excerpt up to this length. */
@@ -111,7 +112,7 @@ const COMPACTION_MESSAGE_CHARS = 2_000;
 
 /** The older messages as plain text for a tools-off summary call, newest kept within `maxBytes` (older ones are named, not sent). */
 export function agentCompactionTranscript(messages: readonly AgentTurnMessage[], maxBytes: number): string {
-  const cutText = (text: string) => text.length <= COMPACTION_MESSAGE_CHARS ? text : `${text.slice(0, COMPACTION_MESSAGE_CHARS)} …[cut]`;
+  const cutText = (text: string) => text.length <= COMPACTION_MESSAGE_CHARS ? text : `${modelTextPrefix(text, COMPACTION_MESSAGE_CHARS)} …[cut]`;
   const lines = messages.map(message => message.role === 'assistant'
     ? `[assistant] ${cutText(message.content)}${message.toolCalls.map(call => `\n  → ${call.name} ${cutText(call.argumentsJson)}`).join('')}`
     : message.role === 'tool' ? `[tool result ${message.name}] ${cutText(message.content)}` : `[${message.role}] ${cutText(message.content)}`);
@@ -129,7 +130,7 @@ export function agentCompactionTranscript(messages: readonly AgentTurnMessage[],
 function cutWithin(text: string, limit: number): string {
   if (text.length <= limit) return text;
   const marker = ` …[cut: ${text.length} characters, sha256 ${createHash('sha256').update(text).digest('hex').slice(0, 16)}]`;
-  return `${text.slice(0, Math.max(0, limit - marker.length))}${marker}`;
+  return `${modelTextPrefix(text, Math.max(0, limit - marker.length))}${marker}`;
 }
 /** Pieces of at most `limit` characters, split at the last space before the limit when there is a reasonable one: no text is dropped. */
 function pieces(text: string, limit: number): string[] {
@@ -137,7 +138,8 @@ function pieces(text: string, limit: number): string[] {
   let rest = text.trim();
   while (rest.length > limit) {
     const space = rest.lastIndexOf(' ', limit);
-    const at = space > limit / 2 ? space : limit;
+    // A hard split never separates a surrogate pair (a limit of 1 cannot hold a pair; it is never used, and 0 would not progress).
+    const at = space > limit / 2 ? space : modelTextBoundary(rest, limit) || limit;
     out.push(rest.slice(0, at).trimEnd()); rest = rest.slice(at).trimStart();
   }
   return rest ? [...out, rest] : out;

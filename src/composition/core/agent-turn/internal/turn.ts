@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
-  type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
+  type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand, type ModelInvocationOutcome } from '#domain/index.js';
 import { agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
   requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
@@ -63,6 +63,16 @@ export function withMcpNotices(notices: readonly string[], note: string | null):
   if (room < 2) return note;
   const mcp = joined.length <= room ? joined : `${joined.slice(0, room - 1)}…`;
   return note ? `${mcp} ${note}` : mcp;
+}
+/**
+ * How a round that ended without an answer is named in the turn's note: the outcome state and, when the provider answered, its bounded
+ * diagnostic (rejection reason, HTTP status) — never the response body, which stays in the receipt (it may echo the sent input).
+ */
+export function chatTurnRoundFailureState(outcome: ModelInvocationOutcome): string {
+  const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
+  if (!evidence) return outcome.state;
+  return `${outcome.state}: ${evidence.reason === 'http-status' && evidence.httpStatus !== null ? `HTTP ${evidence.httpStatus}`
+    : `${evidence.reason}${evidence.httpStatus !== null ? `, HTTP ${evidence.httpStatus}` : ''}`}`;
 }
 /** MODES-3: a turn launched in full access is admitted only on the company grant, and recorded before anything runs (no record, no turn; a
  * refusal is recorded when it can be). */
@@ -202,7 +212,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         }
         const outcome = result.receipt.outcome;
         if (!outcome) return { status: 'failed', state: 'pending' };
-        if (outcome.state !== 'responded') return { status: 'failed', state: outcome.state };
+        if (outcome.state !== 'responded') return { status: 'failed', state: chatTurnRoundFailureState(outcome) };
         const message = openAiChatMessageFromInvocation(result);
         if (!message) return { status: 'failed', state: 'unreadable' };
         // What was shown is always a prefix of the governed result; anything else ends the turn, never merged.

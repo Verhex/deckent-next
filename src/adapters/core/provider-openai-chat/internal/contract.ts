@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, type JsonObject } from '#domain/index.js';
+import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, wellFormedModelJson, type JsonObject } from '#domain/index.js';
 
 export const OPENAI_CHAT_HTTP_ADAPTER_ID = 'openai-chat-http' as const;
 export const OPENAI_CHAT_HTTP_ADAPTER_VERSION = 4 as const;
@@ -127,7 +127,11 @@ export function parseOpenAiChatTextRequest(input: unknown, definition: Pick<Open
   const copied = openAiChatWireObjectSchema.safeParse(input), parsed = copied.success && requestSchema.safeParse(copied.data);
   if (!parsed || !parsed.success || parsed.data.max_completion_tokens > definition.maxOutputTokens) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const deepFreeze = <T>(value: T): T => { if (value && typeof value === 'object') { for (const entry of Object.values(value)) deepFreeze(entry); Object.freeze(value); } return value; };
-  const data = structuredClone(parsed.data) as z.infer<typeof requestSchema>;
+  // SURROGATE-CUT: a lone UTF-16 surrogate (e.g. a persisted text cut inside an emoji) is sent as `\udXXX` and a provider tokenizer
+  // rejects the whole request, so every string of the parsed request is made well-formed (U+FFFD) here, where every adapter that
+  // serializes it — the body, the counter's body, the tariff's body digest, the Anthropic wire — reads it. The admitted command and
+  // its request digest are unchanged: this is a pure, idempotent part of the encoding, so a replay of the same command sends the same bytes.
+  const data = wellFormedModelJson(structuredClone(parsed.data)) as z.infer<typeof requestSchema>;
   return deepFreeze({ model: data.model, messages: data.messages as OpenAiChatTextMessage[],
     max_completion_tokens: data.max_completion_tokens, ...(data.stream === undefined ? {} : { stream: data.stream }),
     ...(data.stream === true ? { stream_options: { include_usage: true as const } } : {}),

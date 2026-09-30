@@ -31,7 +31,7 @@ const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durabilit
 export const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
 export const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
-export type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string };
+export type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string; status?: number };
 export async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
@@ -52,7 +52,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }), mkdir(home, { mode: 0o700 })]);
   await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
-  const state = { requests: [] as Record<string, unknown>[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
+  const state = { requests: [] as Record<string, unknown>[], raw: [] as string[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
     object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   const usage = `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
@@ -66,8 +66,15 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
         const counted = JSON.parse(Buffer.concat(body).toString('utf8')) as { messages: unknown[] };
         res.end(JSON.stringify({ count: options.count ? options.count(counted) : options.countedTokens ?? 500, max_model_len: 131072, tokens: [] })); return;
       }
+      state.raw.push(Buffer.concat(body).toString('utf8'));
       state.requests.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
       const step = state.script[state.requests.length - 1] ?? { content: 'no script' };
+      if (step.status !== undefined) {
+        // A provider rejection shaped like the owner's vLLM answer to a lone surrogate (SURROGATE-CUT 2026-09-30).
+        res.writeHead(step.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'TextEncodeInput must be Union[TextInputSequence, Tuple[InputSequence, InputSequence]]',
+          type: 'BadRequestError', param: null, code: step.status } })); return;
+      }
       if (step.summary !== undefined) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ id: 'chatcmpl-sum', object: 'chat.completion', created: 1, model: 'native-chat',

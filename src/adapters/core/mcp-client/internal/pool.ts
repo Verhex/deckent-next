@@ -6,6 +6,7 @@ import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/ind
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
 import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type McpClientSettings, type McpLiveTool, type McpToolVerdict } from './pin.js';
+import { modelTextPrefix } from '#domain/index.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the 2025 `initialize` era as the fallback. */
 export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25']);
@@ -195,7 +196,7 @@ export class McpClientPool {
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
-      const failed = { ok: false as const, reason: 'start-failed' as const, detail: String(errorCode(error) ?? (error as Error)?.message ?? 'failed').slice(0, 200) };
+      const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(String(errorCode(error) ?? (error as Error)?.message ?? 'failed'), 200) };
       if (!launch.sandbox) return failed;
       // MCP-SANDBOX-PATHS: a sandboxed start that failed is explained by probing the same view (what it hides, or what the command needs
       // from outside it); the outcome stays a failure — never a start on the host instead.
