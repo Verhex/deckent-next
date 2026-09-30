@@ -3,6 +3,9 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Canlı (2026-09-30, 15. parti):** `origin/main` = `47a76adf` (Astra 2194 PASS); instance `85d99b8d`, Node 24.21; tam erişimde model curl → HTTP/2 200
+  (istem v6). Kanıt `proof/LIVE-SWITCH-BATCH15-2026-09-30/README.md`. **Sıradaki (owner 2026-09-30):** dogfood — terminal kalan/UI-UX/komut kartlarını
+  Deckent'in kendi Run döngüsüyle yaptırmak (D1 canlı profil, D2 ilk döngü).
 - **On dördüncü parti (2026-09-30):** `integrate/2026-09-30-o` (worktree `/home/alperen/deckent-next-integrate-n`, taban `02601269`) =
   Astra 2189 REVISE düzeltmeleri: R7 ata pinleri (açık + kapalı yazılabilir görünüm; lane/r7-ancestor), gömülü bwrap kopya yarışı (link ile yayın),
   R8 doctor MCP launch kuralı (lane/r8-doctor-mcp). Tam verify 490/3467 0 skip (Docker imajıyla) → Astra 2190 PASS → `origin/main` = `51b19dc5` (push 2026-09-30).
