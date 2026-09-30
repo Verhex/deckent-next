@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { validateRecipe, parseVersionHistory } from '../../assets/worker-image/history.mjs';
+import { validateRecipe, parseVersionHistory, assertVersionAdvances } from '../../assets/worker-image/history.mjs';
 
 const recipe = () => ({ schemaVersion: 2, repository: 'deckent/worker', imageVersion: 'r2-20260922', previousVersion: 'r1-20260921', baseImage: 'node:24-trixie-slim' });
 const lines = (...extra) => ['# version <id> | <date> | base <image> | supersedes <id|none> | <reason>', ...extra,
@@ -35,4 +35,24 @@ test('recipe identity mismatches are refused before any Docker call', () => {
   assert.throws(() => validateRecipe({ ...recipe(), repository: 'Deckent/Worker' }), /WORKER_RECIPE_REPOSITORY/);
   assert.throws(() => validateRecipe({ ...recipe(), baseImage: '--evil' }), /WORKER_RECIPE_INVALID/);
   assert.equal(validateRecipe({ ...recipe(), previousVersion: null }).previousVersion, null);
+});
+
+test('lineage: revision counters strictly decrease newest-first, so a second rN can never enter the history', () => {
+  const second = { ...recipe(), imageVersion: 'r2-20260930', previousVersion: 'r2-20260922' };
+  assert.throws(() => parseVersionHistory(lines('# version r2-20260930 | 2026-09-30 | base node:24-trixie-slim | supersedes r2-20260922 | second r2'), second), /WORKER_HISTORY_COUNTER/);
+  const skipBack = { ...recipe(), imageVersion: 'r1-20260930', previousVersion: 'r2-20260922' };
+  assert.throws(() => parseVersionHistory(lines('# version r1-20260930 | 2026-09-30 | base node:24-trixie-slim | supersedes r2-20260922 | backwards'), skipBack), /WORKER_HISTORY_COUNTER/);
+  const next = { ...recipe(), imageVersion: 'r3-20260930', previousVersion: 'r2-20260922' };
+  assert.equal(parseVersionHistory(lines('# version r3-20260930 | 2026-09-30 | base node:24-trixie-slim | supersedes r2-20260922 | next'), next)[0].id, 'r3-20260930');
+});
+
+test('lineage: a new build counter must exceed every counter the daemon already holds for the repository', () => {
+  // The observed hazard: package recipe still at r2 while the daemon already holds r3-20260922 from a product-path build.
+  assert.throws(() => assertVersionAdvances('r3-20260930', ['r1-20260921', 'r2-20260922', 'r3-20260922']), /WORKER_VERSION_COUNTER_TAKEN: r3-20260930 .* r3-20260922/);
+  assert.throws(() => assertVersionAdvances('r3-20260930', ['r5-20260101']), /WORKER_VERSION_COUNTER_TAKEN/);
+  assert.throws(() => assertVersionAdvances('r3-20260922', ['r3-20260922']), /WORKER_VERSION_COUNTER_TAKEN/);
+  // After r3 exists the next revision is r4; unrelated tags (latest, <none>, other schemes) are ignored.
+  assert.doesNotThrow(() => assertVersionAdvances('r4-20260930', ['r1-20260921', 'r2-20260922', 'r3-20260922', 'latest', '<none>', 'r3-20260922-local', '']));
+  assert.doesNotThrow(() => assertVersionAdvances('r1-20260921', []));
+  assert.throws(() => assertVersionAdvances('v4', []), /WORKER_RECIPE_VERSION/);
 });

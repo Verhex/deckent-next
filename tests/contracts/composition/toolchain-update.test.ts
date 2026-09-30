@@ -42,14 +42,17 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     expect(await updateToolchains(off.project, {}, off.options, { fetcher: off.fetcher, runner: off.runner })).toMatchObject({ decision: 'disabled', plan: null });
     const f = await fixture({});
     const planned = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:00:00.000Z' });
-    expect(planned).toMatchObject({ mode: 'propose', decision: 'planned', build: null, proposal: null, plan: { decision: 'build', staleProviders: ['codex'], next: { imageVersion: 'r3-20260923' } } });
+    expect(planned).toMatchObject({ mode: 'propose', decision: 'planned', build: null, proposal: null, plan: { decision: 'build', staleProviders: ['codex'], next: { imageVersion: 'r4-20260923' } } });
+    // The packaged recipe carries the r3-20260922 lineage, so the product path plans r4 (never a second r3).
+    expect(planned.plan).toMatchObject({ current: { imageVersion: 'r3-20260922' }, next: { previousVersion: 'r3-20260922' } });
+    expect(planned.plan!.next!.historyLine).toMatch(/^# version r4-20260923 \| 2026-09-23 \| base node:24-trixie-slim \| supersedes r3-20260922 \| /);
     expect(planned.plan!.affectedProfiles).toEqual([{ profile: { id: 'codex-pinned', version: 1 }, provider: 'codex', cliVersion: 'codex-cli 0.155.1', imageId }]);
     expect(await readdir(join(f.home, 'plans'))).toHaveLength(1); expect(f.runs).toEqual([]);
     const built = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:05:00.000Z' });
-    expect(built).toMatchObject({ decision: 'built', build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r3-20260923' },
-      proposal: { imageVersion: 'r3-20260923', application: 'not-applied', profiles: [{ profile: { id: 'codex-pinned' }, changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: imageId, to: 'sha256:' + 'b'.repeat(64) } } }] } });
-    expect(f.runs).toHaveLength(1); expect(f.runs[0]).toMatch(/builds\/r3-20260923\/build\.mjs .*receipts\/r3-20260923\.json$/);
-    expect((await readdir(join(f.home, 'builds', 'r3-20260923'))).sort()).toEqual(['Dockerfile', 'build.mjs', 'history.mjs', 'inspect.mjs', 'install.mjs', 'recipe.json']);
+    expect(built).toMatchObject({ decision: 'built', build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r4-20260923' },
+      proposal: { imageVersion: 'r4-20260923', application: 'not-applied', profiles: [{ profile: { id: 'codex-pinned' }, changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: imageId, to: 'sha256:' + 'b'.repeat(64) } } }] } });
+    expect(f.runs).toHaveLength(1); expect(f.runs[0]).toMatch(/builds\/r4-20260923\/build\.mjs .*receipts\/r4-20260923\.json$/);
+    expect((await readdir(join(f.home, 'builds', 'r4-20260923'))).sort()).toEqual(['Dockerfile', 'build.mjs', 'history.mjs', 'inspect.mjs', 'install.mjs', 'recipe.json']);
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);
     // Installed config is never rewritten by the update operation.
     expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.155.1');
@@ -62,15 +65,15 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     expect(await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner })).toMatchObject({ decision: 'no-change', planPath: null });
     f.latest['@openai/codex'] = '0.157.0';
     const built = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-24T08:00:00.000Z' });
-    expect(built).toMatchObject({ mode: 'auto', decision: 'built', plan: { next: { imageVersion: 'r3-20260924' } } });
+    expect(built).toMatchObject({ mode: 'auto', decision: 'built', plan: { next: { imageVersion: 'r4-20260924' } } });
     const lines: string[] = [];
     await toolchainsCommand(['toolchains', 'update', '--json'], { root: f.project, env: f.options.env, stdout: { write: (text: string) => { lines.push(text); return true; } },
-      updateToolchains: async () => ({ decision: 'planned', plan: { next: { imageVersion: 'r3-20260924' } }, build: null, proposalPath: null }) });
+      updateToolchains: async () => ({ decision: 'planned', plan: { next: { imageVersion: 'r4-20260924' } }, build: null, proposalPath: null }) });
     expect(JSON.parse(lines.join(''))).toMatchObject({ decision: 'planned' });
     lines.length = 0;
     await toolchainsCommand(['toolchains', 'update', '--lang', 'tr'], { root: f.project, env: f.options.env, stdout: { write: (text: string) => { lines.push(text); return true; } },
-      updateToolchains: async () => ({ decision: 'built', plan: { next: { imageVersion: 'r3-20260924' } }, build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r3-20260924' }, proposalPath: '/p.json' }) });
-    expect(lines.join('')).toMatch(/Toolchain güncelleme: built; sonraki sürüm r3-20260924; imaj deckent\/worker:r3-20260924/);
+      updateToolchains: async () => ({ decision: 'built', plan: { next: { imageVersion: 'r4-20260924' } }, build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r4-20260924' }, proposalPath: '/p.json' }) });
+    expect(lines.join('')).toMatch(/Toolchain güncelleme: built; sonraki sürüm r4-20260924; imaj deckent\/worker:r4-20260924/);
     await expect(toolchainsCommand(['toolchains', 'rebuild'], { root: f.project })).rejects.toMatchObject({ code: 'CLI_USAGE' });
     await expect(toolchainsCommand(['toolchains', 'update', '--force'], { root: f.project })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });

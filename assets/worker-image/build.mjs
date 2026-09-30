@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateRecipe, parseVersionHistory } from './history.mjs';
+import { validateRecipe, parseVersionHistory, assertVersionAdvances } from './history.mjs';
 
 // Explicit build/update operation. Never mutates runtime profiles, running containers or old images.
 // Each recipe.imageVersion maps to exactly one immutable imageId, tagged <repository>:<imageVersion>.
@@ -62,6 +62,7 @@ try {
     throw new Error(`WORKER_VERSION_TAKEN: ${tag} already names ${alreadyTagged}. Add a new "# version" line and recipe.imageVersion instead of rebuilding a published version.`);
   }
   if (!existingImage) {
+    assertVersionAdvances(recipe.imageVersion, command(['image', 'ls', recipe.repository, '--format', '{{.Tag}}'], 20_000).split('\n'));
     command(['build', '--pull', '--no-cache', '--build-arg', `BASE_IMAGE=${recipe.baseImage}`,
       '--build-arg', `IMAGE_VERSION=${recipe.imageVersion}`, '--build-arg', `RECIPE_SHA256=${sha256('recipe.json')}`,
       '--build-arg', `SOURCE_REVISION=${sourceRevision}`, '--iidfile', join(temporary, 'image-id'), root], 1_200_000, true);

@@ -2,6 +2,7 @@
 # version <id> | <date> | base <image> | supersedes <id|none> | <reason>
 # Resolved provider versions and the immutable imageId live in the build receipt (worker-images/<version>.json).
 # Older receipts are archived under worker-images/archive/; older images and tags are retained, never deleted here.
+# version r3-20260922 | 2026-09-22 | base node:24-trixie-slim | supersedes r2-20260922 | toolchain currency: codex 0.150.0 -> 0.155.1
 # version r2-20260922 | 2026-09-22 | base node:24-trixie-slim | supersedes r1-20260921 | Claude safe-mode/settings flags; OCI labels; history copied into the image
 # version r1-20260921 | 2026-09-21 | base node:24-trixie-slim | supersedes none | first Next three-provider image; built untagged, sources unverified in receipt; tagged retroactively and archived
 ARG BASE_IMAGE
