@@ -13,7 +13,8 @@
 //            NodeNext and Bundler resolution, per given TypeScript, with nothing but the installed package and @types/node on its path
 // Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <ts dir>[,<ts dir>]]
 //        [--types-root <dir holding @types/node>] [--keep] [--only a,b]
-// Prints a JSON report; exit 1 when any check fails. Not part of verify (needs a packed tarball): run per supported Node before a release.
+// Prints a JSON report; exit 1 when any check fails. The tarball path (install, runtime, client, --types) runs per supported Node before a
+// release; the fast --root subset (version,mcp,native,lazy,imports,terminal) runs in every verify via tests/contracts/tooling/pack-smoke-dist.test.ts.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { builtinModules } from 'node:module';

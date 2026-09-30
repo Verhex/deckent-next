@@ -29,6 +29,7 @@ describe.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/script'))(
 
     const smoke = spawnSync(process.execPath, [join(ROOT, 'scripts/pack-smoke.mjs'), '--root', summary.stage, '--only', FAST_CHECKS.join(',')],
       { cwd: ROOT, encoding: 'utf8', timeout: 150_000 });
+    expect(smoke.stdout.trim().startsWith('{'), `pack-smoke printed no report (status ${smoke.status}): ${smoke.stderr.slice(-1500)}`).toBe(true);
     const report = JSON.parse(smoke.stdout) as { ok: boolean; checks: Record<string, { ok: boolean }> };
     // The whole report on failure: which terminal case, which words were missing or unexpected.
     expect(Object.fromEntries(Object.entries(report.checks).map(([name, check]) => [name, check.ok ? true : check])))
