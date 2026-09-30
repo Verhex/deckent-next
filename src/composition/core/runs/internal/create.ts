@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker } from '#adapters/index.js';
+import { assertNativeWorkerBinding, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker } from '#adapters/index.js';
 import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, PoolPolicyAuthorization,
   DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -33,7 +33,11 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
       const profile = config.admission;
       if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
       const execution = resolveExecutionRegistry(admitted.graph, profile.registry, {
-        profile(value) { try { return validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); } },
+        profile(value) {
+          // Astra 2197 WC-R2: the executed argv of a pinned native profile must carry exactly its pinned model (adapter-owned CLI shape).
+          try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
+          try { return validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+        },
         criterion(evaluator, criterion) { try { return validateProcessExitCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } },
       });
       // WORKER-CURRENCY-1: native worker tasks need an exact, current, active catalog model of an active channel (read-only ledger view).

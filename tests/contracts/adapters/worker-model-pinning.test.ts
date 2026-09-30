@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileNativeCodingDockerProfile, createNormalizerState, normalizeClaudeLine, resolveDockerTaskProfile } from '#adapters/index.js';
+import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, createNormalizerState, normalizeClaudeLine, resolveDockerTaskProfile } from '#adapters/index.js';
 import { summarizeWorkerEvents, verifyWorkerModels, workerEventSchema } from '#domain/index.js';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 
@@ -43,6 +43,29 @@ describe('native coding profile v4: exact catalog model reference', () => {
     expect(() => resolveDockerTaskProfile({ ...profile, parameters: { ...profile.parameters, nativeSubscription: withoutModel } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
     expect(() => resolveDockerTaskProfile({ ...profile, parameters: { ...profile.parameters,
       nativeSubscription: { ...(profile.parameters.nativeSubscription as object), schemaVersion: 1 } } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
+  });
+});
+
+describe('native worker argv binding (Astra 2197 WC-R2)', () => {
+  const variants = (provider: string) => [pinned(provider, 'exact-model-1', []),
+    ...(provider === 'claude' ? [{ ...pinned(provider), maxTurns: 7 }, { ...pinned(provider), discovery: { schemaVersion: 1, mode: 'disabled' } },
+      { ...pinned(provider), discovery: { schemaVersion: 1, mode: 'repository', settings: { disableAllHooks: true } } }] : []),
+    { ...pinned(provider, 'exact-model-1', []), prompt: undefined, composition: { schemaVersion: 1, persona: { id: 'p', version: 1, text: 'x' }, skills: [], context: [],
+      task: 'Edit.', scope: 'note.txt', acceptance: 'Exact.' } }];
+  it.each(['codex', 'claude', 'cursor'])('accepts every compiler shape for %s (plain, turn limit, discovery, settings, composition)', provider => {
+    for (const input of variants(provider)) expect(() => assertNativeWorkerBinding(compileNativeCodingDockerProfile(template(), input))).not.toThrow();
+  });
+  it.each(['codex', 'claude', 'cursor'])('refuses a short, inline, extra or repeated model argument for %s', provider => {
+    const profile = compileNativeCodingDockerProfile(template(), pinned(provider, 'exact-model-1', []));
+    const argv = profile.parameters.argv as string[], model = argv.indexOf('--model');
+    for (const changed of [[...argv.slice(0, model), '-m', 'other', ...argv.slice(model)], [...argv.slice(0, 1), '--model=other', ...argv.slice(1)],
+      [...argv.slice(0, model), '--model', 'other', ...argv.slice(model)], [...argv.slice(0, model), 'extra', ...argv.slice(model)],
+      [...argv.slice(0, -1)], argv.map((value, index) => index === model + 1 ? 'other' : value), argv.map((value, index) => index === 0 ? 'sh' : value)]) {
+      expect(() => assertNativeWorkerBinding({ ...profile, parameters: { ...profile.parameters, argv: changed } })).toThrow('WORKER_MODEL_BINDING_MISMATCH');
+    }
+    // A v1 (unpinned) profile is left to admission's WORKER_MODEL_UNPINNED.
+    const legacyProfile = compileNativeCodingDockerProfile(template(), { ...pinned(provider, 'exact-model-1', []), schemaVersion: 3, model: 'exact-model-1' });
+    expect(() => assertNativeWorkerBinding(legacyProfile)).not.toThrow();
   });
 });
 

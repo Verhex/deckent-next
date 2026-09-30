@@ -25,7 +25,9 @@ export interface ModelCatalogReader {
   close(): void;
 }
 export interface ModelCatalogAuthorizer {
-  authorize(action: 'activate' | 'deactivate', scopeId: string, target: ModelCatalogTarget, principal: VerifiedPrincipal): Promise<ModelActivationAuthorization>;
+  /** `installation`: the write changes facts every scope reads, so authority must hold installation-wide; `scope`: one scope's rows. */
+  authorize(action: 'activate' | 'deactivate', scopeId: string, target: ModelCatalogTarget, principal: VerifiedPrincipal,
+    level: 'installation' | 'scope'): Promise<ModelActivationAuthorization>;
 }
 /** Policy resource id of a catalog target (the `model-activation` resource kind is shared with exact-reference activation). */
 export function modelCatalogTargetId(target: unknown): string {
@@ -46,10 +48,12 @@ export class ModelCatalogApplication {
     const actor = modelActivationActorSchema.parse({ id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance });
     // Enabling (register, activate) needs `activate`; only narrowing (deactivate) is allowed with `deactivate`.
     const action = command.action === 'deactivate' ? 'deactivate' as const : 'activate' as const;
+    // Registered facts are installation-wide (every scope's admission reads them); activation rows belong to the command's scope.
+    const level = command.action === 'register' ? 'installation' as const : 'scope' as const;
     const authorizations = [];
     for (const target of modelCatalogTargets(command)) {
-      authorizations.push(Object.freeze({ target, action,
-        authorization: modelActivationAuthorizationSchema.parse(await this.authorizer.authorize(action, command.scopeId, target, principal)) }));
+      authorizations.push(Object.freeze({ target, action, level,
+        authorization: modelActivationAuthorizationSchema.parse(await this.authorizer.authorize(action, command.scopeId, target, principal, level)) }));
     }
     const store = await this.openStore();
     try {

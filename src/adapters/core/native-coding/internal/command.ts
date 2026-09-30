@@ -3,6 +3,7 @@ import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } fro
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import commands from './commands.json' with { type: 'json' };
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
+import { assertNativeWorkerBinding } from './binding.js';
 
 // This versioned adapter supports the owner-admitted isolated, unattended coding pilot only.
 // Its CLI flags implement native protocols, not mutable permission/model selection policy.
@@ -75,5 +76,6 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
         ...(settings ? ['--settings'] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
   validateDockerTaskProfile(profile);
+  assertNativeWorkerBinding(profile); // the compiler's own output always satisfies the admission binding check
   return profile;
 }

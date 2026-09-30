@@ -22,7 +22,8 @@ function admission(command: unknown): ModelCatalogAdmission {
   const parsed = parseModelCatalogCommand(command);
   const targets = parsed.action === 'register' ? parsed.catalog.providers.map(p => ({ channelId: p.id, modelId: null }))
     : [{ channelId: parsed.channelId, modelId: parsed.modelId }];
-  return { command: parsed, actor, admittedAtMs: 1, authorizations: targets.map(target => ({ target, action: parsed.action === 'deactivate' ? 'deactivate' : 'activate', authorization })) };
+  return { command: parsed, actor, admittedAtMs: 1, authorizations: targets.map(target => ({ target, action: parsed.action === 'deactivate' ? 'deactivate' : 'activate',
+    level: parsed.action === 'register' ? 'installation' : 'scope', authorization })) };
 }
 async function ledger() {
   const root = await mkdtemp(join(tmpdir(), 'dn-model-catalog-')); roots.push(root);
@@ -130,4 +131,40 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     expect(() => parseProviderCatalog({ schemaVersion: 2, revision: 'r', providers: [] })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
     expect(() => parseProviderCatalogDocument({ schemaVersion: 1, revision: 'r', providers: [] })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_INVALID' }));
   });
+  it('WC-R3 (Astra 2197): a partial register is checked against the FINAL merged channel; alias collisions roll back completely', async () => {
+    const { path } = await ledger();
+    const store = await openSqliteModelCatalogStore(path, options, 'forbid');
+    const channelDoc = (revision: string, models: object[], aliases: string[] = []) => ({ schemaVersion: 2, revision, providers: [{ id: 'c', version: 1,
+      channel: { kind: 'native-cli', cli: 'claude', aliases }, models }] });
+    const model = (nativeId: string, aliases: string[] = []) => ({ id: nativeId, version: 1, nativeId, protocols: [{ family: 'claude-code-stream-json', version: 'v1', capabilities: [] }],
+      lifecycle: { state: 'active', deprecatedOn: null, retireNotBefore: null, retiredOn: null, source: null }, minCliVersion: null, efforts: [], aliases });
+    let n = 0;
+    const register = (catalog: object) => store.apply(admission({ schemaVersion: 1, commandId: `r${++n}`, scopeId: 's', action: 'register', catalog }));
+    try {
+      await register(channelDoc('one', [model('model-a', ['alias-x'])]));
+      await store.apply(admission({ schemaVersion: 1, commandId: 'act-c', scopeId: 's', action: 'activate', channelId: 'c', modelId: null, expectedRevision: 0 }));
+      await store.apply(admission({ schemaVersion: 1, commandId: 'act-a', scopeId: 's', action: 'activate', channelId: 'c', modelId: 'model-a', expectedRevision: 0 }));
+      const snapshot = () => Object.fromEntries(['model_catalog_channels', 'model_catalog_models', 'model_catalog_activations', 'model_catalog_receipts']
+        .map(table => [table, rows(path, `SELECT * FROM ${table} ORDER BY 1,2`)]));
+      const before = snapshot();
+      // exact ↔ alias: the new model aliases the preserved exact id.
+      await expect(register(channelDoc('two', [model('model-b', ['model-a'])]))).rejects.toMatchObject({ code: 'MODEL_CATALOG_ALIAS_CONFLICT' });
+      // alias ↔ alias: the new model reuses a preserved model's alias; a channel alias equal to a preserved alias or exact id is refused too.
+      await expect(register(channelDoc('three', [model('model-b', ['alias-x'])]))).rejects.toMatchObject({ code: 'MODEL_CATALOG_ALIAS_CONFLICT' });
+      await expect(register(channelDoc('four', [model('model-b')], ['alias-x']))).rejects.toMatchObject({ code: 'MODEL_CATALOG_ALIAS_CONFLICT' });
+      await expect(register(channelDoc('five', [model('model-b')], ['model-a']))).rejects.toMatchObject({ code: 'MODEL_CATALOG_ALIAS_CONFLICT' });
+      // exact id equal to a preserved alias.
+      await expect(register(channelDoc('six', [model('alias-x')]))).rejects.toMatchObject({ code: 'MODEL_CATALOG_ALIAS_CONFLICT' });
+      expect(snapshot()).toEqual(before);
+      // A non-conflicting partial update passes and keeps the preserved model and its activation.
+      const ok = await register(channelDoc('seven', [model('model-b', ['alias-y'])]));
+      expect(ok.receipt.changes).toEqual([{ kind: 'model', channelId: 'c', modelId: 'model-b', revision: 1 }]);
+      expect(rows(path, 'SELECT model_id FROM model_catalog_models ORDER BY model_id').map(row => row.model_id)).toEqual(['model-a', 'model-b']);
+      expect(rows(path, "SELECT state FROM model_catalog_activations WHERE model_id='model-a'")).toEqual([{ state: 'active' }]);
+      // Updating the preserved model itself may move its own alias (no self-collision).
+      await register(channelDoc('eight', [model('model-a', ['alias-z'])]));
+      await register(channelDoc('nine', [model('model-b', ['alias-x'])]));
+    } finally { store.close(); }
+  });
 });
+
