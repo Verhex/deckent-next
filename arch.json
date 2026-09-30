@@ -1231,6 +1231,7 @@
     },
     "src/adapters/core/provider-openrouter-pricing": {
       "dependencies": [
+        "src/domain/core/agent-tool",
         "src/domain/core/primitives"
       ],
       "plan": "PROVIDERS"
