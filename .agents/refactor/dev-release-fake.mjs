@@ -94,7 +94,7 @@ rmSync(out, { recursive: true, force: true }); mkdirSync(stage, { recursive: tru
 cpSync('dist', join(stage, 'dist'), { recursive: true });
 writeFileSync(join(stage, 'package.json'), JSON.stringify({ name: 'deckent', version: '0.0.0', type: 'module' }));
 const behavior = JSON.parse(readFileSync('src/behavior.json', 'utf8'));
-const summary = { schemaVersion: 1, stage, publishable: { ok: !behavior.unpublishable, blockers: behavior.unpublishable ? ['fake blocker'] : [] }, bubblewrap: { shipped: Boolean(bwrap) } };
+const summary = { schemaVersion: 1, stage, publishable: { ok: !behavior.unpublishable, blockers: behavior.unpublishable ? ['fake blocker'] : [] }, bubblewrap: { shipped: Boolean(bwrap) && !behavior.bwrapMissing } };
 let packed = null;
 if (args.includes('--pack')) { const tarball = join(out, 'deckent-0.0.0.tgz'); execFileSync('tar', ['-czf', tarball, '-C', out, 'package']);
   packed = { tarball, size: statSync(tarball).size, sha256: createHash('sha256').update(readFileSync(tarball)).digest('hex') }; }

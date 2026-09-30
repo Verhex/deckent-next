@@ -7,10 +7,11 @@
 //   previous                       the id `rollback` returns to (`checkout` = no current: the checkout's dist, today's behaviour)
 //   switches.jsonl                 one record per switch/rollback;  switches/<ts>/ state-file snapshots;  logs/ service logs
 // Commands (JSON on stdout; exit 0 ok, 1 refused/failed, 2 usage, 3 confirmation required):
-//   stage <commit> [--allow-local] [--preview] [--bwrap <dir>] [--remote-ref origin/main] [--source <repo>] [--keep-build]
+//   stage <commit> [--allow-local] [--preview] [--bwrap <dir>] [--remote-ref origin/main] [--source <repo>] [--waive-smoke <check,…>] [--keep-build]
 //       clone --local --no-hardlinks (nothing is written into the live .git; Jev 2b6f9f73) → npm ci → build → build-dist --pack --bwrap →
 //       smoke:dist on the tarball and on the unpacked tree → versions/<id>. Refuses unknown commits, a dirty symbolic ref, unpushed commits
-//       (unless --allow-local/--preview), a dirty build and an unpublishable package; a failed smoke installs nothing.
+//       (unless --allow-local/--preview), a dirty build and a package without the bundled bubblewrap (other publication blockers are
+//       recorded, not refused); a failed smoke installs nothing.
 //   switch <id> [--allow-local]    governed shutdown through the running service's own CLI (describe → shutdown --command-id), atomic pointer,
 //       start through next-entry, describe must report the release's build; otherwise the pointer goes back (only while the ledger still fits
 //       the old code; a migrated ledger stops with DEV_RELEASE_OPERATOR_REQUIRED instead of starting code that cannot open it).
@@ -306,7 +307,7 @@ function changedState(snapshot) {
 export async function stage(L, ref, opts) {
   const source = opts.source ? resolve(opts.source) : L.project;
   let sha; try { sha = git(source, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], 'DEV_RELEASE_UNKNOWN_COMMIT'); } catch { fail('DEV_RELEASE_UNKNOWN_COMMIT', { ref }); }
-  if (!/^[0-9a-f]{40,64}$/u.test(ref) && git(source, ['status', '--porcelain', '--untracked-files=no'])) fail('DEV_RELEASE_SOURCE_DIRTY', { ref, hint: 'the build uses the commit, not the working tree: pass the full commit sha' });
+  if (!/^[0-9a-f]{7,64}$/u.test(ref) && git(source, ['status', '--porcelain', '--untracked-files=no'])) fail('DEV_RELEASE_SOURCE_DIRTY', { ref, hint: 'the build uses the commit, not the working tree: pass the commit sha' });
   const pushed = run('git', ['--no-optional-locks', '-C', source, 'merge-base', '--is-ancestor', sha, opts.remoteRef]).status === 0;
   if (!pushed && !opts.allowLocal && !opts.preview) fail('DEV_RELEASE_UNPUSHED', { sha, remoteRef: opts.remoteRef });
   const bwrap = opts.bwrap ?? (() => { const packs = join(source, '.pack/bwrap');
@@ -327,12 +328,17 @@ export async function stage(L, ref, opts) {
     const identity = readJson(join(build, 'dist/build-identity.json'));
     if (identity.sourceCommit !== sha || identity.sourceDirty !== false) fail('DEV_RELEASE_BUILD_DIRTY', { sha, sourceCommit: identity.sourceCommit, sourceDirty: identity.sourceDirty });
     const packed = step('buildDist', () => lastJson(must('DEV_RELEASE_BUILD_DIST', opts.node, ['scripts/build-dist.mjs', '--out', join(build, '.pack/release'), '--pack', '--bwrap', bwrap], { cwd: build, env })));
-    if (!packed.publishable?.ok || !packed.bubblewrap?.shipped || !packed.packed?.tarball) fail('DEV_RELEASE_UNPUBLISHABLE', { blockers: packed.publishable?.blockers ?? [], bubblewrap: packed.bubblewrap ?? null });
+    // The bundled bubblewrap is a runtime requirement (without it the sandbox falls back to Landlock, live 2026-09-29): refused. The other
+    // publication blockers (third-party licence texts, declaration leaks; PLAN DEPS-DIST, owner-open) gate a public release, not the
+    // developer's own installation: recorded in release.json and reported, not refused.
+    if (!packed.bubblewrap?.shipped || !packed.packed?.tarball) fail('DEV_RELEASE_UNPUBLISHABLE', { blockers: packed.publishable?.blockers ?? [], bubblewrap: packed.bubblewrap ?? null });
     const id = `${sha.slice(0, 12)}-${identity.sourceTreeSha256.slice(0, 12)}`, dir = join(L.versions, id);
     if (existsSync(dir)) return { ok: true, alreadyStaged: true, id, dir };
     const smokeTarball = step('smokeTarball', () => run(opts.node, ['scripts/pack-smoke.mjs', packed.packed.tarball, '--node', opts.node], { cwd: build, env }));
     const tarballReport = (() => { try { return lastJson(smokeTarball.stdout); } catch { return null; } })();
-    if (smokeTarball.status !== 0 || !tarballReport?.ok) fail('DEV_RELEASE_SMOKE_FAILED', { artifact: 'tarball', failed: Object.entries(tarballReport?.checks ?? {}).filter(([, c]) => !c.ok).map(([n]) => n), stderr: smokeTarball.stderr.slice(-800) });
+    // A failed smoke check refuses the stage unless the operator waived exactly that check (--waive-smoke a,b), recorded in release.json.
+    const unwaived = report => report ? Object.entries(report.checks ?? {}).filter(([name, c]) => !c.ok && !opts.waiveSmoke.includes(name)).map(([name]) => name) : ['report'];
+    if (unwaived(tarballReport).length) fail('DEV_RELEASE_SMOKE_FAILED', { artifact: 'tarball', failed: unwaived(tarballReport), stderr: smokeTarball.stderr.slice(-800) });
     const partial = `${dir}.partial-${process.pid}`; mkdirSync(partial, { mode: 0o700 });
     try {
       must('DEV_RELEASE_UNPACK', 'tar', ['-xzf', packed.packed.tarball, '-C', partial, '--strip-components=1', '--no-same-owner']);
@@ -341,16 +347,17 @@ export async function stage(L, ref, opts) {
       const version = must('DEV_RELEASE_SMOKE_FAILED', opts.node, [join(partial, CLI_ENTRY), '--version'], { cwd: build }).trim();
       const smokeRoot = step('smokeRoot', () => run(opts.node, ['scripts/pack-smoke.mjs', '--root', partial, '--node', opts.node], { cwd: build, env }));
       const rootReport = (() => { try { return lastJson(smokeRoot.stdout); } catch { return null; } })();
-      if (smokeRoot.status !== 0 || !rootReport?.ok) fail('DEV_RELEASE_SMOKE_FAILED', { artifact: 'unpacked', failed: Object.entries(rootReport?.checks ?? {}).filter(([, c]) => !c.ok).map(([n]) => n) });
+      if (unwaived(rootReport).length) fail('DEV_RELEASE_SMOKE_FAILED', { artifact: 'unpacked', failed: unwaived(rootReport) });
       const manifest = `${JSON.stringify(manifestOf(partial), null, 1)}\n`;
       writeFileSync(join(partial, 'manifest.json'), manifest, { mode: 0o600 });
       let protocol = null;
       try { protocol = /RUNTIME_SERVICE_SCHEMA_VERSION = (\d+)/u.exec(readFileSync(join(partial, 'dist/engine/core/runtime/internal/service-protocol.js'), 'utf8'))?.[1] ?? null; } catch { /* recorded as null */ }
       const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceTreeSha256: identity.sourceTreeSha256, identity, version,
-        pushed, remoteRef: opts.remoteRef, local: !pushed && !opts.preview, preview: Boolean(opts.preview), node: spawnSync(opts.node, ['--version'], { encoding: 'utf8' }).stdout.trim(),
+        publishable: { ok: Boolean(packed.publishable?.ok), blockers: packed.publishable?.blockers ?? [] }, pushed, remoteRef: opts.remoteRef, local: !pushed && !opts.preview, preview: Boolean(opts.preview), node: spawnSync(opts.node, ['--version'], { encoding: 'utf8' }).stdout.trim(),
         ledgerVersion: codeLedgerVersion(partial), protocolVersion: protocol === null ? null : Number(protocol),
         tarball: { name: basename(packed.packed.tarball), sha256: packed.packed.sha256, size: packed.packed.size },
-        smoke: { tarball: Object.fromEntries(Object.entries(tarballReport.checks).map(([n, c]) => [n, c.ok])), unpacked: Object.fromEntries(Object.entries(rootReport.checks).map(([n, c]) => [n, c.ok])) },
+        smoke: { tarball: Object.fromEntries(Object.entries(tarballReport.checks).map(([n, c]) => [n, c.ok])), unpacked: Object.fromEntries(Object.entries(rootReport.checks).map(([n, c]) => [n, c.ok])),
+          waived: opts.waiveSmoke.filter(name => [tarballReport, rootReport].some(report => report.checks?.[name] && !report.checks[name].ok)) },
         bwrap, manifestSha256: sha256(manifest), stagedAt: new Date().toISOString(), timingsMs: timings };
       const fd = openSync(join(partial, 'release.json'), 'w', 0o600); writeSync(fd, `${JSON.stringify(release, null, 2)}\n`); fsyncSync(fd); closeSync(fd);
       renameSync(partial, dir);
@@ -367,7 +374,8 @@ export async function switchTo(L, id, opts) {
   const release = readRelease(L, id);
   if (release.preview) fail('DEV_RELEASE_PREVIEW_NOT_SWITCHABLE', { id });
   if (release.local && !opts.allowLocal) fail('DEV_RELEASE_UNREVIEWED', { id, hint: 'stage a pushed, reviewed commit' });
-  if (!Object.values(release.smoke?.tarball ?? {}).every(Boolean) || !Object.values(release.smoke?.unpacked ?? {}).every(Boolean)) fail('DEV_RELEASE_SMOKE_FAILED', { id });
+  const smokeOk = checks => Object.entries(checks ?? {}).every(([name, ok]) => ok || (release.smoke?.waived ?? []).includes(name));
+  if (!release.smoke || !smokeOk(release.smoke.tarball) || !smokeOk(release.smoke.unpacked)) fail('DEV_RELEASE_SMOKE_FAILED', { id });
   verifyManifest(release);
   const unlock = installLock(L.installRoot);
   try {
@@ -379,7 +387,7 @@ export async function switchTo(L, id, opts) {
     setCurrent(L, id);
     const started = await startService(L, expectOf(L, id), opts);
     const ledgerAfter = ledgerVersion(paths.ledger);
-    const base = { action: 'switch', from, to: id, fromBuild: stopped.build ?? null, shutdownCommandId: stopped.commandId ?? null, stopMs: stopped.stopMs ?? null,
+    const base = { action: 'switch', from, to: id, fromBuild: stopped.build ?? null, shutdownCommandId: stopped.commandId ?? null, stoppedVia: stopped.cli ?? null, stopMs: stopped.stopMs ?? null,
       startMs: started.startMs, ledgerBefore, ledgerAfter, ledgerBackup: started.ledgerUpgrade?.backupPath ?? null, snapshot, log: started.log };
     if (started.ok) {
       writePrevious(L, from); record(L, { ...base, ok: true, instanceId: started.descriptor.instanceId });
@@ -509,6 +517,7 @@ export async function main(argv, env = process.env) {
   const take = name => { const at = args.indexOf(name); if (at < 0) return undefined; const value = args[at + 1]; if (!value || value.startsWith('--')) fail('DEV_RELEASE_USAGE', { option: name }, 2); args.splice(at, 2); return value; };
   const flag = name => { const at = args.indexOf(name); if (at >= 0) args.splice(at, 1); return at >= 0; };
   flags.node = resolve(take('--node') ?? process.execPath); flags.bwrap = take('--bwrap'); flags.remoteRef = take('--remote-ref') ?? 'origin/main';
+  flags.waiveSmoke = (take('--waive-smoke') ?? '').split(',').filter(Boolean);
   flags.to = take('--to'); flags.confirm = take('--confirm'); flags.source = take('--source'); const launcher = take('--launcher');
   flags.stopTimeoutMs = Number(take('--stop-timeout-ms') ?? 90_000); flags.startTimeoutMs = Number(take('--start-timeout-ms') ?? 60_000);
   for (const name of ['allow-local', 'preview', 'keep-build', 'restore-ledger', 'restore-state']) flags[name.replace(/-(\w)/gu, (_, c) => c.toUpperCase())] = flag(`--${name}`);

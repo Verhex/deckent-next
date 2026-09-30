@@ -50,7 +50,7 @@ async function startFromLauncher(f) {
   throw new Error('fake service did not start');
 }
 
-test('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and unpublishable input', async t => {
+test('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and sandbox-less input', async t => {
   const f = fixture(); t.after(f.cleanup);
   const good = f.fake.commit('good');
   const refsBefore = refsHash(f.repo);
@@ -60,7 +60,7 @@ test('stage builds the exact pushed commit outside the source repository and ref
   assert.match(id, new RegExp(`^${good.slice(0, 12)}-[0-9a-f]{12}$`));
   const release = JSON.parse(readFileSync(join(dir, 'release.json'), 'utf8'));
   assert.equal(release.sourceCommit, good); assert.equal(release.pushed, true); assert.equal(release.local, false); assert.equal(release.ledgerVersion, 43);
-  assert.equal(release.protocolVersion, 18); assert.deepEqual(release.smoke, { tarball: { version: true, runtime: true }, unpacked: { version: true, runtime: true } });
+  assert.equal(release.protocolVersion, 18); assert.deepEqual(release.smoke, { tarball: { version: true, runtime: true }, unpacked: { version: true, runtime: true }, waived: [] });
   assert.ok(existsSync(join(dir, 'dist/composition/core/cli/internal/entry.js')));
   // Nothing written into the source repository's .git (clone --local --no-hardlinks, Jev 2b6f9f73), no build tree or partial left.
   assert.equal(refsHash(f.repo), refsBefore);
@@ -79,12 +79,19 @@ test('stage builds the exact pushed commit outside the source repository and ref
   const smokeFails = f.fake.commit('smoke-fails', { behavior: { smokeFail: true } });
   const smoke = f.tool('stage', smokeFails);
   assert.equal(smoke.json.code, 'DEV_RELEASE_SMOKE_FAILED'); assert.deepEqual(smoke.json.failed, ['runtime']);
+  assert.equal(f.tool('stage', smokeFails, '--waive-smoke', 'terminal').json.code, 'DEV_RELEASE_SMOKE_FAILED', 'a waiver covers only the named check');
+  const waived = f.tool('stage', smokeFails, '--waive-smoke', 'runtime');
+  assert.equal(waived.status, 0, waived.stdout); assert.deepEqual(waived.json.release.smoke.waived, ['runtime']);
   const dirty = f.fake.commit('dirty-build', { behavior: { dirtyOnBuild: true } });
   assert.equal(f.tool('stage', dirty).json.code, 'DEV_RELEASE_BUILD_DIRTY');
+  const noSandbox = f.fake.commit('no-bwrap', { behavior: { bwrapMissing: true } });
+  assert.equal(f.tool('stage', noSandbox).json.code, 'DEV_RELEASE_UNPUBLISHABLE');
+  // Publication-only blockers (licence texts, declaration leaks) are recorded, not refused: the dev installation is not a publication.
   const blocked = f.fake.commit('unpublishable', { behavior: { unpublishable: true } });
-  assert.equal(f.tool('stage', blocked).json.code, 'DEV_RELEASE_UNPUBLISHABLE');
+  const recorded = f.tool('stage', blocked);
+  assert.equal(recorded.status, 0, recorded.stdout); assert.deepEqual(recorded.json.release.publishable, { ok: false, blockers: ['fake blocker'] });
   // A failed stage installs nothing: only the two staged versions exist, no partial directories, no build trees, pointer untouched.
-  assert.deepEqual(readdirSync(join(f.installRoot, 'versions')).sort(), [id, allowed.json.id].sort());
+  assert.deepEqual(readdirSync(join(f.installRoot, 'versions')).sort(), [id, allowed.json.id, recorded.json.id, waived.json.id].sort());
   assert.deepEqual(readdirSync(join(f.installRoot, 'build')), []);
   assert.equal(f.current(), null);
   const noBwrap = spawnSync(process.execPath, [join(f.repo, '.agents/refactor/dev-release.mjs'), 'stage', good], { env: f.env, encoding: 'utf8' });
@@ -108,6 +115,7 @@ test('switch stops the running service through its own CLI, moves the pointer at
   const first = f.tool('switch', ids.b);
   assert.equal(first.status, 0, first.stdout);
   assert.equal(f.current(), `versions/${ids.b}`);
+  assert.equal(first.json.stoppedVia, join(f.repo, 'dist/composition/core/cli/internal/entry.js'));
   assert.equal(first.json.from, 'checkout'); assert.equal(first.json.service.build.sourceCommit, b);
   const shutdowns = readFileSync(join(f.data, 'state/shutdowns.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert.equal(shutdowns[0].instanceId, before.instanceId); assert.match(shutdowns[0].commandId, /^dev-release-switch-/);
