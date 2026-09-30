@@ -1409,7 +1409,12 @@ that is not Deckent's state (`hardFloor.product`: every registry resource under 
 bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads; denied paths and protected anchors never) is bound writable
 over it — a tracked `.deckent/docs` checks out clean. Commits e376f546 + 46148e4f + cef933a7. A missing root is created empty (0700) first
 (bwrap would otherwise `mkdir` it on the host, measured 0.13). The Core credential patterns are masked in HOME over a bounded walk (depth 3,
-20 000 entries — over it the call is refused; vendored trees and symbolic links not entered). An owner-approved call of that turn keeps the
+20 000 entries — over it the call is refused; vendored trees and symbolic links not entered). Astra 2189 R7: a mount protects a path, not
+its parent — every ancestor of a protective target (sealed/hidden root, read-only path, mask, scratch) up to `/` is self-bound
+(`openViewAncestors`), so renaming it fails EBUSY instead of carrying the mount away; the pins come right after `--bind / /`, before every
+other mount (a later host bind would otherwise cover the floor); a non-canonical ancestor or more than `BUBBLEWRAP_OPEN_ANCESTOR_MAX`
+(1 024; measured 32, +1.8 ms) refuses the view. Closed views are not pinned (an overlay pin would bypass the write set; the writable-project
+closed view has the same rename class for in-project masks — open follow-up). An owner-approved call of that turn keeps the
 existing configuration file writable (content only). Fail closed: an open request without the hard floor, a root that holds the project,
 HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`): `prefer-sandbox` runs the call on the host with a visible
 notice ("full access: no open sandbox (…); running on host … protected by name only"), `require-sandbox` keeps the closed view with a
