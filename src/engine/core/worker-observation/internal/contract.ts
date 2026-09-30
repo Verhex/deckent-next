@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { artifactReceiptSchema } from '#capabilities/index.js';
-import { identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary } from '#domain/index.js';
+import { identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import type { DispatchTerminal } from '#engine/core/dispatch/index.js';
 export const workerObservationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   source: identitySchema.optional(), after: identitySchema.nullable().default(null), limit: z.number().int().positive().optional() }).strict();
@@ -28,6 +28,8 @@ export interface WorkerObservation {
   readonly handle: string | null; readonly terminal: DispatchTerminal | null;
   readonly outputRecorded: boolean; readonly patchRecorded: boolean; readonly files: WorkerSidecars | null;
   readonly diagnostics: readonly string[];
+  /** Pinned worker tasks (WORKER-CURRENCY-2): requested → init → usage → verdict; `pending` until the host seals the log. */
+  readonly model?: WorkerModelView | null;
 }
 export interface WorkerObservationSource {
   readonly id: string; readonly path: string; readonly kind: string; readonly status: 'available' | 'unavailable' | 'denied' | 'not-sampled';

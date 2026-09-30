@@ -1,8 +1,9 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult } from '#domain/index.js';
+import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult, WorkerModelView } from '#domain/index.js';
+import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
   schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
-  summary: WorkerEventSummary | null; events: readonly WorkerEvent[] }>>;
+  summary: WorkerEventSummary | null; events: readonly WorkerEvent[]; model?: WorkerModelView | null }>>;
 const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
   const labels: Record<WorkerPhase, string> = {
@@ -15,10 +16,12 @@ export function phaseLabel(phase: WorkerPhase, locale: Locale) {
 const TOOL_PHASE: Record<string, WorkerPhase> = { read: 'reading', edit: 'editing', write: 'editing', shell: 'running', search: 'searching', network: 'fetching', agent: 'delegating', other: 'running' };
 /** Human-readable transcript: header, usage and a step timeline. Worker-reported evidence, not acceptance. */
 export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscriptHandler>>, locale: Locale): string {
-  if (!data.sealed || !data.summary) return [t('cli.task.transcript.none', {}, locale),
+  // WORKER-CURRENCY-2 report view: the pinned model row first, with the evidence limit stated.
+  const model = data.model ? [renderWorkerModelLine(data.model, locale), t('cli.worker.model.notice', {}, locale)] : [];
+  if (!data.sealed || !data.summary) return [...model, t('cli.task.transcript.none', {}, locale),
     ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), JSON.stringify(data.finalReport, null, 2)] : [])].join('\n');
   const s = data.summary;
-  const lines = [
+  const lines = [...model,
     t('cli.task.transcript.header', { provider: s.provider ?? '—', model: s.model ?? '—', turns: s.turns ?? '—', seconds: seconds(s.durationMs),
       api: seconds(s.apiDurationMs), outcome: s.outcome }, locale),
     t('cli.task.transcript.tokens', { input: s.tokens.input, output: s.tokens.output, cacheRead: s.tokens.cacheRead, cacheWrite: s.tokens.cacheWrite,

@@ -22,6 +22,15 @@ export async function openSqliteInventoryReader(path: string, options: import('.
   const { SqliteInventoryReader } = await import('./internal/inventory-reader.js');
   return new SqliteInventoryReader(path, options);
 }
+/** Read-only Run and sealed worker log reads that each open and close their own connection (observation paths, WORKER-CURRENCY-2). */
+export function inventoryReadsPerCall(path: () => Promise<string>, options: import('./internal/inventory-reader.js').SqliteInventoryOptions) {
+  const read = async <T>(use: (reader: import('./internal/inventory-reader.js').SqliteInventoryReader) => Promise<T>) => {
+    const reader = await openSqliteInventoryReader(await path(), options);
+    try { return await use(reader); } finally { reader.close(); }
+  };
+  return Object.freeze({ loadRun: (scopeId: string, runId: string) => read(reader => reader.loadRun(scopeId, runId)),
+    loadWorkerEventLog: (scopeId: string, attemptId: string) => read(reader => reader.loadWorkerEventLog(scopeId, attemptId)) });
+}
 /** Service-start upgrade of an existing older ledger with a versioned backup; loads the native driver lazily. */
 export async function upgradeExistingProductLedger(path: string, options: SqliteLedgerOptions, backupDirectory: string, now: Date,
   profiles?: import('#engine/index.js').SupervisorProfileValidator, companyId?: string) {

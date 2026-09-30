@@ -13,6 +13,10 @@ function missing(error: unknown) { return !!error && typeof error === 'object' &
 /** POSIX trusted-host store; managed tree must be outside worker mounts. Preflight is not openat custody. */
 export class FileArtifactStore implements ArtifactStore {
   private readonly options: FileArtifactOptions;
+  /** Read-only view whose root is resolved at its first read, for observation paths that may never read an artifact (WORKER-CURRENCY-2). */
+  static reader(root: () => Promise<string>, maxBytes: number): Pick<ArtifactStore, 'read'> {
+    return Object.freeze({ read: async (scopeId: string, receipt: ArtifactReceipt) => new FileArtifactStore({ root: await root(), maxBytes }).read(scopeId, receipt) });
+  }
   constructor(input: FileArtifactOptions) {
     const parsed = optionsSchema.safeParse(input);
     if (!parsed.success || !isAbsolute(parsed.data.root)) throw new ArtifactError('ARTIFACT_INVALID');

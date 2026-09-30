@@ -1,8 +1,8 @@
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
-import { evaluateProcessExit, validateProcessExitCriterion } from '#capabilities/index.js';
-import { authenticate, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, projectRunView, type TaskEvaluationCommand } from '#engine/index.js';
+import { processExitTerminalEvaluator } from '#capabilities/index.js';
+import { authenticate, describeTaskEvaluationReceipt, TaskEvaluationApplication, taskEvaluationCommandSchema, DispatchPolicyAuthorization, type TaskEvaluationCommand } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -19,17 +19,9 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-      const application = new TaskEvaluationApplication(store, verifier, authorization, {
-        async evaluate(evaluator, criterion, terminal) {
-          validateProcessExitCriterion(evaluator, criterion);
-          return evaluateProcessExit(criterion.parameters, { exitCode: terminal.exitCode,
-            ...(terminal.signal === undefined ? {} : { signal: terminal.signal }) });
-        },
-      }, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.
-      const receipt = await application.execute(command);
-      return Object.freeze({ schemaVersion: 1 as const, layout,
-        evaluation: Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) }) });
+      const application = new TaskEvaluationApplication(store, verifier, authorization, processExitTerminalEvaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes });
+      return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: describeTaskEvaluationReceipt(await application.execute(command)) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

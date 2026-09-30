@@ -7,7 +7,7 @@ export type { ModelActivationAuthorizer, ModelActivationInvocationDelivery, Mode
   ModelActivationDeliveryTarget } from './internal/application.js';
 export { ModelActivationInspectionApplication } from './internal/inspection.js';
 export type { ModelActivationInspection, ModelActivationReader } from './internal/inspection.js';
-export { ModelCatalogApplication, sameModelCatalogRequest, modelCatalogTargetId } from './internal/catalog.js';
-export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer } from './internal/catalog.js';
+export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId } from './internal/catalog.js';
+export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
 export { admitWorkerModels, WorkerModelAdmissionError } from './internal/worker-admission.js';
 export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail } from './internal/worker-admission.js';

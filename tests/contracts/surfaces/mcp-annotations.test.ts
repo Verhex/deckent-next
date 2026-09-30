@@ -36,6 +36,9 @@ const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   shutdown_runtime_service: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   inspect_model_activation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   admit_model_activation: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  // WORKER-CURRENCY-2: ledger model catalog; apply replays by (scope, commandId) receipt (SqliteModelCatalogStore.apply).
+  inspect_model_catalog: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  apply_model_catalog: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   inspect_model_invocation: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_provider_spending: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   audit_provider_spending: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -55,11 +58,11 @@ const descriptor = (id: string, effectClass: 'read' | 'write' | 'irreversible', 
   precondition: 'none' as const, compensation: compensation ? ref(compensation) : null, inputMaxBytes: 4096 });
 const writeCatalog = [descriptor('post-order', 'write', 'cancel-order'), descriptor('cancel-order', 'write')];
 const noop = async () => ({});
-// Every optional application handler is supplied so the real server advertises all 30 tools; only
+// Every optional application handler is supplied so the real server advertises all tools; only
 // tools/list is exercised here, so stub bodies never execute a real effect.
 const applications: McpApplications = {
   renewApproval: noop, listApprovals: noop, inspectApproval: noop, decideApproval: noop,
-  inspectModelActivation: noop, admitModelActivation: noop, inspectModelInvocation: noop, invokeModel: noop,
+  inspectModelActivation: noop, admitModelActivation: noop, inspectModelCatalog: noop, applyModelCatalog: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,
   auditProviderSpendAccount: noop, inspectDeclaredModels: noop, inspectModelBinding: noop, inspectToolchainCurrency: noop,
   updateToolchains: noop, createRun: noop, reserveRunTasks: noop, executeTask: noop, evaluateTask: noop,
@@ -77,7 +80,7 @@ async function listAnnotatedTools(overrides: Partial<McpApplications> = {}) {
   try { return (await client.listTools()).tools; }
   finally { await client.close(); await server.close(); }
 }
-it('advertises exactly the 33 contracted tools, no more and no fewer', async () => {
+it('advertises exactly the 35 contracted tools, no more and no fewer', async () => {
   const tools = await listAnnotatedTools();
   expect(new Set(tools.map(tool => tool.name))).toEqual(new Set(Object.keys(EXPECTED)));
 });

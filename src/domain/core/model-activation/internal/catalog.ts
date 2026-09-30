@@ -27,6 +27,10 @@ const catalogDocumentSchema = z.unknown().transform((input, context): ProviderCa
 });
 const base = { schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), commandId: identitySchema, scopeId: identitySchema };
 export const modelCatalogTargetSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema.nullable() }).strict().readonly();
+/** Read query (WORKER-CURRENCY-2): the catalog as one scope sees it, optionally one channel. */
+export const modelCatalogQuerySchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION), scopeId: identitySchema,
+  channelId: identitySchema.optional() }).strict().readonly();
+export type ModelCatalogQuery = Readonly<z.infer<typeof modelCatalogQuerySchema>>;
 export const modelCatalogCommandSchema = z.discriminatedUnion('action', [
   z.object({ ...base, action: z.literal('register'), catalog: catalogDocumentSchema }).strict(),
   z.object({ ...base, action: z.enum(['activate', 'deactivate']), channelId: identitySchema, modelId: exactModelIdSchema.nullable(),

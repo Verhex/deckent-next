@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema } from '#domain/core/run/index.js';
+import { workerModelPinSchema, workerProviderSchema } from '#domain/core/worker-event/index.js';
 const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass', 'fail', 'unknown']),
   evidenceIds: z.array(identitySchema).readonly(),
 }).strict().superRefine((value, context) => {
@@ -9,10 +10,27 @@ const criterion = z.object({ criterionId: identitySchema, verdict: z.enum(['pass
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_EVALUATION_INVALID' });
   }
 }).readonly();
+const modelText = z.string().min(1).max(256);
+/**
+ * Worker model evidence of a pinned native attempt (WORKER-CURRENCY-2, owner rule A 2026-09-30; Jev 933e43f2, 58ffe1c9). Recorded with the
+ * evaluation; present exactly when the Run's frozen profile pins a model. The verdict is the host-sealed comparison of worker-reported usage
+ * with the pin (not provider attestation); `absent` evidence means no sealed log. Tasks without a pin carry no field (bytes unchanged).
+ */
+export const taskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
+  init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(), verdict: z.enum(['verified', 'substituted', 'unverified']),
+  unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict().readonly();
+export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
-  criteria: z.array(criterion).min(1).readonly(),
+  criteria: z.array(criterion).min(1).readonly(), model: taskEvaluationModelSchema.optional(),
 }).strict().readonly();
+/** Acceptance consequence of the model evidence: an undeclared model fails the attempt; a Claude attempt (the provider that reports
+ * per-model usage) without a sealed 'verified' verdict is held; Codex/Cursor stay accepted by their criteria, visibly unverified. */
+export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fail' | 'unknown' | null {
+  if (!model) return null;
+  if (model.verdict === 'substituted') return 'fail';
+  return model.provider === 'claude' && model.verdict !== 'verified' ? 'unknown' : null;
+}
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
 export class TaskEvaluationError extends Error {
   constructor(readonly code: 'TASK_EVALUATION_INVALID' | 'TASK_EVALUATION_STALE' | 'TASK_EVALUATION_NOT_READY' | 'TASK_EVALUATION_CRITERIA') {
@@ -36,6 +54,8 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
     || task.acceptanceCriteria.some(id => !byId.has(id))) throw new TaskEvaluationError('TASK_EVALUATION_CRITERIA');
   const criteria = task.acceptanceCriteria.map(id => { const value = byId.get(id)!; return { ...value, evidenceIds: [...value.evidenceIds].sort() }; });
   const normalized = taskEvaluationSchema.parse({ ...evaluation, criteria });
-  const conclusion: 'pass' | 'fail' | 'unknown' = criteria.some(value => value.verdict === 'fail') ? 'fail' : criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
+  const gate = taskModelConclusion(normalized.model);
+  const conclusion: 'pass' | 'fail' | 'unknown' = gate === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+    : gate === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
   return Object.freeze({ evaluation: normalized, conclusion });
 }
