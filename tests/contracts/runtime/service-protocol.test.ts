@@ -357,3 +357,16 @@ describe('runtime protocol v18: the secret write operations (SECRET-WRITE; v17 w
     }
   });
 });
+
+describe('runtime service protocol: tool.finished trackedChanges (FA-TRACKED-WARN)', () => {
+  // FA-TRACKED-WARN (owner 2026-09-30): `tool.finished`'s optional `trackedChanges`, a full-access host shell call only. v18 is released:
+  // whether this ships in the v19 bundle or as an additive v18 item (CLEANUP-MARK precedent) is the lead's decision; the schema itself is
+  // pinned here — counts only, non-negative integers, nothing else.
+  it("admits tool.finished's optional trackedChanges counts and rejects any other shape", () => {
+    const base = { schemaVersion: 18, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
+    const finish = (trackedChanges: unknown) => ({ ...base, events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, trackedChanges }] });
+    for (const counts of [{ deleted: 1, overwritten: 0 }, { deleted: 0, overwritten: 12 }]) expect(runtimeServiceEventFrameSchema.parse(finish(counts))).toEqual(finish(counts));
+    for (const invalid of [{ deleted: -1, overwritten: 0 }, { deleted: 1.5, overwritten: 0 }, { deleted: 1 }, { deleted: 1, overwritten: 0, paths: ['a'] }, 'deleted 1'])
+      expect(runtimeServiceEventFrameSchema.safeParse(finish(invalid)).success).toBe(false);
+  });
+});
