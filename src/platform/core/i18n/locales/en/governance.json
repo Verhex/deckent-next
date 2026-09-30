@@ -912,6 +912,8 @@
   "error.MODEL_CATALOG_CORRUPT": "A stored model catalog record does not match its ledger row. Nothing was selected from it; restore the ledger from its backup or re-register the entry.",
   "error.MODEL_CATALOG_UNAVAILABLE": "The model catalog could not be read or written. Retry once the ledger is available.",
   "error.MODEL_CATALOG_OUTCOME_UNKNOWN": "The model catalog change may or may not have been saved. Repeat the same command with the same command id to learn its outcome.",
+  "error.WORKER_MODEL_BINDING_MISMATCH": "A native worker profile's executed command does not match its pinned catalog model (a different, moved, duplicated or inline model flag, an extra argument, or another executable). Prepare the profile again with `deckent coding prepare`; hand-edited worker commands are refused.",
+  "error.MODEL_CATALOG_ALIAS_CONFLICT": "The catalog change would make an alias equal an exact model id or another alias on the same channel, counting the models it keeps. Nothing was written; rename or remove the conflicting alias and retry.",
   "error.AGENT_TURN_IN_PROGRESS": "This turn is still running; wait for its answer or cancel it before sending the same turn again.",
   "error.AGENT_TURN_CONFLICT": "This turn id was already used for a different request or by a different user; send the message as a new turn.",
   "error.AGENT_TURN_CORRUPT": "The stored record of this turn is damaged and was not trusted; send the message as a new turn.",
