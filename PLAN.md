@@ -400,6 +400,14 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); o adayın tam
 
 ## Kanıt ve durum
 
+- **Owner kararları 2026-09-30 — dogfood ile terminal, model/imaj güncelliği, izleme.** (1) Terminal kalan/UI-UX/komut kartları Deckent'in
+  kendi dogfood döngüsüyle yapılır (izole N1 kurulumu, topoloji a′: canlıya yazılmaz; ilk döngü D1-0 `c7b44469` benimsendi,
+  `proof/DOGFOOD-D1-2026-09-30/README.md`; N1 sandbox doğrulamasında v3 dışlamalar, yayım kapısı host tam verify + Astra). (2) `/new` kaldırılır,
+  `/clear` olur — takma ad değil yeniden adlandırma. (3) **Worker'lar her zaman güncel CLI ve güncel modelle çalışır; eski modele iş verilmez:**
+  WORKER-CURRENCY kartı = güncel imaj (r4; r3 Claude CLI 2.1.278 < npm 2.1.285, `sonnet` takma adı eski modele çözülüyor) + yeni Run admission'ında
+  imaj/CLI/model güncellik reddi (PLAN "Worker imajı" açığı) + yalnız aktif model listesi ve efor seçimi (G31 atama sözleşmesi). İşin istenen ve doğru
+  modele atanması kritik. (4) Owner main'den Deckent'in işini izleyebilmeli: B09-3 kalanı (canlı `workers watch` üreticisi, `report workers`)
+  + terminalden Run/teslim/doğrulama/benimseme (bugün yalnız CLI). Eski directives.md/.task karşılığı: D15b `do` → RunProposal → G31 (tasarımda).
 - **Açık (dağıtım/SBOM, Astra 2192 teyitli):** `dist-sbom.mjs` ve dist-ajv-stub gömülü kopya tespiti `node_modules/<ad>` yol önekine bakıyor;
   proje dışı/sembolik bağlı `node_modules` (pnpm düzeni, worktree bağı) altında gömülü fast-uri/cf-worker satırları raporlanmıyor. Ürün çalışma
   zamanı kusuru değil; kurulum/düzen bağımsız tespit + negatif test gerekli (kanıt `proof/INTEGRATE-2026-09-30-P-verify-279d22c6-symlinked-node-modules.log`).
