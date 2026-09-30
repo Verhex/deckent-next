@@ -78,7 +78,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     /**
      * v6 PROMPT-POSTURE: the posture the system prompt states for this turn's shell, from the same realm resolution and open-view rule its
      * calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not
-     * change `open` for either); any other turn's calls are closed whatever their authority. The realm is known now: the configuration, the
+     * change `open` or the floor for either); any other turn's calls are closed whatever their authority. In the open view the turn's write
+     * floor is the configuration file (turn.ts): read-only for a `full-access` call, and for an `owner-approved` one as `shellWritePosture`
+     * says (Astra 2192 R9: the owner's card opens its existing content). The realm is known now: the configuration, the
      * memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result
      * says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an
      * open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
@@ -86,10 +88,12 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     async posture(): Promise<AgentTurnShellPosture> {
       const resolved = await resolveRealm();
       if (!resolved.ok) return { kind: 'unavailable' };
-      const fullAccess = input.fullAccess === true, open = shellWritePosture(fullAccess ? 'full-access' : 'owner-approved', 'other-modify', fullAccess).open;
+      const fullAccess = input.fullAccess === true, approved = shellWritePosture('owner-approved', 'other-modify', fullAccess);
+      const open = shellWritePosture(fullAccess ? 'full-access' : 'owner-approved', 'other-modify', fullAccess).open;
       const realm = callRealm(resolved, open);
       if (realm.containment === 'host' || realm.realm.kind === 'host') return { kind: 'host' };
-      return { kind: 'sandbox', realm: realm.realm.kind, open: open && realm.opens === true };
+      return open && realm.opens === true ? { kind: 'sandbox', realm: realm.realm.kind, open: true, configuration: approved.writeFloorReadOnly ? 'read-only' : 'owner-approved' }
+        : { kind: 'sandbox', realm: realm.realm.kind, open: false };
     },
     /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
     tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
