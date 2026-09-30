@@ -48,7 +48,7 @@ export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
 export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
-export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError } from '#adapters/core/native-coding/index.js';
+export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
 

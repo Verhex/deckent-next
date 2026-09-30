@@ -73,8 +73,8 @@ export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalog
       }
       const changes: ModelCatalogChange[] = [];
       if (command.action === 'register') {
-        const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId),
-          model: (channelId, modelId) => this.modelRows(channelId).find(entry => entry.modelId === modelId) ?? null });
+        // Planned (and its merged channel invariants checked) inside this IMMEDIATE transaction, against the rows it will replace.
+        const plan = planModelCatalogRegistration(command, { channel: channelId => this.channelRow(channelId), models: channelId => this.modelRows(channelId) });
         for (const record of plan.channels) {
           const written = this.db.prepare(`INSERT INTO model_catalog_channels(channel_id,revision,record) VALUES(?,?,?)
             ON CONFLICT(channel_id) DO UPDATE SET revision=excluded.revision,record=excluded.record WHERE revision=excluded.revision-1`)

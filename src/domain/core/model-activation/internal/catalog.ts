@@ -14,7 +14,7 @@ export const MODEL_CATALOG_SCHEMA_VERSION = 1;
 export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
 export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
   | 'MODEL_CATALOG_NOT_ACTIVE' | 'MODEL_CATALOG_COMMAND_CONFLICT' | 'MODEL_CATALOG_CORRUPT' | 'MODEL_CATALOG_UNAVAILABLE'
-  | 'MODEL_CATALOG_OUTCOME_UNKNOWN';
+  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT';
 export class ModelCatalogError extends Error {
   constructor(readonly code: ModelCatalogErrorCode) { super(code); this.name = 'ModelCatalogError'; }
 }
@@ -46,9 +46,9 @@ const changeSchema = z.object({ kind: z.enum(['channel', 'model', 'activation'])
 export const modelCatalogReceiptSchema = z.object({ schemaVersion: z.literal(MODEL_CATALOG_SCHEMA_VERSION),
   command: modelCatalogCommandSchema, actor: modelActivationActorSchema,
   authorizations: z.array(z.object({ target: modelCatalogTargetSchema, action: z.enum(['activate', 'deactivate']),
-    authorization: modelActivationAuthorizationSchema }).strict().readonly()).min(1).readonly(),
+    level: z.enum(['installation', 'scope']), authorization: modelActivationAuthorizationSchema }).strict().readonly()).min(1).readonly(),
   changes: z.array(changeSchema).readonly(), admittedAtMs: counterSchema,
-}).strict().readonly();
+}).strict().refine(receipt => receipt.authorizations.every(entry => entry.level === (receipt.command.action === 'register' ? 'installation' : 'scope'))).readonly();
 
 export type ModelCatalogCommand = Readonly<z.infer<typeof modelCatalogCommandSchema>>;
 export type ModelCatalogTarget = Readonly<z.infer<typeof modelCatalogTargetSchema>>;
@@ -82,9 +82,22 @@ export function modelCatalogTargets(command: ModelCatalogCommand): readonly Mode
   return Object.freeze(command.catalog.providers.map(provider => Object.freeze({ channelId: provider.id, modelId: null })));
 }
 
+/**
+ * Invariants of one channel's FINAL state (Astra 2197 WC-R3): a register is partial — models it omits are preserved — so the document's own
+ * checks are not enough. Across the channel alias list and every model's aliases: no alias repeats and none equals an exact id of any
+ * model (preserved or written); CLI minimums only on a CLI channel. Refusal is typed; the caller's transaction then writes nothing.
+ */
+function assertMergedChannel(channel: ModelCatalogChannelRecord['channel'], models: readonly ModelCatalogModelRecord['model'][]): void {
+  const exact = new Set(models.map(model => model.nativeId)), aliases = new Set<string>();
+  for (const alias of [...channel.aliases, ...models.flatMap(model => model.aliases)]) {
+    if (exact.has(alias) || aliases.has(alias)) throw new ModelCatalogError('MODEL_CATALOG_ALIAS_CONFLICT');
+    aliases.add(alias);
+  }
+  if (channel.kind !== 'native-cli' && models.some(model => model.minCliVersion !== null)) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
+}
 /** Catalog rows a register command writes: only new or changed facts get a new revision; absent rows are never deleted (retire instead). */
 export function planModelCatalogRegistration(command: ModelCatalogCommand, current: {
-  channel(channelId: string): ModelCatalogChannelRecord | null; model(channelId: string, modelId: string): ModelCatalogModelRecord | null;
+  channel(channelId: string): ModelCatalogChannelRecord | null; models(channelId: string): readonly ModelCatalogModelRecord[];
 }): { channels: ModelCatalogChannelRecord[]; models: ModelCatalogModelRecord[] } {
   if (command.action !== 'register') throw new ModelCatalogError('MODEL_CATALOG_INVALID');
   const catalogRevision = command.catalog.revision, channels: ModelCatalogChannelRecord[] = [], models: ModelCatalogModelRecord[] = [];
@@ -95,8 +108,12 @@ export function planModelCatalogRegistration(command: ModelCatalogCommand, curre
       channels.push(parseModelCatalogChannelRecord({ schemaVersion: 1, channelId: provider.id, revision: (prior?.revision ?? 0) + 1,
         providerVersion: provider.version, channel: provider.channel, catalogRevision }));
     }
+    const existing = new Map(current.models(provider.id).map(entry => [entry.modelId, entry]));
+    const merged = new Map([...existing].map(([modelId, entry]) => [modelId, entry.model]));
+    for (const model of provider.models) merged.set(model.nativeId, model);
+    assertMergedChannel(provider.channel, [...merged.values()]);
     for (const model of provider.models) {
-      const before = current.model(provider.id, model.nativeId);
+      const before = existing.get(model.nativeId) ?? null;
       if (before && before.providerVersion === provider.version && same(before.model, model)) continue;
       models.push(parseModelCatalogModelRecord({ schemaVersion: 1, channelId: provider.id, modelId: model.nativeId,
         revision: (before?.revision ?? 0) + 1, providerVersion: provider.version, model, catalogRevision }));
