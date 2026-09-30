@@ -996,8 +996,10 @@ without setuid/setgid, in root-owned directories not writable by group/others up
 (GHSA-pxhw-h44j-8pfx / CVE-2026-87766; a distribution backport is not recognized); otherwise the **bundled build**
 (`dist/adapters/core/shell-sandbox-bwrap/bundled/linux-<arch>/bwrap`, resolved from the module URL): its bytes are read once, must hash to
 `BUBBLEWRAP_BUNDLED` (generated from `packaging/bwrap/bwrap.lock.json`), and the same bytes are written to `<global state
-root>/bin/bwrap-<sha256>` (0700 directory, 0500 file, temporary + fsync + rename; an existing copy is reused only when ours, single-link and
-verifying) — that copy is what runs, so an npm install under umask 002 (package file 0775) is not a problem and the package tree's
+root>/bin/bwrap-<sha256>` (0700 directory, 0500 file, unique temporary + fsync, published with `link` — never replacing — so concurrent
+processes all run one inode; the check waits ≤ 0.5 s while a publisher's temporary name is still linked; only a copy that does not verify
+is replaced by `rename`; an existing copy is reused only when ours, single-link and verifying; a replacing `rename` refused 29/120
+concurrent measurements with nlink 0, 2026-09-30) — that copy is what runs, so an npm install under umask 002 (package file 0775) is not a problem and the package tree's
 permissions are not trusted. PATH never consulted. The probe runs the selected launcher once (`--unshare-all --die-with-parent --new-session
 --ro-bind / / --proc /proc --dev /dev -- /bin/true`, env empty, 1 s); the realm is usable only when that run succeeded, and on every use the
 launcher file must still be the measured one (`dev:ino:size:mtimeNs:ctimeNs`; the bundled copy is re-hashed when its identity moved, a
@@ -1409,7 +1411,13 @@ that is not Deckent's state (`hardFloor.product`: every registry resource under 
 bootstrap configuration, the MCP registry, the Core floor's `.deckent/` heads; denied paths and protected anchors never) is bound writable
 over it — a tracked `.deckent/docs` checks out clean. Commits e376f546 + 46148e4f + cef933a7. A missing root is created empty (0700) first
 (bwrap would otherwise `mkdir` it on the host, measured 0.13). The Core credential patterns are masked in HOME over a bounded walk (depth 3,
-20 000 entries — over it the call is refused; vendored trees and symbolic links not entered). An owner-approved call of that turn keeps the
+20 000 entries — over it the call is refused; vendored trees and symbolic links not entered). Astra 2189 R7: a mount protects a path, not
+its parent — every ancestor of a protective target (sealed/hidden root, read-only path, mask, scratch) up to `/` is self-bound
+(`ancestorPins`), so renaming it fails EBUSY instead of carrying the mount away; the pins come right after `--bind / /`, before every
+other mount (a later host bind would otherwise cover the floor); a non-canonical ancestor or more than `BUBBLEWRAP_ANCESTOR_PIN_MAX`
+(1 024; measured 32, +1.8 ms) refuses the view. A closed view with a writable project (owner-approved; unattended narrow) pins the
+in-project ancestors right after the project bind, before every protective mount (measured 0–10 pins, ≤ +1 ms); an overlay (a pin would
+bypass the write set) or read-only project (EROFS) view pins nothing. An owner-approved call of that turn keeps the
 existing configuration file writable (content only). Fail closed: an open request without the hard floor, a root that holds the project,
 HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`): `prefer-sandbox` runs the call on the host with a visible
 notice ("full access: no open sandbox (…); running on host … protected by name only"), `require-sandbox` keeps the closed view with a
