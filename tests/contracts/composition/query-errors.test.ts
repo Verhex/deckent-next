@@ -78,3 +78,17 @@ it('maps native pricing and request failures to safe product errors without back
     expect(String(safe)).not.toContain('private'); expect(String(safe)).not.toContain('credential=secret');
   }
 });
+it('carries a reservation diagnostic as RUN_CAPACITY_OR_ORDER parameters in the fixed field order, an absent gap left out (COMPOSITION-RELIEF)', () => {
+  const diagnostic = { reconciliationCount: 0, terminalCount: 1, occupiedCount: 2, delayedCount: 0, blockedCount: 0, waitingCount: 3, readyCount: 4,
+    requestedCount: 5, selectedCount: 0, inFlightOccupied: 1, executionOccupied: 2, inFlightSlots: 3, executionSlots: 2, now: 1_000, reason: 'capacity-exhausted' as const,
+    site: 'application-empty' as const };
+  const order = ['site', 'reason', 'now', 'executionSlots', 'inFlightSlots', 'executionOccupied', 'inFlightOccupied', 'selectedCount', 'requestedCount', 'readyCount',
+    'waitingCount', 'blockedCount', 'delayedCount', 'occupiedCount', 'terminalCount', 'reconciliationCount'];
+  const plain = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', diagnostic));
+  expect(plain.code).toBe('RUN_CAPACITY_OR_ORDER');
+  expect(Object.keys(plain.params ?? {})).toEqual(order);
+  expect(plain.params).toEqual(diagnostic);
+  const delayed = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', { ...diagnostic, reason: 'delayed', eligibilityGapMs: 250 }));
+  expect(Object.keys(delayed.params ?? {})).toEqual([...order.slice(0, 3), 'eligibilityGapMs', ...order.slice(3)]);
+  expect(delayed.params?.['eligibilityGapMs']).toBe(250);
+});
