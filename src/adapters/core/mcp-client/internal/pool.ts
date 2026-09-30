@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { DeckentJsonSchemaValidator, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
@@ -49,10 +49,11 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), rejected: { kind: string; reason: string }[] = [];
   if (capabilities.platform !== 'linux') rejected.push({ kind: 'platform', reason: capabilities.platform });
+  // MCP-CLIENT (Astra 2188 R8): the same launch-eligibility rule doctor's `preferSandbox` report walks (`shellLaunchUsable`), so a
+  // provider usable for one shell command but with no `.launch` (Landlock) is rejected here exactly as doctor rejects it.
   else for (const sandbox of context.sandboxes) {
-    const usable = sandbox.usable(capabilities);
+    const usable = shellLaunchUsable(sandbox, capabilities);
     if (!usable.ok) { rejected.push({ kind: sandbox.kind, reason: usable.reason }); continue; }
-    if (!usable.launch) { rejected.push({ kind: sandbox.kind, reason: 'runs one command at a time' }); continue; }
     const launch = await usable.launch(context.environment);
     if (!launch.ok) { rejected.push({ kind: sandbox.kind, reason: launch.reason }); continue; }
     // The card's words come from the view this launch enforces (C5: the project read-only), with how to let a server write.
