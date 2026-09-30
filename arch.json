@@ -375,6 +375,8 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/adapters/core/sqlite-model-activation",
+        "src/engine/core/model-activation",
         "src/adapters/core/approval-store",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
