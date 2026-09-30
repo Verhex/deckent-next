@@ -406,7 +406,10 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); o adayın tam
   `/clear` olur — takma ad değil yeniden adlandırma. (3) **Worker'lar her zaman güncel CLI ve güncel modelle çalışır; eski modele iş verilmez:**
   WORKER-CURRENCY kartı = güncel imaj (r4; r3 Claude CLI 2.1.278 < npm 2.1.285, `sonnet` takma adı eski modele çözülüyor) + yeni Run admission'ında
   imaj/CLI/model güncellik reddi (PLAN "Worker imajı" açığı) + yalnız aktif model listesi ve efor seçimi (G31 atama sözleşmesi). İşin istenen ve doğru
-  modele atanması kritik. (4) Owner main'den Deckent'in işini izleyebilmeli: B09-3 kalanı (canlı `workers watch` üreticisi, `report workers`)
+  modele atanması kritik. **Owner 2026-09-30 (onay):** WORKER-CURRENCY tasarımı (`proof/WORKER-CURRENCY-DESIGN-2026-09-30`) ve r4 kabul;
+  model her zaman **tam API adıyla** sabitlenir, takma ad hiç kabul edilmez (tipli ret, sessiz çözüm yok); model kataloğu DB'de (ledger tablosu),
+  anahtar **(sağlayıcı kanalı, tam model kimliği)** — aynı model Anthropic API anahtarı / abonelik / Bedrock gibi kanallardan ayrı kayıt;
+  sağlayıcı aktif mi → altındaki modeller aktif mi; katalog sürekli güncel ve izinli yönetilir (mevcut provider-catalog/model-activation sahipleri genişletilir). (4) Owner main'den Deckent'in işini izleyebilmeli: B09-3 kalanı (canlı `workers watch` üreticisi, `report workers`)
   + terminalden Run/teslim/doğrulama/benimseme (bugün yalnız CLI). Eski directives.md/.task karşılığı: D15b `do` → RunProposal → G31 (tasarımda).
 - **Açık (dağıtım/SBOM, Astra 2192 teyitli):** `dist-sbom.mjs` ve dist-ajv-stub gömülü kopya tespiti `node_modules/<ad>` yol önekine bakıyor;
   proje dışı/sembolik bağlı `node_modules` (pnpm düzeni, worktree bağı) altında gömülü fast-uri/cf-worker satırları raporlanmıyor. Ürün çalışma
