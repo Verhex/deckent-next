@@ -17,6 +17,9 @@ export type ToolResultSummary =
   | { readonly kind: 'matches'; readonly count: number; readonly more: boolean }
   | { readonly kind: 'entries'; readonly count: number }
   | { readonly kind: 'sandbox-none' } | { readonly kind: 'sandbox-degraded' };
+/** FA-TRACKED-WARN: git-tracked files a full-access shell call deleted or overwrote, read by the renderer from the trusted leading
+ * metadata of the call's own result (`trackedChangesOfToolResult`); protocol v18 carries no field for it (a typed one waits for v19). */
+export type ToolTrackedChanges = { readonly deleted: number; readonly overwritten: number };
 
 /**
  * Surface-facing streaming turn contract (S-STREAM, Jev 1370d942). The producer (composition over the runtime protocol)

@@ -357,3 +357,16 @@ describe('runtime protocol v18: the secret write operations (SECRET-WRITE; v17 w
     }
   });
 });
+
+describe('runtime service protocol: no tracked-file field on v18 (FA-TRACKED-WARN)', () => {
+  // Lead decision 2026-09-30 (Jev 34a8df5c, bundle_v19): v18 is released and `tool.finished` is strict, so a v18 frame never carries
+  // `trackedChanges`. The released parser (this schema, unchanged since v18) rejects it; the warning travels in the result text instead
+  // (`[deckent] run_shell: tracked: deleted=N overwritten=M; …` first line + the named line at the end). The typed field is a v19 hook.
+  it('rejects tool.finished with trackedChanges on a v18 frame, and keeps the plain finish parsing', () => {
+    const base = { schemaVersion: 18, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
+    const finish = { kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10 } as const;
+    expect(runtimeServiceEventFrameSchema.parse({ ...base, events: [finish] })).toEqual({ ...base, events: [finish] });
+    for (const trackedChanges of [{ deleted: 1, overwritten: 0 }, { deleted: 0, overwritten: 12 }])
+      expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [{ ...finish, trackedChanges }] }).success).toBe(false);
+  });
+});

@@ -12,3 +12,5 @@ export { ASYNC_FS_OPS, fsOpsFor, LOCAL_FILESYSTEM_TYPES, SYNC_FS_OPS, type FsOps
 export { applySandboxWriteSet, describeSandboxWriteSet, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, SANDBOX_WRITE_SET_BOUNDS, sandboxWriteSetRoot, scanSandboxWriteSet,
   type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteDecider, type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetDirectory,
   type SandboxWriteSetReport, type SandboxWriteSetScan } from './internal/write-set.js';
+export { compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, TRACKED_FILES_LINE_PATHS, TRACKED_FILES_MAX, type TrackedFilesBaseline,
+  type TrackedFilesChange, type TrackedFilesList } from './internal/tracked-files.js';

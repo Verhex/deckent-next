@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
 import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
-  type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier } from '#engine/index.js';
+  type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier,
+  trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
@@ -171,7 +172,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
      * nothing runs), a mode relaxation is audited first, and a silent decision is counted.
      */
     async execute(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string,
-      run: (gate: EffectApprovalGate, authority: ShellCallAuthority, writes?: SandboxWriteDecider) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
+      run: (gate: EffectApprovalGate, authority: ShellCallAuthority, writes?: SandboxWriteDecider,
+        track?: (change: { readonly deleted: TrackedFilesAuditList; readonly overwritten: TrackedFilesAuditList }) => Promise<boolean>) => Promise<AgentToolOutcome>): Promise<AgentToolOutcome> {
       const key = keyOf(tool, args), kept = stored.get(key);
       const { gate: inner, close } = approvals.gate(tool, args, execution);
       try {
@@ -211,7 +213,11 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
         // MODES-3 x Astra 2170 (owner 2026-09-29): a full-access call is owner-authorized by the launched mode (its own write posture).
         // SHELL-OVERLAY: a shell call a full-auto relaxation let run may keep its writes aside; each is then decided like an edit (`writeSet`).
         }, fullAccess ? 'full-access' : relaxation?.mode === 'full-auto' && tool.toolClass === 'shell' ? 'full-auto' : 'unattended',
-        relaxation?.mode === 'full-auto' && tool.toolClass === 'shell' ? writeSet(tool, args, execution, callId) : undefined);
+        relaxation?.mode === 'full-auto' && tool.toolClass === 'shell' ? writeSet(tool, args, execution, callId) : undefined,
+        // FA-TRACKED-WARN: what a full-access shell call did to tracked files is sealed after its effect (false: not recorded; the call's line says so).
+        fullAccess && tool.toolClass === 'shell' ? change => withAudit(audit => audit.record(trackedFilesAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool,
+          summary: callSummary(tool, args), eventId: permissionModeEventId(scopeId, turnId, execution, agentToolArgumentsDigest(tool.name, args), 'tracked-files-changed'),
+          call: { turnId, round: execution.round, index: execution.index, callId } }, fresh.revision, change))).then(() => true, () => false) : undefined);
       } finally { await close(); }
     },
   };

@@ -1,4 +1,4 @@
-import type { ToolResultSummary } from './turn-stream.js';
+import type { ToolResultSummary, ToolTrackedChanges } from './turn-stream.js';
 
 /**
  * Tool-line presentation derived entirely client-side from data the engine already puts on the wire (TL-B D2,
@@ -24,6 +24,9 @@ export function describeAgentToolCallTarget(name: string, argumentsJson: string 
   return [`"${pattern}"`, ...(path ? [path] : []), ...(glob ? [`(${glob})`] : [])].join(' ');
 }
 
+/** FA-TRACKED-WARN: `[deckent] run_shell: tracked: deleted=N overwritten=M; …` — written first on the result's first line by the host shell
+ * (`describeHostShellResult`), before the realm marker, the exit and the command; the command's text and output only ever come after it. */
+const TRACKED_PREFIX = /^\[deckent\] run_shell: tracked: deleted=(\d{1,9}) overwritten=(\d{1,9}); /u;
 const META_PREFIX = '[deckent] ';
 /** Lines a read-class tool's own text marks as content (never the leading meta line, a skip note or a truncation
  * marker — all of those start with the tool's own `[deckent] ` prefix by construction, `workspace-read/internal/tools.ts`). */
@@ -63,8 +66,10 @@ function readFileSummary(content: string): ToolResultSummary | null {
  * and a coarse "may be incomplete" flag come from the shape of the text. */
 export function summarizeAgentToolResult(name: string, content: string): ToolResultSummary | null {
   // S5/S11: only the trusted leading metadata carries posture (host fallback, degraded Landlock); command stdout cannot supply this prefix.
-  if (name === 'run_shell') return content.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' }
-    : content.startsWith('[deckent] run_shell: sandbox: degraded; ') ? { kind: 'sandbox-degraded' } : null;
+  if (name === 'run_shell') {
+    const head = content.replace(TRACKED_PREFIX, '[deckent] run_shell: ');
+    return head.startsWith('[deckent] run_shell: sandbox: none; ') ? { kind: 'sandbox-none' } : head.startsWith('[deckent] run_shell: sandbox: degraded; ') ? { kind: 'sandbox-degraded' } : null;
+  }
   if (name === 'read_file') return readFileSummary(content);
   if (name === 'grep') return grepSummary(content);
   if (name === 'glob') {
@@ -73,4 +78,10 @@ export function summarizeAgentToolResult(name: string, content: string): ToolRes
   }
   if (name === 'list_dir') return { kind: 'entries', count: countContentLines(content) };
   return null;
+}
+
+/** The tracked-file counts of a finished `run_shell` call, from its result's trusted leading metadata only (null when there is none). */
+export function trackedChangesOfToolResult(name: string, content: string): ToolTrackedChanges | null {
+  const match = name === 'run_shell' ? TRACKED_PREFIX.exec(content) : null;
+  return match ? { deleted: Number(match[1]), overwritten: Number(match[2]) } : null;
 }

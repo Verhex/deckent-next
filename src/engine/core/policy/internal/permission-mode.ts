@@ -1,4 +1,4 @@
-import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
+import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 
 /**
@@ -196,6 +196,20 @@ export function agentCallAuditEvent(input: AgentCallAuditInput, decision: AgentT
   const relaxation = decision.relaxation!;
   return { ...base, subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool, call, grants: { company: relaxation.company, person: relaxation.person },
     decision: { previous: 'require-approval', next: 'allow' }, summary: input.summary } };
+}
+/** One list of a `tracked-files-changed` event: the full count and the first project-relative paths. */
+export interface TrackedFilesAuditList { readonly count: number; readonly paths: readonly string[] }
+/**
+ * FA-TRACKED-WARN (owner 2026-09-30): the sealed record of what a full-access shell call measurably did to git-tracked files, written after
+ * its effect under the same call reference and policy revision as its `full-access-call` event. Paths beyond `AUDIT_TRACKED_PATHS_MAX` are
+ * counted, not named.
+ */
+export function trackedFilesAuditEvent(input: AgentCallAuditInput, revision: string,
+  change: { readonly deleted: TrackedFilesAuditList; readonly overwritten: TrackedFilesAuditList }): AuditEvent {
+  const list = (item: TrackedFilesAuditList) => ({ count: item.count, paths: item.paths.slice(0, AUDIT_TRACKED_PATHS_MAX) });
+  return { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: input.eventId, scopeId: input.scopeId, principal: { issuer: input.principal.issuer, subject: input.principal.subject },
+    policyRevision: revision, atMs: input.atMs, subject: { kind: 'tracked-files-changed', tool: { name: input.tool.name, version: input.tool.version }, call: { ...input.call },
+      summary: input.summary, deleted: list(change.deleted), overwritten: list(change.overwritten) } };
 }
 /**
  * Whether a decision taken at an effect admission is the one the audit event recorded (Astra 2133, MODES-3): allow, on the same effective
