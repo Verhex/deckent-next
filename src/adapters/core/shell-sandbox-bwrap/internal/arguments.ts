@@ -2,7 +2,8 @@ import { dirname } from 'node:path';
 
 /**
  * The sandbox's view of the machine, resolved before a command runs (S9): every path is absolute and real. Nothing outside it
- * exists inside the sandbox; the order below is the mount order and is load-bearing (a later mount covers an earlier one).
+ * exists inside the sandbox; the order below is the mount order and is load-bearing (a later mount covers an earlier one). The open view
+ * also pins the ancestors of its protective mounts, right after the root bind (`openViewAncestors`, Astra 2189 R7).
  */
 export interface BubblewrapView {
   /** The project root: read-write (the one place a command changes). */
@@ -34,7 +35,8 @@ export interface BubblewrapView {
    * allowlist, no toolchain binds, no private `/tmp` or HOME tmpfs); the PID namespace, `--die-with-parent`, `--new-session`, a fresh
    * `/proc` and a minimal `/dev` stay. The hard floor is sealed structurally: `sealed` state roots inside the project are bound read-only
    * over the project (their product state masked by the deny walk, so no name, existing or new, is created there), `hidden` ones outside it
-   * become an empty tmpfs remounted read-only after every other mount (the scratch area's mount point inside one is made first).
+   * become an empty tmpfs remounted read-only after every other mount (the scratch area's mount point inside one is made first). Every
+   * ancestor of a protective mount is itself a mount point (`openViewAncestors`): renaming it fails with EBUSY (R7).
    */
   readonly open?: { readonly sealed: readonly string[]; readonly hidden: readonly string[] };
 }

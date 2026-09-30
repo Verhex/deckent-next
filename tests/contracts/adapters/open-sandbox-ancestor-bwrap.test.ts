@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -65,12 +65,13 @@ describe.skipIf(process.platform !== 'linux')('R7: the open view pins every ance
       f => ({ moved: join(f.project, '.deckent/docs/sub'), protectedFile: join(f.project, '.deckent/docs/sub/.env') })];
     const results = [];
     for (const shape of shapes) {
-      const f = await fixture(), { moved, protectedFile } = shape(f);
+      const f = await fixture(), { moved, protectedFile } = shape(f), inode = (await stat(protectedFile)).ino;
       const outcome = await f.run(`mv '${moved}' '${moved}-moved' && mkdir -p "$(dirname '${protectedFile}')" && printf REPLACED-SYNTHETIC > '${protectedFile}'`);
-      results.push({ moved: moved.slice(f.root.length) || '<root>', status: outcome.status, busy: /Device or resource busy/u.test(outcome.output), current: await f.bytes(protectedFile) });
+      results.push({ moved: moved.slice(f.root.length) || '<root>', status: outcome.status, busy: /Device or resource busy/u.test(outcome.output), current: await f.bytes(protectedFile),
+        sameInode: await stat(protectedFile).then(info => info.ino === inode, () => false) });
     }
     console.log('R7_ANCESTOR_SHAPES', JSON.stringify(results));
-    for (const result of results) expect(result).toEqual({ moved: result.moved, status: 1, busy: true, current: ORIGINAL });
+    for (const result of results) expect(result).toEqual({ moved: result.moved, status: 1, busy: true, current: ORIGINAL, sameInode: true });
   }, 60_000);
 
   it.skipIf(!launcher)('the pins do not undo the floor (ordering): sealed and hidden roots refuse direct writes, masks stay unreadable; HOME, project and docs stay writable', async () => {
