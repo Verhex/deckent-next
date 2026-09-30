@@ -1,11 +1,27 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, t } from '#platform/index.js';
+
+/** A minimal in-memory TTY screen: the composer's real render lands here through `runTerminalWorkline`. */
+class Screen extends Writable {
+  text = '';
+  readonly isTTY = true; readonly columns = 120; readonly rows = 40;
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.text += chunk.toString('utf8'); done(); }
+}
+function keyboard() {
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  return stdin;
+}
+const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
+async function until(check: () => boolean, label: string) {
+  for (let attempt = 0; attempt < 300; attempt++) { if (check()) return; await settle(10); }
+  throw new Error(`timed out waiting for ${label}`);
+}
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -113,5 +129,26 @@ describe('deckent terminal CLI', () => {
       stdin: Object.assign(Readable.from([]), { isTTY: true }), initialize() {}, async describeTerminalChatPlan() { return plan; } })).toBe(0);
     expect(JSON.parse(out.text())).toEqual({ schemaVersion: 1, tty: { stdin: true, stdout: false, columns: null, rows: null },
       inference: { configured: false }, chat: plan });
+  });
+
+  // D1-3: the workline's real label construction (worklineLabels in terminal.ts) wires the composer with no visible
+  // `deckent> ` prefix; earlier tests only mounted the Composer with `prompt: ''` supplied directly, so a revert of
+  // that one field to `t('terminal.session.prompt')` would still pass them. This mounts through the real CLI entry.
+  it('wires the workline composer with no visible "deckent>" prefix, through the real terminal entry', async () => {
+    const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
+    const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'],
+      { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
+        stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; } });
+    await until(() => stdout.text.includes('Ask anything'), 'catalog placeholder rendered on the empty draft');
+    expect(stdout.text).not.toContain('deckent>');
+    stdin.write('/exit\r');
+    expect(await run).toBe(0);
+  }, 15_000);
+
+  it('keeps line mode\'s own prompt on the terminal.session.prompt catalog text', () => {
+    // Line mode (`terminal session`) is a separate code path (readline, not the Composer) and unaffected by the
+    // workline's D1-3 change; this pins the catalog string it reads so the two prompts are not confused.
+    expect(t('terminal.session.prompt', {}, 'en')).toBe('deckent> ');
+    expect(t('terminal.session.prompt', {}, 'tr')).toBe('deckent› ');
   });
 });

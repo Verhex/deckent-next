@@ -299,13 +299,13 @@ describe('workline view rendered by Ink', () => {
     view.stdin.write('\u0003'); await until(() => exited, 'second idle ctrl+c exits');
   });
 
-  // Astra 2054 R3: one serialized drain follows every line kind. Debug output repeats rows, so single execution is proven by port counters.
   it('registers /clear and no longer registers /new', () => {
     const names = WORKLINE_SLASH_COMMANDS.map(command => command.name);
     expect(names).toContain('clear');
     expect(names).not.toContain('new');
   });
 
+  // Astra 2054 R3: one serialized drain follows every line kind. Debug output repeats rows, so single execution is proven by port counters.
   it('drains the queue past an immediate slash command: text, /status, text all run in order and once', async () => {
     const sent: string[] = []; const gates: Array<() => void> = [];
     const view = mount({ completeTurn: messages => new Promise(resolve => {
