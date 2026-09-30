@@ -1,5 +1,5 @@
 import type { ShellRealmMode } from '#domain/index.js';
-import { boundSandboxReason, landlockShellSandbox, nativeShellKernelProbe, probeShellCapabilities, resolveShellRealm, type ShellCapabilities, type ShellRealmResolution,
+import { boundSandboxReason, landlockShellSandbox, nativeShellKernelProbe, probeShellCapabilities, resolveShellRealm, shellLaunchSandboxes, type ShellCapabilities, type ShellRealmResolution,
   type ShellSandbox, type ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { selectBubblewrapLauncher } from './launcher.js';
 import { bubblewrapShellSandbox } from './realm.js';
@@ -19,9 +19,12 @@ export interface ShellRealmSelectionView {
 /**
  * REALM-NOTICE (doctor): what a shell call in this project gets under the configured realm mode, from the same stateDir, providers and
  * resolver the service uses — so a probe that says `available` while the provider refuses (a launcher inside the project) is visible.
- * `preferSandbox` (host mode only): what a `prefer-sandbox` MCP server (the registry default) gets here. `bubblewrap`/`landlock`: the
- * host measurement. The measurement is read-only (`place: false`: a bundled copy the service has not placed yet is reported, not written)
- * and taken now in this process — a service that measured earlier keeps its own until it restarts.
+ * `preferSandbox` (host mode only): what a `prefer-sandbox` MCP server (the registry default) actually gets from `McpClientPool.open` —
+ * the same launch-eligible walk the pool's own launch uses (`shellLaunchSandboxes`, Astra 2188 R8), so a provider usable for one shell
+ * command but not a long-lived launch (Landlock: it runs one command at a time) is never reported as the MCP default here while the
+ * real open runs on the host. `bubblewrap`/`landlock` below remain the plain host measurement. The measurement is read-only (`place:
+ * false`: a bundled copy the service has not placed yet is reported, not written) and taken now in this process — a service that
+ * measured earlier keeps its own until it restarts.
  */
 export interface ShellRealmReport extends ShellRealmSelectionView {
   readonly schemaVersion: 1;
@@ -46,7 +49,7 @@ export async function inspectShellRealmSelection(input: { readonly mode: ShellRe
   const sandboxes = input.sandboxes ?? shippedShellSandboxes({ project: input.project, scratchDir: null, writeFloor: () => true });
   const { status, launcher, rejected, detail } = capabilities.bubblewrap;
   return { schemaVersion: 1, mode: input.mode, stateDir: input.stateDir, ...viewOf(resolveShellRealm(input.mode, capabilities, sandboxes)),
-    preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('prefer-sandbox', capabilities, sandboxes)) : null,
+    preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('prefer-sandbox', capabilities, shellLaunchSandboxes(sandboxes))) : null,
     bubblewrap: { status, launcher: launcher && { source: launcher.source, path: launcher.path, version: launcher.version, overlay: launcher.overlay },
       rejected: rejected.map(item => ({ path: item.path, reason: boundSandboxReason(item.reason) })), detail: detail && boundSandboxReason(detail) },
     landlock: capabilities.landlock };

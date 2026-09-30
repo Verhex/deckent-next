@@ -179,6 +179,29 @@ export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | 
 export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly ShellSandbox[];
 
 /**
+ * MCP-CLIENT (Astra 2188 R8): whether one provider can hold a long-lived launch, not just run a single command — a provider usable for
+ * the shell (`sandbox.usable(capabilities).ok`) but with no `.launch` (Landlock: it runs one command at a time) is rejected here the same
+ * way `McpClientPool`'s own launch walk (`launchOf`, mcp-client/internal/pool.ts) rejects it. One rule, so a provider `resolveShellRealm`
+ * would pick for a one-shot shell call never reports as usable for an MCP server's long-lived process when the pool itself cannot launch it.
+ */
+export function shellLaunchUsable(sandbox: ShellSandbox, capabilities: ShellCapabilities):
+  Extract<ReturnType<ShellSandbox['usable']>, { readonly ok: false }> | (Extract<ReturnType<ShellSandbox['usable']>, { readonly ok: true }> & { readonly launch: ShellSandboxLaunch }) {
+  const usable = sandbox.usable(capabilities);
+  if (!usable.ok) return usable;
+  if (!usable.launch) return { ok: false, reason: 'runs one command at a time' };
+  return usable as Extract<ReturnType<ShellSandbox['usable']>, { readonly ok: true }> & { readonly launch: ShellSandboxLaunch };
+}
+/**
+ * MCP-CLIENT (Astra 2188 R8): the provider list as a long-lived MCP launch sees it — `resolveShellRealm` walks this exactly like the
+ * shell's own list (same preference order, same fallback notice), narrowed through `shellLaunchUsable` first. Doctor's `preferSandbox`
+ * report is this walk (`inspectShellRealmSelection`); the pool's real launch (`launchOf`) asks `shellLaunchUsable` per candidate directly
+ * (it also needs to try the next provider when an eligible one's actual `.launch()` call fails at runtime, which this list does not run).
+ */
+export function shellLaunchSandboxes(sandboxes: readonly ShellSandbox[]): readonly ShellSandbox[] {
+  return sandboxes.map(sandbox => ({ kind: sandbox.kind, usable: (capabilities: ShellCapabilities) => shellLaunchUsable(sandbox, capabilities) }));
+}
+
+/**
  * Picks the realm for one call (S5, S9, S11). `host` is host. Under `prefer-sandbox` / `require-sandbox` the first usable provider
  * wins (list order = preference); with none, `require-sandbox` refuses (typed, before any plan) and `prefer-sandbox` runs on the
  * host with a visible notice naming every mechanism and why it was not usable — never a silent fallback. A later provider that wins

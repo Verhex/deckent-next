@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DeckentJsonSchemaValidator } from '#platform/core/validate/index.js';
-import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, isWriteApprovalFloored, McpClientPool, mcpToolPinDigest, mcpToolWireName,
-  readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX, type McpClientSettings,
-  type McpLiveTool, type McpTrustCard, type ShellSandbox } from '#adapters/index.js';
-import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { bubblewrapShellSandbox, createWorkspaceScope, decideMcpTrust, describeMcpResult, describeMcpTrustCard, expandMcpEntry, inspectShellRealmSelection, isWriteApprovalFloored, McpClientPool,
+  mcpToolPinDigest, mcpToolWireName, readMcpRegistryFile, readMcpTrust, resolveMcpRegistry, shippedShellSandboxes, updateMcpTrust, verifyMcpTools, MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_TOOLS_MAX,
+  type McpClientSettings, type McpLiveTool, type McpTrustCard, type ShellSandbox } from '#adapters/index.js';
+import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // MCP-CLIENT (owner 2026-09-28): Deckent as an MCP client of the owner's local stdio servers — both protocol eras (2025-11-25 `initialize`
 // and 2026-07-28 `server/discover`), the pinned tool list, bounded redacted results, timeouts and a bounded restart. Every server here is a
@@ -167,6 +167,26 @@ describe('MCP client: calls, bounds and failures', () => {
     const denied = await pool().open(caged, settings([caged]), { cwd: f.root, environment: {}, sandboxes: [noisy], capabilities: caps });
     expect(denied).toMatchObject({ ok: false, reason: 'sandbox-unavailable', detail: expect.stringMatching(/^bubblewrap: a b x+…$/u) });
   }, 30_000);
+
+  // Astra 2188 R8 (owner 2026-09-30): doctor's `preferSandbox` (the MCP default) used the shell's own resolver, which treats Landlock as
+  // usable for a one-shot call; the real MCP pool needs a launch-capable provider, which Landlock never is (it runs one command at a
+  // time). With bubblewrap unavailable and only Landlock available, doctor used to say `selected: 'landlock'` while `McpClientPool.open`
+  // actually ran the server on the host — a false isolation posture. Fixed: both now walk the same launch-eligible provider list
+  // (`shellLaunchSandboxes` / `shellLaunchUsable`, host-shell/internal/realm.ts), so they agree.
+  it('doctor\'s prefer-sandbox (MCP default) agrees with the real MCP launch when only Landlock is available (Astra 2188 R8)', async () => {
+    const f = fixture('modern'), p = pool();
+    const project = await createWorkspaceScope(f.root);
+    const capabilities = linuxShellHost({ landlock: { status: 'available', abi: 6 } });
+    const sandboxes = shippedShellSandboxes({ project, scratchDir: null, writeFloor: () => true });
+    const report = await inspectShellRealmSelection({ mode: 'host', stateDir: null, project, capabilities, sandboxes });
+    const server = { ...f.server([pinOf(echo)]), realm: 'prefer-sandbox' as const };
+    const opened = await p.open(server, settings([server]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes, capabilities });
+    expect(opened).toMatchObject({ ok: true, sandboxed: false });
+    expect(opened.ok && opened.posture).toMatch(/landlock: runs one command at a time/u);
+    // Doctor's MCP-default field names the same realm the real open actually used, with the same bounded reason.
+    expect(report.preferSandbox).toMatchObject({ selected: 'host', marker: 'sandbox: none' });
+    expect(report.preferSandbox?.notice).toMatch(/landlock: runs one command at a time/u);
+  });
 });
 
 // MCP-VALIDATOR (owner 2026-09-29, "fast-uri hemen düzenlensin"): the SDK's Node default validator is its bundled ajv 8.18 + fast-uri 3.1.0
