@@ -7,7 +7,7 @@ import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HT
   parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID,
   OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition,
   type OpenRouterPricedNative, fetchOpenRouterTariff, type OpenRouterMetadataObservation,
-  providerSpendingSchema, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition,
+  providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition,
   ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
@@ -15,14 +15,6 @@ import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
 
 type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>;
-
-function budgetFrom(config: Record<string, unknown>, scopeId: string) {
-  const parsed = providerSpendingSchema.safeParse(config['provider_spending']);
-  if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
-  const value = parsed.data.budgets.find(candidate => candidate.scopeId === scopeId);
-  if (!value) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
-  return value;
-}
 
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition
  * is unauthenticated and completes before pure preparation; credential resolution remains send-only.
@@ -69,7 +61,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
       }
       // Reject absent/revoked scope authority before the metadata network effect.
-      budgetFrom(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
+      providerSpendingBudgetFor(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
       const definition = parseOpenRouterChatDefinition(input.profile.adapter.definition);
       current.cell.observation = await fetchOpenRouterTariff({ endpoint: definition.metadataEndpoint,
         modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
@@ -80,19 +72,19 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     async authorize(input: ModelInvocationSpendingInput) {
       if (input.profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && input.profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
         // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
-        const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
+        const budget = providerSpendingBudgetFor(await context.freshConfig(), input.command.scopeId);
         return Object.freeze({ budget, quote: quoteOpenAiChatOperatorTariff(input) });
       }
       if (input.profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && input.profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
         // Published tariff from the profile: the same scope budget and reservation as priced providers (settlement limit: review.md, checkpoint A).
         if (!anthropic || !isDeepStrictEqual(input.profile, anthropic.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
-        const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
+        const budget = providerSpendingBudgetFor(await context.freshConfig(), input.command.scopeId);
         return Object.freeze({ budget, quote: anthropic.priced.quote(input) });
       }
       const current = selected;
       if (!current || input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID
         || !isDeepStrictEqual(input.profile, current.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
-      const budget = budgetFrom(await context.freshConfig(), input.command.scopeId);
+      const budget = providerSpendingBudgetFor(await context.freshConfig(), input.command.scopeId);
       return Object.freeze({ budget, quote: current.priced.quote(input) });
     },
   });

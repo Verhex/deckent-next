@@ -20,7 +20,7 @@ export function registerProviderConfig(): void {
   registerSecretStoreConfig();
   registered = true;
 }
-export { providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
+export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
 export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from './secrets.js';
 export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';

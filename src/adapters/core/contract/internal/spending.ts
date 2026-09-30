@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { parseProviderSpendBudget, providerSpendBudgetSchema } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
+import { ProviderSpendError } from '#engine/index.js';
 
 export const providerSpendingSchema = z.object({ schemaVersion: z.literal(1),
   budgets: z.array(providerSpendBudgetSchema).readonly() }).strict();
@@ -40,4 +41,14 @@ export function registerProviderSpendingConfig(): void {
     validateLayers: validateProviderSpendingLayers,
     validateValue: value => { if (value !== undefined) validate(value); },
   });
+}
+
+/** The scope's budget in a loaded configuration's `provider_spending`; an absent or unreadable section, or no budget for the scope, is
+ * `PROVIDER_SPEND_UNAVAILABLE` (a model call is never priced without one). */
+export function providerSpendingBudgetFor(config: Record<string, unknown>, scopeId: string) {
+  const parsed = providerSpendingSchema.safeParse(config['provider_spending']);
+  if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+  const value = parsed.data.budgets.find(candidate => candidate.scopeId === scopeId);
+  if (!value) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+  return value;
 }
