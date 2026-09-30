@@ -3,6 +3,9 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **2026-09-30 akşam:** `origin/main` = `30988c66` canlıda (16. parti; instance `0c8a0709`, ledger v43). Owner K1–K9 kararları PLAN'da.
+  Çalışanlar: lane/work-targets (K1/K2/K4), lane/worker-currency-2 (kural A + görünürlük + katalog CLI), dogfood D2 (N1 yenileme, katalog tohumu,
+  r4 profilleri, ince köprü, D2-1..D2-3). Bekleyen: lane/fa-tracked-warn `9e0bcf10` (17. partiye). Kanıt `proof/DOGFOOD-K-DECISIONS-2026-09-30`.
 - **Canlı (2026-09-30, 15. parti):** `origin/main` = `47a76adf` (Astra 2194 PASS); instance `85d99b8d`, Node 24.21; tam erişimde model curl → HTTP/2 200
   (istem v6). Kanıt `proof/LIVE-SWITCH-BATCH15-2026-09-30/README.md`. **Sıradaki (owner 2026-09-30):** on altıncı parti (`integrate/2026-09-30-q`)
   dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1'i birleştirdi (ayrıntı aşağıda); sıradaki adım tam verify → Astra → push →

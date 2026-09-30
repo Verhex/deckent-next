@@ -404,6 +404,18 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
 
 ## Kanıt ve durum
 
+- **On altıncı parti canlıda (2026-09-30 19:05):** Astra 2197 REVISE (WC-R1..R3) → düzeltme → Astra 2199 PASS (REVIEW 2200); push `47a76adf..30988c66`;
+  instance `0c8a0709`, ledger v42→v43 (yedek `state/backups/ledger-v42-2026-09-30T16-05-51-181Z.db`). Kanıt `proof/LIVE-SWITCH-BATCH16-2026-09-30/README.md`.
+  Ortam: WSL 3.0.1.0 otomatik güncellemesi (16:27) yeniden başlattı; nvm default 24.21 olduğundan 24.15 altındaki global araçlar aynı sürümlerle 24.21'e kuruldu.
+- **Owner kararları 2026-09-30 akşam — dogfood kontrolü (K1–K9, her biri araştırma + loglu Jev; `proof/K1-WORK-TARGET-RESEARCH-2026-09-30`,
+  `proof/DOGFOOD-K-DECISIONS-2026-09-30`).** İkame kuralı A (profil ana + yardımcı modelleri beyan eder; beyan dışı model → deneme kabul edilmez;
+  model çağrıları izlenebilir) → WORKER-CURRENCY-2. Tam erişimde izlenen dosya silme/üzerine yazma uyarı + audit (FA-TRACKED-WARN, 17. parti).
+  K1 **W2**: Core `workTargets` kaydı (ilk dilim tek Git hedefi; ERP ayrı port), checkout HEAD yerine adlandırılmış `baseRef` ve tipli "taban
+  ilerledi", kendini hedefleme bariyeri; U1 canlı checkout'ta build/verify yok; U2 yan yana sürüm kurulumu ayrı kart (Jev e05e02e6 .92/.80).
+  K2 A `work-target` policy türü (use/adopt). K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). K4 A öz-hedefte
+  `baseRef` = benimseme hedefi, HEAD ayrık (W2'deki "hedef ≠ baseRef" maddesi kalktı). K5 A tipli havuz bekletme. K6 A yama hazırlığında kapsam
+  sınıflaması: önce uyarı, `enforce` ile tipli ret. K7 A ince köprü (dilim 3+5 gelince silinir). K8 A canlı ledger + ayrı proje scope'u.
+  K9 A konu dışı: incelenmemiş kod hiçbir yerde servis olarak çalışmaz. Sıra: WORK-TARGETS (K1/K2/K4) ∥ WORKER-CURRENCY-2 ∥ dogfood D2 → K3 → K5/K6 → U2.
 - **Owner kararları 2026-09-30 — dogfood ile terminal, model/imaj güncelliği, izleme.** (1) Terminal kalan/UI-UX/komut kartları Deckent'in
   kendi dogfood döngüsüyle yapılır (izole N1 kurulumu, topoloji a′: canlıya yazılmaz; ilk döngü D1-0..D1-2 benimsendi — `c7b44469` →
   `844048e6` → `0e4fa003` → `b61b34b9`, D1-2 ile (2)'deki `/clear` yeniden adlandırması teslim edildi —
