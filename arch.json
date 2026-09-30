@@ -353,7 +353,8 @@
         "src/platform/core/bootstrap-state",
         "src/platform/core/errors",
         "src/platform/core/managed-files",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/engine/core/scheduling"
       ],
       "plan": "FOUNDATION"
     },

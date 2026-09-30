@@ -16,7 +16,7 @@ import { TaskEvaluationError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
 import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } from '#platform/index.js';
-import { ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
+import { reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof ApprovalError || error instanceof SessionAuthenticationError) return ErrorRegistry.createError(error.code);
@@ -51,17 +51,7 @@ export function queryFailure(error: unknown): DeckentError {
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {
-    const diagnostic = error.diagnostic;
-    return ErrorRegistry.createError(error.code, { params: {
-      site: diagnostic.site, reason: diagnostic.reason, now: diagnostic.now,
-      ...(diagnostic.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: diagnostic.eligibilityGapMs }),
-      executionSlots: diagnostic.executionSlots, inFlightSlots: diagnostic.inFlightSlots,
-      executionOccupied: diagnostic.executionOccupied, inFlightOccupied: diagnostic.inFlightOccupied,
-      selectedCount: diagnostic.selectedCount, requestedCount: diagnostic.requestedCount,
-      readyCount: diagnostic.readyCount, waitingCount: diagnostic.waitingCount, blockedCount: diagnostic.blockedCount,
-      delayedCount: diagnostic.delayedCount, occupiedCount: diagnostic.occupiedCount,
-      terminalCount: diagnostic.terminalCount, reconciliationCount: diagnostic.reconciliationCount,
-    } });
+    return ErrorRegistry.createError(error.code, { params: reservationDiagnosticParams(error.diagnostic) });
   }
   if (error instanceof ServiceShutdownError || error instanceof ReconciliationRecoveryError || error instanceof ReconciliationRuntimeLoopError || error instanceof CancellationRuntimeLoopError || error instanceof LocalRuntimeSocketError || error instanceof RuntimeServiceProtocolError || error instanceof RuntimeServiceLifecycleError || error instanceof RunWorkspaceCustodyError || error instanceof WorkspaceError || error instanceof CancellationDeliveryError || error instanceof TaskEvaluationError || error instanceof TaskEvidenceError || error instanceof EvaluationEvidenceError || error instanceof ExecutionRegistryError || error instanceof AuthenticationError || error instanceof AttemptStoreError || error instanceof DispatchError || error instanceof RunStoreError ||
     error instanceof ManagedFileError || error instanceof PolicyAuthorizationError || error instanceof WorkTargetError) return ErrorRegistry.createError(ErrorRegistry.has(error.code) ? error.code : 'INVENTORY_UNAVAILABLE');

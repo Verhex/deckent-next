@@ -51,3 +51,17 @@ export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationD
     delayedCount: counts.delayed, occupiedCount: counts.occupied, terminalCount: counts.terminal,
     reconciliationCount: counts.reconciliation });
 }
+
+/** The diagnostic as the typed error's parameters (`RUN_CAPACITY_OR_ORDER`): field by field in this fixed order, an absent gap stays absent. */
+export function reservationDiagnosticParams(diagnostic: ReservationDiagnostic) {
+  return {
+    site: diagnostic.site, reason: diagnostic.reason, now: diagnostic.now,
+    ...(diagnostic.eligibilityGapMs === undefined ? {} : { eligibilityGapMs: diagnostic.eligibilityGapMs }),
+    executionSlots: diagnostic.executionSlots, inFlightSlots: diagnostic.inFlightSlots,
+    executionOccupied: diagnostic.executionOccupied, inFlightOccupied: diagnostic.inFlightOccupied,
+    selectedCount: diagnostic.selectedCount, requestedCount: diagnostic.requestedCount,
+    readyCount: diagnostic.readyCount, waitingCount: diagnostic.waitingCount, blockedCount: diagnostic.blockedCount,
+    delayedCount: diagnostic.delayedCount, occupiedCount: diagnostic.occupiedCount,
+    terminalCount: diagnostic.terminalCount, reconciliationCount: diagnostic.reconciliationCount,
+  };
+}
