@@ -122,6 +122,18 @@ test('switch stops the running service through its own CLI, moves the pointer at
   assert.equal(shutdowns[0].via, join(f.repo, 'dist/composition/core/cli/internal/entry.js'), 'the old service was stopped by its own CLI');
   assert.match(readFileSync(`/proc/${first.json.service.processId}/cmdline`, 'utf8'), new RegExp(`versions/${ids.b}/dist/`));
   assert.equal(readFileSync(join(f.installRoot, 'previous'), 'utf8').trim(), 'checkout');
+  // The first live rollback: back to the checkout dist (pointer removed, next-entry falls back to the checkout).
+  const home = f.tool('rollback');
+  assert.equal(home.status, 0, home.stdout);
+  assert.equal(f.current(), null); assert.equal(home.json.to, 'checkout');
+  const again = f.describe(); assert.equal(again.build.sourceCommit, a);
+  assert.match(readFileSync(`/proc/${again.processId}/cmdline`, 'utf8'), new RegExp(`${f.repo}/dist/`));
+  assert.equal(readFileSync(join(f.installRoot, 'previous'), 'utf8').trim(), ids.b);
+  // A failed switch away from the checkout puts the checkout back (no pointer) and restarts its service.
+  const fromCheckout = f.tool('switch', ids.broken);
+  assert.equal(fromCheckout.json.code, 'DEV_RELEASE_SWITCH_FAILED', fromCheckout.stdout); assert.equal(fromCheckout.json.pointer, 'checkout');
+  assert.equal(f.current(), null); assert.equal(f.describe().build.sourceCommit, a);
+  assert.equal(f.tool('switch', ids.b).status, 0);
 
   for (const bad of ['broken', 'liar']) {
     const failed = f.tool('switch', ids[bad]);
@@ -132,7 +144,7 @@ test('switch stops the running service through its own CLI, moves the pointer at
     assert.deepEqual(readdirSync(f.installRoot).filter(name => name.startsWith('current.tmp')), []);
   }
   const log = readFileSync(join(f.installRoot, 'switches.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.deepEqual(log.map(entry => [entry.to, entry.ok, entry.state ?? null]), [[ids.b, true, null], [ids.broken, false, 'rolled-back'], [ids.liar, false, 'rolled-back']]);
+  assert.deepEqual(log.map(entry => [entry.to, entry.ok, entry.state ?? null]), [[ids.b, true, null], ['checkout', true, null], [ids.broken, false, 'rolled-back'], [ids.b, true, null], [ids.broken, false, 'rolled-back'], [ids.liar, false, 'rolled-back']]);
   // A tampered version is refused before anything stops.
   writeFileSync(join(f.installRoot, 'versions', ids.liar, 'dist/lazy-extra.js'), '');
   assert.equal(f.tool('switch', ids.liar).json.code, 'DEV_RELEASE_MANIFEST_MISMATCH');
