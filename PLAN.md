@@ -400,6 +400,21 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); o adayın tam
 
 ## Kanıt ve durum
 
+- **Astra 2188 — 2026-09-30 @ `02601269`: REVISE (13. parti)** → düzeltme **on dördüncü parti** `integrate/2026-09-30-o`.
+  **R7 P1:** full-access açık bwrap görünümünde korunan kökün (global durum kökü, proje `.deckent`, maskeli kimlik dosyaları) yazılabilir atası
+  taşınıp özgün yola yeni bytes yazılabiliyordu. Düzeltme (Jev 61177582, self_bind_ancestors .99/sufficiency .76): her koruyucu mount hedefinin
+  yazılabilir mount altındaki ataları kendi üzerine bağlanır (`ancestorPins`, üst sınır `BUBBLEWRAP_ANCESTOR_PIN_MAX` 1024, aşımda/kanonik olmayan
+  atada tipli ret); açık görünümde `--bind / /` hemen ardından, kapalı yazılabilir-proje görünümünde proje bind'ından hemen sonra, dıştan içe ve
+  her koruyucu mount'tan önce. rename/rmdir → EBUSY. Overlay (full-auto) ve salt-okunur proje görünümlerinde pin yok (davranış değişmedi).
+  Kapalı yazılabilir görünümdeki aynı sınıf lane probunda bulundu ve aynı mekanizmayla kapandı. Owner'a görünen bedel: tam erişimde kimlik dosyası
+  tutan HOME dizinleri (derinlik 3) taşınamaz/silinemez (EBUSY). Ölçüm: açık görünüm 49→81 mount, `true` medyan 6.9→8.6 ms.
+  **Gömülü bwrap kopya yarışı** (lane teşhisi): eşzamanlı süreçler kopyayı rename ile birbirinin üstüne yazıyor, nlink=0 → "did not verify" →
+  Landlock'a düşüş (8×15'te 29/120). Düzeltme: benzersiz geçici dosya + fsync + `link(2)` ile yayın, doğrulanan kopya asla değiştirilmez; 120/120.
+  **R8 P2:** doctor MCP varsayılanı artık MCP havuzunun launch kuralından (`shellLaunchUsable`/`shellLaunchSandboxes`, host-shell) hesaplanıyor;
+  bwrap yok + Landlock var → host. Astra'nın üç reviewer negatifi depoya alındı, önce kırmızı sonra yeşil.
+  [Astra raporu](../deckent-refactor-work/proof/ASTRA-2188-2026-09-30/review.md), [düzeltme kanıtı](../deckent-refactor-work/proof/R7-R8-FIX-2026-09-30/).
+  Açık: `/mnt` (drvfs) atalarında pin denenmedi; yayıncı 0.5 s'den uzun askıda kalırsa kopya yenisiyle değiştirilir (yine doğrulanan kopya).
+
 DOGFOOD_MODE=OFF (sürekli mod değil); owner 2026-09-23 Hat A kapsamında sınırlı DOGFOOD denemesine izin verdi ve ilk deneme uçtan uca başarılı (B07 satırı). Ağırlıklı yetenek paydası kabul edilmediğinden genel tamamlanma yüzdesi verilmez.
 
 - Tarihsel checkpoint/koşum sayıları ve arşiv bağlantıları [COMPLETED-PLAN](COMPLETED-PLAN.md)'dedir.
