@@ -478,7 +478,8 @@
         "src/platform/core/clock",
         "src/adapters/core/scratch-store",
         "src/adapters/core/http-fetch",
-        "src/adapters/core/host-shell"
+        "src/adapters/core/host-shell",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "EXECUTION"
     },

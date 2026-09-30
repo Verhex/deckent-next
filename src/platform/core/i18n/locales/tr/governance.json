@@ -1063,5 +1063,14 @@
   "error.SECRET_STORE_READ_ONLY": "{backend} secret'lar deposu salt okunur; kurulum config'inde yazılabilir bir arka uç seçin (örneğin core.secret-store.file@1).",
   "error.SECRET_STORE_UNSUPPORTED": "{backend} secret'lar deposu secret'larını listeleyemez (ortam değişkenleri secret'lardan oluşan bir liste değildir).",
   "error.SECRET_CHANGE_DENIED": "Hiçbir policy grant'i secret-store kaydında `{action}` işlemine izin vermiyor [{name}]; hiçbir şey yazılmadı. policy.json'a bir allow grant ekleyin: kaynak türü `secret`, eylemler [\"{action}\"], kimlikler [\"{name}\"] ya da \"all\", kendi principal'ınız ve bu kapsam (ilk kurulum şablonu v2 kurulumunda vardır).",
-  "error.SECRET_INPUT_CANCELLED": "İptal edildi; hiçbir şey gönderilmedi ya da saklanmadı."
+  "error.SECRET_INPUT_CANCELLED": "İptal edildi; hiçbir şey gönderilmedi ya da saklanmadı.",
+  "error.WORK_TARGET_PATH_INVALID": "Yapılandırılmış çalışma hedefinin yolu mutlak ve kanonik olmalı (sembolik bağ veya göreli parça yok). Yapılandırmadaki execution.workTargets değerini düzeltin.",
+  "error.WORK_TARGET_UNSAFE": "Yapılandırılmış çalışma hedefi, servis kullanıcısına ait ve grup ya da diğerleri tarafından yazılamayan bir dizin olmalı.",
+  "error.WORK_TARGET_IN_DATA_ROOT": "Yapılandırılmış çalışma hedefi Deckent'in ürün verisinin içinde. Veri kökü ve yapılandırma dizini dışında bir depo seçin.",
+  "error.WORK_TARGET_IS_PROJECT": "Yapılandırılmış çalışma hedefi proje kökünün kendisi. Ayrı bir klon gösterin ya da proje üzerinde çalışmak için execution.workTargets değerini kaldırın.",
+  "error.WORK_TARGET_NOT_WORKTREE": "Yapılandırılmış çalışma hedefi, taban dalı olan çıplak olmayan bir Git deposunun en üst dizini olmalı.",
+  "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "Yapılandırılmış çalışma hedefi Git deposunu çalışan projeyle paylaşıyor (onun worktree'lerinden biri); Deckent çalışan kaynağını asla hedeflemez. Bağımsız bir klon kullanın.",
+  "error.WORK_TARGET_ALTERNATES": "Yapılandırılmış çalışma hedefi nesnelerini başka bir depodan ödünç alıyor (objects/info/alternates). --shared veya --reference kullanılmadan alınmış bağımsız bir klon kullanın.",
+  "error.WORK_TARGET_BASE_MISSING": "Yapılandırılmış çalışma hedefinin taban dalı bir commit göstermiyor. Dalı oluşturun ya da baseRef değerini düzeltin.",
+  "error.PATCH_BASE_ADVANCED": "Çalışma hedefinin taban dalı bu teslimin tabanından ileri gitti. Güncel taban üzerinde yeni bir Run başlatın; rebase veya merge denenmez."
 }

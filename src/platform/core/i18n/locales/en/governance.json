@@ -1063,5 +1063,14 @@
   "error.SECRET_STORE_READ_ONLY": "The secret-store {backend} is read-only; select a writable backend (for example core.secret-store.file@1) in the installation config.",
   "error.SECRET_STORE_UNSUPPORTED": "The secret-store {backend} cannot list its secrets (environment variables are not a list of secrets).",
   "error.SECRET_CHANGE_DENIED": "No policy grant allows `{action}` on the secret-store entry [{name}]; nothing was written. Add an allow grant to policy.json: resource kind `secret`, actions [\"{action}\"], ids [\"{name}\"] or \"all\", your principal and this scope (a first-run template v2 installation has it).",
-  "error.SECRET_INPUT_CANCELLED": "Cancelled; nothing was sent or stored."
+  "error.SECRET_INPUT_CANCELLED": "Cancelled; nothing was sent or stored.",
+  "error.WORK_TARGET_PATH_INVALID": "The configured work target path must be absolute and canonical (no symbolic link or relative part). Fix execution.workTargets in the configuration.",
+  "error.WORK_TARGET_UNSAFE": "The configured work target must be a directory owned by the service user and not writable by group or others.",
+  "error.WORK_TARGET_IN_DATA_ROOT": "The configured work target lies inside Deckent's product data. Choose a repository outside the data root and the configuration directory.",
+  "error.WORK_TARGET_IS_PROJECT": "The configured work target is the project root itself. Name a separate clone, or remove execution.workTargets to work on the project.",
+  "error.WORK_TARGET_NOT_WORKTREE": "The configured work target must be the top directory of a non-bare Git repository with a base branch.",
+  "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "The configured work target shares its Git repository with the running project (it is one of its worktrees); Deckent never targets its running source. Use an independent clone.",
+  "error.WORK_TARGET_ALTERNATES": "The configured work target borrows objects from another repository (objects/info/alternates). Use an independent clone made without --shared or --reference.",
+  "error.WORK_TARGET_BASE_MISSING": "The configured work target's base branch does not name a commit. Create the branch or fix baseRef.",
+  "error.PATCH_BASE_ADVANCED": "The work target's base branch has advanced past this delivery's base. Start a new Run on the current base; no rebase or merge is attempted."
 }
