@@ -4,6 +4,7 @@ import type { ModelCommandContext } from './context.js';
 import { modelInvocationCommand } from './model-invocation.js';
 import { modelActivationCommand } from './model-activation.js';
 import { modelSpendingCommand } from './model-spending.js';
+import { modelCatalogCommand } from './model-catalog.js';
 
 interface Parsed { action: 'list' | 'binding'; json: boolean; noColor: boolean; help: boolean; language?: string;
   providerId?: string; providerVersion?: number; modelId?: string; modelVersion?: number }
@@ -63,6 +64,8 @@ export async function modelsCommand(argv: readonly string[], context: ModelComma
   if (argv[1] === 'spending' || argv[1] === 'audit-spending') return modelSpendingCommand(argv, context);
   if (argv[1] === 'invoke' || argv[1] === 'invocation' || argv[1] === 'purge-content' || argv[1] === 'cancel') return modelInvocationCommand(argv, context);
   if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);
+  // WORKER-CURRENCY-2: the ledger model catalog; `models catalog activate` never reaches the chat activation command above.
+  if (argv[1] === 'catalog') return modelCatalogCommand(argv, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = resolveLocale(parsed.language, env);
   context.onLocale?.(locale);
   if (parsed.help) {

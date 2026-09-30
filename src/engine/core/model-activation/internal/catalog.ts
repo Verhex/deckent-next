@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogTargets, parseModelCatalogCommand,
-  parseModelCatalogReceipt, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
+import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
+  parseModelCatalogCommand, parseModelCatalogReceipt, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -19,6 +19,8 @@ export interface ModelCatalogStore {
 }
 /** Read port used by admission. Rows are verified by the adapter; absence is null, never a default. */
 export interface ModelCatalogReader {
+  /** Every registered channel, ordered by id (catalog listing). */
+  channels(): Promise<readonly ModelCatalogChannelRecord[]>;
   channel(channelId: string): Promise<ModelCatalogChannelRecord | null>;
   models(channelId: string): Promise<readonly ModelCatalogModelRecord[]>;
   activation(scopeId: string, channelId: string, modelId: string | null): Promise<ModelCatalogActivationRecord | null>;
@@ -26,7 +28,7 @@ export interface ModelCatalogReader {
 }
 export interface ModelCatalogAuthorizer {
   /** `installation`: the write changes facts every scope reads, so authority must hold installation-wide; `scope`: one scope's rows. */
-  authorize(action: 'activate' | 'deactivate', scopeId: string, target: ModelCatalogTarget, principal: VerifiedPrincipal,
+  authorize(action: 'activate' | 'deactivate' | 'inspect', scopeId: string, target: ModelCatalogTarget, principal: VerifiedPrincipal,
     level: 'installation' | 'scope'): Promise<ModelActivationAuthorization>;
 }
 /** Policy resource id of a catalog target (the `model-activation` resource kind is shared with exact-reference activation). */
@@ -62,5 +64,42 @@ export class ModelCatalogApplication {
       if (typeof result.replayed !== 'boolean' || !sameModelCatalogRequest(receipt, command, actor)) throw new ModelCatalogError('MODEL_CATALOG_CORRUPT');
       return Object.freeze({ replayed: result.replayed, receipt });
     } finally { store.close(); }
+  }
+}
+
+/** A channel as one scope sees it (WORKER-CURRENCY-2): installation facts plus the scope's activation rows; `denied` without `inspect`. */
+export type ModelCatalogChannelView = Readonly<{ channelId: string; access: 'denied' }> | Readonly<{ channelId: string; access: 'allowed';
+  revision: number; providerVersion: number; catalogRevision: string; channel: ModelCatalogChannelRecord['channel'];
+  activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null;
+  models: readonly Readonly<{ modelId: string; revision: number; model: ModelCatalogModelRecord['model'];
+    activation: Readonly<{ state: 'active' | 'inactive'; revision: number }> | null }>[] }>;
+export interface ModelCatalogInspection { readonly schemaVersion: 1; readonly scopeId: string; readonly channels: readonly ModelCatalogChannelView[] }
+/** Read-only catalog listing with the scope's activation state; each channel needs the scoped `inspect` decision on its target. */
+export class ModelCatalogInspectionApplication {
+  constructor(private readonly verifier: PrincipalVerifier, private readonly authorizer: ModelCatalogAuthorizer,
+    private readonly openReader: () => Promise<ModelCatalogReader>) {}
+  async inspect(input: unknown, credential?: unknown): Promise<ModelCatalogInspection> {
+    const parsed = modelCatalogQuerySchema.safeParse(input);
+    if (!parsed.success) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
+    const query = parsed.data, principal = await authenticate(this.verifier, credential, query.scopeId);
+    const reader = await this.openReader();
+    try {
+      const state = (row: ModelCatalogActivationRecord | null) => row ? Object.freeze({ state: row.state, revision: row.revision }) : null;
+      const channels: ModelCatalogChannelView[] = [];
+      for (const record of (await reader.channels()).filter(entry => query.channelId === undefined || entry.channelId === query.channelId)) {
+        try { await this.authorizer.authorize('inspect', query.scopeId, { channelId: record.channelId, modelId: null }, principal, 'scope'); }
+        catch (error) {
+          if (!(error instanceof Error && 'code' in error && ['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED'].includes(String(error.code)))) throw error;
+          channels.push(Object.freeze({ channelId: record.channelId, access: 'denied' })); continue;
+        }
+        const models = [];
+        for (const entry of await reader.models(record.channelId)) models.push(Object.freeze({ modelId: entry.modelId, revision: entry.revision, model: entry.model,
+          activation: state(await reader.activation(query.scopeId, record.channelId, entry.modelId)) }));
+        channels.push(Object.freeze({ channelId: record.channelId, access: 'allowed', revision: record.revision, providerVersion: record.providerVersion,
+          catalogRevision: record.catalogRevision, channel: record.channel, activation: state(await reader.activation(query.scopeId, record.channelId, null)),
+          models: Object.freeze(models) }));
+      }
+      return Object.freeze({ schemaVersion: 1, scopeId: query.scopeId, channels: Object.freeze(channels) });
+    } finally { reader.close(); }
   }
 }

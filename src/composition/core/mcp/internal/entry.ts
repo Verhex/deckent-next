@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { admitConfiguredModelActivation, inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
+import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -30,6 +30,7 @@ export async function main(root = process.cwd()) {
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command),
+    inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
     inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),

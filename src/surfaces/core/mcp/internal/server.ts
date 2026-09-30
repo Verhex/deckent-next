@@ -1,9 +1,9 @@
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, approvalCommandSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
-import { modelActivationQuerySchema, modelActivationCommandSchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
-  type ModelActivationQuery, type ModelActivationCommand, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
-import type { ModelActivationInspection, ModelActivationResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
+import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
+  type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
+import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -21,6 +21,8 @@ export interface McpApplications {
   decideApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
+  inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
+  applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
   inspectModelInvocation?(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   invokeModel?(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult>;
   purgeModelInvocationContent?(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
@@ -143,6 +145,16 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (admitActivation) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'admit_model_activation',
     description: t('mcp.tool.admitModelActivation', {}, locale), schema: modelActivationCommandSchema,
     invoke: input => admitActivation.call(applications, modelActivationCommandSchema.parse(input)) });
+  // WORKER-CURRENCY-2 parity: the ledger model catalog, the same application contract as CLI `models catalog` and SDK.
+  const inspectCatalog = applications.inspectModelCatalog;
+  if (inspectCatalog) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_catalog',
+    description: t('mcp.tool.inspectModelCatalog', {}, locale), schema: modelCatalogQuerySchema,
+    invoke: input => inspectCatalog.call(applications, modelCatalogQuerySchema.parse(input)) });
+  const applyCatalog = applications.applyModelCatalog;
+  // Destructive but idempotent: adapters/core/sqlite-model-activation/internal/catalog.ts SqliteModelCatalogStore.apply returns the (scope, commandId) receipt before any row is written again.
+  if (applyCatalog) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_model_catalog',
+    description: t('mcp.tool.applyModelCatalog', {}, locale), schema: modelCatalogCommandSchema,
+    invoke: input => applyCatalog.call(applications, modelCatalogCommandSchema.parse(input)) });
   const inspectInvocation = applications.inspectModelInvocation;
   if (inspectInvocation) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_invocation',
     description: t('mcp.tool.inspectModelInvocation', {}, locale), schema: modelInvocationQuerySchema, modelDelivery: true,

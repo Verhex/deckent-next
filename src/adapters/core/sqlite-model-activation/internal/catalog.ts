@@ -48,6 +48,12 @@ class CatalogRows {
 }
 
 export class SqliteModelCatalogReader extends CatalogRows implements ModelCatalogReader {
+  async channels() {
+    try {
+      const rows = this.db.prepare('SELECT channel_id FROM model_catalog_channels ORDER BY channel_id').all() as Row[];
+      return Object.freeze(rows.map(row => this.channelRow(id(row['channel_id']))!));
+    } catch (error) { return failure(error); }
+  }
   async channel(channelId: string) { try { return this.channelRow(id(channelId)); } catch (error) { return failure(error); } }
   async models(channelId: string) { try { return Object.freeze(this.modelRows(id(channelId))); } catch (error) { return failure(error); } }
   async activation(scopeId: string, channelId: string, modelId: string | null) {
