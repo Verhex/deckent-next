@@ -45,10 +45,10 @@ describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => 
     expect(human.stdout).toContain('canlı durum değil'); expect(human.stdout).toContain('Etkin'); expect(human.stdout).not.toContain('\u001b[');
     const english = await exec(process.execPath, [cli, ...args, '--lang', 'en'], options);
     expect(english.stdout).toContain('recorded revision'); expect(english.stdout).toContain('Cancellation: no request recorded.');
-    const missingHuman = await exec(process.execPath, [cli, 'run', 'inspect', '--scope', 's', '--id', 'missing', '--lang', 'en'], options);
-    expect(missingHuman.stdout).toContain('No recorded Run found: missing');
-    const absent = await exec(process.execPath, [cli, 'run', 'inspect', '--scope', 's', '--id', 'missing', '--json'], options);
-    expect(JSON.parse(absent.stdout).run).toBeNull();
+    await expect(exec(process.execPath, [cli, 'run', 'inspect', '--scope', 's', '--id', 'missing', '--lang', 'en'], options))
+      .rejects.toMatchObject({ code: 1, stdout: '', stderr: expect.stringContaining('No recorded Run found: missing.') });
+    await expect(exec(process.execPath, [cli, 'run', 'inspect', '--scope', 's', '--id', 'missing', '--json'], options))
+      .rejects.toMatchObject({ code: 1, stdout: '', stderr: expect.stringContaining('RUN_NOT_FOUND') });
     await f.policy([]); await expect(exec(process.execPath, [cli, ...args, '--json'], options)).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
     await expect(exec(process.execPath, [cli, ...args, '--id', 'duplicate'], options)).rejects.toMatchObject({ code: 2 });
     await expect(exec(process.execPath, [cli, 'run', 'cancel'], options)).rejects.toMatchObject({ code: 2 });

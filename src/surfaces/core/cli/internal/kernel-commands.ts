@@ -59,6 +59,7 @@ export interface CommandContext extends ModelCommandContext {
   runMcpCommand?: import('./mcp.js').McpCommandHandler;
   prepareWorkspacePatch?: TaskPatchHandler;
   previewWorkspacePatch?: TaskPatchHandler;
+  renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   completeTerminalChat?: TerminalChatTurnHandler;
   streamTerminalChat?: TerminalChatStreamHandler;

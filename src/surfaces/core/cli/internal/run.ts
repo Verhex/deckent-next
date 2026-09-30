@@ -105,6 +105,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   }
   if (!context.inspectRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, runId }, { env: context.env ?? process.env });
+  if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
     const phases = {
       pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
@@ -113,7 +114,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       reconciling: t('cli.run.inspect.states.reconciling', {}, locale),
     };
     const run = data.run;
-    if (!run) return t('cli.run.inspect.missing', { run: runId }, locale);
+    if (!run) return '';
     return [t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),

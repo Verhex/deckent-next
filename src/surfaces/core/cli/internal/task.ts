@@ -18,6 +18,16 @@ export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, opt
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+async function resolveLatestAttempt(context: CommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
+  let best: AttemptIdentity | undefined, after: string | null = null;
+  do {
+    const { page } = await context.inspectInventory!(context.root ?? process.cwd(), { schemaVersion: 1, scopeId, after }, { env: context.env ?? process.env });
+    for (const { identity } of page.entries) if (identity.runId === runId && identity.taskId === taskId && (!best || identity.generation > best.generation)) best = identity;
+    after = page.nextAfter;
+  } while (after !== null);
+  if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
+  return best;
+}
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
@@ -27,23 +37,37 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
   if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback', 'transcript'].includes(action ?? '')) throw usage();
+  const flags = action === 'patch-preview' ? ['--stat', '--diff'] : [];
   const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
-  const values = new Map<string, string>(); let json = false;
+  const values = new Map<string, string>(); let json = false, stat = false, diff = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--json') { if (json) throw usage(); json = true; continue; }
     if (arg === '--no-color') continue;
+    if (flags.includes(arg)) { if (arg === '--stat' ? stat : diff) throw usage(arg); if (arg === '--stat') stat = true; else diff = true; continue; }
     if (!allowed.includes(arg)) throw usage();
     if (values.has(arg)) throw usage(arg);
     const value = argv[++i]; if (!value || value.startsWith('--')) throw usage(arg); values.set(arg, value);
   }
+  if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
   const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
-  if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
-    || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
-  const identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
+  const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action ?? '') && !attemptId && !layoutRevision && !generation;
+  let identity: AttemptIdentity;
+  let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
+  if (resolveLatest) {
+    if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
+    if (!context.inspectInventory) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    identity = await resolveLatestAttempt(context, scopeId, runId, taskId);
+    resolvedNotice = { attempt: identity.attemptId, generation: identity.generation, layout: identity.layoutRevision, run: runId, task: taskId };
+  } else {
+    if (!scopeId || !runId || !taskId || !attemptId || !layoutRevision || !generation || !/^[1-9][0-9]*$/.test(generation)
+      || !Number.isSafeInteger(Number(generation))) throw usage(!scopeId ? '--scope' : !runId ? '--run' : !taskId ? '--task' : !attemptId ? '--attempt' : !layoutRevision ? '--layout-revision' : '--generation');
+    identity = attemptIdentitySchema.parse({ scopeId, runId, taskId, attemptId, layoutRevision, generation: Number(generation) });
+  }
   const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
   const options = { env: context.env ?? process.env };
+  if (resolvedNotice) (json ? context.stderr ?? process.stderr : context.stdout ?? process.stdout).write(`${t('cli.task.resolvedAttempt', resolvedNotice, locale)}\n`);
   if (action === 'integration-deliver') {
     const commandId = values.get('--command-id'), integrationCommandId = values.get('--candidate-command-id');
     if (!commandId || !integrationCommandId) throw usage(!commandId ? '--command-id' : '--candidate-command-id');
@@ -108,11 +132,37 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const handler = action === 'patch-prepare' ? context.prepareWorkspacePatch : context.previewWorkspacePatch;
     if (!handler) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await handler(context.root ?? process.cwd(), identity, options);
-    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
-      t('cli.task.patch.heading', { task: identity.taskId, count: data.patch.changes.length }, locale),
-      ...data.patch.changes.map(change => JSON.stringify(change)),
-      t('cli.task.patch.notice', {}, locale),
-    ].join('\n') }); return;
+    const heading = (data: typeof result) => t('cli.task.patch.heading', { task: identity.taskId, count: data.patch.changes.length }, locale);
+    const notice = t('cli.task.patch.notice', {}, locale);
+    if (action === 'patch-prepare' || json) {
+      emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
+        heading(data), ...data.patch.changes.map(change => JSON.stringify(change)), notice,
+      ].join('\n') }); return;
+    }
+    if (!context.renderUnifiedDiff) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const render = context.renderUnifiedDiff;
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+      const sections = data.patch.changes.map(change => {
+        let before = change.before?.text ?? null, after = change.after?.text ?? null;
+        // A trailing newline is not a phantom empty line, unless it is the only difference.
+        if ((before === null || before.endsWith('\n')) && (after === null || after.endsWith('\n'))) {
+          before = before?.slice(0, -1) ?? null; after = after?.slice(0, -1) ?? null;
+        }
+        const modeChanged = change.before && change.after && change.before.mode !== change.after.mode;
+        const body = change.before && change.after && change.before.text === change.after.text ? '' : render(change.path, before, after);
+        const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
+        return { path: change.path, body, mode };
+      });
+      if (!stat) return [heading(data), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
+      let totalAdded = 0, totalRemoved = 0;
+      const lines = sections.map(section => {
+        const body = section.body.split('\n').slice(2).filter(line => !line.startsWith('@@'));
+        const added = body.filter(line => line.startsWith('+')).length, removed = body.filter(line => line.startsWith('-')).length;
+        totalAdded += added; totalRemoved += removed;
+        return `${section.path} | +${added} -${removed}`;
+      });
+      return [heading(data), ...lines, t('cli.task.patch.stat.summary', { count: sections.length, added: totalAdded, removed: totalRemoved }, locale), notice].join('\n');
+    } }); return;
   }
   if (action === 'execute') {
     if (!context.executeTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

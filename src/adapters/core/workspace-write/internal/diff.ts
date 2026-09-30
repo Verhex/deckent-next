@@ -6,9 +6,9 @@ const CONTEXT = 3;
  * Unified diff of two texts for the approval preview (presentation only; the approval binds the call's digest and the write is
  * conditional on the file version). Line LCS by dynamic programming, bounded by MAX_DIFF_CELLS; a larger change is summarized.
  */
-export function unifiedDiff(path: string, before: string | null, after: string): string {
-  const a = before === null ? [] : before.split('\n'), b = after.split('\n');
-  const header = [`--- ${before === null ? '/dev/null' : `a/${path}`}`, `+++ b/${path}`];
+export function unifiedDiff(path: string, before: string | null, after: string | null): string {
+  const a = before === null ? [] : before.split('\n'), b = after === null ? [] : after.split('\n');
+  const header = [`--- ${before === null ? '/dev/null' : `a/${path}`}`, `+++ ${after === null ? '/dev/null' : `b/${path}`}`];
   if (a.length * b.length > MAX_DIFF_CELLS) return [...header, `@@ ${a.length} lines -> ${b.length} lines (too large to diff here) @@`].join('\n');
   // lcs[i][j] = LCS length of a[i..] and b[j..].
   const lcs: Uint32Array[] = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));

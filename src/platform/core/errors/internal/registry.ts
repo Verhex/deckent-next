@@ -257,6 +257,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   RUN_ADMISSION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_ADMISSION_NOT_CONFIGURED', p, l) }) },
   RUN_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CORRUPT', p, l) }) },
   RUN_STORE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_STORE_CONFLICT', p, l), suggestion: t('remedy.RUN_STORE_CONFLICT', p, l) }) },
+  RUN_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.RUN_NOT_FOUND', p, l) }) },
   RUN_COMMAND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_COMMAND_CONFLICT', p, l) }) },
   RUN_POOL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_REQUIRED', p, l) }) },
   RUN_POOL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_CONFLICT', p, l) }) },
@@ -266,6 +267,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
       ? (p.eligibilityGapMs !== undefined ? t('error.RUN_CAPACITY_OR_ORDER.delayed', p, l) : t('error.RUN_CAPACITY_OR_ORDER.detail', p, l))
       : t('error.RUN_CAPACITY_OR_ORDER', p, l) }) },
   INVENTORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.INVENTORY_QUERY_INVALID', p, l) }) },
+  ATTEMPT_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_NOT_FOUND', p, l) }) },
   INVENTORY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INVENTORY_UNAVAILABLE', p, l) }) },
   DISPATCH_INVENTORY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.DISPATCH_INVENTORY_LIMIT', p, l) }) },
   AUTHENTICATION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.AUTHENTICATION_REQUIRED', p, l) }) },
