@@ -5,7 +5,7 @@ import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/in
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
-import { BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, type BubblewrapView } from './arguments.js';
+import { BUBBLEWRAP_OPEN_ANCESTOR_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, openViewAncestors, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
@@ -124,6 +124,21 @@ async function maskHomeCredentials(home: string, denied: (rel: string) => boolea
     return null;
   };
   return walk(home, '', 0);
+}
+
+/**
+ * Astra 2189 R7: whether every ancestor the open view pins (`openViewAncestors`) can be made a mount point — within the bound, and each a
+ * canonical directory (`lstat` a directory, its own real path: a symbolic link in the chain would pin the link's target, not the name a
+ * rename moves). Otherwise the view is refused; the command never runs with a renamable ancestor.
+ */
+async function canPinAncestors(view: BubblewrapView): Promise<string | null> {
+  const pins = openViewAncestors(view);
+  if (pins.length > BUBBLEWRAP_OPEN_ANCESTOR_MAX) return `protected-path ancestors over their bound (${BUBBLEWRAP_OPEN_ANCESTOR_MAX})`;
+  for (const path of pins) {
+    try { if ((await lstat(path)).isDirectory() && await realpath(path) === path) continue; } catch { /* refused below */ }
+    return `an ancestor of a protected path is not a canonical directory (${path})`;
+  }
+  return null;
 }
 
 /**
@@ -287,12 +302,16 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
         if (entry.isDirectory() && !entry.isSymbolicLink() && !product!(rel) && !layout.project.denied(rel) && !layout.project.denied(`${rel}/`) && !onChain(rel)) writable.add(path);
       }
     }
-    // OPEN-SANDBOX: HOME is the host's; the Core floor's credential patterns are masked in it (bounded walk), the state roots skipped.
-    const refusedHome = homeDir && layout.hardFloor ? await maskHomeCredentials(homeDir, layout.hardFloor.homeDenied, [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles) : null;
+    // OPEN-SANDBOX: HOME is the host's; the Core floor's credential patterns are masked in it (bounded walk), the state roots skipped. The
+    // walk starts at HOME's real path, so every mask (and each ancestor pinned for it, R7) is canonical.
+    const realHome = homeDir ? await realpath(homeDir).catch(() => homeDir) : null;
+    const refusedHome = realHome && layout.hardFloor ? await maskHomeCredentials(realHome, layout.hardFloor.homeDenied, [root, ...seal.sealed, ...seal.hidden], maskedDirectories, maskedFiles) : null;
     if (refusedHome) return { ok: false, reason: refusedHome };
     const over = overMasks(); if (over) return { ok: false, reason: over };
-    return { ok: true, view: Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
-      readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
+    const view: BubblewrapView = Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
+      readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles });
+    const refusedPins = await canPinAncestors(view);
+    return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
   }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
   return { ok: true, view: Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,

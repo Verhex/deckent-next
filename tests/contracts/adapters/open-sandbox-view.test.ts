@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, hostShellRealm, openShellRealm, REPOSITORY_INTERNALS_DENY, sandboxWriteView, shellWritePosture,
   type ShellRealmResolution, type ShellSandboxLayout } from '#adapters/index.js';
-import { bubblewrapArguments, bubblewrapPosture, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { BUBBLEWRAP_OPEN_ANCESTOR_MAX, bubblewrapArguments, bubblewrapPosture, openViewAncestors, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 
 // OPEN-SANDBOX: the fourth write posture (full access: open view) and the bubblewrap arguments that build it, without running bubblewrap.
 const roots: string[] = [];
@@ -132,6 +132,55 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     // Without the product predicate nothing under the sealed root is rebound (fail safe).
     const bare = await resolveBubblewrapView(f.layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true, open: true });
     expect(bare.ok && (bare.view.writablePaths ?? []).some(path => path.startsWith(join(f.project, '.deckent')))).toBe(false);
+  });
+
+  it('R7: every ancestor of a protective mount is pinned right after the root bind, outermost first, before every other mount', async () => {
+    const f = await fixture();
+    await Promise.all([mkdir(join(f.project, 'a/b'), { recursive: true }), mkdir(join(f.project, '.deckent/docs/sub'), { recursive: true }),
+      mkdir(join(f.home, '.local/state/x'), { recursive: true })]);
+    await Promise.all([writeFile(join(f.project, 'a/b/.env'), 'k'), writeFile(join(f.project, '.deckent/docs/sub/.env'), 'k')]);
+    const product = (rel: string) => rel.startsWith('.deckent/data') || '.deckent/data'.startsWith(rel);
+    const layout: ShellSandboxLayout = { ...f.layout, hardFloor: { roots: [...f.layout.hardFloor!.roots, join(f.home, '.local/state/x')], homeDenied, product } };
+    const resolved = await resolveBubblewrapView(layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true, open: true });
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const args = bubblewrapArguments(resolved.view);
+    const at = (...token: string[]) => args.findIndex((_, index) => token.every((part, offset) => args[index + offset] === part));
+    const pins = openViewAncestors(resolved.view), root = at('--bind', '/', '/');
+    // The pins are exactly the tokens between the root bind and `/proc`, outermost first — before every other mount (the project bind, the
+    // sealed root, the masks, the hidden roots), so none of them can cover a protective mount with the host's writable tree.
+    expect(args.slice(root + 3, at('--proc', '/proc'))).toEqual(pins.flatMap(path => ['--bind', path, path]));
+    const depths = pins.map(path => path.split('/').length);
+    expect(depths).toEqual([...depths].sort((a, b) => a - b));
+    // Every ancestor of every protective target up to `/` (exclusive): outside the project (the fixture root and `/tmp`; HOME, `~/.local`,
+    // `~/.local/state` above a hidden root; `~/.ssh` and `~/a/b` above masked keys), inside it (`a`, `a/b` above a masked `.env`), and inside
+    // the owner-Y writable `.deckent/docs` (`docs/sub` above its masked `.env`).
+    const ancestors = (path: string) => { const out: string[] = []; for (let dir = join(path, '..'); dir !== '/'; dir = join(dir, '..')) out.push(dir); return out; };
+    for (const path of [...ancestors(f.root), f.root, f.home, join(f.home, '.local'), join(f.home, '.local/state'), join(f.home, '.ssh'), join(f.home, 'a'), join(f.home, 'a/b'),
+      join(f.project, 'a'), join(f.project, 'a/b'), join(f.project, '.deckent/docs/sub')]) expect({ path, pinned: pins.includes(path) }).toEqual({ path, pinned: true });
+    // Never a mount target (the project, the sealed root, the writable docs), never inside a read-only or tmpfs mount (the sealed product
+    // state, the masked scratch tree).
+    for (const path of [f.project, join(f.project, '.deckent'), join(f.project, '.deckent/docs'), join(f.project, '.deckent/data'), join(f.project, '.deckent/data/state'),
+      join(f.project, '.deckent/data/state/scratch/a')]) expect({ path, pinned: pins.includes(path) }).toEqual({ path, pinned: false });
+    expect(args.filter((_, index) => args[index - 1] === '--bind' && args[index] === f.project)).toHaveLength(1);
+    // The closed views pin nothing (an overlay would resolve a pin to the host's lower directory).
+    const closed = await resolveBubblewrapView(layout, { HOME: f.home, PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true });
+    if (!closed.ok) throw new Error(closed.reason);
+    expect(openViewAncestors(closed.view)).toEqual([]);
+  });
+
+  it('R7: the view is refused (nothing runs) when an ancestor cannot be pinned or the pins are over their bound', async () => {
+    const f = await fixture();
+    const env = { HOME: f.home, PATH: '/usr/bin:/bin' };
+    // A symbolic link in a protective target's chain (a scratch area named through a link): a pin would bind the link's target, not the name.
+    await mkdir(join(f.root, 'real/scratch'), { recursive: true }); await symlink(join(f.root, 'real'), join(f.root, 'link'));
+    const linked = await resolveBubblewrapView({ ...f.layout, scratchDir: join(f.root, 'link/scratch') }, env, {}, { floorReadOnly: true, open: true });
+    expect(linked).toEqual({ ok: false, reason: `an ancestor of a protected path is not a canonical directory (${join(f.root, 'link')})` });
+    // Over the bound: a masked file under each of BUBBLEWRAP_OPEN_ANCESTOR_MAX + 1 directories.
+    await Promise.all(Array.from({ length: BUBBLEWRAP_OPEN_ANCESTOR_MAX + 1 }, async (_, index) => {
+      await mkdir(join(f.project, 'many', String(index)), { recursive: true }); await writeFile(join(f.project, 'many', String(index), '.env'), 'k');
+    }));
+    const over = await resolveBubblewrapView(f.layout, env, {}, { floorReadOnly: true, open: true });
+    expect(over).toEqual({ ok: false, reason: `protected-path ancestors over their bound (${BUBBLEWRAP_OPEN_ANCESTOR_MAX})` });
   });
 
   it('fails closed: no hard floor, a root holding the project or HOME, a read-only project', async () => {
