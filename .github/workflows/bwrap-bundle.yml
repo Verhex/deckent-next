@@ -7,11 +7,21 @@ name: bwrap-bundle
 on:
   push:
     branches: [main]
-    paths: ['packaging/bwrap/**', 'scripts/build-bwrap.mjs', 'scripts/build-dist.mjs', 'src/adapters/core/shell-sandbox-bwrap/**',
-      'src/adapters/core/host-shell/internal/probe.ts', 'tests/contracts/adapters/bwrap-launcher.test.ts', '.github/workflows/bwrap-bundle.yml']
+    paths: ['packaging/bwrap/**', 'scripts/build*.mjs', 'scripts/ci-*.mjs', 'scripts/ci-*.sh',
+      'src/adapters/core/shell-sandbox-bwrap/**', 'src/adapters/core/host-shell/**', 'src/adapters/core/shell-realm/**',
+      'src/composition/core/agent-turn/**', 'src/**/native/**', 'src/domain/core/agent-tool/internal/shell-realm.ts',
+      'tests/contracts/adapters/*bwrap*.test.ts', 'tests/contracts/adapters/shell-realm.test.ts',
+      'tests/contracts/composition/open-sandbox-ancestor.test.ts', 'tests/contracts/composition/shell-realm-doctor.test.ts',
+      'tests/contracts/tooling/bwrap-lock.test.ts', 'tests/fixtures/shell-host.ts',
+      'package.json', 'package-lock.json', 'tsconfig*.json', 'vitest.config.ts', '.github/workflows/bwrap-bundle.yml']
   pull_request:
-    paths: ['packaging/bwrap/**', 'scripts/build-bwrap.mjs', 'scripts/build-dist.mjs', 'src/adapters/core/shell-sandbox-bwrap/**',
-      'src/adapters/core/host-shell/internal/probe.ts', 'tests/contracts/adapters/bwrap-launcher.test.ts', '.github/workflows/bwrap-bundle.yml']
+    paths: ['packaging/bwrap/**', 'scripts/build*.mjs', 'scripts/ci-*.mjs', 'scripts/ci-*.sh',
+      'src/adapters/core/shell-sandbox-bwrap/**', 'src/adapters/core/host-shell/**', 'src/adapters/core/shell-realm/**',
+      'src/composition/core/agent-turn/**', 'src/**/native/**', 'src/domain/core/agent-tool/internal/shell-realm.ts',
+      'tests/contracts/adapters/*bwrap*.test.ts', 'tests/contracts/adapters/shell-realm.test.ts',
+      'tests/contracts/composition/open-sandbox-ancestor.test.ts', 'tests/contracts/composition/shell-realm-doctor.test.ts',
+      'tests/contracts/tooling/bwrap-lock.test.ts', 'tests/fixtures/shell-host.ts',
+      'package.json', 'package-lock.json', 'tsconfig*.json', 'vitest.config.ts', '.github/workflows/bwrap-bundle.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,16 +50,18 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       VITEST_MAX_FORKS: '2'
-      DECKENT_GLOBAL_HOME: ${{ runner.temp }}/deckent-global
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: 24, cache: npm }
+      - run: echo "DECKENT_GLOBAL_HOME=$RUNNER_TEMP/deckent-global" >> "$GITHUB_ENV"
       - run: npm ci
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with: { name: bwrap-x86_64, path: '${{ runner.temp }}/bwrap-x86_64' }
       - name: Stage the verified build where the runtime resolves it (sha256 checked against the lock again)
         run: node scripts/build-bwrap.mjs --stage-dev "$RUNNER_TEMP/bwrap-x86_64"
+      - name: Build the product and native helpers before realm tests
+        run: node scripts/build.mjs
       - name: Record the host's user-namespace restriction (evidence for the typed AppArmor path)
         run: |
           uname -r
@@ -60,6 +72,7 @@ jobs:
       - name: Realm tests with unprivileged user namespaces allowed for this runner only
         run: |
           if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          node scripts/ci-shell-realm.mjs
           npx vitest run tests/contracts/adapters/bwrap-launcher.test.ts tests/contracts/adapters/shell-sandbox-bwrap.test.ts tests/contracts/adapters/shell-realm.test.ts
   realm-arm64:
     # Disabled until the arm64 native prebuild card lands (owner 2026-09-29): enabling it, and seeing it pass, is what allows adding

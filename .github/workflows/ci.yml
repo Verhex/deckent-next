@@ -2,6 +2,8 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request:
+permissions:
+  contents: read
 jobs:
   verify:
     name: verify (${{ matrix.os }}, node ${{ matrix.node }})
@@ -21,4 +23,22 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '${{ matrix.node }}', cache: npm }
       - run: npm ci
+      - name: Prepare the pinned Docker test image (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/ci-docker-fixture.sh
+      - name: Build and stage the locked bundled bubblewrap (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          node scripts/build-bwrap.mjs --arch x86_64 --out "$RUNNER_TEMP/bwrap-x86_64"
+          node scripts/build-bwrap.mjs --stage-dev "$RUNNER_TEMP/bwrap-x86_64"
+          echo "DECKENT_GLOBAL_HOME=$RUNNER_TEMP/deckent-global" >> "$GITHUB_ENV"
+      - name: Prove the built product selects bubblewrap before tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Only this ephemeral GitHub runner: the required mount/rename proofs need user namespaces.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; fi
+          node scripts/build.mjs
+          node scripts/ci-shell-realm.mjs
       - run: npm run verify
+        env:
+          DECKENT_TEST_STARTUP_COST: '1'
