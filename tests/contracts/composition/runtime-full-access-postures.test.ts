@@ -37,7 +37,9 @@ describe.skipIf(process.platform !== 'linux')('full access composed with the Ast
       // (1) Full access, no card: a NEW write-floor name (built at run time), an existing floor file and a commit to .git all land.
       const wrote = await f.call('run_shell', { command: `f=pack; echo '{"n":1}' > src/\${f}age.json && echo '{"v":2}' > package.json && ${COMMIT} full-access-floor` }, 'deny', fa);
       expect({ card: wrote.card, status: wrote.status, readOnly: wrote.text.includes('the project was read-only') }).toEqual({ card: false, status: 'ok', readOnly: false });
-      expect(wrote.text).toMatch(new RegExp(`^\\[deckent\\] run_shell: sandbox: ${realm}; exit 0`, 'u'));
+      // FA-TRACKED-WARN: the call overwrites the tracked package.json, so the counts lead the line and the tracked line names it.
+      expect(wrote.text).toMatch(new RegExp(`^\\[deckent\\] run_shell: tracked: deleted=0 overwritten=1; sandbox: ${realm}; exit 0`, 'u'));
+      expect(wrote.text).toContain('[deckent] tracked files changed: deleted 0, overwritten 1 (package.json)');
       expect(await readFile(join(f.project, 'src/package.json'), 'utf8')).toBe('{"n":1}\n');
       expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{"v":2}\n');
       expect(git(f.project, 'log', '--format=%s', '-1').trim()).toBe('full-access-floor');

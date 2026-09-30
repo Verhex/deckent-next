@@ -111,9 +111,12 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     const eventReceipt = await artifacts.put('test', Buffer.from(received.map(e => JSON.stringify(e)).join('\n')));
     let authorized = 0;
     const app = new WorkerTranscriptApplication({ async loadWorkerEventLog() { return { schemaVersion: 1, identity: attemptIdentitySchema.parse(sandbox.identity), events: eventReceipt, eventCount: received.length, sealedAt: 1 }; },
-      async loadBoundDispatch() { return { output } as DispatchRecord; } }, artifacts, { async authorizeIdentity() { authorized++; } });
+      async loadBoundDispatch() { return { output } as DispatchRecord; },
+      // The composed store (openSqliteAttemptStore) owns loadRun; this attempt has no persisted Run, so the model row is absent (WORKER-CURRENCY-2).
+      async loadRun() { return null; } }, artifacts, { async authorizeIdentity() { authorized++; } });
     const transcript = await app.inspect(sandbox.identity, principal);
     expect(transcript.finalReport).toEqual(final); expect(authorized).toBe(1);
+    expect(transcript).toHaveProperty('model', null);
     const printed: string[] = [];
     expect(await cliMain(['task', 'transcript', '--scope', 'test', '--run', 'run', '--task', 'task', '--attempt', sandbox.identity.attemptId, '--generation', '1', '--layout-revision', 'layout'],
       { root: workspace, stdout: { write: (s: string) => { printed.push(s); } }, inspectWorkerTranscript: async () => transcript })).toBe(0);
